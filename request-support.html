@@ -75,9 +75,11 @@
             <label for="supMsg">Anything you'd like us to know (optional)</label>
             <textarea id="supMsg" rows="4" placeholder="Your situation, timing, questions…"></textarea>
           </div>
+          <p class="privacy-line">By sending this form, you consent to Legacy using these details to create or update your caregiver record and follow up about support. Please do not include medical record numbers or emergency details.</p>
           <button type="submit" class="btn btn-coral" style="width: 100%;">Send request</button>
-          <div class="success-note" id="supSuccess">✓ Request received — our team will reach out within two business days.</div>
-          <div class="routing-note" id="supRouting">Behind the scenes (demo): this request just created (or updated) a caregiver record and queued a follow-up for staff — nothing gets lost in an inbox.</div>
+          <div class="success-note" id="supSuccess" data-intake-success role="status" aria-live="polite">✓ Request received — our team will reach out within two business days.</div>
+          <div class="error-note" data-intake-error role="alert" aria-live="assertive"></div>
+          <div class="routing-note" id="supRouting" data-intake-routing>Behind the scenes: this request created or updated a caregiver record and queued a follow-up for staff — nothing gets lost in an inbox.</div>
         </form>
       </div>
       <div>
@@ -128,15 +130,5 @@
 </footer>
 
 <script src="app.js"></script>
-<script>
-function submitSupport(e) {
-  e.preventDefault();
-  document.getElementById('supSuccess').style.display = 'block';
-  setTimeout(function () {
-    document.getElementById('supRouting').style.display = 'block';
-  }, 600);
-  return false;
-}
-</script>
 </body>
 </html>

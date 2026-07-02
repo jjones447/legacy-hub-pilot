@@ -49,7 +49,7 @@
           <div class="event-meta">Every Wednesday · 5:00–6:00 PM CST · Google Meet</div>
           <p class="small muted mb-8">Our Alzheimer&#39;s Association-certified support group — honest conversation and real connection in a judgment-free space. Register once; the link and reminders come to you.</p>
           <div style="display:flex; align-items:center; gap:12px;">
-            <button class="btn btn-plum btn-sm" onclick="openRegister('Virtual Support Group — Wednesdays 5 PM')">Register</button>
+            <button class="btn btn-plum btn-sm" onclick="openRegister('Virtual Support Group — Wednesdays 5 PM', 'ev_virtual_support_group')">Register</button>
             <span class="small muted">18 registered</span>
           </div>
         </div>
@@ -63,7 +63,7 @@
           <div class="event-meta">Saturday · 10:00 AM–1:00 PM · Community Room</div>
           <p class="small muted mb-8">A welcoming, supervised gathering for your loved one — familiar activities, trained staff, no pressure — while you take a real break.</p>
           <div style="display:flex; align-items:center; gap:12px;">
-            <button class="btn btn-plum btn-sm" onclick="openRegister('Memory Social — Jul 18')">Register</button>
+            <button class="btn btn-plum btn-sm" onclick="openRegister('Memory Social — Jul 18', 'ev_memory_social_jul18')">Register</button>
             <span class="small muted">8 registered · capacity 12</span>
           </div>
         </div>
@@ -77,7 +77,7 @@
           <div class="event-meta">Saturday · 11:00 AM · Virtual</div>
           <p class="small muted mb-8">Everything about Wellness Grants: member eligibility, the application, how awards and care packages are personalized, and Q&amp;A.</p>
           <div style="display:flex; align-items:center; gap:12px;">
-            <button class="btn btn-plum btn-sm" onclick="openRegister('Wellness Grant Info Session — Aug 1')">Register</button>
+            <button class="btn btn-plum btn-sm" onclick="openRegister('Wellness Grant Info Session — Aug 1', 'ev_wellness_grant_info_aug01')">Register</button>
             <span class="small muted">9 registered</span>
           </div>
         </div>
@@ -91,7 +91,7 @@
           <div class="event-meta">Saturday · 10:00 AM–1:00 PM · Community Room</div>
           <p class="small muted mb-8">Two rooms, one space: your loved one enjoys a supervised Memory Social while you join fellow caregivers for wellness, connection, and education.</p>
           <div style="display:flex; align-items:center; gap:12px;">
-            <button class="btn btn-plum btn-sm" onclick="openRegister('Memory Social Caregiver Event — Aug 15')">Register</button>
+            <button class="btn btn-plum btn-sm" onclick="openRegister('Memory Social Caregiver Event — Aug 15', 'ev_memory_social_caregiver_aug15')">Register</button>
             <span class="small muted">6 registered · capacity 12</span>
           </div>
         </div>
@@ -129,9 +129,11 @@
           <option>Community member</option>
         </select>
       </div>
+      <p class="privacy-line">By registering, you consent to Legacy using these details to create or update your caregiver record, manage attendance, and send event follow-up. Please do not include medical record numbers or emergency details.</p>
       <button type="submit" class="btn btn-coral" style="width: 100%;">Complete registration</button>
-      <div class="success-note" id="regSuccess">✓ You're registered! A confirmation is on its way.</div>
-      <div class="routing-note" id="regRouting">Behind the scenes (demo): this registration just routed into the caregiver record — profile matched, attendance list updated, follow-up queued for staff.</div>
+      <div class="success-note" id="regSuccess" data-intake-success role="status" aria-live="polite">✓ You're registered! A confirmation is on its way.</div>
+      <div class="error-note" data-intake-error role="alert" aria-live="assertive"></div>
+      <div class="routing-note" id="regRouting" data-intake-routing>Behind the scenes: this registration routed into the caregiver record — profile matched, attendance list updated, follow-up queued for staff.</div>
     </form>
   </div>
 </div>
