@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Request Support — Legacy Home &amp; Respite Care Foundation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="demo-banner"><strong>DEMO PREVIEW</strong> · sample data only · built by X-Centric as a working preview for Legacy Home &amp; Respite Care Foundation</div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a class="brand" href="index.html">
+      <div class="brand-mark">L</div>
+      <div class="brand-name">Legacy<small>Home &amp; Respite Care Foundation</small></div>
+    </a>
+    <button class="nav-toggle" aria-label="Menu" onclick="document.querySelector('.main-nav').classList.toggle('open')">☰</button>
+    <nav class="main-nav">
+      <a href="index.html">Home</a>
+      <a href="about.html">About</a>
+      <a href="programs.html">The Sanctuary</a>
+      <a href="resources.html">Resource Hub</a>
+      <a href="events.html">Events</a>
+      <a href="portal.html" class="nav-portal">Caregiver Portal</a>
+      <a href="index.html#donate" class="nav-cta">Donate</a>
+    </nav>
+  </div>
+</header>
+
+<section class="hero" style="padding: 56px 0 64px;">
+  <div class="container">
+    <h1 style="font-size: clamp(30px, 4vw, 44px);">Request Support</h1>
+    <p class="lede">For yourself, or for a caregiver you know. One short form — we take it from there.</p>
+  </div>
+</section>
+
+<section>
+  <div class="container">
+    <div class="split" style="align-items: start;">
+      <div class="login-card" style="max-width: none;">
+        <h2 style="font-size: 24px;">Tell us what you need</h2>
+        <p class="sub">Every request goes straight to our team — no phone tag required.</p>
+        <form id="supportForm" onsubmit="return submitSupport(event)">
+          <div class="field">
+            <label for="supName">Your name</label>
+            <input id="supName" type="text" placeholder="e.g., Maria Gonzalez" required>
+          </div>
+          <div class="field">
+            <label for="supEmail">Email or phone</label>
+            <input id="supEmail" type="text" placeholder="how we reach you" required>
+          </div>
+          <div class="field">
+            <label for="supWho">I am…</label>
+            <select id="supWho">
+              <option>A family caregiver (for myself)</option>
+              <option>Referring a caregiver I know</option>
+              <option>A professional / organization referring a client</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="supWhat">Support needed</label>
+            <select id="supWhat">
+              <option>Respite — Memory Socials</option>
+              <option>Wellness Grant information</option>
+              <option>Virtual Support Group</option>
+              <option>Sanctuary membership</option>
+              <option>Something else / not sure</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="supMsg">Anything you'd like us to know (optional)</label>
+            <textarea id="supMsg" rows="4" placeholder="Your situation, timing, questions…"></textarea>
+          </div>
+          <button type="submit" class="btn btn-coral" style="width: 100%;">Send request</button>
+          <div class="success-note" id="supSuccess">✓ Request received — our team will reach out within two business days.</div>
+          <div class="routing-note" id="supRouting">Behind the scenes (demo): this request just created (or updated) a caregiver record and queued a follow-up for staff — nothing gets lost in an inbox.</div>
+        </form>
+      </div>
+      <div>
+        <span class="eyebrow">What happens next</span>
+        <h2 style="font-size: 26px; margin-bottom: 18px;">A person, not a process</h2>
+        <div class="timeline-item"><div class="timeline-dot" style="background: var(--green);"></div><div><strong>1 · We read it same-day</strong><div class="when">Requests route straight to the team's work queue</div></div></div>
+        <div class="timeline-item"><div class="timeline-dot" style="background: var(--green);"></div><div><strong>2 · We reach out</strong><div class="when">Within two business days, by your preferred contact</div></div></div>
+        <div class="timeline-item"><div class="timeline-dot" style="background: var(--amber);"></div><div><strong>3 · We connect you</strong><div class="when">Membership, respite, grants, groups — whatever fits</div></div></div>
+        <div class="card mt-24" style="background: var(--sand); border-style: dashed;">
+          <p class="small" style="margin:0;"><strong>In crisis right now?</strong> Don't wait on a form — see <a href="resources.html">Crisis Help in the Resource Hub</a> for the caregiver support hotline.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <div class="footer-grid">
+      <div>
+        <h4>Legacy Home &amp; Respite Care Foundation</h4>
+        <p style="font-size: 13.5px; max-width: 300px;">A nonprofit supporting caregivers of loved ones with dementia — wellness, respite, and community since 2023.</p>
+      </div>
+      <div>
+        <h4>The Sanctuary</h4>
+        <a href="programs.html#grants">Wellness Grants</a>
+        <a href="programs.html#socials">Memory Socials</a>
+        <a href="events.html">Support Group &amp; Events</a>
+      </div>
+      <div>
+        <h4>Get Involved</h4>
+        <a href="request-support.html">Request Support</a>
+        <a href="#" onclick="alert('Demo: partner/volunteer intake form.'); return false;">Volunteer</a>
+        <a href="#" onclick="alert('Demo: organizational partnership form.'); return false;">Partner with us</a>
+        <a href="index.html#donate">Donate</a>
+      </div>
+      <div>
+        <h4>Access</h4>
+        <a href="portal.html">Caregiver Portal</a>
+        <a href="staff.html">Staff Console (demo)</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 Legacy Home &amp; Respite Care Foundation · Demo preview — sample data only</span>
+      <span>Built &amp; hosted by X-Centric · Managed Hosted Hub</span>
+    </div>
+  </div>
+</footer>
+
+<script src="app.js"></script>
+<script>
+function submitSupport(e) {
+  e.preventDefault();
+  document.getElementById('supSuccess').style.display = 'block';
+  setTimeout(function () {
+    document.getElementById('supRouting').style.display = 'block';
+  }, 600);
+  return false;
+}
+</script>
+</body>
+</html>
