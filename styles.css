@@ -1,16 +1,16 @@
-/* Legacy Home & Respite Care Foundation — Caregiver Wellness & Resource Hub
-   Demo site · X-Centric Managed Hosted Hub · DEMO DATA ONLY */
+/* Legacy Home & Respite Care Foundation â€” Caregiver Wellness & Resource Hub
+   Demo site Â· X-Centric Managed Hosted Hub Â· DEMO DATA ONLY */
 
 :root {
-  --plum: #4a2d5e;
-  --plum-dark: #37204a;
-  --plum-light: #6d4a87;
+  --plum: #6b5744;
+  --plum-dark: #4a3b2d;
+  --plum-light: #7d6347;
   --coral: #e8795a;
   --coral-dark: #d05f40;
   --cream: #faf6f1;
   --sand: #f3ece3;
-  --ink: #2b2333;
-  --ink-soft: #5f5568;
+  --ink: #2e2822;
+  --ink-soft: #6a5f52;
   --white: #ffffff;
   --green: #3d8b64;
   --green-soft: #e3f2ea;
@@ -19,8 +19,8 @@
   --blue-soft: #e7eef8;
   --blue: #3c6fb0;
   --radius: 14px;
-  --shadow: 0 2px 14px rgba(43, 35, 51, 0.08);
-  --shadow-lg: 0 8px 30px rgba(43, 35, 51, 0.14);
+  --shadow: 0 2px 14px rgba(46, 40, 34, 0.08);
+  --shadow-lg: 0 8px 30px rgba(46, 40, 34, 0.14);
   --font-display: 'Fraunces', Georgia, serif;
   --font-body: 'Inter', -apple-system, 'Segoe UI', sans-serif;
 }
@@ -48,7 +48,7 @@ h1, h2, h3, .display { font-family: var(--font-display); font-weight: 600; line-
 /* ---------- Demo banner ---------- */
 .demo-banner {
   background: var(--plum-dark);
-  color: #d9c9e8;
+  color: #e3d7c8;
   text-align: center;
   font-size: 12.5px;
   letter-spacing: 0.04em;
@@ -116,7 +116,7 @@ nav.main-nav a.active { color: var(--plum); border-bottom-color: var(--coral); }
   background: radial-gradient(circle, rgba(232,121,90,0.35) 0%, transparent 70%);
 }
 .hero h1 { color: #fff; font-size: clamp(34px, 5vw, 54px); max-width: 640px; margin-bottom: 20px; }
-.hero p.lede { font-size: 19px; max-width: 560px; color: #e8ddf2; margin-bottom: 34px; }
+.hero p.lede { font-size: 19px; max-width: 560px; color: #eae1d2; margin-bottom: 34px; }
 .hero .btn-row { display: flex; gap: 14px; flex-wrap: wrap; }
 
 .btn {
@@ -183,7 +183,7 @@ section { padding: 64px 0; }
 .badge-green { background: var(--green-soft); color: var(--green); }
 .badge-amber { background: var(--amber-soft); color: var(--amber); }
 .badge-blue { background: var(--blue-soft); color: var(--blue); }
-.badge-plum { background: #efe6f7; color: var(--plum); }
+.badge-plum { background: #f0e9dd; color: var(--plum); }
 
 /* ---------- Resource hub ---------- */
 .filter-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 30px; }
@@ -210,28 +210,28 @@ section { padding: 64px 0; }
 }
 
 /* ---------- Portal / app UI mock ---------- */
-.app-shell { background: #f4f0f9; border-radius: var(--radius); overflow: hidden; border: 1px solid #e2d8ee; box-shadow: var(--shadow-lg); }
+.app-shell { background: #f5f0e8; border-radius: var(--radius); overflow: hidden; border: 1px solid #e6dccc; box-shadow: var(--shadow-lg); }
 .app-topbar {
   background: var(--plum-dark); color: #fff; padding: 12px 20px;
   display: flex; align-items: center; justify-content: space-between; font-size: 13.5px;
 }
 .app-topbar .dot { display: inline-block; width: 8px; height: 8px; background: #7ee2a8; border-radius: 50%; margin-right: 7px; }
 .app-body { padding: 24px; }
-.panel { background: #fff; border-radius: 12px; padding: 20px; border: 1px solid #eee3f2; margin-bottom: 16px; }
+.panel { background: #fff; border-radius: 12px; padding: 20px; border: 1px solid #ece4d8; margin-bottom: 16px; }
 .panel h4 { font-size: 15px; color: var(--plum-dark); margin-bottom: 12px; font-family: var(--font-body); font-weight: 700; }
-.kv-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed #eee3f2; font-size: 14px; }
+.kv-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed #ece4d8; font-size: 14px; }
 .kv-row:last-child { border-bottom: none; }
 .kv-row .k { color: var(--ink-soft); }
 .kv-row .v { font-weight: 600; }
 
-.timeline-item { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px dashed #eee3f2; font-size: 13.5px; }
+.timeline-item { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px dashed #ece4d8; font-size: 13.5px; }
 .timeline-item:last-child { border-bottom: none; }
 .timeline-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--coral); margin-top: 6px; flex-shrink: 0; }
 .timeline-item .when { color: var(--ink-soft); font-size: 12px; }
 
 /* ---------- Login mock ---------- */
 .login-wrap { max-width: 430px; margin: 0 auto; }
-.login-card { background: #fff; border-radius: var(--radius); padding: 38px; box-shadow: var(--shadow-lg); border: 1px solid #eee3f2; }
+.login-card { background: #fff; border-radius: var(--radius); padding: 38px; box-shadow: var(--shadow-lg); border: 1px solid #ece4d8; }
 .login-card h2 { font-size: 26px; margin-bottom: 6px; }
 .login-card .sub { color: var(--ink-soft); font-size: 14px; margin-bottom: 24px; }
 .field { margin-bottom: 16px; }
@@ -244,7 +244,7 @@ section { padding: 64px 0; }
 .hint { font-size: 12px; color: var(--ink-soft); margin-top: 6px; }
 
 /* ---------- Chat agent mock ---------- */
-.chat-shell { background: #fff; border-radius: 12px; border: 1px solid #e2d8ee; overflow: hidden; }
+.chat-shell { background: #fff; border-radius: 12px; border: 1px solid #e6dccc; overflow: hidden; }
 .chat-head { background: var(--plum); color: #fff; padding: 12px 18px; font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 9px; }
 .chat-head .bot-dot { width: 9px; height: 9px; background: #7ee2a8; border-radius: 50%; }
 .chat-body { padding: 18px; display: flex; flex-direction: column; gap: 12px; max-height: 460px; overflow-y: auto; }
@@ -262,26 +262,26 @@ section { padding: 64px 0; }
 }
 .chip-confirm { background: var(--green); color: #fff; }
 .chip-cancel { background: #eee; color: var(--ink-soft); }
-.chat-input-row { display: flex; border-top: 1px solid #eee3f2; }
+.chat-input-row { display: flex; border-top: 1px solid #ece4d8; }
 .chat-input-row input { flex: 1; border: none; padding: 14px 18px; font-size: 14px; font-family: var(--font-body); }
-.chat-input-row input:focus { outline: none; background: #faf7fd; }
+.chat-input-row input:focus { outline: none; background: #fbf8f3; }
 .chat-input-row button { background: var(--coral); border: none; color: #fff; padding: 0 22px; font-weight: 700; cursor: pointer; }
 
 /* ---------- Tables (staff console) ---------- */
 table.data { width: 100%; border-collapse: collapse; font-size: 13.8px; background: #fff; }
 table.data th {
   text-align: left; font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em;
-  color: var(--ink-soft); padding: 10px 14px; border-bottom: 2px solid #eee3f2; font-weight: 700;
+  color: var(--ink-soft); padding: 10px 14px; border-bottom: 2px solid #ece4d8; font-weight: 700;
 }
 table.data td { padding: 12px 14px; border-bottom: 1px solid #f4ede4; vertical-align: middle; }
-table.data tr:hover td { background: #faf7fd; }
+table.data tr:hover td { background: #fbf8f3; }
 
 /* ---------- Footer ---------- */
 footer {
-  background: var(--plum-dark); color: #c9b8d9; padding: 54px 0 30px; margin-top: 40px; font-size: 14px;
+  background: var(--plum-dark); color: #d3c4af; padding: 54px 0 30px; margin-top: 40px; font-size: 14px;
 }
 footer h4 { color: #fff; font-size: 15px; margin-bottom: 14px; font-family: var(--font-body); }
-footer a { color: #c9b8d9; text-decoration: none; display: block; padding: 3px 0; }
+footer a { color: #d3c4af; text-decoration: none; display: block; padding: 3px 0; }
 footer a:hover { color: #fff; }
 .footer-grid { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 36px; margin-bottom: 36px; }
 .footer-bottom { border-top: 1px solid rgba(255,255,255,0.12); padding-top: 22px; font-size: 12.5px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
