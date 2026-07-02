@@ -1,0 +1,130 @@
+{
+  "content_type": "page_section",
+  "note": "Editable page copy (slice 02.1). Values are HTML fragments rendered verbatim - inline <strong>/<em>/<a> allowed, structure lives in templates/*.j2. The agent edits items here, never templates.",
+  "items": {
+    "about.hero": {
+      "title": "Born from the journey we lived",
+      "lede": "Legacy exists to be the support we wish our own family had."
+    },
+    "about.story": {
+      "eyebrow": "Our story",
+      "heading": "From one family's journey to a community's sanctuary",
+      "paragraphs": [
+        "Legacy began as a home health agency. When the pandemic made it impossible to keep nurses on staff, we faced a choice — and chose to follow the deeper calling behind the work.",
+        "Our founder cared for her mother through younger-onset dementia while still a teenager. She lived the gaps firsthand — the exhaustion, the isolation, the support that never came. After her mother passed, that experience became a mission: <strong>be the support we didn't have.</strong>",
+        "In 2023 we became a nonprofit devoted entirely to the caregivers of loved ones living with dementia — their wellness, their rest, and their community."
+      ],
+      "note": "Draft copy for Legacy's review — we'll refine this story together in your words."
+    },
+    "about.values": {
+      "heading": "What guides us",
+      "items": [
+        {"title": "Caregivers first", "when": "Your wellness matters — not just your loved one's care"},
+        {"title": "No judgment, ever", "when": "Every journey is different; every feeling is welcome"},
+        {"title": "Real rest, not lip service", "when": "Free respite and grants that fund actual self-care"},
+        {"title": "Community over isolation", "when": "People who truly understand, in the same room"}
+      ]
+    },
+    "about.join": {
+      "eyebrow": "Join us",
+      "heading": "The Caregiver Sanctuary is free — and it's for you",
+      "body": "Support groups, wellness grants, Memory Socials, and events — one free membership connects you to all of it.",
+      "cta_label": "Explore The Sanctuary"
+    },
+    "programs.hero": {
+      "title": "The Caregiver Sanctuary",
+      "lede": "A free membership community for caregivers of loved ones living with dementia — support, wellness, and respite, designed by someone who's lived the journey.",
+      "cta_label": "Become a member — free"
+    },
+    "programs.membership": {
+      "eyebrow": "Membership",
+      "heading": "One membership, every kind of support",
+      "paragraphs": [
+        "Sanctuary membership is free and connects you to everything Legacy offers: the weekly Virtual Support Group, Wellness Grants, Memory Socials, caregiver events, and the Resource Hub.",
+        "One short form, once — after that, everything you do with Legacy builds on the same profile. No repeating your story every time."
+      ],
+      "panel_heading": "Membership includes",
+      "rows": [
+        {"k": "Virtual Support Group", "v": "Weekly · Wednesdays"},
+        {"k": "Wellness Grants", "v": "Members eligible"},
+        {"k": "Memory Socials", "v": "Drop-in respite"},
+        {"k": "Caregiver events", "v": "Wellness · connection · education"},
+        {"k": "Cost", "v": "Free"}
+      ]
+    },
+    "programs.support_group": {
+      "panel_heading": "Virtual Support Group",
+      "rows": [
+        {"k": "When", "v": "Wednesdays · 5:00–6:00 PM CST"},
+        {"k": "Where", "v": "Google Meet"},
+        {"k": "Facilitation", "v": "Alzheimer's Association-certified"},
+        {"k": "Cost", "v": "Free"}
+      ],
+      "panel_cta_label": "Register",
+      "eyebrow": "Weekly Support Group",
+      "heading": "A judgment-free hour that's just for you",
+      "paragraphs": [
+        "Every Wednesday evening, caregivers gather online to talk honestly about the journey — the hard parts, the wins, and everything in between. Certified facilitation, zero judgment, real connection.",
+        "Register once and you're on the list — reminders and the meeting link come to you."
+      ]
+    },
+    "programs.grants": {
+      "eyebrow": "Wellness Grants",
+      "heading": "A personalized stipend for your well-being",
+      "paragraphs": [
+        "Caregivers spend so much on everyone else. Wellness Grants fund the things that restore <em>you</em> — a massage, counseling, a gym membership — and every award comes with its own care package.",
+        "<strong>Sanctuary members are eligible.</strong> Apply online; our team reviews each application and personalizes the award to your wellness plan."
+      ],
+      "cta_label": "Apply for a Wellness Grant",
+      "panel_heading": "Your grant journey",
+      "timeline": [
+        {"dot": "var(--green)", "title": "1 · Join the Sanctuary", "when": "Free membership — you're eligible"},
+        {"dot": "var(--green)", "title": "2 · Apply", "when": "Simple online form — five minutes"},
+        {"dot": "var(--amber)", "title": "3 · Review &amp; award", "when": "Personalized stipend + care package"},
+        {"dot": "", "title": "4 · Check-in &amp; outcomes", "when": "We follow your journey, not just the award"}
+      ]
+    },
+    "programs.socials": {
+      "panel_heading": "Memory Socials, simply",
+      "rows": [
+        {"k": "For your loved one", "v": "Calm, familiar activities"},
+        {"k": "Staffing", "v": "Trained, supervised"},
+        {"k": "Pressure to participate", "v": "None — ever"},
+        {"k": "Cost to you", "v": "Free"},
+        {"k": "Coming soon", "v": "<span class=\"badge badge-blue\">Community Center</span>"}
+      ],
+      "panel_note": "When our community center opens, Memory Social registration and check-in will live right here on this site.",
+      "eyebrow": "Memory Socials — Drop-In Respite",
+      "heading": "A welcoming place for your loved one — a real break for you",
+      "paragraphs": [
+        "Memory Socials are supervised gatherings for people living with dementia: familiar activities, gentle social connection, and no pressure to participate in any certain way. You can step away knowing your loved one is in trained, caring hands.",
+        "<strong>Memory Social Caregiver Events</strong> run alongside — while your loved one is engaged, you join other caregivers for wellness, connection, or education. Together in the same space, each of you cared for."
+      ],
+      "cta_label": "See upcoming Memory Socials"
+    },
+    "programs.coaching": {
+      "badge": "Coming Soon",
+      "heading": "1:1 Wellness Coaching",
+      "body": "Private sessions with Shanelle — The Dementia Caregiver Wellness Coach. Personal guidance for your caregiving journey, one conversation at a time.",
+      "cta_label": "Join the interest list"
+    },
+    "request_support.hero": {
+      "title": "Request Support",
+      "lede": "For yourself, or for a caregiver you know. One short form — we take it from there."
+    },
+    "request_support.form": {
+      "heading": "Tell us what you need",
+      "sub": "Every request goes straight to our team — no phone tag required."
+    },
+    "request_support.next": {
+      "eyebrow": "What happens next",
+      "heading": "A person, not a process",
+      "steps": [
+        {"dot": "var(--green)", "title": "1 · We read it same-day", "when": "Requests route straight to the team's work queue"},
+        {"dot": "var(--green)", "title": "2 · We reach out", "when": "Within two business days, by your preferred contact"},
+        {"dot": "var(--amber)", "title": "3 · We connect you", "when": "Membership, respite, grants, groups — whatever fits"}
+      ],
+      "crisis_html": "<strong>In crisis right now?</strong> Don't wait on a form — see <a href=\"resources.html\">Crisis Help in the Resource Hub</a> for the caregiver support hotline."
+    }
+  }
+}

@@ -1,0 +1,36 @@
+<!-- Membership modal -->
+<div class="modal-overlay" id="membershipModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeMembership()" aria-label="Close membership form">✕</button>
+    <h3>Join The Caregiver Sanctuary</h3>
+    <p class="sub">One short form starts your free membership and creates your caregiver record.</p>
+    <form id="membershipForm" onsubmit="return submitMembership(event)">
+      <div class="field">
+        <label for="memName">Your name</label>
+        <input id="memName" type="text" placeholder="e.g., Maria Gonzalez" required>
+      </div>
+      <div class="field">
+        <label for="memEmail">Email</label>
+        <input id="memEmail" type="email" placeholder="you@example.com" required>
+      </div>
+      <div class="field">
+        <label for="memCaringFor">I am caring for</label>
+        <select id="memCaringFor">
+          <option>A parent or older adult</option>
+          <option>A spouse or partner</option>
+          <option>A family member or friend</option>
+          <option>I am exploring support options</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="memNote">Anything you want us to know (optional)</label>
+        <textarea id="memNote" rows="3" placeholder="Questions, timing, or programs you want to hear about"></textarea>
+      </div>
+      <p class="privacy-line">By joining, you consent to Legacy using these details to create or update your caregiver record and follow up about Sanctuary programs. Please do not include medical record numbers or emergency details.</p>
+      <button type="submit" class="btn btn-coral" style="width: 100%;">Join free</button>
+      <div class="success-note" data-intake-success role="status" aria-live="polite">✓ Membership request received — welcome to The Sanctuary.</div>
+      <div class="error-note" data-intake-error role="alert" aria-live="assertive"></div>
+      <div class="routing-note" data-intake-routing>Behind the scenes: your caregiver record was created or updated and staff follow-up is queued.</div>
+    </form>
+  </div>
+</div>

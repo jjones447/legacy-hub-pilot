@@ -21,13 +21,17 @@ PAGES = {
     "index.html": "index.html.j2",
     "resources.html": "resources.html.j2",
     "events.html": "events.html.j2",
+    "about.html": "about.html.j2",
+    "programs.html": "programs.html.j2",
+    "request-support.html": "request-support.html.j2",
 }
 
 
 def load_content() -> dict:
     resources = json.loads((ROOT / "content" / "resources.json").read_text(encoding="utf-8"))
     events = json.loads((ROOT / "content" / "events.json").read_text(encoding="utf-8"))
-    return {"resources": resources["items"], "events": events["items"]}
+    sections = json.loads((ROOT / "content" / "page-sections.json").read_text(encoding="utf-8"))
+    return {"resources": resources["items"], "events": events["items"], "sections": sections["items"]}
 
 
 def render_all() -> dict:

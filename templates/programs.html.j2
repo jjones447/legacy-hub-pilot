@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Caregiver Sanctuary — Legacy Home &amp; Respite Care Foundation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="demo-banner"><strong>DEMO PREVIEW</strong> · sample data only · built by X-Centric as a working preview for Legacy Home &amp; Respite Care Foundation</div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a class="brand" href="index.html">
+      <div class="brand-mark">L</div>
+      <div class="brand-name">Legacy<small>Home &amp; Respite Care Foundation</small></div>
+    </a>
+    <button class="nav-toggle" aria-label="Menu" onclick="document.querySelector('.main-nav').classList.toggle('open')">☰</button>
+    <nav class="main-nav">
+      <a href="index.html">Home</a>
+      <a href="about.html">About</a>
+      <a href="programs.html" class="active">The Sanctuary</a>
+      <a href="resources.html">Resource Hub</a>
+      <a href="events.html">Events</a>
+      <a href="portal.html" class="nav-portal">Caregiver Portal</a>
+      <a href="index.html#donate" class="nav-cta">Donate</a>
+    </nav>
+  </div>
+</header>
+
+<section class="hero" style="padding: 56px 0 64px;">
+  <div class="container">
+    <h1 style="font-size: clamp(30px, 4vw, 44px);">{{ sections["programs.hero"].title }}</h1>
+    <p class="lede">{{ sections["programs.hero"].lede }}</p>
+    <div class="btn-row">
+      <a href="#" class="btn btn-coral" onclick="openMembership(); return false;">{{ sections["programs.hero"].cta_label }}</a>
+    </div>
+  </div>
+</section>
+
+<section id="membership">
+  <div class="container">
+    <div class="split">
+      <div>
+        <span class="eyebrow">{{ sections["programs.membership"].eyebrow }}</span>
+        <h2 style="margin-bottom: 14px;">{{ sections["programs.membership"].heading }}</h2>
+{%- for p in sections["programs.membership"].paragraphs %}
+        <p class="muted mb-16">{{ p }}</p>
+{%- endfor %}
+      </div>
+      <div class="visual">
+        <h3 style="font-size: 18px; margin-bottom: 14px;">{{ sections["programs.membership"].panel_heading }}</h3>
+{%- for r in sections["programs.membership"].rows %}
+        <div class="kv-row"><span class="k">{{ r.k }}</span><span class="v">{{ r.v }}</span></div>
+{%- endfor %}
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="support-group" style="background: var(--sand);">
+  <div class="container">
+    <div class="split">
+      <div class="visual" style="background: #fff;">
+        <h3 style="font-size: 18px; margin-bottom: 14px;">{{ sections["programs.support_group"].panel_heading }}</h3>
+{%- for r in sections["programs.support_group"].rows %}
+        <div class="kv-row"><span class="k">{{ r.k }}</span><span class="v">{{ r.v }}</span></div>
+{%- endfor %}
+        <a href="events.html" class="btn btn-plum btn-sm mt-16" style="display:inline-block;">{{ sections["programs.support_group"].panel_cta_label }}</a>
+      </div>
+      <div>
+        <span class="eyebrow">{{ sections["programs.support_group"].eyebrow }}</span>
+        <h2 style="margin-bottom: 14px;">{{ sections["programs.support_group"].heading }}</h2>
+{%- for p in sections["programs.support_group"].paragraphs %}
+        <p class="muted mb-16">{{ p }}</p>
+{%- endfor %}
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="grants">
+  <div class="container">
+    <div class="split">
+      <div>
+        <span class="eyebrow">{{ sections["programs.grants"].eyebrow }}</span>
+        <h2 style="margin-bottom: 14px;">{{ sections["programs.grants"].heading }}</h2>
+{%- for p in sections["programs.grants"].paragraphs %}
+        <p class="muted mb-16">{{ p }}</p>
+{%- endfor %}
+        <a href="#" class="btn btn-plum btn-sm" onclick="alert('Demo: the grant application routes directly into your caregiver record — staff see status, review progress, and award in one place.'); return false;">{{ sections["programs.grants"].cta_label }}</a>
+      </div>
+      <div class="visual">
+        <h3 style="font-size: 18px; margin-bottom: 14px;">{{ sections["programs.grants"].panel_heading }}</h3>
+{%- for it in sections["programs.grants"].timeline %}
+        <div class="timeline-item"><div class="timeline-dot"{% if it.dot %} style="background: {{ it.dot }};"{% endif %}></div><div><strong>{{ it.title }}</strong><div class="when">{{ it.when }}</div></div></div>
+{%- endfor %}
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="socials" style="background: var(--sand);">
+  <div class="container">
+    <div class="split">
+      <div class="visual" style="background: #fff;">
+        <h3 style="font-size: 18px; margin-bottom: 14px;">{{ sections["programs.socials"].panel_heading }}</h3>
+{%- for r in sections["programs.socials"].rows %}
+        <div class="kv-row"><span class="k">{{ r.k }}</span><span class="v">{{ r.v }}</span></div>
+{%- endfor %}
+        <p class="small muted mt-16">{{ sections["programs.socials"].panel_note }}</p>
+      </div>
+      <div>
+        <span class="eyebrow">{{ sections["programs.socials"].eyebrow }}</span>
+        <h2 style="margin-bottom: 14px;">{{ sections["programs.socials"].heading }}</h2>
+{%- for p in sections["programs.socials"].paragraphs %}
+        <p class="muted mb-16">{{ p }}</p>
+{%- endfor %}
+        <a href="events.html" class="btn btn-plum btn-sm">{{ sections["programs.socials"].cta_label }}</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="coaching">
+  <div class="container">
+    <div class="card" style="display:flex; gap: 24px; align-items:center; flex-wrap: wrap;">
+      <div class="icon" style="margin: 0; flex-shrink: 0;">💬</div>
+      <div style="flex: 1; min-width: 260px;">
+        <span class="badge badge-blue">{{ sections["programs.coaching"].badge }}</span>
+        <h3 style="font-size: 20px; margin: 8px 0 6px;">{{ sections["programs.coaching"].heading }}</h3>
+        <p class="muted small" style="margin: 0;">{{ sections["programs.coaching"].body }}</p>
+      </div>
+      <a href="#" class="btn btn-outline btn-sm" onclick="alert('Demo: joins the coaching interest list — you\'ll be first to know when sessions open.'); return false;">{{ sections["programs.coaching"].cta_label }}</a>
+    </div>
+  </div>
+</section>
+
+{% include '_membership-modal.html.j2' %}
+{% include '_footer.html.j2' %}
+
+<script src="app.js"></script>
+</body>
+</html>

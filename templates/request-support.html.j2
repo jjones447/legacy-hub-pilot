@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Request Support — Legacy Home &amp; Respite Care Foundation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="demo-banner"><strong>DEMO PREVIEW</strong> · sample data only · built by X-Centric as a working preview for Legacy Home &amp; Respite Care Foundation</div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a class="brand" href="index.html">
+      <div class="brand-mark">L</div>
+      <div class="brand-name">Legacy<small>Home &amp; Respite Care Foundation</small></div>
+    </a>
+    <button class="nav-toggle" aria-label="Menu" onclick="document.querySelector('.main-nav').classList.toggle('open')">☰</button>
+    <nav class="main-nav">
+      <a href="index.html">Home</a>
+      <a href="about.html">About</a>
+      <a href="programs.html">The Sanctuary</a>
+      <a href="resources.html">Resource Hub</a>
+      <a href="events.html">Events</a>
+      <a href="portal.html" class="nav-portal">Caregiver Portal</a>
+      <a href="index.html#donate" class="nav-cta">Donate</a>
+    </nav>
+  </div>
+</header>
+
+<section class="hero" style="padding: 56px 0 64px;">
+  <div class="container">
+    <h1 style="font-size: clamp(30px, 4vw, 44px);">{{ sections["request_support.hero"].title }}</h1>
+    <p class="lede">{{ sections["request_support.hero"].lede }}</p>
+  </div>
+</section>
+
+<section>
+  <div class="container">
+    <div class="split" style="align-items: start;">
+      <div class="login-card" style="max-width: none;">
+        <h2 style="font-size: 24px;">{{ sections["request_support.form"].heading }}</h2>
+        <p class="sub">{{ sections["request_support.form"].sub }}</p>
+        <form id="supportForm" onsubmit="return submitSupport(event)">
+          <div class="field">
+            <label for="supName">Your name</label>
+            <input id="supName" type="text" placeholder="e.g., Maria Gonzalez" required>
+          </div>
+          <div class="field">
+            <label for="supEmail">Email or phone</label>
+            <input id="supEmail" type="text" placeholder="how we reach you" required>
+          </div>
+          <div class="field">
+            <label for="supWho">I am…</label>
+            <select id="supWho">
+              <option>A family caregiver (for myself)</option>
+              <option>Referring a caregiver I know</option>
+              <option>A professional / organization referring a client</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="supWhat">Support needed</label>
+            <select id="supWhat">
+              <option>Respite — Memory Socials</option>
+              <option>Wellness Grant information</option>
+              <option>Virtual Support Group</option>
+              <option>Sanctuary membership</option>
+              <option>Something else / not sure</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="supMsg">Anything you'd like us to know (optional)</label>
+            <textarea id="supMsg" rows="4" placeholder="Your situation, timing, questions…"></textarea>
+          </div>
+          <p class="privacy-line">By sending this form, you consent to Legacy using these details to create or update your caregiver record and follow up about support. Please do not include medical record numbers or emergency details.</p>
+          <button type="submit" class="btn btn-coral" style="width: 100%;">Send request</button>
+          <div class="success-note" id="supSuccess" data-intake-success role="status" aria-live="polite">✓ Request received — our team will reach out within two business days.</div>
+          <div class="error-note" data-intake-error role="alert" aria-live="assertive"></div>
+          <div class="routing-note" id="supRouting" data-intake-routing>Behind the scenes: this request created or updated a caregiver record and queued a follow-up for staff — nothing gets lost in an inbox.</div>
+        </form>
+      </div>
+      <div>
+        <span class="eyebrow">{{ sections["request_support.next"].eyebrow }}</span>
+        <h2 style="font-size: 26px; margin-bottom: 18px;">{{ sections["request_support.next"].heading }}</h2>
+{%- for it in sections["request_support.next"].steps %}
+        <div class="timeline-item"><div class="timeline-dot" style="background: {{ it.dot }};"></div><div><strong>{{ it.title }}</strong><div class="when">{{ it.when }}</div></div></div>
+{%- endfor %}
+        <div class="card mt-24" style="background: var(--sand); border-style: dashed;">
+          <p class="small" style="margin:0;">{{ sections["request_support.next"].crisis_html }}</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+{% include '_footer.html.j2' %}
+
+<script src="app.js"></script>
+</body>
+</html>
