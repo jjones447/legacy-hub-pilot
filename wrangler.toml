@@ -1,0 +1,22 @@
+# Legacy Caregiver Hub — Cloudflare Pages + D1 (slice 03: deploy-ready, not deployed)
+# Tenancy per docs/decisions/0004: Jacob's Cloudflare account; domain onboards once at go-live.
+#
+# Fill these two values at first deploy:
+#   1. account_id — from the Cloudflare dashboard (or `wrangler whoami`)
+#   2. database_id — printed by `wrangler d1 create legacy-hub-db` (and the staging one)
+# Then: `wrangler d1 execute legacy-hub-db --file=schema/0001_init.sql` and deploy.
+
+name = "legacy-hub"
+compatibility_date = "2026-07-01"
+pages_build_output_dir = "."
+
+[[d1_databases]]
+binding = "LEGACY_DB"
+database_name = "legacy-hub-db"
+database_id = "FILL-AT-FIRST-DEPLOY"
+
+[env.staging]
+[[env.staging.d1_databases]]
+binding = "LEGACY_DB"
+database_name = "legacy-hub-db-staging"
+database_id = "FILL-AT-FIRST-DEPLOY"
