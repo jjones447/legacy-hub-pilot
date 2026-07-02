@@ -13,10 +13,7 @@ pages_build_output_dir = "."
 [[d1_databases]]
 binding = "LEGACY_DB"
 database_name = "legacy-hub-db"
-database_id = "FILL-AT-FIRST-DEPLOY"
+database_id = "dab02f78-f131-4d17-abaa-db9e6b45fb1b"
 
-[env.staging]
-[[env.staging.d1_databases]]
-binding = "LEGACY_DB"
-database_name = "legacy-hub-db-staging"
-database_id = "FILL-AT-FIRST-DEPLOY"
+# Pages environments are fixed: "production" + per-branch "preview" deployments.
+# (A separate staging D1 can bind to the preview environment later if slice 04 needs it.)
