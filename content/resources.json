@@ -1,0 +1,93 @@
+{
+  "content_type": "resource",
+  "items": [
+    {
+      "category": "crisis",
+      "category_label": "Crisis Help",
+      "title": "Caregiver Support Hotline",
+      "description": "24/7 phone support for caregivers in crisis or feeling overwhelmed. You are not alone — call any time.",
+      "link_label": "Call / details →",
+      "link": "#demo"
+    },
+    {
+      "category": "crisis",
+      "category_label": "Crisis Help",
+      "title": "When to Seek Emergency Care",
+      "description": "A quick guide to recognizing medical emergencies in loved ones with dementia, and what to tell first responders.",
+      "link_label": "Read guide →",
+      "link": "#demo"
+    },
+    {
+      "category": "education",
+      "category_label": "Education",
+      "title": "Understanding Younger-Onset Dementia",
+      "description": "What families should know when dementia arrives early — symptoms, progression, and how to plan together.",
+      "link_label": "Read guide →",
+      "link": "#demo"
+    },
+    {
+      "category": "education",
+      "category_label": "Education",
+      "title": "Preparing for a Memory Social",
+      "description": "What to expect from drop-in respite, how to prepare your loved one for a visit, and how to make the most of your break.",
+      "link_label": "Read guide →",
+      "link": "programs.html#socials"
+    },
+    {
+      "category": "education",
+      "category_label": "Education",
+      "title": "Video: Communication Techniques",
+      "description": "Practical ways to connect when words get hard — redirection, validation, and meeting your loved one where they are.",
+      "link_label": "Watch (18 min) →",
+      "link": "#demo"
+    },
+    {
+      "category": "selfcare",
+      "category_label": "Self-Care",
+      "title": "Wellness Grants: How to Apply",
+      "description": "Who's eligible, what grants can fund — massage, counseling, a gym membership — and how awards and care packages are personalized.",
+      "link_label": "Read the guide →",
+      "link": "#demo-grant"
+    },
+    {
+      "category": "selfcare",
+      "category_label": "Self-Care",
+      "title": "10-Minute Reset Practices",
+      "description": "Breathing, grounding, and micro-break practices that fit inside a caregiving day.",
+      "link_label": "Download PDF →",
+      "link": "#demo"
+    },
+    {
+      "category": "support",
+      "category_label": "Support Groups",
+      "title": "Virtual Support Group (Wednesdays)",
+      "description": "Our Alzheimer's Association-certified weekly group — Wednesdays 5:00–6:00 PM CST via Google Meet. Judgment-free, caregiver-only.",
+      "link_label": "Register →",
+      "link": "events.html"
+    },
+    {
+      "category": "support",
+      "category_label": "Support Groups",
+      "title": "Memory Social Caregiver Events",
+      "description": "While your loved one enjoys a supervised Memory Social, join fellow caregivers for wellness, connection, and education — side by side in the same space.",
+      "link_label": "See dates →",
+      "link": "events.html"
+    },
+    {
+      "category": "financial",
+      "category_label": "Financial & Legal",
+      "title": "Benefits & Assistance Finder",
+      "description": "A starting map of public benefits, veteran programs, and assistance funds available to family caregivers in our region.",
+      "link_label": "Open guide →",
+      "link": "#demo"
+    },
+    {
+      "category": "financial",
+      "category_label": "Financial & Legal",
+      "title": "Planning Ahead: POA & Care Decisions",
+      "description": "Plain-language basics on powers of attorney, advance directives, and getting documents in order early.",
+      "link_label": "Read guide →",
+      "link": "#demo"
+    }
+  ]
+}

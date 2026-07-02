@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Resource Hub — Legacy Home &amp; Respite Care Foundation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="demo-banner"><strong>DEMO PREVIEW</strong> · sample data only · built by X-Centric as a working preview for Legacy Home &amp; Respite Care Foundation</div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a class="brand" href="index.html">
+      <div class="brand-mark">L</div>
+      <div class="brand-name">Legacy<small>Home &amp; Respite Care Foundation</small></div>
+    </a>
+    <button class="nav-toggle" aria-label="Menu" onclick="document.querySelector('.main-nav').classList.toggle('open')">☰</button>
+    <nav class="main-nav">
+      <a href="index.html">Home</a>
+      <a href="about.html">About</a>
+      <a href="programs.html">The Sanctuary</a>
+      <a href="resources.html" class="active">Resource Hub</a>
+      <a href="events.html">Events</a>
+      <a href="portal.html" class="nav-portal">Caregiver Portal</a>
+      <a href="index.html#donate" class="nav-cta">Donate</a>
+    </nav>
+  </div>
+</header>
+
+<section class="hero" style="padding: 56px 0 64px;">
+  <div class="container">
+    <h1 style="font-size: clamp(30px, 4vw, 44px);">Resource Hub</h1>
+    <p class="lede">Everything in one place — crisis lines, education, self-care tools, and support. No more hunting across five different sites.</p>
+  </div>
+</section>
+
+<section>
+  <div class="container">
+    <input type="search" class="resource-search" id="resourceSearch" placeholder="Search resources… (try 'respite' or 'hotline')" aria-label="Search resources">
+    <div class="filter-row" id="filterRow">
+      <button class="filter-chip active" data-cat="all">All</button>
+      <button class="filter-chip" data-cat="crisis">Crisis Help</button>
+      <button class="filter-chip" data-cat="education">Education</button>
+      <button class="filter-chip" data-cat="selfcare">Self-Care</button>
+      <button class="filter-chip" data-cat="support">Support Groups</button>
+      <button class="filter-chip" data-cat="financial">Financial &amp; Legal</button>
+    </div>
+
+    <div class="card-grid" id="resourceGrid">
+{%- for r in resources %}
+      <div class="card resource-item" data-cat="{{ r.category }}">
+        <span class="resource-tag">{{ r.category_label | e }}</span>
+        <h3>{{ r.title | e }}</h3>
+        <p>{{ r.description | e }}</p>
+{%- if r.link == "#demo" %}
+        <a class="more" href="#" onclick="alert('Demo resource link'); return false;">{{ r.link_label | e }}</a>
+{%- elif r.link == "#demo-grant" %}
+        <a class="more" href="#" onclick="alert('Demo: your application status is tracked on your caregiver record — staff and you see the same journey.'); return false;">{{ r.link_label | e }}</a>
+{%- else %}
+        <a class="more" href="{{ r.link }}">{{ r.link_label | e }}</a>
+{%- endif %}
+      </div>
+{%- endfor %}
+    </div>
+    <p class="small muted mt-24" id="noResults" style="display:none;">No resources match your search — try a different term.</p>
+    <p class="small muted mt-24">Staff add or update resources by chat — <em>"add the new caregiver support hotline under Crisis Help"</em> — previewed and confirmed before going live.</p>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <div class="footer-grid">
+      <div>
+        <h4>Legacy Home &amp; Respite Care Foundation</h4>
+        <p style="font-size: 13.5px; max-width: 300px;">A nonprofit supporting caregivers of loved ones with dementia — wellness, respite, and community since 2023.</p>
+      </div>
+      <div>
+        <h4>The Sanctuary</h4>
+        <a href="programs.html#grants">Wellness Grants</a>
+        <a href="programs.html#socials">Memory Socials</a>
+        <a href="events.html">Support Group &amp; Events</a>
+      </div>
+      <div>
+        <h4>Get Involved</h4>
+        <a href="request-support.html">Request Support</a>
+        <a href="#" onclick="alert('Demo: partner/volunteer intake form.'); return false;">Volunteer</a>
+        <a href="#" onclick="alert('Demo: organizational partnership form.'); return false;">Partner with us</a>
+        <a href="index.html#donate">Donate</a>
+      </div>
+      <div>
+        <h4>Access</h4>
+        <a href="portal.html">Caregiver Portal</a>
+        <a href="staff.html">Staff Console (demo)</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 Legacy Home &amp; Respite Care Foundation · Demo preview — sample data only</span>
+      <span>Built &amp; hosted by X-Centric · Managed Hosted Hub</span>
+    </div>
+  </div>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>

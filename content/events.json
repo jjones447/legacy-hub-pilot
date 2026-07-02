@@ -1,0 +1,65 @@
+{
+  "content_type": "event",
+  "items": [
+    {
+      "id": "vsg-weekly",
+      "month": "Jul",
+      "day": "08",
+      "badge": "Support Group",
+      "badge_class": "badge-plum",
+      "title": "Virtual Support Group",
+      "title_badge": "Weekly",
+      "title_badge_class": "badge-plum",
+      "meta": "Every Wednesday · 5:00–6:00 PM CST · Google Meet",
+      "description": "Our Alzheimer's Association-certified support group — honest conversation and real connection in a judgment-free space. Register once; the link and reminders come to you.",
+      "register_label": "Virtual Support Group — Wednesdays 5 PM",
+      "registered_note": "18 registered",
+      "teaser": true
+    },
+    {
+      "id": "memory-social-jul18",
+      "month": "Jul",
+      "day": "18",
+      "badge": "Memory Social",
+      "badge_class": "badge-green",
+      "title": "Memory Social — Drop-In Respite",
+      "title_badge": null,
+      "title_badge_class": null,
+      "meta": "Saturday · 10:00 AM–1:00 PM · Community Room",
+      "description": "A welcoming, supervised gathering for your loved one — familiar activities, trained staff, no pressure — while you take a real break.",
+      "register_label": "Memory Social — Jul 18",
+      "registered_note": "8 registered · capacity 12",
+      "teaser": true
+    },
+    {
+      "id": "grant-info-aug1",
+      "month": "Aug",
+      "day": "01",
+      "badge": "Wellness",
+      "badge_class": "badge-amber",
+      "title": "Wellness Grant Info Session",
+      "title_badge": null,
+      "title_badge_class": null,
+      "meta": "Saturday · 11:00 AM · Virtual",
+      "description": "Everything about Wellness Grants: member eligibility, the application, how awards and care packages are personalized, and Q&A.",
+      "register_label": "Wellness Grant Info Session — Aug 1",
+      "registered_note": "9 registered",
+      "teaser": false
+    },
+    {
+      "id": "msce-aug15",
+      "month": "Aug",
+      "day": "15",
+      "badge": "Caregiver Event",
+      "badge_class": "badge-blue",
+      "title": "Memory Social Caregiver Event",
+      "title_badge": null,
+      "title_badge_class": null,
+      "meta": "Saturday · 10:00 AM–1:00 PM · Community Room",
+      "description": "Two rooms, one space: your loved one enjoys a supervised Memory Social while you join fellow caregivers for wellness, connection, and education.",
+      "register_label": "Memory Social Caregiver Event — Aug 15",
+      "registered_note": "6 registered · capacity 12",
+      "teaser": false
+    }
+  ]
+}

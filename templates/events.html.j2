@@ -41,62 +41,21 @@
 <section>
   <div class="container">
     <div class="card-grid">
+{%- for ev in events %}
       <div class="card event-card">
-        <div class="event-date"><div class="month">Jul</div><div class="day">08</div></div>
+        <div class="event-date"><div class="month">{{ ev.month | e }}</div><div class="day">{{ ev.day | e }}</div></div>
         <div style="flex:1;">
-          <span class="badge badge-plum">Support Group</span>
-          <h3 style="font-size: 19px; margin: 8px 0 4px;">Virtual Support Group <span class="badge badge-plum">Weekly</span></h3>
-          <div class="event-meta">Every Wednesday · 5:00–6:00 PM CST · Google Meet</div>
-          <p class="small muted mb-8">Our Alzheimer&#39;s Association-certified support group — honest conversation and real connection in a judgment-free space. Register once; the link and reminders come to you.</p>
+          <span class="badge {{ ev.badge_class }}">{{ ev.badge | e }}</span>
+          <h3 style="font-size: 19px; margin: 8px 0 4px;">{{ ev.title | e }}{% if ev.title_badge %} <span class="badge {{ ev.title_badge_class }}">{{ ev.title_badge | e }}</span>{% endif %}</h3>
+          <div class="event-meta">{{ ev.meta | e }}</div>
+          <p class="small muted mb-8">{{ ev.description | e }}</p>
           <div style="display:flex; align-items:center; gap:12px;">
-            <button class="btn btn-plum btn-sm" onclick="openRegister('Virtual Support Group — Wednesdays 5 PM')">Register</button>
-            <span class="small muted">18 registered</span>
+            <button class="btn btn-plum btn-sm" onclick="openRegister('{{ ev.register_label | replace("'", "\\'") }}')">Register</button>
+            <span class="small muted">{{ ev.registered_note | e }}</span>
           </div>
         </div>
       </div>
-
-      <div class="card event-card">
-        <div class="event-date"><div class="month">Jul</div><div class="day">18</div></div>
-        <div style="flex:1;">
-          <span class="badge badge-green">Memory Social</span>
-          <h3 style="font-size: 19px; margin: 8px 0 4px;">Memory Social — Drop-In Respite</h3>
-          <div class="event-meta">Saturday · 10:00 AM–1:00 PM · Community Room</div>
-          <p class="small muted mb-8">A welcoming, supervised gathering for your loved one — familiar activities, trained staff, no pressure — while you take a real break.</p>
-          <div style="display:flex; align-items:center; gap:12px;">
-            <button class="btn btn-plum btn-sm" onclick="openRegister('Memory Social — Jul 18')">Register</button>
-            <span class="small muted">8 registered · capacity 12</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="card event-card">
-        <div class="event-date"><div class="month">Aug</div><div class="day">01</div></div>
-        <div style="flex:1;">
-          <span class="badge badge-amber">Wellness</span>
-          <h3 style="font-size: 19px; margin: 8px 0 4px;">Wellness Grant Info Session</h3>
-          <div class="event-meta">Saturday · 11:00 AM · Virtual</div>
-          <p class="small muted mb-8">Everything about Wellness Grants: member eligibility, the application, how awards and care packages are personalized, and Q&amp;A.</p>
-          <div style="display:flex; align-items:center; gap:12px;">
-            <button class="btn btn-plum btn-sm" onclick="openRegister('Wellness Grant Info Session — Aug 1')">Register</button>
-            <span class="small muted">9 registered</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="card event-card">
-        <div class="event-date"><div class="month">Aug</div><div class="day">15</div></div>
-        <div style="flex:1;">
-          <span class="badge badge-blue">Caregiver Event</span>
-          <h3 style="font-size: 19px; margin: 8px 0 4px;">Memory Social Caregiver Event</h3>
-          <div class="event-meta">Saturday · 10:00 AM–1:00 PM · Community Room</div>
-          <p class="small muted mb-8">Two rooms, one space: your loved one enjoys a supervised Memory Social while you join fellow caregivers for wellness, connection, and education.</p>
-          <div style="display:flex; align-items:center; gap:12px;">
-            <button class="btn btn-plum btn-sm" onclick="openRegister('Memory Social Caregiver Event — Aug 15')">Register</button>
-            <span class="small muted">6 registered · capacity 12</span>
-          </div>
-        </div>
-      </div>
-
+{% endfor %}
     </div>
 
     <div class="card mt-32" style="background: var(--sand); border-style: dashed;">
