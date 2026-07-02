@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Staff Console (Demo) — Legacy Hub</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="demo-banner"><strong>STAFF CONSOLE · DEMO</strong> · sample data only · in production this sits behind secure staff sign-in (Cloudflare Access)</div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a class="brand" href="index.html">
+      <div class="brand-mark">L</div>
+      <div class="brand-name">Legacy Hub<small>Staff Console — Demo</small></div>
+    </a>
+    <nav class="main-nav" style="display:flex;">
+      <a href="index.html">← Public site</a>
+      <a href="portal.html">Caregiver Portal</a>
+    </nav>
+  </div>
+</header>
+
+<section style="padding: 44px 0;">
+  <div class="container">
+    <div class="section-head" style="margin-bottom: 28px;">
+      <span class="eyebrow">One caregiver record · every workflow</span>
+      <h2>Today at Legacy</h2>
+      <p>Every registration, grant application, respite visit, and follow-up — one system, no spreadsheets. Staff work it by chat.</p>
+    </div>
+
+    <div class="split" style="align-items: start; grid-template-columns: 1.2fr 1fr;">
+      <div>
+        <div class="panel">
+          <h4>📥 Needs attention</h4>
+          <table class="data">
+            <thead><tr><th>Caregiver</th><th>Item</th><th>Status</th></tr></thead>
+            <tbody>
+              <tr><td><strong>Maria Gonzalez</strong></td><td>Wellness grant — review check-in</td><td><span class="badge badge-amber">Due this week</span></td></tr>
+              <tr><td><strong>James Whitfield</strong></td><td>New Sanctuary member — welcome call</td><td><span class="badge badge-blue">New</span></td></tr>
+              <tr><td><strong>Dorothy Chen</strong></td><td>Memory Social follow-up (Jun 20)</td><td><span class="badge badge-plum">Queued</span></td></tr>
+              <tr><td><strong>Angela Rivers</strong></td><td>Grant award — care package + outcome note</td><td><span class="badge badge-green">Ready</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="panel">
+          <h4>📅 Upcoming events</h4>
+          <table class="data">
+            <thead><tr><th>Event</th><th>Date</th><th>Registered</th></tr></thead>
+            <tbody>
+              <tr><td>Virtual Support Group (weekly)</td><td>Jul 8</td><td>18</td></tr>
+              <tr><td>Memory Social — Drop-In Respite</td><td>Jul 18</td><td>8 / 12 capacity</td></tr>
+              <tr><td>Wellness Grant Info Session</td><td>Aug 1</td><td>9</td></tr>
+              <tr><td>Memory Social Caregiver Event</td><td>Aug 15</td><td>6 / 12 capacity</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="panel">
+          <h4>👤 Caregiver record — Maria Gonzalez <span class="badge badge-green">sample</span></h4>
+          <div class="kv-row"><span class="k">Sanctuary member since</span><span class="v">March 2024</span></div>
+          <div class="kv-row"><span class="k">Caring for</span><span class="v">Mother · younger-onset dementia</span></div>
+          <div class="kv-row"><span class="k">Programs</span><span class="v">Wellness grant · Memory Socials · Support Group</span></div>
+          <div class="kv-row"><span class="k">Grant status</span><span class="v"><span class="badge badge-amber">In review</span></span></div>
+          <div class="kv-row"><span class="k">Last attended</span><span class="v">Virtual Support Group · Jun 24</span></div>
+          <div class="kv-row"><span class="k">Memory Socials</span><span class="v">4 attended · 2026</span></div>
+          <div class="kv-row"><span class="k">Notes</span><span class="v">Prefers morning contact</span></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="chat-shell">
+          <div class="chat-head"><span class="bot-dot"></span> Legacy Assistant — staff chat <span style="margin-left:auto; font-size: 11px; opacity:.8;">draft → preview → confirm</span></div>
+          <div class="chat-body" id="chatBody">
+            <div class="msg user">add a Memory Social next Saturday 10 to 1 in the community room, registration open, capacity 12</div>
+            <div class="msg bot">
+              Here's a draft — nothing is live yet:
+              <div class="preview">
+                <div class="p-title">📅 Memory Social — Drop-In Respite</div>
+                Sat Jul 25 · 10:00 AM–1:00 PM · Community Room<br>
+                Registration: open · Capacity: 12 · Category: Memory Social<br>
+                Listed on: Events page + portal
+              </div>
+              <div class="confirm-row">
+                <button class="chip-btn chip-confirm" onclick="agentConfirm(this)">Confirm &amp; publish</button>
+                <button class="chip-btn chip-cancel" onclick="agentCancel(this)">Discard</button>
+              </div>
+            </div>
+          </div>
+          <div class="chat-input-row">
+            <input id="chatInput" type="text" placeholder='Try: "add Maria as a caregiver…" or "update the resource hub…"' onkeydown="if(event.key==='Enter'){agentSend();}">
+            <button onclick="agentSend()">Send</button>
+          </div>
+        </div>
+        <div class="card mt-16" style="background: var(--sand); border-style: dashed;">
+          <p class="small" style="margin:0;"><strong>The governed assistant:</strong> staff make changes by asking. The assistant edits <em>content and data only</em> — never code, design, or security — and every change is previewed, confirmed, and logged. A bad request becomes a draft someone declines; it can't break the site.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <div class="footer-bottom" style="border-top: none; padding-top: 0;">
+      <span>© 2026 Legacy Home &amp; Respite Care Foundation · Staff console demo — sample data only</span>
+      <span>Built &amp; hosted by X-Centric · Managed Hosted Hub</span>
+    </div>
+  </div>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>

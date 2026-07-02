@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Events — Legacy Home &amp; Respite Care Foundation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="demo-banner"><strong>DEMO PREVIEW</strong> · sample data only · built by X-Centric as a working preview for Legacy Home &amp; Respite Care Foundation</div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a class="brand" href="index.html">
+      <div class="brand-mark">L</div>
+      <div class="brand-name">Legacy<small>Home &amp; Respite Care Foundation</small></div>
+    </a>
+    <button class="nav-toggle" aria-label="Menu" onclick="document.querySelector('.main-nav').classList.toggle('open')">☰</button>
+    <nav class="main-nav">
+      <a href="index.html">Home</a>
+      <a href="programs.html">The Sanctuary</a>
+      <a href="resources.html">Resource Hub</a>
+      <a href="events.html" class="active">Events</a>
+      <a href="portal.html" class="nav-portal">Caregiver Portal</a>
+      <a href="index.html#donate" class="nav-cta">Donate</a>
+    </nav>
+  </div>
+</header>
+
+<section class="hero" style="padding: 56px 0 64px;">
+  <div class="container">
+    <h1 style="font-size: clamp(30px, 4vw, 44px);">Events</h1>
+    <p class="lede">Register in one click — your registration, attendance, and follow-up all connect to your caregiver profile automatically.</p>
+  </div>
+</section>
+
+<section>
+  <div class="container">
+    <div class="card-grid">
+      <div class="card event-card">
+        <div class="event-date"><div class="month">Jul</div><div class="day">08</div></div>
+        <div style="flex:1;">
+          <span class="badge badge-plum">Support Group</span>
+          <h3 style="font-size: 19px; margin: 8px 0 4px;">Virtual Support Group <span class="badge badge-plum">Weekly</span></h3>
+          <div class="event-meta">Every Wednesday · 5:00–6:00 PM CST · Google Meet</div>
+          <p class="small muted mb-8">Our Alzheimer's Association-certified support group — honest conversation and real connection in a judgment-free space. Register once; the link and reminders come to you.</p>
+          <div style="display:flex; align-items:center; gap:12px;">
+            <button class="btn btn-plum btn-sm" onclick="openRegister('Virtual Support Group — Wednesdays 5 PM')">Register</button>
+            <span class="small muted">18 registered</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card event-card">
+        <div class="event-date"><div class="month">Jul</div><div class="day">18</div></div>
+        <div style="flex:1;">
+          <span class="badge badge-green">Memory Social</span>
+          <h3 style="font-size: 19px; margin: 8px 0 4px;">Memory Social — Drop-In Respite</h3>
+          <div class="event-meta">Saturday · 10:00 AM–1:00 PM · Community Room</div>
+          <p class="small muted mb-8">A welcoming, supervised gathering for your loved one — familiar activities, trained staff, no pressure — while you take a real break.</p>
+          <div style="display:flex; align-items:center; gap:12px;">
+            <button class="btn btn-plum btn-sm" onclick="openRegister('Memory Social — Jul 18')">Register</button>
+            <span class="small muted">8 registered · capacity 12</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card event-card">
+        <div class="event-date"><div class="month">Aug</div><div class="day">01</div></div>
+        <div style="flex:1;">
+          <span class="badge badge-amber">Wellness</span>
+          <h3 style="font-size: 19px; margin: 8px 0 4px;">Wellness Grant Info Session</h3>
+          <div class="event-meta">Saturday · 11:00 AM · Virtual</div>
+          <p class="small muted mb-8">Everything about Wellness Grants: member eligibility, the application, how awards and care packages are personalized, and Q&amp;A.</p>
+          <div style="display:flex; align-items:center; gap:12px;">
+            <button class="btn btn-plum btn-sm" onclick="openRegister('Wellness Grant Info Session — Aug 1')">Register</button>
+            <span class="small muted">9 registered</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card event-card">
+        <div class="event-date"><div class="month">Aug</div><div class="day">15</div></div>
+        <div style="flex:1;">
+          <span class="badge badge-blue">Caregiver Event</span>
+          <h3 style="font-size: 19px; margin: 8px 0 4px;">Memory Social Caregiver Event</h3>
+          <div class="event-meta">Saturday · 10:00 AM–1:00 PM · Community Room</div>
+          <p class="small muted mb-8">Two rooms, one space: your loved one enjoys a supervised Memory Social while you join fellow caregivers for wellness, connection, and education.</p>
+          <div style="display:flex; align-items:center; gap:12px;">
+            <button class="btn btn-plum btn-sm" onclick="openRegister('Memory Social Caregiver Event — Aug 15')">Register</button>
+            <span class="small muted">6 registered · capacity 12</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mt-32" style="background: var(--sand); border-style: dashed;">
+      <p class="small" style="margin: 0;"><strong>How staff manage this page:</strong> by chat — <em>"post a Memory Social next Saturday 10–1 in the community room, registration open, capacity 12."</em> The assistant drafts it, staff preview and confirm, and it goes live. Attendance flows back to each caregiver's record for follow-up.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Registration modal -->
+<div class="modal-overlay" id="registerModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeRegister()">✕</button>
+    <h3 id="regTitle">Register</h3>
+    <p class="sub">One quick form — no re-typing your details every time.</p>
+    <form id="regForm" onsubmit="return submitRegister(event)">
+      <div class="field">
+        <label for="regName">Your name</label>
+        <input id="regName" type="text" placeholder="e.g., Maria Gonzalez" required>
+      </div>
+      <div class="field">
+        <label for="regEmail">Email</label>
+        <input id="regEmail" type="email" placeholder="you@example.com" required>
+      </div>
+      <div class="field">
+        <label for="regRole">I am a…</label>
+        <select id="regRole">
+          <option>Family caregiver</option>
+          <option>Professional caregiver</option>
+          <option>Volunteer</option>
+          <option>Community member</option>
+        </select>
+      </div>
+      <button type="submit" class="btn btn-coral" style="width: 100%;">Complete registration</button>
+      <div class="success-note" id="regSuccess">✓ You're registered! A confirmation is on its way.</div>
+      <div class="routing-note" id="regRouting">Behind the scenes (demo): this registration just routed into the caregiver record — profile matched, attendance list updated, follow-up queued for staff.</div>
+    </form>
+  </div>
+</div>
+
+<footer>
+  <div class="container">
+    <div class="footer-grid">
+      <div>
+        <h4>Legacy Home &amp; Respite Care Foundation</h4>
+        <p style="font-size: 13.5px; max-width: 300px;">A nonprofit supporting caregivers of loved ones with dementia — wellness, respite, and community since 2023.</p>
+      </div>
+      <div>
+        <h4>The Sanctuary</h4>
+        <a href="programs.html#grants">Wellness Grants</a>
+        <a href="programs.html#socials">Memory Socials</a>
+        <a href="events.html">Support Group &amp; Events</a>
+      </div>
+      <div>
+        <h4>Get Involved</h4>
+        <a href="#" onclick="alert('Demo: request support / self-care referral form — routes into the caregiver record.'); return false;">Request Support</a>
+        <a href="#" onclick="alert('Demo: partner/volunteer intake form.'); return false;">Volunteer</a>
+        <a href="#" onclick="alert('Demo: organizational partnership form.'); return false;">Partner with us</a>
+        <a href="index.html#donate">Donate</a>
+      </div>
+      <div>
+        <h4>Access</h4>
+        <a href="portal.html">Caregiver Portal</a>
+        <a href="staff.html">Staff Console (demo)</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 Legacy Home &amp; Respite Care Foundation · Demo preview — sample data only</span>
+      <span>Built &amp; hosted by X-Centric · Managed Hosted Hub</span>
+    </div>
+  </div>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Caregiver Portal — Legacy Home &amp; Respite Care Foundation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="demo-banner"><strong>DEMO PREVIEW</strong> · sample data only · <strong>Phase 2 preview</strong> — the caregiver portal, shown early</div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a class="brand" href="index.html">
+      <div class="brand-mark">L</div>
+      <div class="brand-name">Legacy<small>Home &amp; Respite Care Foundation</small></div>
+    </a>
+    <button class="nav-toggle" aria-label="Menu" onclick="document.querySelector('.main-nav').classList.toggle('open')">☰</button>
+    <nav class="main-nav">
+      <a href="index.html">Home</a>
+      <a href="programs.html">The Sanctuary</a>
+      <a href="resources.html">Resource Hub</a>
+      <a href="events.html">Events</a>
+      <a href="portal.html" class="nav-portal active">Caregiver Portal</a>
+      <a href="index.html#donate" class="nav-cta">Donate</a>
+    </nav>
+  </div>
+</header>
+
+<!-- LOGIN VIEW -->
+<section id="loginView" style="padding: 70px 0;">
+  <div class="container">
+    <div class="login-wrap">
+      <div class="login-card">
+        <h2>Caregiver Portal</h2>
+        <p class="sub">Your Sanctuary membership — profile, grants, events, and resources in one secure place.</p>
+        <div class="field">
+          <label for="loginEmail">Email</label>
+          <input id="loginEmail" type="email" value="maria.g@example.com">
+        </div>
+        <button class="btn btn-plum" style="width: 100%;" onclick="portalLogin()">Send me a sign-in link</button>
+        <p class="hint">Demo: click to preview the portal as <strong>Maria G.</strong> (sample caregiver). In production this is a secure email sign-in — no password to remember.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- DASHBOARD VIEW -->
+<section id="dashView" style="display:none; padding: 44px 0;">
+  <div class="container">
+    <div style="display:flex; justify-content: space-between; align-items:center; flex-wrap: wrap; gap: 12px; margin-bottom: 26px;">
+      <div>
+        <span class="eyebrow">Caregiver Portal</span>
+        <h2 style="font-size: 30px;">Welcome back, Maria</h2>
+      </div>
+      <button class="btn btn-outline btn-sm" onclick="portalLogout()">Sign out</button>
+    </div>
+
+    <div class="card-grid" style="grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));">
+
+      <div class="panel" style="margin:0;">
+        <h4>🌱 My Wellness Grant</h4>
+        <div class="kv-row"><span class="k">Membership</span><span class="v"><span class="badge badge-green">Sanctuary member</span></span></div>
+        <div class="kv-row"><span class="k">Application</span><span class="v"><span class="badge badge-amber">In review · Jun 2</span></span></div>
+        <div class="kv-row"><span class="k">Requested for</span><span class="v">Counseling sessions</span></div>
+        <div class="kv-row"><span class="k">Award &amp; care package</span><span class="v">Personalized on approval</span></div>
+        <a href="#" class="btn btn-plum btn-sm mt-16" style="display:inline-block;" onclick="alert('Demo: your application status, review notes, and award details — all from your caregiver record.'); return false;">View application</a>
+      </div>
+
+      <div class="panel" style="margin:0;">
+        <h4>📅 My Events</h4>
+        <div class="timeline-item"><div class="timeline-dot" style="background: var(--green);"></div><div><strong>Virtual Support Group</strong> — Wednesdays <span class="badge badge-green">Registered</span><div class="when">5:00–6:00 PM CST · Google Meet</div></div></div>
+        <div class="timeline-item"><div class="timeline-dot" style="background: var(--amber);"></div><div><strong>Memory Social</strong> — Jul 18<div class="when">Not registered yet</div></div></div>
+        <div class="timeline-item"><div class="timeline-dot"></div><div><strong>Attended:</strong> Virtual Support Group · Jun 24<div class="when">Thanks for coming!</div></div></div>
+        <a href="events.html" class="btn btn-outline btn-sm mt-16" style="display:inline-block;">Browse all events</a>
+      </div>
+
+      <div class="panel" style="margin:0;">
+        <h4>🏡 My Memory Socials</h4>
+        <div class="kv-row"><span class="k">Attended (2026)</span><span class="v">4 socials</span></div>
+        <div class="kv-row"><span class="k">Last visit</span><span class="v">Jun 20</span></div>
+        <div class="kv-row"><span class="k">Next up</span><span class="v">Memory Social · Jul 18</span></div>
+        <a href="#" class="btn btn-plum btn-sm mt-16" style="display:inline-block;" onclick="alert('Demo (Phase 2): Memory Social registration with capacity + on-site check-in when the community center opens.'); return false;">Register for Jul 18</a>
+      </div>
+
+      <div class="panel" style="margin:0;">
+        <h4>📚 Saved Resources</h4>
+        <div class="timeline-item"><div class="timeline-dot" style="background: var(--blue);"></div><div><strong>10-Minute Reset Practices</strong><div class="when">Self-Care · saved Jun 18</div></div></div>
+        <div class="timeline-item"><div class="timeline-dot" style="background: var(--blue);"></div><div><strong>Benefits &amp; Assistance Finder</strong><div class="when">Financial &amp; Legal · saved Jun 5</div></div></div>
+        <a href="resources.html" class="btn btn-outline btn-sm mt-16" style="display:inline-block;">Open Resource Hub</a>
+      </div>
+
+    </div>
+
+    <div class="card mt-24" style="background: var(--sand); border-style: dashed;">
+      <p class="small" style="margin:0;"><strong>Why this matters:</strong> everything on this page is one caregiver record underneath — the same record staff see, that events update, that the grant workflow drives. The portal is just a secure window into it. <em>(Portal = Phase 2; shown here as a working preview.)</em></p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <div class="footer-grid">
+      <div>
+        <h4>Legacy Home &amp; Respite Care Foundation</h4>
+        <p style="font-size: 13.5px; max-width: 300px;">A nonprofit supporting caregivers of loved ones with dementia — wellness, respite, and community since 2023.</p>
+      </div>
+      <div>
+        <h4>The Sanctuary</h4>
+        <a href="programs.html#grants">Wellness Grants</a>
+        <a href="programs.html#socials">Memory Socials</a>
+        <a href="events.html">Support Group &amp; Events</a>
+      </div>
+      <div>
+        <h4>Get Involved</h4>
+        <a href="#" onclick="alert('Demo: request support / self-care referral form — routes into the caregiver record.'); return false;">Request Support</a>
+        <a href="#" onclick="alert('Demo: partner/volunteer intake form.'); return false;">Volunteer</a>
+        <a href="#" onclick="alert('Demo: organizational partnership form.'); return false;">Partner with us</a>
+        <a href="index.html#donate">Donate</a>
+      </div>
+      <div>
+        <h4>Access</h4>
+        <a href="portal.html">Caregiver Portal</a>
+        <a href="staff.html">Staff Console (demo)</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 Legacy Home &amp; Respite Care Foundation · Demo preview — sample data only</span>
+      <span>Built &amp; hosted by X-Centric · Managed Hosted Hub</span>
+    </div>
+  </div>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
