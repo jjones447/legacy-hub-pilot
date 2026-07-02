@@ -2,7 +2,7 @@
   "content_type": "event",
   "items": [
     {
-      "id": "vsg-weekly",
+      "id": "ev_virtual_support_group",
       "month": "Jul",
       "day": "08",
       "badge": "Support Group",
@@ -17,7 +17,7 @@
       "teaser": true
     },
     {
-      "id": "memory-social-jul18",
+      "id": "ev_memory_social_jul18",
       "month": "Jul",
       "day": "18",
       "badge": "Memory Social",
@@ -32,7 +32,7 @@
       "teaser": true
     },
     {
-      "id": "grant-info-aug1",
+      "id": "ev_wellness_grant_info_aug01",
       "month": "Aug",
       "day": "01",
       "badge": "Wellness",
@@ -47,7 +47,7 @@
       "teaser": false
     },
     {
-      "id": "msce-aug15",
+      "id": "ev_memory_social_caregiver_aug15",
       "month": "Aug",
       "day": "15",
       "badge": "Caregiver Event",

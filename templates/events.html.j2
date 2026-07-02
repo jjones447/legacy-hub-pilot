@@ -50,7 +50,7 @@
           <div class="event-meta">{{ ev.meta | e }}</div>
           <p class="small muted mb-8">{{ ev.description | e }}</p>
           <div style="display:flex; align-items:center; gap:12px;">
-            <button class="btn btn-plum btn-sm" onclick="openRegister('{{ ev.register_label | replace("'", "\\'") }}')">Register</button>
+            <button class="btn btn-plum btn-sm" onclick="openRegister('{{ ev.register_label | replace("'", "\\'") }}', '{{ ev.id }}')">Register</button>
             <span class="small muted">{{ ev.registered_note | e }}</span>
           </div>
         </div>
@@ -88,9 +88,11 @@
           <option>Community member</option>
         </select>
       </div>
+      <p class="privacy-line">By registering, you consent to Legacy using these details to create or update your caregiver record, manage attendance, and send event follow-up. Please do not include medical record numbers or emergency details.</p>
       <button type="submit" class="btn btn-coral" style="width: 100%;">Complete registration</button>
-      <div class="success-note" id="regSuccess">✓ You're registered! A confirmation is on its way.</div>
-      <div class="routing-note" id="regRouting">Behind the scenes (demo): this registration just routed into the caregiver record — profile matched, attendance list updated, follow-up queued for staff.</div>
+      <div class="success-note" id="regSuccess" data-intake-success role="status" aria-live="polite">✓ You're registered! A confirmation is on its way.</div>
+      <div class="error-note" data-intake-error role="alert" aria-live="assertive"></div>
+      <div class="routing-note" id="regRouting" data-intake-routing>Behind the scenes: this registration routed into the caregiver record — profile matched, attendance list updated, follow-up queued for staff.</div>
     </form>
   </div>
 </div>
