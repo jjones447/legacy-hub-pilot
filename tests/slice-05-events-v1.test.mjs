@@ -93,6 +93,14 @@ test('GET/POST /api/followups allows viewing and updating followups', async () =
 
   const statusVal = raw.prepare(`SELECT status FROM followup WHERE id = ?`).get(followupId);
   assert.equal(statusVal.status, 'done');
+
+  // Verify audit log entry
+  const audit = raw.prepare(`SELECT * FROM audit_log WHERE entity = 'followup' AND entity_id = ?`).get(followupId.toString());
+  assert.ok(audit);
+  assert.equal(audit.actor, 'staff_console');
+  assert.equal(audit.action, 'followup.update_status');
+  assert.equal(JSON.parse(audit.before_json).status, 'open');
+  assert.equal(JSON.parse(audit.after_json).status, 'done');
 });
 
 test('GET/POST /api/registrations allows viewing and updating registration status', async () => {
@@ -126,4 +134,12 @@ test('GET/POST /api/registrations allows viewing and updating registration statu
 
   const statusVal = raw.prepare(`SELECT status FROM registration WHERE id = ?`).get(regId);
   assert.equal(statusVal.status, 'attended');
+
+  // Verify audit log entry
+  const audit = raw.prepare(`SELECT * FROM audit_log WHERE entity = 'registration' AND entity_id = ?`).get(regId.toString());
+  assert.ok(audit);
+  assert.equal(audit.actor, 'staff_console');
+  assert.equal(audit.action, 'registration.update_status');
+  assert.equal(JSON.parse(audit.before_json).status, 'registered');
+  assert.equal(JSON.parse(audit.after_json).status, 'attended');
 });
