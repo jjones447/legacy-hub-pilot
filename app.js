@@ -262,3 +262,46 @@ function agentSend() {
   }, 450);
   body.scrollTop = body.scrollHeight;
 }
+
+/* ---------- Events live D1 listing ---------- */
+function loadLiveEvents() {
+  const cards = document.querySelectorAll('.event-card');
+  if (!cards.length) return;
+
+  fetch('/api/events')
+    .then(function (res) { return res.json(); })
+    .then(function (data) {
+      if (!data.ok || !data.events) return;
+      
+      data.events.forEach(function (e) {
+        const btn = Array.from(document.querySelectorAll('button')).find(function (b) {
+          const onclickAttr = b.getAttribute('onclick') || '';
+          return onclickAttr.indexOf("'" + e.id + "'") !== -1 || onclickAttr.indexOf('"' + e.id + '"') !== -1;
+        });
+
+        if (btn) {
+          const container = btn.closest('.event-card') || btn.parentElement;
+          const noteSpan = container.querySelector('span.small.muted');
+          if (noteSpan) {
+            if (e.capacity) {
+              noteSpan.textContent = e.registered_count + ' registered · capacity ' + e.capacity;
+              if (e.registered_count >= e.capacity) {
+                btn.textContent = 'Full';
+                btn.disabled = true;
+                btn.className = 'btn btn-outline btn-sm';
+                btn.onclick = null;
+              }
+            } else {
+              noteSpan.textContent = e.registered_count + ' registered';
+            }
+          }
+        }
+      });
+    })
+    .catch(function (err) {
+      console.error('Failed to load live events from D1:', err);
+    });
+}
+
+document.addEventListener('DOMContentLoaded', loadLiveEvents);
+

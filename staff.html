@@ -39,11 +39,8 @@
           <h4>📥 Needs attention</h4>
           <table class="data">
             <thead><tr><th>Caregiver</th><th>Item</th><th>Status</th></tr></thead>
-            <tbody>
-              <tr><td><strong>Maria Gonzalez</strong></td><td>Wellness grant — review check-in</td><td><span class="badge badge-amber">Due this week</span></td></tr>
-              <tr><td><strong>James Whitfield</strong></td><td>New Sanctuary member — welcome call</td><td><span class="badge badge-blue">New</span></td></tr>
-              <tr><td><strong>Dorothy Chen</strong></td><td>Memory Social follow-up (Jun 20)</td><td><span class="badge badge-plum">Queued</span></td></tr>
-              <tr><td><strong>Angela Rivers</strong></td><td>Grant award — care package + outcome note</td><td><span class="badge badge-green">Ready</span></td></tr>
+            <tbody id="needsAttentionBody">
+              <tr><td colspan="3" class="text-center muted small">Loading follow-ups...</td></tr>
             </tbody>
           </table>
         </div>
@@ -52,14 +49,18 @@
           <h4>📅 Upcoming events</h4>
           <table class="data">
             <thead><tr><th>Event</th><th>Date</th><th>Registered</th></tr></thead>
-            <tbody>
-              <tr><td>Virtual Support Group (weekly)</td><td>Jul 8</td><td>18</td></tr>
-              <tr><td>Memory Social — Drop-In Respite</td><td>Jul 18</td><td>8 / 12 capacity</td></tr>
-              <tr><td>Wellness Grant Info Session</td><td>Aug 1</td><td>9</td></tr>
-              <tr><td>Memory Social Caregiver Event</td><td>Aug 15</td><td>6 / 12 capacity</td></tr>
+            <tbody id="upcomingEventsBody">
+              <tr><td colspan="3" class="text-center muted small">Loading events...</td></tr>
             </tbody>
           </table>
         </div>
+
+        <div class="panel" id="attendancePanel" style="display:none; margin-top:24px;">
+          <h4>👥 Event Attendance</h4>
+          <p class="small muted" style="margin-bottom:12px;">Capture attendance for registered caregivers.</p>
+          <div id="attendanceContent"></div>
+        </div>
+
 
         <div class="panel">
           <h4>👤 Caregiver record — Maria Gonzalez <span class="badge badge-green">sample</span></h4>
@@ -115,5 +116,184 @@
 </footer>
 
 <script src="app.js"></script>
+<script>
+let currentEventId = null;
+let currentEventTitle = '';
+
+async function loadStaffConsole() {
+  await Promise.all([loadFollowups(), loadEvents()]);
+  if (currentEventId) {
+    await loadRegistrations(currentEventId, currentEventTitle);
+  }
+}
+
+async function loadFollowups() {
+  try {
+    const res = await fetch('/api/followups');
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to fetch followups');
+    
+    const body = document.getElementById('needsAttentionBody');
+    if (!body) return;
+    if (data.followups.length === 0) {
+      body.innerHTML = '<tr><td colspan="3" class="text-center muted small">No follow-ups in queue.</td></tr>';
+      return;
+    }
+    
+    body.innerHTML = data.followups.map(fu => {
+      const caregiverName = `${fu.first_name || ''} ${fu.last_name || ''}`.trim() || 'Anonymous';
+      const badgeClass = fu.status === 'open' ? 'badge-plum' : 'badge-green';
+      const statusText = fu.status === 'open' ? 'Queued' : 'Resolved';
+      
+      let actionHtml = '';
+      if (fu.status === 'open') {
+        actionHtml = `<button class="btn btn-sm btn-coral" style="padding: 4px 10px; font-size: 11px; margin-left: 8px;" onclick="resolveFollowup(${fu.id})">Resolve</button>`;
+      }
+      
+      return `
+        <tr>
+          <td><strong>${caregiverName}</strong></td>
+          <td>${fu.kind}: ${fu.detail || ''}</td>
+          <td>
+            <span class="badge ${badgeClass}">${statusText}</span>
+            ${actionHtml}
+          </td>
+        </tr>
+      `;
+    }).join('');
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+async function resolveFollowup(id) {
+  try {
+    const res = await fetch('/api/followups', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, status: 'done' })
+    });
+    if (res.ok) {
+      await loadFollowups();
+    }
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+async function loadEvents() {
+  try {
+    const res = await fetch('/api/events');
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to fetch events');
+    
+    const body = document.getElementById('upcomingEventsBody');
+    if (!body) return;
+    if (data.events.length === 0) {
+      body.innerHTML = '<tr><td colspan="3" class="text-center muted small">No events found.</td></tr>';
+      return;
+    }
+    
+    body.innerHTML = data.events.map(ev => {
+      const regText = ev.capacity ? `${ev.registered_count} / ${ev.capacity} capacity` : `${ev.registered_count}`;
+      const isSelected = ev.id === currentEventId ? 'background: #fbf6f0; font-weight: bold;' : '';
+      const dateText = ev.starts_at ? ev.starts_at.split(' ')[0] : '';
+      
+      return `
+        <tr style="cursor: pointer; ${isSelected}" onclick="selectEvent('${ev.id}', '${ev.title.replace(/'/g, "\\'")}')">
+          <td><strong>${ev.title}</strong></td>
+          <td>${dateText}</td>
+          <td>${regText}</td>
+        </tr>
+      `;
+    }).join('');
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+async function selectEvent(eventId, eventTitle) {
+  currentEventId = eventId;
+  currentEventTitle = eventTitle;
+  // highlight selected row
+  await loadEvents();
+  await loadRegistrations(eventId, eventTitle);
+}
+
+async function loadRegistrations(eventId, eventTitle) {
+  try {
+    const res = await fetch(`/api/registrations?event_id=${eventId}`);
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to fetch registrations');
+    
+    const panel = document.getElementById('attendancePanel');
+    const content = document.getElementById('attendanceContent');
+    if (!panel || !content) return;
+    
+    panel.style.display = 'block';
+    
+    if (data.registrations.length === 0) {
+      content.innerHTML = '<p class="small muted text-center">No caregivers registered for this event yet.</p>';
+      return;
+    }
+    
+    content.innerHTML = `
+      <table class="data">
+        <thead>
+          <tr>
+            <th>Caregiver</th>
+            <th>Email</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${data.registrations.map(reg => {
+            const caregiverName = `${reg.first_name || ''} ${reg.last_name || ''}`.trim() || 'Anonymous';
+            let badgeClass = 'badge-blue';
+            if (reg.status === 'attended') badgeClass = 'badge-green';
+            if (reg.status === 'no_show') badgeClass = 'badge-amber';
+            if (reg.status === 'cancelled') badgeClass = 'badge-plum';
+            
+            return `
+              <tr>
+                <td><strong>${caregiverName}</strong></td>
+                <td>${reg.email || ''}</td>
+                <td><span class="badge ${badgeClass}">${reg.status}</span></td>
+                <td>
+                  <button class="btn btn-sm btn-plum" style="padding: 4px 8px; font-size: 11px; margin-right: 4px;" onclick="updateAttendance(${reg.id}, 'attended')">Attended</button>
+                  <button class="btn btn-sm btn-outline" style="padding: 4px 8px; font-size: 11px; margin-right: 4px;" onclick="updateAttendance(${reg.id}, 'no_show')">No Show</button>
+                  <button class="btn btn-sm btn-outline" style="padding: 4px 8px; font-size: 11px;" onclick="updateAttendance(${reg.id}, 'cancelled')">Cancel</button>
+                </td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    `;
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+async function updateAttendance(id, status) {
+  try {
+    const res = await fetch('/api/registrations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, status })
+    });
+    if (res.ok) {
+      await loadStaffConsole();
+    }
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+// Initial load
+document.addEventListener('DOMContentLoaded', loadStaffConsole);
+</script>
 </body>
 </html>
+
