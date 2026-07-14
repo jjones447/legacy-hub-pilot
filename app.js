@@ -195,16 +195,193 @@ document.addEventListener('click', function (e) {
   if (membershipOverlay && e.target === membershipOverlay) closeMembership();
 });
 
-/* ---------- Portal: mock login / dashboard ---------- */
-function portalLogin() {
-  document.getElementById('loginView').style.display = 'none';
-  document.getElementById('dashView').style.display = 'block';
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+/* ---------- Portal: Magic-link login, logout, and session check ---------- */
+
+function checkPortalSession() {
+  const loginView = document.getElementById('loginView');
+  const dashView = document.getElementById('dashView');
+  if (!loginView || !dashView) return; // not on portal page
+
+  fetch('/api/portal/me')
+    .then(function (res) {
+      if (res.status === 200) {
+        return res.json();
+      }
+      throw new Error('unauthorized');
+    })
+    .then(function (data) {
+      if (data.ok) {
+        renderPortalData(data);
+        loginView.style.display = 'none';
+        dashView.style.display = 'block';
+      } else {
+        dashView.style.display = 'none';
+        loginView.style.display = 'block';
+      }
+    })
+    .catch(function () {
+      dashView.style.display = 'none';
+      loginView.style.display = 'block';
+    });
 }
+
+function submitPortalLogin(e) {
+  if (e) e.preventDefault();
+  const emailInput = document.getElementById('loginEmail');
+  const statusDiv = document.getElementById('loginStatus');
+  const btn = document.getElementById('loginBtn');
+  if (!emailInput || !statusDiv) return;
+
+  const email = (emailInput.value || '').trim();
+  if (!email || !email.includes('@')) {
+    statusDiv.style.display = 'block';
+    statusDiv.style.background = '#fee2e2';
+    statusDiv.style.color = '#b91c1c';
+    statusDiv.textContent = 'Please enter a valid email address.';
+    return;
+  }
+
+  statusDiv.style.display = 'block';
+  statusDiv.style.background = '#f3f4f6';
+  statusDiv.style.color = '#4b5563';
+  statusDiv.textContent = 'Sending sign-in link...';
+  if (btn) btn.disabled = true;
+
+  fetch('/api/portal/login', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: email })
+  })
+    .then(function (res) {
+      if (res.status === 429) {
+        throw new Error('rate_limited');
+      }
+      return res.json();
+    })
+    .then(function (data) {
+      if (data.ok) {
+        statusDiv.style.background = '#dcfce7';
+        statusDiv.style.color = '#15803d';
+
+        if (data.dev_link) {
+          statusDiv.innerHTML = 'Success! Link generated for demo mode:<br><a href="' + data.dev_link + '" class="btn btn-plum btn-sm mt-8" style="display:inline-block; text-decoration:none;">Click here to sign in</a>';
+        } else {
+          statusDiv.textContent = "If you're a member, check your email for a secure sign-in link!";
+        }
+      } else {
+        throw new Error(data.error || 'Failed to request link.');
+      }
+    })
+    .catch(function (err) {
+      statusDiv.style.background = '#fee2e2';
+      statusDiv.style.color = '#b91c1c';
+      if (err.message === 'rate_limited') {
+        statusDiv.textContent = 'Too many requests. Please wait a few minutes and try again.';
+      } else {
+        statusDiv.textContent = "We couldn't request a sign-in link just now. Please try again later.";
+      }
+    })
+    .finally(function () {
+      if (btn) btn.disabled = false;
+    });
+}
+
 function portalLogout() {
-  document.getElementById('dashView').style.display = 'none';
-  document.getElementById('loginView').style.display = 'block';
+  fetch('/api/portal/logout', { method: 'POST' })
+    .then(function () {
+      const loginView = document.getElementById('loginView');
+      const dashView = document.getElementById('dashView');
+      const statusDiv = document.getElementById('loginStatus');
+      const emailInput = document.getElementById('loginEmail');
+
+      if (statusDiv) statusDiv.style.display = 'none';
+      if (emailInput) emailInput.value = '';
+
+      if (dashView) dashView.style.display = 'none';
+      if (loginView) loginView.style.display = 'block';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
 }
+
+function renderPortalData(data) {
+  const welcome = document.getElementById('portalWelcome');
+  if (welcome) {
+    welcome.textContent = 'Welcome back, ' + (data.profile.first_name || 'Member');
+  }
+
+  // Membership status
+  const memberStatus = document.getElementById('portalMembershipStatus');
+  if (memberStatus) {
+    if (data.profile.sanctuary_member === 1) {
+      memberStatus.innerHTML = '<span class="badge badge-green">Sanctuary member</span>';
+    } else {
+      memberStatus.innerHTML = '<span class="badge badge-gray">Non-member</span>';
+    }
+  }
+
+  // Grant status
+  const grantStatus = document.getElementById('portalGrantStatus');
+  const grantRequestedFor = document.getElementById('portalGrantRequestedFor');
+  const grantAward = document.getElementById('portalGrantAward');
+  if (grantStatus && grantRequestedFor && grantAward) {
+    if (data.grants && data.grants.length > 0) {
+      const ga = data.grants[0];
+      let badgeClass = 'badge-gray';
+      if (ga.status === 'submitted' || ga.status === 'in_review') badgeClass = 'badge-amber';
+      else if (ga.status === 'awarded') badgeClass = 'badge-green';
+
+      grantStatus.innerHTML = '<span class="badge ' + badgeClass + '">' + ga.status.replace('_', ' ') + '</span>';
+      grantRequestedFor.textContent = ga.requested_for || 'Wellness grant';
+      grantAward.textContent = ga.amount ? 'Awarded: ' + ga.amount + ' (' + (ga.care_package || 'No package') + ')' : 'Personalized on approval';
+    } else {
+      grantStatus.innerHTML = '<span class="badge badge-gray">No application</span>';
+      grantRequestedFor.textContent = '—';
+      grantAward.textContent = '—';
+    }
+  }
+
+  // Events list
+  const eventsList = document.getElementById('portalEventsList');
+  if (eventsList) {
+    eventsList.innerHTML = '';
+    if (data.events && data.events.length > 0) {
+      data.events.forEach(function (e) {
+        const item = document.createElement('div');
+        item.className = 'timeline-item';
+        let dotColor = 'var(--ink-soft)';
+        if (e.type === 'support_group') dotColor = 'var(--green)';
+        else if (e.type === 'memory_social') dotColor = 'var(--amber)';
+        else if (e.type === 'wellness') dotColor = 'var(--plum)';
+
+        item.innerHTML = '<div class="timeline-dot" style="background: ' + dotColor + ';"></div>' +
+                         '<div><strong>' + e.title + '</strong> <span class="badge badge-green">' + e.registration_status + '</span>' +
+                         '<div class="when">' + e.starts_at + ' · ' + (e.location || 'Online') + '</div></div>';
+        eventsList.appendChild(item);
+      });
+    } else {
+      eventsList.innerHTML = '<p class="small muted" style="margin:0;">No registered events yet.</p>';
+    }
+  }
+
+  // Memory socials count and details
+  const socialsCount = document.getElementById('portalSocialsCount');
+  const socialsLast = document.getElementById('portalSocialsLastVisit');
+  const socialsNext = document.getElementById('portalSocialsNext');
+  if (socialsCount && socialsLast && socialsNext) {
+    const socials = (data.events || []).filter(function (e) { return e.type === 'memory_social'; });
+    const attended = socials.filter(function (e) { return e.registration_status === 'attended'; });
+    const registered = socials.filter(function (e) { return e.registration_status === 'registered'; });
+
+    socialsCount.textContent = attended.length + ' socials';
+
+    const last = attended.sort(function (a, b) { return new Date(b.starts_at) - new Date(a.starts_at); })[0];
+    socialsLast.textContent = last ? last.starts_at.slice(0, 10) : '—';
+
+    const next = registered.sort(function (a, b) { return new Date(a.starts_at) - new Date(b.starts_at); })[0];
+    socialsNext.textContent = next ? next.title + ' · ' + next.starts_at.slice(0, 10) : '—';
+  }
+}
+
 
 /* ---------- Staff console: governed agent chat mock ---------- */
 function agentConfirm(btn) {
@@ -303,5 +480,8 @@ function loadLiveEvents() {
     });
 }
 
-document.addEventListener('DOMContentLoaded', loadLiveEvents);
+document.addEventListener('DOMContentLoaded', function() {
+  loadLiveEvents();
+  checkPortalSession();
+});
 
