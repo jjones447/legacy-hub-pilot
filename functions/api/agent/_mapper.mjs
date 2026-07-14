@@ -1,5 +1,5 @@
 // Pure NL -> change mapper (the LLM step - testable) (slice 07)
-export async function mapRequestToChange({ request, contentType, current, backend, apiKey }) {
+export async function mapRequestToChange({ request, contentType, current, backend, gatewayUrl, gatewayKey, role = 'bulk', sensitivity = 'low' }) {
   const jsonSchema = typeof contentType.json_schema === 'string'
     ? JSON.parse(contentType.json_schema)
     : contentType.json_schema;
@@ -8,19 +8,22 @@ export async function mapRequestToChange({ request, contentType, current, backen
     return backend({ request, contentType, current });
   }
 
-  return defaultBackend({
+  if (!gatewayUrl) {
+    return { ok: false, refusal: "inference unavailable — gateway not configured" };
+  }
+
+  return gatewayBackend({
     requestText: request,
     jsonSchema,
     currentData: current,
-    apiKey
+    gatewayUrl,
+    gatewayKey,
+    role,
+    sensitivity
   });
 }
 
-async function defaultBackend({ requestText, jsonSchema, currentData, apiKey }) {
-  if (!apiKey) {
-    throw new Error('Anthropic API key is required');
-  }
-
+async function gatewayBackend({ requestText, jsonSchema, currentData, gatewayUrl, gatewayKey, role, sensitivity }) {
   const systemPrompt = `You are a site-builder agent mapping natural language requests to structured content edits.
 You must adhere to these rules:
 1. Output content must validate against the target schema.
@@ -30,64 +33,82 @@ You must adhere to these rules:
 
 Current content data: ${currentData ? JSON.stringify(currentData) : 'None'}`;
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+  const headers = {
+    'content-type': 'application/json',
+    'x-emp-role': role,
+    'x-emp-sensitivity': sensitivity
+  };
+  if (gatewayKey) {
+    headers['authorization'] = `Bearer ${gatewayKey}`;
+  }
+
+  const response = await fetch(gatewayUrl, {
     method: 'POST',
-    headers: {
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-    },
+    headers,
     body: JSON.stringify({
-      model: 'claude-3-5-sonnet-20240620',
-      max_tokens: 1000,
-      system: systemPrompt,
+      role,
+      sensitivity,
       messages: [
         {
+          role: 'system',
+          content: systemPrompt
+        },
+        {
           role: 'user',
-          content: `Map the user's natural language request to a structured change.
-Request: ${requestText}`
+          content: `Map the user's natural language request to a structured change.\nRequest: ${requestText}`
         }
       ],
       tools: [
         {
-          name: 'propose_change',
-          description: 'Propose a structured JSON change matching the content schema.',
-          input_schema: jsonSchema
+          type: 'function',
+          function: {
+            name: 'propose_change',
+            description: 'Propose a structured JSON change matching the content schema.',
+            parameters: jsonSchema
+          }
         },
         {
-          name: 'refuse_request',
-          description: 'Refuse the request if it is invalid, unsafe, out of scope, or tries to change code/templates/auth/domains.',
-          input_schema: {
-            type: 'object',
-            properties: {
-              reason: {
-                type: 'string',
-                description: 'Reason for refusal'
-              }
-            },
-            required: ['reason']
+          type: 'function',
+          function: {
+            name: 'refuse_request',
+            description: 'Refuse the request if it is invalid, unsafe, out of scope, or tries to change code/templates/auth/domains.',
+            parameters: {
+              type: 'object',
+              properties: {
+                reason: {
+                  type: 'string',
+                  description: 'Reason for refusal'
+                }
+              },
+              required: ['reason']
+            }
           }
         }
       ],
-      tool_choice: { type: 'any' }
+      tool_choice: 'required'
     })
   });
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`Anthropic API error: ${response.status} - ${errorText}`);
+    throw new Error(`Gateway API error: ${response.status} - ${errorText}`);
   }
 
   const resJson = await response.json();
-  const toolUse = resJson.content?.find(c => c.type === 'tool_use');
-  if (!toolUse) {
+  const choice = resJson.choices?.[0];
+  const toolCall = choice?.message?.tool_calls?.[0];
+  if (!toolCall) {
     throw new Error('LLM failed to select a tool');
   }
 
-  if (toolUse.name === 'propose_change') {
-    return { ok: true, change: toolUse.input };
+  const args = typeof toolCall.function.arguments === 'string'
+    ? JSON.parse(toolCall.function.arguments)
+    : toolCall.function.arguments;
+
+  if (toolCall.function.name === 'propose_change') {
+    return { ok: true, change: args };
   } else {
-    return { ok: false, refusal: toolUse.input.reason };
+    return { ok: false, refusal: args.reason };
   }
 }
 
