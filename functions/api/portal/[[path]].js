@@ -92,7 +92,10 @@ export async function onRequestGet({ request, env }) {
     const pathSegments = url.pathname.split('/').filter(Boolean);
     const action = pathSegments[pathSegments.length - 1];
 
-    const secret = env.PORTAL_TOKEN_SECRET || 'dev_secret_only';
+    const secret = env.PORTAL_TOKEN_SECRET;
+    if (!secret) {
+      return json({ ok: false, error: 'auth_not_configured' }, 503);
+    }
 
     if (action === 'verify') {
       const token = url.searchParams.get('token');
@@ -216,7 +219,10 @@ export async function onRequestPost({ request, env }) {
     const pathSegments = url.pathname.split('/').filter(Boolean);
     const action = pathSegments[pathSegments.length - 1];
 
-    const secret = env.PORTAL_TOKEN_SECRET || 'dev_secret_only';
+    const secret = env.PORTAL_TOKEN_SECRET;
+    if (!secret) {
+      return json({ ok: false, error: 'auth_not_configured' }, 503);
+    }
 
     if (action === 'login') {
       const body = await request.json().catch(() => ({}));

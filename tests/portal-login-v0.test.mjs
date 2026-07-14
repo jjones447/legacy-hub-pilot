@@ -202,3 +202,35 @@ test('logout api clears the session cookie and logs logout audit', async () => {
   const auditRow = raw.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'portal.logout' AND actor = 'cg_seed_fictional'").get();
   assert.equal(auditRow.n, 1);
 });
+
+test('auth fails closed with 503 when PORTAL_TOKEN_SECRET is missing', async () => {
+  const envNoSecret = {
+    LEGACY_DB: d1(raw),
+    PORTAL_TOKEN_SECRET: undefined,
+    PORTAL_DEV_RETURN_LINK: 1
+  };
+
+  // POST login fails
+  const req1 = mockRequest('http://localhost/api/portal/login', 'POST', { email: 'jane.doe@example.com' });
+  const res1 = await postPortal({ request: req1, env: envNoSecret });
+  assert.equal(res1.status, 503);
+  const data1 = await res1.json();
+  assert.equal(data1.ok, false);
+  assert.equal(data1.error, 'auth_not_configured');
+
+  // GET verify fails
+  const req2 = mockRequest('http://localhost/api/portal/verify?token=somepayload', 'GET');
+  const res2 = await getPortal({ request: req2, env: envNoSecret });
+  assert.equal(res2.status, 503);
+  const data2 = await res2.json();
+  assert.equal(data2.ok, false);
+  assert.equal(data2.error, 'auth_not_configured');
+
+  // GET me fails
+  const req3 = mockRequest('http://localhost/api/portal/me', 'GET');
+  const res3 = await getPortal({ request: req3, env: envNoSecret });
+  assert.equal(res3.status, 503);
+  const data3 = await res3.json();
+  assert.equal(data3.ok, false);
+  assert.equal(data3.error, 'auth_not_configured');
+});
