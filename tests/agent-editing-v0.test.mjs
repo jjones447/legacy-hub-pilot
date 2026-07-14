@@ -218,3 +218,151 @@ test('GET /api/agent/drafts returns list of pending drafts only', async () => {
   assert.equal(data.drafts.length, 1);
   assert.equal(data.drafts[0].id, 'ci_draft_1');
 });
+
+test('gateway client returns graceful refusal when EMP_LLM_GATEWAY_URL is unset', async () => {
+  const req = new Request('http://localhost/api/agent/draft', {
+    method: 'POST',
+    body: JSON.stringify({
+      request: 'Add a helpline',
+      type_id: 'resource'
+    })
+  });
+
+  const noGatewayEnv = {
+    LEGACY_DB: d1(raw)
+  };
+
+  const res = await postAgent({ request: req, env: noGatewayEnv });
+  assert.equal(res.status, 200);
+  const data = await res.json();
+  assert.equal(data.ok, false);
+  assert.equal(data.refusal, 'inference unavailable — gateway not configured');
+});
+
+test('gateway client POSTs OpenAI-shaped request to EMP_LLM_GATEWAY_URL and parses tool_calls', async () => {
+  const originalFetch = globalThis.fetch;
+
+  let fetchCalled = false;
+  let requestHeaders = null;
+  let requestBody = null;
+
+  globalThis.fetch = async (url, options) => {
+    fetchCalled = true;
+    assert.equal(url, 'https://gateway.internal/v1/chat/completions');
+    assert.equal(options.method, 'POST');
+    requestHeaders = options.headers;
+    requestBody = JSON.parse(options.body);
+
+    return new Response(JSON.stringify({
+      choices: [
+        {
+          message: {
+            role: 'assistant',
+            tool_calls: [
+              {
+                id: 'call_1',
+                type: 'function',
+                function: {
+                  name: 'propose_change',
+                  arguments: JSON.stringify({
+                    title: 'Gateway Helpline',
+                    description: 'Direct call',
+                    category: 'crisis'
+                  })
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+
+  try {
+    const req = new Request('http://localhost/api/agent/draft', {
+      method: 'POST',
+      body: JSON.stringify({
+        request: 'Add a gateway helpline',
+        type_id: 'resource',
+        role: 'bulk',
+        sensitivity: 'low'
+      })
+    });
+
+    const gatewayEnv = {
+      LEGACY_DB: d1(raw),
+      EMP_LLM_GATEWAY_URL: 'https://gateway.internal/v1/chat/completions',
+      EMP_LLM_GATEWAY_KEY: 'test-key-123'
+    };
+
+    const res = await postAgent({ request: req, env: gatewayEnv });
+    assert.equal(res.status, 200);
+    const data = await res.json();
+    assert.ok(data.ok);
+    assert.equal(data.preview.title, 'Gateway Helpline');
+
+    assert.ok(fetchCalled);
+    assert.equal(requestHeaders['authorization'], 'Bearer test-key-123');
+    assert.equal(requestHeaders['x-emp-role'], 'bulk');
+    assert.equal(requestHeaders['x-emp-sensitivity'], 'low');
+
+    assert.equal(requestBody.role, 'bulk');
+    assert.equal(requestBody.sensitivity, 'low');
+    assert.ok(requestBody.messages);
+    assert.equal(requestBody.tools[0].type, 'function');
+    assert.equal(requestBody.tools[0].function.name, 'propose_change');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('gateway client handles refuse_request tool call from gateway', async () => {
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = async (url, options) => {
+    return new Response(JSON.stringify({
+      choices: [
+        {
+          message: {
+            role: 'assistant',
+            tool_calls: [
+              {
+                id: 'call_2',
+                type: 'function',
+                function: {
+                  name: 'refuse_request',
+                  arguments: JSON.stringify({
+                    reason: 'Refused: unsafe content detected'
+                  })
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+
+  try {
+    const req = new Request('http://localhost/api/agent/draft', {
+      method: 'POST',
+      body: JSON.stringify({
+        request: 'unsafe request',
+        type_id: 'resource'
+      })
+    });
+
+    const gatewayEnv = {
+      LEGACY_DB: d1(raw),
+      EMP_LLM_GATEWAY_URL: 'https://gateway.internal/v1/chat/completions'
+    };
+
+    const res = await postAgent({ request: req, env: gatewayEnv });
+    assert.equal(res.status, 200);
+    const data = await res.json();
+    assert.equal(data.ok, false);
+    assert.equal(data.refusal, 'Refused: unsafe content detected');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
