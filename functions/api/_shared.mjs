@@ -2,7 +2,7 @@
 // No handler exports, so Pages creates no route for this file. Tested directly
 // in tests/intake.test.mjs against the real schema via node:sqlite.
 
-export const INTAKE_KINDS = ['support_request', 'membership', 'event_registration'];
+export const INTAKE_KINDS = ['support_request', 'membership', 'event_registration', 'grant_application'];
 
 export function validateIntake(body) {
   if (!body || typeof body !== 'object') return 'body must be a JSON object';
@@ -23,6 +23,7 @@ const KIND_TABLE = {
   support_request: 'followup',
   membership: 'followup',
   event_registration: 'registration',
+  grant_application: 'grant_application',
 };
 
 export async function handleIntake(db, body) {
@@ -106,6 +107,18 @@ export async function handleIntake(db, body) {
     await db
       .prepare(`INSERT INTO followup (caregiver_id, kind, detail, source, external_ref) VALUES (?, 'membership_welcome', ?, ?, ?)`)
       .bind(caregiverId, 'Welcome new Sanctuary member', source, body.external_ref)
+      .run();
+  } else if (body.kind === 'grant_application') {
+    await db
+      .prepare(
+        `INSERT INTO grant_application (caregiver_id, status, requested_for, source, external_ref)
+         VALUES (?, 'submitted', ?, ?, ?)`
+      )
+      .bind(caregiverId, body.requested_for || null, source, body.external_ref)
+      .run();
+    await db
+      .prepare(`INSERT INTO followup (caregiver_id, kind, detail, source, external_ref) VALUES (?, 'grant_review', ?, ?, ?)`)
+      .bind(caregiverId, 'New wellness-grant application', source, body.external_ref + ':fu')
       .run();
   } else {
     // support_request
