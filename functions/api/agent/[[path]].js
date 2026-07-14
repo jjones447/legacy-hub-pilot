@@ -61,14 +61,18 @@ export async function onRequestPost({ request, env }) {
       }
 
       const backend = env.AGENT_MAPPER_BACKEND || null;
-      const apiKey = env.ANTHROPIC_API_KEY || null;
+      const gatewayUrl = env.EMP_LLM_GATEWAY_URL || null;
+      const gatewayKey = env.EMP_LLM_GATEWAY_KEY || null;
 
       const res = await mapRequestToChange({
         request: body.request,
         contentType,
         current: currentData,
         backend,
-        apiKey
+        gatewayUrl,
+        gatewayKey,
+        role: body.role || 'bulk',
+        sensitivity: body.sensitivity || 'low'
       });
 
       if (!res.ok) {
