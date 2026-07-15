@@ -40,10 +40,11 @@
         <p class="sub">Your Sanctuary membership — profile, grants, events, and resources in one secure place.</p>
         <div class="field">
           <label for="loginEmail">Email</label>
-          <input id="loginEmail" type="email" value="maria.g@example.com">
+          <input id="loginEmail" type="email" placeholder="you@example.com">
         </div>
-        <button class="btn btn-plum" style="width: 100%;" onclick="portalLogin()">Send me a sign-in link</button>
-        <p class="hint">Demo: click to preview the portal as <strong>Maria G.</strong> (sample caregiver). In production this is a secure email sign-in — no password to remember.</p>
+        <button id="loginBtn" class="btn btn-plum" style="width: 100%;" onclick="submitPortalLogin(event)">Send me a sign-in link</button>
+        <div id="loginStatus" class="mt-16" style="display:none; padding: 10px; border-radius: 4px; font-size: 13.5px; text-align: center;"></div>
+        <p class="hint">Demo: click to preview the portal as <strong style="cursor: pointer; text-decoration: underline;" onclick="document.getElementById('loginEmail').value = 'jane.doe@example.com'; submitPortalLogin(event)">Maria G. (Jane Doe)</strong> (sample caregiver). In production this is a secure email sign-in — no password to remember.</p>
       </div>
     </div>
   </div>
@@ -55,7 +56,7 @@
     <div style="display:flex; justify-content: space-between; align-items:center; flex-wrap: wrap; gap: 12px; margin-bottom: 26px;">
       <div>
         <span class="eyebrow">Caregiver Portal</span>
-        <h2 style="font-size: 30px;">Welcome back, Maria</h2>
+        <h2 id="portalWelcome" style="font-size: 30px;">Welcome back</h2>
       </div>
       <button class="btn btn-outline btn-sm" onclick="portalLogout()">Sign out</button>
     </div>
@@ -64,27 +65,27 @@
 
       <div class="panel" style="margin:0;">
         <h4>🌱 My Wellness Grant</h4>
-        <div class="kv-row"><span class="k">Membership</span><span class="v"><span class="badge badge-green">Sanctuary member</span></span></div>
-        <div class="kv-row"><span class="k">Application</span><span class="v"><span class="badge badge-amber">In review · Jun 2</span></span></div>
-        <div class="kv-row"><span class="k">Requested for</span><span class="v">Counseling sessions</span></div>
-        <div class="kv-row"><span class="k">Award &amp; care package</span><span class="v">Personalized on approval</span></div>
+        <div class="kv-row"><span class="k">Membership</span><span class="v" id="portalMembershipStatus"><span class="badge badge-green">Sanctuary member</span></span></div>
+        <div class="kv-row"><span class="k">Application</span><span class="v" id="portalGrantStatus"><span class="badge badge-gray">No application</span></span></div>
+        <div class="kv-row"><span class="k">Requested for</span><span class="v" id="portalGrantRequestedFor">—</span></div>
+        <div class="kv-row"><span class="k">Award &amp; care package</span><span class="v" id="portalGrantAward">—</span></div>
         <a href="#" class="btn btn-plum btn-sm mt-16" style="display:inline-block;" onclick="alert('Demo: your application status, review notes, and award details — all from your caregiver record.'); return false;">View application</a>
       </div>
 
       <div class="panel" style="margin:0;">
         <h4>📅 My Events</h4>
-        <div class="timeline-item"><div class="timeline-dot" style="background: var(--green);"></div><div><strong>Virtual Support Group</strong> — Wednesdays <span class="badge badge-green">Registered</span><div class="when">5:00–6:00 PM CST · Google Meet</div></div></div>
-        <div class="timeline-item"><div class="timeline-dot" style="background: var(--amber);"></div><div><strong>Memory Social</strong> — Jul 18<div class="when">Not registered yet</div></div></div>
-        <div class="timeline-item"><div class="timeline-dot"></div><div><strong>Attended:</strong> Virtual Support Group · Jun 24<div class="when">Thanks for coming!</div></div></div>
+        <div id="portalEventsList">
+          <p class="small muted" style="margin:0;">No registered events yet.</p>
+        </div>
         <a href="events.html" class="btn btn-outline btn-sm mt-16" style="display:inline-block;">Browse all events</a>
       </div>
 
       <div class="panel" style="margin:0;">
         <h4>🏡 My Memory Socials</h4>
-        <div class="kv-row"><span class="k">Attended (2026)</span><span class="v">4 socials</span></div>
-        <div class="kv-row"><span class="k">Last visit</span><span class="v">Jun 20</span></div>
-        <div class="kv-row"><span class="k">Next up</span><span class="v">Memory Social · Jul 18</span></div>
-        <a href="#" class="btn btn-plum btn-sm mt-16" style="display:inline-block;" onclick="alert('Demo (Phase 2): Memory Social registration with capacity + on-site check-in when the community center opens.'); return false;">Register for Jul 18</a>
+        <div class="kv-row"><span class="k">Attended (2026)</span><span class="v" id="portalSocialsCount">0 socials</span></div>
+        <div class="kv-row"><span class="k">Last visit</span><span class="v" id="portalSocialsLastVisit">—</span></div>
+        <div class="kv-row"><span class="k">Next up</span><span class="v" id="portalSocialsNext">—</span></div>
+        <a href="#" class="btn btn-plum btn-sm mt-16" style="display:inline-block;" onclick="alert('Demo (Phase 2): Memory Social registration with capacity + on-site check-in when the community center opens.'); return false;">Register for next social</a>
       </div>
 
       <div class="panel" style="margin:0;">
