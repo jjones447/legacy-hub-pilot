@@ -80,7 +80,10 @@ async function parseSessionCookie(cookieHeader, secret) {
   const parts = sessionVal.split(':');
   if (parts.length !== 3) return null;
   const [caregiverId, exp, signature] = parts;
-  const computedSig = await getHmacSha256(`${caregiverId}:${exp}`, secret);
+  // SEC-3: domain-separate session vs magic-link. A session cookie is signed over
+  // `session:<payload>`, so a magic-link token (signed over `magiclink:<payload>`)
+  // pasted as a cookie fails this check and cannot establish a session.
+  const computedSig = await getHmacSha256(`session:${caregiverId}:${exp}`, secret);
   if (!constantTimeEqual(computedSig, signature)) return null;
   if (Date.now() > Number(exp)) return null;
   return caregiverId;
@@ -112,7 +115,7 @@ export async function onRequestGet({ request, env }) {
       const expiresAt = Number(expiresAtStr);
 
       // Verify HMAC signature
-      const computedSig = await getHmacSha256(`${caregiverId}:${expiresAtStr}`, secret);
+      const computedSig = await getHmacSha256(`magiclink:${caregiverId}:${expiresAtStr}`, secret);
       if (!constantTimeEqual(computedSig, signature)) {
         return htmlErrorPage('The access link has an invalid signature.');
       }
@@ -152,7 +155,7 @@ export async function onRequestGet({ request, env }) {
       // Set signed session cookie
       const sessionExp = Date.now() + 2 * 60 * 60 * 1000; // 2 hours
       const sessionPayload = `${caregiverId}:${sessionExp}`;
-      const sessionSig = await getHmacSha256(sessionPayload, secret);
+      const sessionSig = await getHmacSha256(`session:${sessionPayload}`, secret);
       const cookieValue = encodeURIComponent(`${sessionPayload}:${sessionSig}`);
       const cookieHeader = `portal_session=${cookieValue}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=7200`;
 
@@ -263,7 +266,7 @@ export async function onRequestPost({ request, env }) {
         const expiresAt = Date.now() + 15 * 60 * 1000;
         const expiresAtStr = String(expiresAt);
         const payload = `${caregiver.id}:${expiresAtStr}`;
-        const signature = await getHmacSha256(payload, secret);
+        const signature = await getHmacSha256(`magiclink:${payload}`, secret);
         const tokenValue = `${payload}:${signature}`;
 
         const tokenHash = await sha256(tokenValue);
@@ -276,7 +279,10 @@ export async function onRequestPost({ request, env }) {
           .run();
 
         // If dev return link mode is enabled, provide the link in response
-        if (env.PORTAL_DEV_RETURN_LINK === '1' || env.PORTAL_DEV_RETURN_LINK === 1) {
+        // SEC-4: dev-return-link only in an explicitly non-prod environment (positive
+        // allowlist — never leaks when ENVIRONMENT is unset, i.e. production default).
+        if ((env.PORTAL_DEV_RETURN_LINK === '1' || env.PORTAL_DEV_RETURN_LINK === 1)
+            && (env.ENVIRONMENT === 'preview' || env.ENVIRONMENT === 'development')) {
           responseObj.dev_link = `/api/portal/verify?token=${encodeURIComponent(tokenValue)}`;
         }
       }

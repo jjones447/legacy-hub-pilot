@@ -68,7 +68,8 @@ beforeEach(() => {
   env = {
     LEGACY_DB: d1(raw),
     PORTAL_TOKEN_SECRET: 'my_test_secret_key',
-    PORTAL_DEV_RETURN_LINK: 1
+    PORTAL_DEV_RETURN_LINK: 1,
+    ENVIRONMENT: 'development'
   };
 });
 
@@ -177,6 +178,23 @@ test('gated me API returns caregiver-scoped data and rejects unauthorized reques
   const req5 = mockRequest('http://localhost/api/portal/me', 'GET', null, badCookie);
   const res5 = await getPortal({ request: req5, env });
   assert.equal(res5.status, 401);
+});
+
+test('SEC-3: a magic-link token cannot be pasted directly as a session cookie', async () => {
+  // Attacker obtains a raw magic-link token (leaked link, referrer, etc.)
+  const req1 = mockRequest('http://localhost/api/portal/login', 'POST', { email: 'jane.doe@example.com' });
+  const res1 = await postPortal({ request: req1, env });
+  const data1 = await res1.json();
+  const token = new URL('http://localhost' + data1.dev_link).searchParams.get('token');
+
+  // ...and pastes it straight into portal_session, skipping /verify (and its single-use check)
+  const forgedCookie = `portal_session=${encodeURIComponent(token)}`;
+  const req2 = mockRequest('http://localhost/api/portal/me', 'GET', null, forgedCookie);
+  const res2 = await getPortal({ request: req2, env });
+
+  // Domain separation (session: vs magiclink: HMAC prefix) must reject it.
+  // Pre-fix (shared secret + format) this returned 200 with the caregiver's data.
+  assert.equal(res2.status, 401);
 });
 
 test('logout api clears the session cookie and logs logout audit', async () => {
