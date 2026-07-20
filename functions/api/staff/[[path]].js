@@ -1,10 +1,14 @@
 // GET/POST /api/staff/[[path]] — staff endpoints for queue and caregiver management (slice 08).
 
-function getActor(request) {
-  // Check for dev/testing header first
-  const devActor = request.headers.get('x-dev-actor');
-  if (devActor) return devActor;
+function getActor(request, env) {
+  // x-dev-actor is honored ONLY in the non-prod dev-console mode (SEC: no audit spoof).
+  if (env && env.ALLOW_DEV_CONSOLE === '1') {
+    const devActor = request.headers.get('x-dev-actor');
+    if (devActor) return devActor;
+  }
 
+  // The JWT here is already signature-verified by _middleware.js; decoding for the
+  // email is safe.
   const jwt = request.headers.get('Cf-Access-Jwt-Assertion');
   if (!jwt) return 'anonymous_staff';
 
@@ -136,7 +140,7 @@ export async function onRequestPost({ request, env }) {
       return json({ ok: false, error: 'invalid followup id' }, 400);
     }
 
-    const actor = getActor(request);
+    const actor = getActor(request, env);
 
     // Fetch followup status
     const followup = await env.LEGACY_DB.prepare(`
