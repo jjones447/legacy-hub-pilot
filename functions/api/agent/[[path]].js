@@ -1,6 +1,27 @@
 // GET/POST /api/agent/[[path]] — site-builder agent editing loop endpoints (slice 07).
 import { mapRequestToChange, validateJsonSchema } from './_mapper.mjs';
 
+// Actor identity from the CF Access JWT (already signature-verified by _middleware.js
+// before this handler runs). x-dev-actor is honored ONLY in the non-prod dev-console
+// mode. Never trust a client-supplied staff_id in the body (SEC-2).
+function getActor(request, env) {
+  if (env && env.ALLOW_DEV_CONSOLE === '1') {
+    const dev = request.headers.get('x-dev-actor');
+    if (dev) return dev;
+  }
+  const jwt = request.headers.get('Cf-Access-Jwt-Assertion');
+  if (jwt) {
+    try {
+      const p = jwt.split('.');
+      if (p.length === 3) {
+        const payload = JSON.parse(atob(p[1].replace(/-/g, '+').replace(/_/g, '/')));
+        return payload.email || payload.sub || 'staff';
+      }
+    } catch { /* fall through */ }
+  }
+  return 'staff';
+}
+
 export async function onRequestGet({ request, env }) {
   try {
     const url = new URL(request.url);
@@ -117,9 +138,11 @@ export async function onRequestPost({ request, env }) {
     }
 
     if (action === 'confirm') {
-      if (!body.draft_id || !body.staff_id) {
-        return json({ ok: false, error: 'draft_id and staff_id are required' }, 400);
+      if (!body.draft_id) {
+        return json({ ok: false, error: 'draft_id is required' }, 400);
       }
+      // SEC-2: actor comes from the verified identity, never the request body.
+      const actor = getActor(request, env);
 
       const item = await env.LEGACY_DB
         .prepare(`SELECT status, data FROM content_item WHERE id = ?`)
@@ -136,7 +159,7 @@ export async function onRequestPost({ request, env }) {
 
       await env.LEGACY_DB
         .prepare(`UPDATE content_item SET status = 'published', updated_by = ?, updated_at = datetime('now') WHERE id = ?`)
-        .bind('staff_' + body.staff_id, body.draft_id)
+        .bind('staff_' + actor, body.draft_id)
         .run();
 
       await env.LEGACY_DB
@@ -145,7 +168,7 @@ export async function onRequestPost({ request, env }) {
           VALUES (?, 'content_item.publish', 'content_item', ?, ?, ?)
         `)
         .bind(
-          body.staff_id,
+          actor,
           body.draft_id,
           JSON.stringify({ status: 'draft', data: JSON.parse(item.data) }),
           JSON.stringify({ status: 'published', data: JSON.parse(item.data) })

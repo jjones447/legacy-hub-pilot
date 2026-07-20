@@ -140,29 +140,32 @@ test('POST /api/agent/confirm requires staff identity and publishes + audits', a
     VALUES ('ci_test_draft', 'resource', '{"title":"Helpline","description":"988","category":"crisis"}', 'draft', 'agent')
   `).run();
 
-  // Try to confirm without staff_id -> reject with 400
+  // Missing draft_id -> 400 (staff_id is no longer required — actor comes from identity)
   const reqFail = new Request('http://localhost/api/agent/confirm', {
     method: 'POST',
-    body: JSON.stringify({ draft_id: draftId })
+    body: JSON.stringify({})
   });
   const resFail = await postAgent({ request: reqFail, env });
   assert.equal(resFail.status, 400);
 
-  // Confirm with staff_id -> success
+  // Confirm with a verified CF Access identity. The JWT is signature-verified by
+  // _middleware.js before reaching here; the endpoint decodes it for the email.
+  // SEC-2: a client-supplied staff_id in the body must be IGNORED (spoof attempt).
   const reqSuccess = new Request('http://localhost/api/agent/confirm', {
     method: 'POST',
-    body: JSON.stringify({ draft_id: draftId, staff_id: 'st_jacob' })
+    headers: { 'Cf-Access-Jwt-Assertion': 'h.eyJlbWFpbCI6InN0YWZmQGV4YW1wbGUub3JnIn0.sig' }, // email: staff@example.org
+    body: JSON.stringify({ draft_id: draftId, staff_id: 'attacker_spoof' })
   });
   const resSuccess = await postAgent({ request: reqSuccess, env });
   assert.equal(resSuccess.status, 200);
 
   const item = raw.prepare(`SELECT status, updated_by FROM content_item WHERE id = ?`).get(draftId);
   assert.equal(item.status, 'published');
-  assert.equal(item.updated_by, 'staff_st_jacob');
+  assert.equal(item.updated_by, 'staff_staff@example.org'); // from identity, NOT 'attacker_spoof'
 
   const audit = raw.prepare(`SELECT * FROM audit_log WHERE entity = 'content_item' AND entity_id = ?`).get(draftId);
   assert.ok(audit);
-  assert.equal(audit.actor, 'st_jacob');
+  assert.equal(audit.actor, 'staff@example.org'); // verified identity, not the body
   assert.equal(audit.action, 'content_item.publish');
 });
 
