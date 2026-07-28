@@ -93,7 +93,7 @@ nav.main-nav a:hover { color: var(--plum); }
 nav.main-nav a.active { color: var(--plum); border-bottom-color: var(--coral); }
 .nav-cta {
   background: var(--coral); color: #fff !important; padding: 9px 18px !important;
-  border-radius: 999px; font-weight: 700 !important; font-size: 18px !important;
+  border-radius: 999px; font-weight: 700 !important; font-size: 19px !important;
   min-height: 44px; display: inline-flex; align-items: center;
   border-bottom: none !important; transition: background .15s;
 }
@@ -140,7 +140,7 @@ nav.main-nav a.active { color: var(--plum); border-bottom-color: var(--coral); }
 }
 .btn:hover { transform: translateY(-1px); }
 /* Coral CTAs carry white text — kept >=18px/bold so AA holds at this contrast (WCAG large-text exception) */
-.btn-coral { background: var(--coral); color: #fff; font-size: 18px; font-weight: 700; }
+.btn-coral { background: var(--coral); color: #fff; font-size: 19px; font-weight: 700; }
 .btn-coral:hover { background: var(--coral-dark); }
 .btn-outline-light { border: 1.5px solid rgba(255,255,255,0.6); color: #fff; background: transparent; }
 .btn-outline-light:hover { background: rgba(255,255,255,0.1); }
@@ -226,7 +226,7 @@ section { padding: 64px 0; }
   border-radius: 999px; letter-spacing: .02em;
 }
 .badge-green { background: var(--green-soft); color: var(--green); }
-.badge-amber { background: var(--amber-soft); color: var(--amber); }
+.badge-amber { background: var(--amber-soft); color: var(--coral-dark); }
 .badge-blue { background: var(--blue-soft); color: var(--blue); }
 .badge-plum { background: #f3e6dc; color: var(--plum); }
 
