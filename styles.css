@@ -7,7 +7,7 @@
   --plum-dark: #155356;
   --plum-light: #2a8589;
   --coral: #d86b4d;
-  --coral-dark: #c45a3d;
+  --coral-dark: #a84a32;
   --cream: #faf6f1;
   --sand: #f7e6d5;
   --ink: #1e0b09;
@@ -50,7 +50,7 @@ h1, h2, h3, .display { font-family: var(--font-display); font-weight: 600; line-
 /* ---------- Demo banner ---------- */
 .demo-banner {
   background: var(--plum-dark);
-  color: #ecd9cd;
+  color: #d9ebe9;
   text-align: center;
   font-size: 12.5px;
   letter-spacing: 0.04em;
@@ -93,8 +93,9 @@ nav.main-nav a:hover { color: var(--plum); }
 nav.main-nav a.active { color: var(--plum); border-bottom-color: var(--coral); }
 .nav-cta {
   background: var(--coral); color: #fff !important; padding: 9px 18px !important;
-  border-radius: 999px; font-weight: 600 !important; border-bottom: none !important;
-  transition: background .15s;
+  border-radius: 999px; font-weight: 700 !important; font-size: 18px !important;
+  min-height: 44px; display: inline-flex; align-items: center;
+  border-bottom: none !important; transition: background .15s;
 }
 .nav-cta:hover { background: var(--coral-dark); }
 .nav-portal {
@@ -138,7 +139,8 @@ nav.main-nav a.active { color: var(--plum); border-bottom-color: var(--coral); }
   border: none; cursor: pointer; font-family: var(--font-body);
 }
 .btn:hover { transform: translateY(-1px); }
-.btn-coral { background: var(--coral); color: #fff; }
+/* Coral CTAs carry white text — kept >=18px/bold so AA holds at this contrast (WCAG large-text exception) */
+.btn-coral { background: var(--coral); color: #fff; font-size: 18px; font-weight: 700; }
 .btn-coral:hover { background: var(--coral-dark); }
 .btn-outline-light { border: 1.5px solid rgba(255,255,255,0.6); color: #fff; background: transparent; }
 .btn-outline-light:hover { background: rgba(255,255,255,0.1); }
@@ -186,10 +188,13 @@ section { padding: 64px 0; }
 .card a.more { font-weight: 600; font-size: 14px; text-decoration: none; color: var(--coral-dark); }
 
 /* ---------- Stats band ---------- */
-.stats-band { background: var(--sand); }
+/* Dark surface so amber numerals never render as text-on-light (client hard rule) */
+.stats-band { background: var(--plum-dark); }
+.stats-band .eyebrow { color: #fff; }
+.stats-band h2 { color: #fff; }
 .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 20px; text-align: center; }
 .stat .num { font-family: var(--font-display); font-size: 42px; font-weight: 700; color: var(--amber); }
-.stat .label { font-size: 15px; color: var(--ink-soft); font-weight: 500; }
+.stat .label { font-size: 15px; color: #d9ebe9; font-weight: 500; }
 
 .quote-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 22px; }
 .quote-card {
@@ -205,6 +210,7 @@ section { padding: 64px 0; }
 }
 .band-teal h2 { color: #fff; }
 .band-teal p { color: #d9ebe9; max-width: 640px; margin-left: auto; margin-right: auto; }
+.band-teal .eyebrow { color: #fff; }
 
 /* ---------- Event cards ---------- */
 .event-card { display: flex; gap: 20px; align-items: flex-start; }
@@ -317,10 +323,10 @@ table.data tr:hover td { background: #fcf7f3; }
 
 /* ---------- Footer ---------- */
 footer {
-  background: var(--plum-dark); color: #d9bfae; padding: 54px 0 30px; margin-top: 40px; font-size: 14px;
+  background: var(--plum-dark); color: #d9ebe9; padding: 54px 0 30px; margin-top: 40px; font-size: 14px;
 }
 footer h4 { color: #fff; font-size: 15px; margin-bottom: 14px; font-family: var(--font-body); }
-footer a { color: #d9bfae; text-decoration: none; display: block; padding: 3px 0; }
+footer a { color: #d9ebe9; text-decoration: none; display: block; padding: 3px 0; }
 footer a:hover { color: #fff; }
 .footer-grid { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 36px; margin-bottom: 36px; }
 .footer-bottom { border-top: 1px solid rgba(255,255,255,0.12); padding-top: 22px; font-size: 12.5px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
