@@ -93,7 +93,7 @@ header.site-header {
   position: sticky; top: 0; z-index: 50;
   background: var(--white); border-bottom: 1px solid #eee5da; box-shadow: 0 1px 8px rgba(30,11,9,0.05);
 }
-.nav-bar > .nav-v2 { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+.nav-bar > .nav-v2 { max-width: 1200px; margin: 0 auto; padding: 0 24px; justify-content: space-between; }
 /* the brand row scrolls away; only the nav bar follows you down the page */
 .site-header:has(+ .nav-bar) { position: static; }
 .footer-brand { margin-bottom: 34px; max-width: 520px; }
