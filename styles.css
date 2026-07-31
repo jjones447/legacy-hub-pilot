@@ -82,6 +82,9 @@ header.site-header {
 .brand-tagline {
   font-family: var(--font-body); font-size: 18px; font-weight: 500; color: var(--ink-soft);
   letter-spacing: 0.01em; white-space: nowrap;
+  /* the wordmark's tall L-loop puts the readable word ~5.5px below the image's
+     geometric centre; nudge the tagline to the word's optical centre line */
+  transform: translateY(6px);
 }
 /* brand row shares the nav row's width and left edge so the lockup reads as one unit */
 .site-header:has(+ .nav-bar) .header-inner { max-width: 1400px; padding: 8px 24px 10px; }
