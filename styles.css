@@ -74,6 +74,8 @@ header.site-header {
   max-width: 1120px;
   margin: 0 auto;
 }
+/* the six-group nav needs a wider bar than the 1120 content column */
+.site-header:has(.nav-v2) .header-inner { max-width: 1400px; }
 .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; }
 .brand-mark {
   width: 42px; height: 42px; border-radius: 12px;
@@ -377,10 +379,10 @@ footer a:hover { color: #fff; }
 /* ---------- v2 navigation (slice 12): click-open one-level dropdowns ---------- */
 .nav-v2 { display: flex; align-items: center; gap: 2px; flex-wrap: nowrap; }
 .nav-v2 .nav-item { position: relative; display: flex; align-items: center; white-space: nowrap; }
-.nav-v2 .nav-item > a { padding: 10px 4px 10px 8px; font-size: 18px; white-space: nowrap; }
+.nav-v2 .nav-item > a { padding: 10px 2px 10px 6px; font-size: 18px; white-space: nowrap; }
 .nav-v2 .drop-toggle {
   background: none; border: none; cursor: pointer; font-size: 16px; line-height: 1;
-  color: var(--plum); opacity: 0.75; padding: 10px 8px 10px 2px; min-height: 44px; min-width: 28px;
+  color: var(--plum); opacity: 0.75; padding: 10px 4px 10px 0; min-height: 44px; min-width: 20px;
 }
 .nav-v2 .drop-toggle:hover { opacity: 1; }
 .nav-v2 .drop-toggle:hover, .nav-v2 .drop-toggle[aria-expanded="true"] { color: var(--plum); }
@@ -410,7 +412,7 @@ footer a:hover { color: #fff; }
 
 /* v2 collapses to the hamburger earlier than v1 (six items need the room), and
    dropdowns become an always-expanded accordion list under it */
-@media (max-width: 1100px) {
+@media (max-width: 1400px) {
   nav.main-nav.nav-v2 {
     display: none; position: absolute; top: 100%; left: 0; right: 0;
     background: #fff; flex-direction: column; padding: 18px 24px; gap: 14px;
