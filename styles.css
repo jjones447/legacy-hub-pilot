@@ -78,11 +78,14 @@ header.site-header {
 
 .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; flex: 0 0 auto; min-width: 0; }
 /* ---------- v3 two-row header: brand lockup row + full-width sticky nav row ---------- */
-.brand-wordmark { height: 52px; width: auto; display: block; flex: 0 0 auto; }
+.brand-wordmark { height: 72px; width: auto; display: block; flex: 0 0 auto; }
 .brand-tagline {
-  font-family: var(--font-body); font-size: 15px; font-weight: 500; color: var(--ink-soft);
-  letter-spacing: 0.02em; white-space: nowrap;
+  font-family: var(--font-body); font-size: 18px; font-weight: 500; color: var(--ink-soft);
+  letter-spacing: 0.01em; white-space: nowrap;
 }
+/* brand row shares the nav row's width and left edge so the lockup reads as one unit */
+.site-header:has(+ .nav-bar) .header-inner { max-width: 1400px; padding: 8px 24px 10px; }
+.site-header:has(+ .nav-bar) .brand { gap: 16px; }
 .nav-bar {
   position: sticky; top: 0; z-index: 50;
   background: var(--white); border-bottom: 1px solid #eee5da; box-shadow: 0 1px 8px rgba(30,11,9,0.05);
