@@ -74,8 +74,8 @@ header.site-header {
   max-width: 1120px;
   margin: 0 auto;
 }
-.brand { display: flex; align-items: center; gap: 12px; text-decoration: none; }
-.brand-logo { height: 58px; width: auto; display: block; }
+.brand { display: flex; align-items: center; gap: 12px; text-decoration: none; flex: 0 0 auto; min-width: 0; }
+.brand-logo { height: 58px; width: auto; flex: 0 0 auto; max-width: 260px; object-fit: contain; display: block; }
 .brand-mark {
   width: 42px; height: 42px; border-radius: 12px;
   background: linear-gradient(135deg, var(--plum) 0%, var(--plum-light) 100%);
