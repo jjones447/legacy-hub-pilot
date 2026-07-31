@@ -419,11 +419,23 @@ footer a:hover { color: #fff; }
   nav.main-nav.nav-v2.open { display: flex; }
   .site-header:has(.nav-v2) .nav-toggle { display: block; }
   .nav-v2 { align-items: stretch; gap: 0; }
-  .nav-v2 .nav-item { flex-direction: column; align-items: stretch; white-space: normal; }
-  .nav-v2 .drop-toggle { display: none; }
-  .nav-v2 .drop {
-    display: block; position: static; border: none; box-shadow: none; padding: 0 0 6px 16px;
-    min-width: 0; background: transparent;
+  /* Each section is one row: label link (navigates) + big chevron (expands). Sub-links
+     stay COLLAPSED until tapped, so the open menu is 8 rows, not 3 screens of links. */
+  .nav-v2 .nav-item {
+    flex-direction: row; flex-wrap: wrap; align-items: center;
+    justify-content: space-between; white-space: normal;
+    border-bottom: 1px solid #f0e9e0;
   }
-  .nav-v2 .drop a { font-size: 17px; padding: 10px 12px; }
+  .nav-v2 .nav-item > a { flex: 1; padding: 12px 8px; }
+  .nav-v2 .drop-toggle {
+    display: block; font-size: 20px; opacity: 0.85;
+    min-width: 52px; min-height: 48px; text-align: center;
+    transition: transform .15s;
+  }
+  .nav-v2 .nav-item.open .drop-toggle { transform: rotate(180deg); }
+  .nav-v2 .drop {
+    display: none; position: static; border: none; box-shadow: none;
+    padding: 0 0 8px 16px; min-width: 0; background: transparent; flex-basis: 100%;
+  }
+  .nav-v2 .drop a { font-size: 17px; padding: 11px 12px; }
 }
