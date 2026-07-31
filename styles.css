@@ -2,27 +2,27 @@
    Demo site · X-Centric Managed Hosted Hub · DEMO DATA ONLY */
 
 :root {
-  /* Slice 11 client palette — teal primary, coral CTAs, cream surfaces */
-  --plum: #1d6a6e;
-  --plum-dark: #155356;
-  --plum-light: #2a8589;
+  /* v1 palette — original chestnut/brown demo style (client-preferred), structural upgrades retained */
+  --plum: #8b4f3b;
+  --plum-dark: #5e3226;
+  --plum-light: #8e4a37;
   --coral: #d86b4d;
   --coral-dark: #a84a32;
   --cream: #faf6f1;
-  --sand: #f7e6d5;
-  --ink: #1e0b09;
-  --ink-soft: #5c4038;
+  --sand: #f3ece3;
+  --ink: #2f2521;
+  --ink-soft: #6d5a50;
   --white: #ffffff;
-  --green: #5f8a58;
-  --green-soft: #e8f0e6;
-  --sage: #a7c4a0;
+  --green: #3d8b64;
+  --green-soft: #e3f2ea;
+  --sage: #e8d7c8;
   --amber: #e3a75d;
   --amber-soft: #f9efdc;
   --blue-soft: #e7eef8;
   --blue: #3c6fb0;
   --radius: 14px;
-  --shadow: 0 2px 14px rgba(30, 11, 9, 0.08);
-  --shadow-lg: 0 8px 30px rgba(30, 11, 9, 0.14);
+  --shadow: 0 2px 14px rgba(47, 37, 33, 0.08);
+  --shadow-lg: 0 8px 30px rgba(47, 37, 33, 0.14);
   --font-display: 'Fraunces', Georgia, serif;
   --font-body: 'Inter', -apple-system, 'Segoe UI', sans-serif;
 }
@@ -50,7 +50,7 @@ h1, h2, h3, .display { font-family: var(--font-display); font-weight: 600; line-
 /* ---------- Demo banner ---------- */
 .demo-banner {
   background: var(--plum-dark);
-  color: #d9ebe9;
+  color: #ecd9cd;
   text-align: center;
   font-size: 12.5px;
   letter-spacing: 0.04em;
@@ -128,7 +128,7 @@ nav.main-nav a.active { color: var(--plum); border-bottom-color: var(--coral); }
 .hero .btn-coral { background: var(--coral); color: #fff; }
 .hero .btn-coral:hover { background: var(--coral-dark); }
 .hero h1 { color: #fff; font-size: clamp(34px, 5vw, 54px); max-width: 640px; margin-bottom: 20px; }
-.hero p.lede { font-size: 19px; max-width: 560px; color: #d9ebe9; margin-bottom: 34px; }
+.hero p.lede { font-size: 19px; max-width: 560px; color: #ecd9cd; margin-bottom: 34px; }
 .hero .btn-row { display: flex; gap: 14px; flex-wrap: wrap; }
 
 .btn {
@@ -194,7 +194,7 @@ section { padding: 64px 0; }
 .stats-band h2 { color: #fff; }
 .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 20px; text-align: center; }
 .stat .num { font-family: var(--font-display); font-size: 42px; font-weight: 700; color: var(--amber); }
-.stat .label { font-size: 15px; color: #d9ebe9; font-weight: 500; }
+.stat .label { font-size: 15px; color: #ecd9cd; font-weight: 500; }
 
 .quote-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 22px; }
 .quote-card {
@@ -209,7 +209,7 @@ section { padding: 64px 0; }
   background: var(--plum-dark); color: #fff; text-align: center;
 }
 .band-teal h2 { color: #fff; }
-.band-teal p { color: #d9ebe9; max-width: 640px; margin-left: auto; margin-right: auto; }
+.band-teal p { color: #ecd9cd; max-width: 640px; margin-left: auto; margin-right: auto; }
 .band-teal .eyebrow { color: #fff; }
 
 /* ---------- Event cards ---------- */
@@ -323,10 +323,10 @@ table.data tr:hover td { background: #fcf7f3; }
 
 /* ---------- Footer ---------- */
 footer {
-  background: var(--plum-dark); color: #d9ebe9; padding: 54px 0 30px; margin-top: 40px; font-size: 14px;
+  background: var(--plum-dark); color: #ecd9cd; padding: 54px 0 30px; margin-top: 40px; font-size: 14px;
 }
 footer h4 { color: #fff; font-size: 15px; margin-bottom: 14px; font-family: var(--font-body); }
-footer a { color: #d9ebe9; text-decoration: none; display: block; padding: 3px 0; }
+footer a { color: #ecd9cd; text-decoration: none; display: block; padding: 3px 0; }
 footer a:hover { color: #fff; }
 .footer-grid { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 36px; margin-bottom: 36px; }
 .footer-bottom { border-top: 1px solid rgba(255,255,255,0.12); padding-top: 22px; font-size: 12.5px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
