@@ -10,7 +10,7 @@
 </head>
 <body>
 
-<div class="demo-banner"><strong>DEMO PREVIEW</strong> · sample data only · built by X-Centric as a working preview for Legacy Home &amp; Respite Care Foundation</div>
+<div class="demo-banner"><strong>DEMO PREVIEW</strong> · sample data only · built by X-Centric as a working preview for Legacy Home &amp; Respite Care Foundation · v2 navigation preview</div>
 
 <header class="site-header">
   <div class="header-inner">
@@ -19,12 +19,74 @@
       <div class="brand-name">Legacy<small>Home &amp; Respite Care Foundation</small></div>
     </a>
     <button class="nav-toggle" aria-label="Menu" onclick="document.querySelector('.main-nav').classList.toggle('open')">☰</button>
-    <nav class="main-nav">
-      <a href="index.html">Home</a>
-      <a href="about.html">About</a>
-      <a href="programs.html" class="active">The Sanctuary</a>
-      <a href="resources.html">Resource Hub</a>
-      <a href="events.html">Events</a>
+    <nav class="main-nav nav-v2">
+      <div class="nav-item"><a href="index.html">Home</a></div>
+      <div class="nav-item has-drop">
+        <a href="about.html">About</a><button class="drop-toggle" aria-expanded="false" aria-label="About menu">&#9662;</button>
+        <div class="drop">
+          <a href="about.html">Overview</a>
+          <a href="about.html#story">Our Story</a>
+          <a href="about.html#mission">Mission &amp; Vision</a>
+          <a href="about.html#team">Meet Our Team</a>
+          <a href="about.html#shanelle">Meet Shanelle</a>
+          <a href="about.html#board">Board of Directors</a>
+          <a href="about.html#reports">Annual Reports &amp; Financials</a>
+          <a href="about.html#careers">Careers</a>
+          <a href="about.html#impact">Our Impact</a>
+          <a href="about.html#voices">Caregiver Voices</a>
+          <a href="about.html#contact">Contact</a>
+        </div>
+      </div>
+      <div class="nav-item has-drop">
+        <a href="sanctuary.html">The Sanctuary</a><button class="drop-toggle" aria-expanded="false" aria-label="The Sanctuary menu">&#9662;</button>
+        <div class="drop">
+          <a href="sanctuary.html">Overview</a>
+          <a href="sanctuary.html#what">What is the Network?</a>
+          <a href="sanctuary.html#how">How It Works</a>
+          <a href="sanctuary.html#partners">Community Partners</a>
+          <a href="sanctuary.html#become">Become a Partner</a>
+          <a href="sanctuary.html#training">Dementia-Friendly Training</a>
+          <a href="sanctuary.html#passport">Caregiver Wellness Passport</a>
+        </div>
+      </div>
+      <div class="nav-item has-drop">
+        <a href="programs-events.html" class="active">Programs &amp; Events</a><button class="drop-toggle" aria-expanded="false" aria-label="Programs &amp; Events menu">&#9662;</button>
+        <div class="drop">
+          <a href="programs-events.html">Overview</a>
+          <a href="programs-events.html#support-group">Virtual Support Group</a>
+          <a href="programs-events.html#community-series">Community Series</a>
+          <a href="programs-events.html#drop-in">Drop-In Respite</a>
+          <a href="programs.html#grants">Wellness Grants</a>
+          <a href="programs-events.html#event-respite">Event Respite</a>
+          <a href="programs-events.html#family-ed">Family Education</a>
+          <a href="events.html">Upcoming Events</a>
+          <a href="programs-events.html#calendar">Calendar</a>
+        </div>
+      </div>
+      <div class="nav-item has-drop">
+        <a href="resources.html">Resources</a><button class="drop-toggle" aria-expanded="false" aria-label="Resources menu">&#9662;</button>
+        <div class="drop">
+          <a href="resources.html">Overview</a>
+          <a href="directory.html">Resource Directory</a>
+          <a href="resources.html#toolkit">Caregiver Wellness Toolkit</a>
+          <a href="resources.html#guides">Downloadable Guides</a>
+          <a href="faq.html">FAQ</a>
+          <a href="resources.html#blog">Blog &amp; Stories</a>
+          <a href="directory.html">Crisis &amp; Emergency</a>
+        </div>
+      </div>
+      <div class="nav-item has-drop">
+        <a href="get-involved.html">Get Involved</a><button class="drop-toggle" aria-expanded="false" aria-label="Get Involved menu">&#9662;</button>
+        <div class="drop">
+          <a href="get-involved.html">Overview</a>
+          <a href="get-involved.html#partner">Become a Wellness Partner</a>
+          <a href="get-involved.html#corporate">Corporate Partnerships</a>
+          <a href="get-involved.html#volunteer">Volunteer</a>
+          <a href="get-involved.html#sponsorship">Sponsorship</a>
+          <a href="get-involved.html#speaking">Speaking Engagements</a>
+          <a href="get-involved.html#training">Request a Training</a>
+        </div>
+      </div>
       <a href="portal.html" class="nav-portal">Caregiver Portal</a>
       <a href="index.html#donate" class="nav-cta">Donate</a>
     </nav>
@@ -180,29 +242,13 @@
 
 <footer>
   <div class="container">
-    <div class="footer-grid">
-      <div>
-        <h4>Legacy Home &amp; Respite Care Foundation</h4>
-        <p style="font-size: 13.5px; max-width: 300px;">A nonprofit supporting caregivers of loved ones with dementia — wellness, respite, and community since 2023.</p>
-      </div>
-      <div>
-        <h4>The Sanctuary</h4>
-        <a href="programs.html#grants">Wellness Grants</a>
-        <a href="programs.html#socials">Memory Socials</a>
-        <a href="events.html">Support Group &amp; Events</a>
-      </div>
-      <div>
-        <h4>Get Involved</h4>
-        <a href="request-support.html">Request Support</a>
-        <a href="#" onclick="alert('Demo: partner/volunteer intake form.'); return false;">Volunteer</a>
-        <a href="#" onclick="alert('Demo: organizational partnership form.'); return false;">Partner with us</a>
-        <a href="index.html#donate">Donate</a>
-      </div>
-      <div>
-        <h4>Access</h4>
-        <a href="portal.html">Caregiver Portal</a>
-        <a href="staff.html">Staff Console (demo)</a>
-      </div>
+    <div class="footer-sitemap">
+      <div><h4>About</h4><a href="about.html#story">Our Story</a><a href="about.html#mission">Mission &amp; Vision</a><a href="about.html#team">Meet Our Team</a><a href="about.html#shanelle">Meet Shanelle</a><a href="about.html#board">Board of Directors</a><a href="about.html#reports">Reports &amp; Financials</a><a href="about.html#careers">Careers</a><a href="about.html#contact">Contact</a></div>
+      <div><h4>The Sanctuary</h4><a href="sanctuary.html#what">What is the Network?</a><a href="sanctuary.html#how">How It Works</a><a href="sanctuary.html#partners">Community Partners</a><a href="sanctuary.html#become">Become a Partner</a><a href="sanctuary.html#training">Dementia-Friendly Training</a><a href="sanctuary.html#passport">Wellness Passport</a></div>
+      <div><h4>Programs &amp; Events</h4><a href="programs-events.html#support-group">Virtual Support Group</a><a href="programs-events.html#community-series">Community Series</a><a href="programs-events.html#drop-in">Drop-In Respite</a><a href="programs.html#grants">Wellness Grants</a><a href="programs-events.html#event-respite">Event Respite</a><a href="programs-events.html#family-ed">Family Education</a><a href="events.html">Upcoming Events</a></div>
+      <div><h4>Resources</h4><a href="directory.html">Resource Directory</a><a href="resources.html#toolkit">Wellness Toolkit</a><a href="resources.html#guides">Downloadable Guides</a><a href="faq.html">FAQ</a><a href="resources.html#blog">Blog &amp; Stories</a><a href="directory.html">Crisis &amp; Emergency</a></div>
+      <div><h4>Get Involved</h4><a href="get-involved.html#partner">Wellness Partners</a><a href="get-involved.html#corporate">Corporate Partnerships</a><a href="get-involved.html#volunteer">Volunteer</a><a href="get-involved.html#sponsorship">Sponsorship</a><a href="get-involved.html#speaking">Speaking</a><a href="get-involved.html#training">Request a Training</a></div>
+      <div><h4>Access</h4><a href="portal.html">Caregiver Portal</a><a href="index.html#donate">Donate</a><a href="request-support.html">Request Support</a><a href="staff.html">Staff Console (demo)</a></div>
     </div>
     <div class="footer-bottom">
       <span>© 2026 Legacy Home &amp; Respite Care Foundation · Demo preview — sample data only</span>
@@ -212,5 +258,6 @@
 </footer>
 
 <script src="app.js"></script>
+<script src="nav-v2.js"></script>
 </body>
 </html>
