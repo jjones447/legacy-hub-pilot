@@ -75,7 +75,7 @@ header.site-header {
   margin: 0 auto;
 }
 /* v2/v3 six-group nav needs a wider bar than the 1120 content column */
-.site-header:has(.nav-v2) .header-inner { max-width: 1360px; }
+.site-header:has(.nav-v2) .header-inner { max-width: 1400px; }
 .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; flex: 0 0 auto; min-width: 0; }
 .brand-stack { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; flex: 0 0 auto; }
 .brand-wordmark { height: 46px; width: auto; display: block; }
@@ -422,7 +422,7 @@ footer a:hover { color: #fff; }
 
 /* v2 collapses to the hamburger earlier than v1 (six items need the room), and
    dropdowns become an always-expanded accordion list under it */
-@media (max-width: 1360px) {
+@media (max-width: 1400px) {
   nav.main-nav.nav-v2 {
     display: none; position: absolute; top: 100%; left: 0; right: 0;
     background: #fff; flex-direction: column; padding: 18px 24px; gap: 14px;
