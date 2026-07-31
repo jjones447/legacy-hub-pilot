@@ -87,7 +87,7 @@ header.site-header {
   transform: translateY(6px);
 }
 /* brand row shares the nav row's width and left edge so the lockup reads as one unit */
-.site-header:has(+ .nav-bar) .header-inner { max-width: 1400px; padding: 8px 24px 10px; }
+.site-header:has(+ .nav-bar) .header-inner { max-width: 1400px; padding: 10px 24px 12px; justify-content: center; }
 .site-header:has(+ .nav-bar) .brand { gap: 16px; }
 .nav-bar {
   position: sticky; top: 0; z-index: 50;
@@ -437,6 +437,7 @@ footer a:hover { color: #fff; }
    dropdowns become an always-expanded accordion list under it */
 @media (max-width: 1150px) {
   .site-header:has(+ .nav-bar) { position: sticky; top: 0; }
+  .site-header:has(+ .nav-bar) .header-inner { justify-content: space-between; padding: 14px 24px; }
   .brand { flex-direction: column; align-items: flex-start; gap: 1px; }
   .brand-wordmark { height: 44px; }
   .brand-tagline { font-size: 9.5px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; }
