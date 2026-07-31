@@ -75,7 +75,11 @@ header.site-header {
   margin: 0 auto;
 }
 .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; flex: 0 0 auto; min-width: 0; }
-.brand-logo { height: 58px; width: auto; flex: 0 0 auto; max-width: 260px; object-fit: contain; display: block; }
+.brand-mark-img { height: 48px; width: auto; flex: 0 0 auto; display: block; }
+.footer-brand { margin-bottom: 34px; max-width: 520px; }
+.footer-brand p { font-size: 14px; opacity: 0.9; }
+.footer-wordmark { height: 62px; width: auto; max-width: 100%; display: block; margin-bottom: 10px;
+  filter: brightness(0) invert(1); opacity: 0.92; }
 .brand-mark {
   width: 42px; height: 42px; border-radius: 12px;
   background: linear-gradient(135deg, var(--plum) 0%, var(--plum-light) 100%);
