@@ -91,7 +91,7 @@
 {%- for p in sections["programs.grants"].paragraphs %}
         <p class="muted mb-16">{{ p }}</p>
 {%- endfor %}
-        <a href="#" class="btn btn-plum btn-sm" onclick="alert('Demo: the grant application routes directly into your caregiver record — staff see status, review progress, and award in one place.'); return false;">{{ sections["programs.grants"].cta_label }}</a>
+        <a href="#" class="btn btn-plum btn-sm" onclick="openGrantApply(); return false;">{{ sections["programs.grants"].cta_label }}</a>
       </div>
       <div class="visual">
         <h3 style="font-size: 18px; margin-bottom: 14px;">{{ sections["programs.grants"].panel_heading }}</h3>
@@ -134,12 +134,14 @@
         <h3 style="font-size: 20px; margin: 8px 0 6px;">{{ sections["programs.coaching"].heading }}</h3>
         <p class="muted small" style="margin: 0;">{{ sections["programs.coaching"].body }}</p>
       </div>
-      <a href="#" class="btn btn-outline btn-sm" onclick="alert('Demo: joins the coaching interest list — you\'ll be first to know when sessions open.'); return false;">{{ sections["programs.coaching"].cta_label }}</a>
+      <a href="#" class="btn btn-outline btn-sm" onclick="openCoachingInterest(); return false;">{{ sections["programs.coaching"].cta_label }}</a>
     </div>
   </div>
 </section>
 
 {% include '_membership-modal.html.j2' %}
+{% include '_grant-apply-modal.html.j2' %}
+{% include '_coaching-interest-modal.html.j2' %}
 {% include '_footer.html.j2' %}
 
 <script src="app.js"></script>

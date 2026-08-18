@@ -88,6 +88,23 @@ test('event registration buttons carry registerable event ids', () => {
   assert.match(page, /consent to Legacy using these details/);
 });
 
+test('programs grant and coaching CTAs open live intake modals instead of alert stubs', () => {
+  const page = file('programs.html');
+  const tmpl = file('templates/programs.html.j2');
+  const app = file('app.js');
+  assert.match(page, /onclick="openGrantApply\(\); return false;"/);
+  assert.match(page, /id="grantApplyForm" onsubmit="return submitGrantApply\(event\)"/);
+  assert.match(page, /onclick="openCoachingInterest\(\); return false;"/);
+  assert.match(page, /id="coachingInterestForm" onsubmit="return submitCoachingInterest\(event\)"/);
+  assert.match(tmpl, /onclick="openGrantApply\(\); return false;"/);
+  assert.match(tmpl, /onclick="openCoachingInterest\(\); return false;"/);
+  assert.match(app, /kind: 'grant_application'/);
+  assert.match(app, /source: 'site_form:coaching'/);
+  assert.match(app, /kind: 'support_request'/);
+  assert.doesNotMatch(page, /Apply for a Wellness Grant[\s\S]*alert\(/);
+  assert.doesNotMatch(page, /Join the interest list[\s\S]{0,80}alert\(/);
+});
+
 test('seeded public events are accepted by the intake core', async () => {
   const events = raw.prepare(`SELECT COUNT(*) AS n FROM event WHERE publish_state='published'`).get();
   assert.equal(events.n, 4);
