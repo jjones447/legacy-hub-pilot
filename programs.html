@@ -153,7 +153,7 @@
         <h2 style="margin-bottom: 14px;">A personalized stipend for your well-being</h2>
         <p class="muted mb-16">Caregivers spend so much on everyone else. Wellness Grants fund the things that restore <em>you</em> — a massage, counseling, a gym membership — and every award comes with its own care package.</p>
         <p class="muted mb-16"><strong>Sanctuary members are eligible.</strong> Apply online; our team reviews each application and personalizes the award to your wellness plan.</p>
-        <a href="#" class="btn btn-plum btn-sm" onclick="alert('Demo: the grant application routes directly into your caregiver record — staff see status, review progress, and award in one place.'); return false;">Apply for a Wellness Grant</a>
+        <a href="#" class="btn btn-plum btn-sm" onclick="openGrantApply(); return false;">Apply for a Wellness Grant</a>
       </div>
       <div class="visual">
         <h3 style="font-size: 18px; margin-bottom: 14px;">Your grant journey</h3>
@@ -198,7 +198,7 @@
         <h3 style="font-size: 20px; margin: 8px 0 6px;">1:1 Wellness Coaching</h3>
         <p class="muted small" style="margin: 0;">Private sessions with Shanelle — The Dementia Caregiver Wellness Coach. Personal guidance for your caregiving journey, one conversation at a time.</p>
       </div>
-      <a href="#" class="btn btn-outline btn-sm" onclick="alert('Demo: joins the coaching interest list — you\'ll be first to know when sessions open.'); return false;">Join the interest list</a>
+      <a href="#" class="btn btn-outline btn-sm" onclick="openCoachingInterest(); return false;">Join the interest list</a>
     </div>
   </div>
 </section>
@@ -236,6 +236,62 @@
       <div class="success-note" data-intake-success role="status" aria-live="polite">✓ Membership request received — welcome to The Sanctuary.</div>
       <div class="error-note" data-intake-error role="alert" aria-live="assertive"></div>
       <div class="routing-note" data-intake-routing>Behind the scenes: your caregiver record was created or updated and staff follow-up is queued.</div>
+    </form>
+  </div>
+</div>
+
+<!-- Grant application modal -->
+<div class="modal-overlay" id="grantApplyModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeGrantApply()" aria-label="Close grant application">✕</button>
+    <h3>Apply for a Wellness Grant</h3>
+    <p class="sub">A short form creates or updates your caregiver record and submits a grant application for staff review.</p>
+    <form id="grantApplyForm" onsubmit="return submitGrantApply(event)">
+      <div class="field">
+        <label for="grantName">Your name</label>
+        <input id="grantName" type="text" placeholder="e.g., Maria Gonzalez" required>
+      </div>
+      <div class="field">
+        <label for="grantEmail">Email</label>
+        <input id="grantEmail" type="email" placeholder="you@example.com" required>
+      </div>
+      <div class="field">
+        <label for="grantRequestedFor">What would this grant support? (optional)</label>
+        <input id="grantRequestedFor" type="text" placeholder="e.g., counseling, a gym membership, a massage">
+      </div>
+      <p class="privacy-line">By applying, you consent to Legacy using these details to create or update your caregiver record and review this wellness-grant application. Please do not include medical record numbers or emergency details.</p>
+      <button type="submit" class="btn btn-plum" style="width: 100%;">Submit application</button>
+      <div class="success-note" data-intake-success role="status" aria-live="polite">✓ Application received — staff will review it on your caregiver record.</div>
+      <div class="error-note" data-intake-error role="alert" aria-live="assertive"></div>
+      <div class="routing-note" data-intake-routing>Behind the scenes: a grant application was submitted and a grant-review follow-up is queued.</div>
+    </form>
+  </div>
+</div>
+
+<!-- Coaching interest modal -->
+<div class="modal-overlay" id="coachingInterestModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeCoachingInterest()" aria-label="Close coaching interest form">✕</button>
+    <h3>Join the coaching interest list</h3>
+    <p class="sub">Leave your name and email. We will create or update your caregiver record and let you know when 1:1 sessions open.</p>
+    <form id="coachingInterestForm" onsubmit="return submitCoachingInterest(event)">
+      <div class="field">
+        <label for="coachName">Your name</label>
+        <input id="coachName" type="text" placeholder="e.g., Maria Gonzalez" required>
+      </div>
+      <div class="field">
+        <label for="coachEmail">Email</label>
+        <input id="coachEmail" type="email" placeholder="you@example.com" required>
+      </div>
+      <div class="field">
+        <label for="coachNote">Anything you want us to know (optional)</label>
+        <textarea id="coachNote" rows="3" placeholder="Timing, questions, or what you hope coaching covers"></textarea>
+      </div>
+      <p class="privacy-line">By joining, you consent to Legacy using these details to create or update your caregiver record and follow up when wellness coaching opens. Please do not include medical record numbers or emergency details.</p>
+      <button type="submit" class="btn btn-coral" style="width: 100%;">Join the list</button>
+      <div class="success-note" data-intake-success role="status" aria-live="polite">✓ You're on the interest list — we will follow up on your caregiver record.</div>
+      <div class="error-note" data-intake-error role="alert" aria-live="assertive"></div>
+      <div class="routing-note" data-intake-routing>Behind the scenes: your caregiver record was created or updated and a coaching-interest follow-up is queued.</div>
     </form>
   </div>
 </div>

@@ -1,0 +1,27 @@
+<!-- Coaching interest modal -->
+<div class="modal-overlay" id="coachingInterestModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeCoachingInterest()" aria-label="Close coaching interest form">✕</button>
+    <h3>Join the coaching interest list</h3>
+    <p class="sub">Leave your name and email. We will create or update your caregiver record and let you know when 1:1 sessions open.</p>
+    <form id="coachingInterestForm" onsubmit="return submitCoachingInterest(event)">
+      <div class="field">
+        <label for="coachName">Your name</label>
+        <input id="coachName" type="text" placeholder="e.g., Maria Gonzalez" required>
+      </div>
+      <div class="field">
+        <label for="coachEmail">Email</label>
+        <input id="coachEmail" type="email" placeholder="you@example.com" required>
+      </div>
+      <div class="field">
+        <label for="coachNote">Anything you want us to know (optional)</label>
+        <textarea id="coachNote" rows="3" placeholder="Timing, questions, or what you hope coaching covers"></textarea>
+      </div>
+      <p class="privacy-line">By joining, you consent to Legacy using these details to create or update your caregiver record and follow up when wellness coaching opens. Please do not include medical record numbers or emergency details.</p>
+      <button type="submit" class="btn btn-coral" style="width: 100%;">Join the list</button>
+      <div class="success-note" data-intake-success role="status" aria-live="polite">✓ You're on the interest list — we will follow up on your caregiver record.</div>
+      <div class="error-note" data-intake-error role="alert" aria-live="assertive"></div>
+      <div class="routing-note" data-intake-routing>Behind the scenes: your caregiver record was created or updated and a coaching-interest follow-up is queued.</div>
+    </form>
+  </div>
+</div>

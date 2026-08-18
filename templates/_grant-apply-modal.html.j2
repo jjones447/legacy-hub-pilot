@@ -1,0 +1,27 @@
+<!-- Grant application modal -->
+<div class="modal-overlay" id="grantApplyModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeGrantApply()" aria-label="Close grant application">✕</button>
+    <h3>Apply for a Wellness Grant</h3>
+    <p class="sub">A short form creates or updates your caregiver record and submits a grant application for staff review.</p>
+    <form id="grantApplyForm" onsubmit="return submitGrantApply(event)">
+      <div class="field">
+        <label for="grantName">Your name</label>
+        <input id="grantName" type="text" placeholder="e.g., Maria Gonzalez" required>
+      </div>
+      <div class="field">
+        <label for="grantEmail">Email</label>
+        <input id="grantEmail" type="email" placeholder="you@example.com" required>
+      </div>
+      <div class="field">
+        <label for="grantRequestedFor">What would this grant support? (optional)</label>
+        <input id="grantRequestedFor" type="text" placeholder="e.g., counseling, a gym membership, a massage">
+      </div>
+      <p class="privacy-line">By applying, you consent to Legacy using these details to create or update your caregiver record and review this wellness-grant application. Please do not include medical record numbers or emergency details.</p>
+      <button type="submit" class="btn btn-plum" style="width: 100%;">Submit application</button>
+      <div class="success-note" data-intake-success role="status" aria-live="polite">✓ Application received — staff will review it on your caregiver record.</div>
+      <div class="error-note" data-intake-error role="alert" aria-live="assertive"></div>
+      <div class="routing-note" data-intake-routing>Behind the scenes: a grant application was submitted and a grant-review follow-up is queued.</div>
+    </form>
+  </div>
+</div>

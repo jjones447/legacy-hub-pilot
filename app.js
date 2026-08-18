@@ -93,6 +93,75 @@ function closeMembership() {
   document.getElementById('membershipModal').classList.remove('open');
 }
 
+function openGrantApply() {
+  const modal = document.getElementById('grantApplyModal');
+  const form = document.getElementById('grantApplyForm');
+  if (form) setFormState(form, 'idle');
+  if (modal) modal.classList.add('open');
+}
+
+function closeGrantApply() {
+  const modal = document.getElementById('grantApplyModal');
+  if (modal) modal.classList.remove('open');
+}
+
+function submitGrantApply(e) {
+  e.preventDefault();
+  const form = e.currentTarget || document.getElementById('grantApplyForm');
+  const name = splitName(document.getElementById('grantName').value);
+  const payload = {
+    kind: 'grant_application',
+    source: 'site_form:grant',
+    external_ref: intakeExternalRef(form, 'grant_application'),
+    first_name: name.first_name,
+    last_name: name.last_name,
+    email: document.getElementById('grantEmail').value.trim(),
+    requested_for: document.getElementById('grantRequestedFor').value.trim() || null,
+  };
+
+  postIntake(form, payload).then(function () {
+    setFormState(form, 'success');
+  }).catch(function () {
+    setFormState(form, 'error', "We couldn't send this application just now. Please email us and we'll take it from there.");
+  });
+  return false;
+}
+
+function openCoachingInterest() {
+  const modal = document.getElementById('coachingInterestModal');
+  const form = document.getElementById('coachingInterestForm');
+  if (form) setFormState(form, 'idle');
+  if (modal) modal.classList.add('open');
+}
+
+function closeCoachingInterest() {
+  const modal = document.getElementById('coachingInterestModal');
+  if (modal) modal.classList.remove('open');
+}
+
+function submitCoachingInterest(e) {
+  e.preventDefault();
+  const form = e.currentTarget || document.getElementById('coachingInterestForm');
+  const name = splitName(document.getElementById('coachName').value);
+  const note = document.getElementById('coachNote').value.trim();
+  const payload = {
+    kind: 'support_request',
+    source: 'site_form:coaching',
+    external_ref: intakeExternalRef(form, 'support_request'),
+    first_name: name.first_name,
+    last_name: name.last_name,
+    email: document.getElementById('coachEmail').value.trim(),
+    message: note ? ('Coaching interest list — ' + note) : 'Coaching interest list',
+  };
+
+  postIntake(form, payload).then(function () {
+    setFormState(form, 'success');
+  }).catch(function () {
+    setFormState(form, 'error', "We couldn't join the list just now. Please email us and we'll take it from there.");
+  });
+  return false;
+}
+
 function submitMembership(e) {
   e.preventDefault();
   const form = e.currentTarget || document.getElementById('membershipForm');
@@ -191,8 +260,12 @@ function submitRegister(e) {
 document.addEventListener('click', function (e) {
   const registerOverlay = document.getElementById('registerModal');
   const membershipOverlay = document.getElementById('membershipModal');
+  const grantOverlay = document.getElementById('grantApplyModal');
+  const coachingOverlay = document.getElementById('coachingInterestModal');
   if (registerOverlay && e.target === registerOverlay) closeRegister();
   if (membershipOverlay && e.target === membershipOverlay) closeMembership();
+  if (grantOverlay && e.target === grantOverlay) closeGrantApply();
+  if (coachingOverlay && e.target === coachingOverlay) closeCoachingInterest();
 });
 
 /* ---------- Portal: Magic-link login, logout, and session check ---------- */
