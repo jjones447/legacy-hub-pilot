@@ -47,16 +47,6 @@ h1, h2, h3, .display { font-family: var(--font-display); font-weight: 600; line-
 
 .container { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
 
-/* ---------- Demo banner ---------- */
-.demo-banner {
-  background: var(--plum-dark);
-  color: #ecd9cd;
-  text-align: center;
-  font-size: 12.5px;
-  letter-spacing: 0.04em;
-  padding: 6px 16px;
-}
-.demo-banner strong { color: #fff; font-weight: 600; }
 
 /* ---------- Header / nav ---------- */
 header.site-header {

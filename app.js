@@ -1,4 +1,3 @@
-/* Legacy Caregiver Hub — demo interactions (sample data only) */
 
 /* ---------- Live intake forms ---------- */
 const INTAKE_ENDPOINT = '/api/intake';
