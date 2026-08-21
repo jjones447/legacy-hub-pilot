@@ -123,6 +123,60 @@ nav.main-nav a.active { color: var(--plum); border-bottom-color: var(--coral); }
 .hero p.lede { font-size: 19px; max-width: 560px; color: #ecd9cd; margin-bottom: 34px; }
 .hero .btn-row { display: flex; gap: 14px; flex-wrap: wrap; }
 
+/* ---------- Hero video (Shanelle's community footage, 2026-08) ----------
+   Source is 720x1280 PORTRAIT phone video. A full-bleed landscape background would
+   crop to a narrow centre band AND upscale ~2.7x on desktop, so the treatment is
+   resolution-honest instead:
+     - phones  : the video is the background, which is its native orientation
+     - desktop : the video is inset to the right at a size close to native, with the
+                 existing gradient still carrying the left side behind the copy
+   The gradient in .hero remains the base layer, so if the video fails to load or the
+   user has reduced-motion on, the hero looks exactly as it did before. */
+.hero.has-video .hero-video {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover; object-position: center 30%;
+  z-index: 0;
+  /* the footage is bright and busy; hold it back so white type stays readable */
+  opacity: 0.34;
+}
+.hero.has-video .hero-scrim {
+  position: absolute; inset: 0; z-index: 1;
+  background: linear-gradient(100deg,
+    var(--plum-dark) 0%,
+    rgba(94, 50, 38, 0.86) 42%,
+    rgba(94, 50, 38, 0.42) 72%,
+    rgba(94, 50, 38, 0.30) 100%);
+}
+.hero.has-video .hero-content { position: relative; z-index: 2; }
+/* keep the decorative blobs above the video but below the copy */
+.hero.has-video::before, .hero.has-video::after { z-index: 1; }
+
+@media (min-width: 900px) {
+  .hero.has-video .hero-video {
+    /* inset panel on the right rather than a stretched background */
+    inset: 0 0 0 auto;
+    width: 38%;
+    opacity: 0.62;
+    object-position: center 28%;
+    -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 22%);
+            mask-image: linear-gradient(to right, transparent 0%, #000 22%);
+  }
+  .hero.has-video .hero-scrim {
+    background: linear-gradient(100deg,
+      var(--plum-dark) 0%,
+      var(--plum) 46%,
+      rgba(139, 79, 59, 0.55) 66%,
+      rgba(139, 79, 59, 0.15) 100%);
+  }
+  .hero.has-video h1, .hero.has-video p.lede { max-width: 560px; }
+}
+
+/* Respect reduced-motion: show the poster frame, never an autoplaying loop. */
+@media (prefers-reduced-motion: reduce) {
+  .hero.has-video .hero-video { display: none; }
+}
+
 .btn {
   display: inline-flex; align-items: center; justify-content: center;
   text-decoration: none; font-weight: 600; font-size: 16px;
