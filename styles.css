@@ -493,6 +493,14 @@ footer a:hover { color: #fff; }
   .nav-bar { position: static; border-bottom: none; box-shadow: none; }
   .nav-bar > .nav-v2 { padding: 0; }
   nav.main-nav.nav-v2 {
+    /* REGRESSION FIX 2026-08-21. The v1 rule above sets `position: absolute; top: 100%`,
+       written when .main-nav lived INSIDE the sticky .site-header, so 100% meant "just
+       below the header". The two-row header moved the nav into .nav-bar, which is
+       position: static at this width -- so 100% began resolving against a full-height
+       containing block and the open menu rendered at y=812 on a 812px viewport: entirely
+       below the fold. The hamburger and the chevrons both worked; the menu was simply
+       off-screen. Put it back in normal flow, directly under the header. */
+    position: static; top: auto; left: auto; right: auto;
     display: none; flex-direction: column; padding: 12px 24px 18px; gap: 0;
     background: #fff; border-bottom: 1px solid #eee5da; box-shadow: var(--shadow);
   }
