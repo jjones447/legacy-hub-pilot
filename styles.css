@@ -176,23 +176,28 @@ nav.main-nav a.active { color: var(--plum); border-bottom-color: var(--coral); }
 .hero.has-video::before, .hero.has-video::after { z-index: 1; }
 
 @media (min-width: 900px) {
+  /* Centred behind the copy at every width -- same treatment as mobile, per Jacob
+     2026-08-21. The earlier right-inset panel protected sharpness (720px source,
+     no upscale) but pushed the footage off to one side of a wide screen; behind a
+     scrim at low opacity the softness is not visible and the centred read is better. */
   .hero.has-video .hero-video {
-    /* inset panel on the right rather than a stretched background */
-    inset: 0 0 0 auto;
-    width: 38%;
-    opacity: 0.62;
-    object-position: center 28%;
-    -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 22%);
-            mask-image: linear-gradient(to right, transparent 0%, #000 22%);
+    inset: 0;
+    width: 100%;
+    opacity: 0.30;
+    /* 50%, not the usual "upper third": on a wide screen the cover-crop shows only
+       ~19% of this portrait source, and at 32% that band landed on ceiling, wall and
+       window blinds with the faces cut off below it. Verified by extracting the exact
+       visible rows at 1920px and looking at them. 50% centres the band on the group. */
+    object-position: center 50%;
+    -webkit-mask-image: none;
+            mask-image: none;
   }
   .hero.has-video .hero-scrim {
-    background: linear-gradient(100deg,
-      var(--plum-dark) 0%,
-      var(--plum) 46%,
-      rgba(139, 79, 59, 0.55) 66%,
-      rgba(139, 79, 59, 0.15) 100%);
+    /* symmetric wash so the centre stays legible without a directional gradient */
+    background:
+      radial-gradient(ellipse 120% 90% at 50% 45%, rgba(90, 53, 38, 0.62) 0%, rgba(90, 53, 38, 0.88) 70%, var(--plum-dark) 100%);
   }
-  .hero.has-video h1, .hero.has-video p.lede { max-width: 560px; }
+  .hero.has-video h1, .hero.has-video p.lede { max-width: 720px; }
 }
 
 /* Respect reduced-motion: show the poster frame, never an autoplaying loop. */
