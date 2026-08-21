@@ -15,8 +15,14 @@
 {% set active_page = 'index' %}
 {% include '_header.html.j2' %}
 
-<section class="hero">
-  <div class="container">
+<section class="hero has-video">
+  <video class="hero-video" autoplay muted loop playsinline preload="metadata"
+         poster="media/hero-poster.jpg" aria-hidden="true" tabindex="-1">
+    <source src="media/hero.webm" type="video/webm">
+    <source src="media/hero.mp4" type="video/mp4">
+  </video>
+  <div class="hero-scrim" aria-hidden="true"></div>
+  <div class="container hero-content">
     <h1>Supporting Dementia Caregivers Through Community, Wellness, and Respite.</h1>
     <p class="lede">At Legacy Home and Respite Care Foundation, we believe caregivers deserve support, too. Through respite, wellness programming, education, and meaningful community connections, we help family caregivers navigate the dementia journey without feeling alone.</p>
     <div class="btn-row">
