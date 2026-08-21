@@ -161,7 +161,7 @@ nav.main-nav a.active { color: var(--plum); border-bottom-color: var(--coral); }
   object-fit: cover; object-position: center 30%;
   z-index: 0;
   /* the footage is bright and busy; hold it back so white type stays readable */
-  opacity: 0.34;
+  opacity: 0.17;
 }
 .hero.has-video .hero-scrim {
   position: absolute; inset: 0; z-index: 1;
@@ -183,7 +183,7 @@ nav.main-nav a.active { color: var(--plum); border-bottom-color: var(--coral); }
   .hero.has-video .hero-video {
     inset: 0;
     width: 100%;
-    opacity: 0.30;
+    opacity: 0.15;
     /* 50%, not the usual "upper third": on a wide screen the cover-crop shows only
        ~19% of this portrait source, and at 32% that band landed on ceiling, wall and
        window blinds with the faces cut off below it. Verified by extracting the exact
