@@ -1,0 +1,23 @@
+name: templates match generated HTML
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: templates match generated HTML
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install render dependency
+        run: pip install jinja2
+      - name: Verify committed HTML matches templates
+        run: python build.py --verify
