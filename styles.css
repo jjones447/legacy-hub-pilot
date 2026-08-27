@@ -275,6 +275,28 @@ section { padding: 64px 0; }
 .card p { color: var(--ink-soft); font-size: 16px; margin-bottom: 14px; }
 .card a.more { font-weight: 600; font-size: 14px; text-decoration: none; color: var(--coral-dark); }
 
+/* Whole-tile click target (agreed with Shanelle 2026-08-21).
+   The small "more" link was the only hit area; the tile now carries it. This is as
+   much an accessibility change as a usability one — a large target is easier for an
+   older or unsteady hand than a 14px link.
+   The ::after overlay is scoped to real destinations: cards whose only link is a
+   placeholder (href="#", awaiting a client URL) are excluded, because a tile that
+   invites a click and then does nothing is worse than a plain tile. */
+.card { position: relative; }
+.card > a.more::after {
+  content: ''; position: absolute; inset: 0;
+  border-radius: inherit; z-index: 1;
+}
+.card > a.more[href="#"]::after,
+.card > a.more[href=""]::after { content: none; }
+/* The anchor itself must stay position:static. If it is positioned, it becomes the
+   containing block for its own ::after and the overlay collapses to the width of the
+   link text instead of covering the tile. */
+/* Keyboard users get the same affordance the mouse hover gives. */
+.card:focus-within { border-top-color: var(--sage); box-shadow: var(--shadow-lg); }
+.card:focus-within a.more { outline: 2px solid var(--coral-dark); outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) { .card { transition: none; } }
+
 /* ---------- Stats band ---------- */
 /* Dark surface so amber numerals never render as text-on-light (client hard rule) */
 .stats-band { background: var(--plum-dark); }
