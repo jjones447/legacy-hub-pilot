@@ -1,0 +1,48 @@
+{#
+  Reusable photo carousel — promised to Shanelle at the 2026-07-31 working session.
+
+  Include it with a caller-supplied heading, blurb and image list:
+
+    {% with carousel_id="community", carousel_title="Our community",
+            carousel_blurb="Moments from Legacy events.", carousel_images=gallery %}
+      {% include "_carousel.html.j2" %}
+    {% endwith %}
+
+  Design notes, so the next person does not undo them:
+  - Scrolling is native CSS scroll-snap, so the carousel works with JavaScript off or
+    still loading. The buttons and dots are enhancement, not the mechanism.
+  - It is a labelled region with real <button>s, not clickable divs. Screen reader and
+    keyboard users get the same affordance as a mouse.
+  - No autoplay. This audience is often reading one-handed beside someone they care for;
+    motion that moves on its own is hostile to that, and it fails WCAG 2.2.2 besides.
+  - Images are lazy and carry width/height so the page does not jump as they arrive.
+#}
+<section class="section" aria-labelledby="{{ carousel_id }}-heading">
+  <div class="container">
+    <h2 id="{{ carousel_id }}-heading">{{ carousel_title }}</h2>
+    {%- if carousel_blurb %}
+    <p class="muted">{{ carousel_blurb }}</p>
+    {%- endif %}
+
+    <div class="carousel" data-carousel id="{{ carousel_id }}">
+      <button class="carousel-nav carousel-prev" type="button"
+              aria-label="Previous photos" data-carousel-prev hidden>&#8592;</button>
+
+      <ul class="carousel-track" data-carousel-track
+          tabindex="0" role="group" aria-label="{{ carousel_title }} photo carousel">
+        {%- for img in carousel_images %}
+        <li class="carousel-item">
+          <img src="{{ img.src }}" alt="{{ img.alt }}"
+               loading="lazy" decoding="async" width="800" height="600">
+          {%- if img.caption %}
+          <p class="carousel-caption">{{ img.caption }}</p>
+          {%- endif %}
+        </li>
+        {%- endfor %}
+      </ul>
+
+      <button class="carousel-nav carousel-next" type="button"
+              aria-label="More photos" data-carousel-next hidden>&#8594;</button>
+    </div>
+  </div>
+</section>
