@@ -557,3 +557,36 @@ document.addEventListener('DOMContentLoaded', function() {
   checkPortalSession();
 });
 
+
+/* Photo carousel: progressive enhancement only.
+   The track scrolls natively with scroll-snap, so everything here is optional. The
+   arrows stay hidden in markup and are revealed only once this runs - a control that
+   does nothing is worse than no control. */
+(function () {
+  document.querySelectorAll('[data-carousel]').forEach(function (root) {
+    var track = root.querySelector('[data-carousel-track]');
+    var prev = root.querySelector('[data-carousel-prev]');
+    var next = root.querySelector('[data-carousel-next]');
+    if (!track || !prev || !next) return;
+
+    var item = track.querySelector('.carousel-item');
+    if (!item) return;
+
+    function step() {
+      var gap = parseFloat(getComputedStyle(track).gap) || 0;
+      return item.getBoundingClientRect().width + gap;
+    }
+    function sync() {
+      var max = track.scrollWidth - track.clientWidth - 1;
+      prev.disabled = track.scrollLeft <= 0;
+      next.disabled = track.scrollLeft >= max;
+      var overflows = track.scrollWidth > track.clientWidth + 1;
+      prev.hidden = next.hidden = !overflows;
+    }
+    prev.addEventListener('click', function () { track.scrollBy({ left: -step(), behavior: 'smooth' }); });
+    next.addEventListener('click', function () { track.scrollBy({ left: step(), behavior: 'smooth' }); });
+    track.addEventListener('scroll', sync, { passive: true });
+    window.addEventListener('resize', sync);
+    sync();
+  });
+})();

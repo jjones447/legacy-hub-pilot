@@ -52,7 +52,9 @@ def load_content() -> dict:
     resources = json.loads((ROOT / "content" / "resources.json").read_text(encoding="utf-8"))
     events = json.loads((ROOT / "content" / "events.json").read_text(encoding="utf-8"))
     sections = json.loads((ROOT / "content" / "page-sections.json").read_text(encoding="utf-8"))
-    return {"resources": resources["items"], "events": events["items"], "sections": sections["items"]}
+    gallery = json.loads((ROOT / "content" / "gallery.json").read_text(encoding="utf-8"))
+    return {"resources": resources["items"], "events": events["items"],
+            "sections": sections["items"], "gallery": gallery["items"]}
 
 
 def _env() -> Environment:

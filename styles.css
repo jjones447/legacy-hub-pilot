@@ -563,3 +563,37 @@ footer a:hover { color: #fff; }
   }
   .nav-v2 .drop a { font-size: 17px; padding: 11px 12px; }
 }
+
+/* ---------- Photo carousel ---------- */
+/* Promised to Shanelle 2026-07-31. Scrolling is native scroll-snap so the component
+   works with JavaScript off; the arrows are enhancement and stay hidden until JS
+   reveals them. No autoplay by design - see the note in templates/_carousel.html.j2. */
+.carousel { position: relative; margin-top: 24px; }
+.carousel-track {
+  display: flex; gap: 18px; overflow-x: auto; list-style: none; margin: 0; padding: 4px;
+  scroll-snap-type: x mandatory; scroll-behavior: smooth;
+  scrollbar-width: thin;
+}
+.carousel-track:focus-visible { outline: 2px solid var(--coral-dark); outline-offset: 4px; }
+.carousel-item {
+  flex: 0 0 auto; width: min(420px, 82vw); scroll-snap-align: start;
+  background: var(--white); border-radius: var(--radius);
+  box-shadow: var(--shadow); border: 1px solid #f0e8dd; overflow: hidden;
+}
+.carousel-item img {
+  display: block; width: 100%; height: 280px; object-fit: cover; background: var(--green-soft);
+}
+.carousel-caption { font-size: 14px; color: var(--ink-soft); margin: 0; padding: 12px 16px; }
+.carousel-nav {
+  position: absolute; top: 140px; transform: translateY(-50%); z-index: 3;
+  width: 44px; height: 44px; border-radius: 50%; cursor: pointer;
+  border: 1px solid var(--sage); background: var(--white); color: var(--ink);
+  font-size: 20px; line-height: 1; box-shadow: var(--shadow);
+}
+.carousel-nav:hover { background: var(--green-soft); }
+.carousel-nav:focus-visible { outline: 2px solid var(--coral-dark); outline-offset: 3px; }
+.carousel-prev { left: -12px; }
+.carousel-next { right: -12px; }
+/* Arrows overlap the edge on a phone, where the thumb scrolls instead. */
+@media (max-width: 720px) { .carousel-nav { display: none; } }
+@media (prefers-reduced-motion: reduce) { .carousel-track { scroll-behavior: auto; } }

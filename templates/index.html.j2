@@ -90,6 +90,12 @@
   </div>
 </section>
 
+{% with carousel_id="community", carousel_title="Moments from our community",
+        carousel_blurb="Caregivers, families and volunteers at Legacy events.",
+        carousel_images=gallery %}
+{% include "_carousel.html.j2" %}
+{% endwith %}
+
 <section class="band-teal">
   <div class="container">
     <span class="eyebrow">Caregiver Sanctuary Network</span>
