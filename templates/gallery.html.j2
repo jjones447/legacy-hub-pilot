@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Photo Gallery — Legacy Home &amp; Respite Care Foundation</title>
+<meta name="description" content="Photographs from Legacy Home &amp; Respite Care Foundation community events.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+
+{% set active_page = 'gallery' %}
+{% include '_header.html.j2' %}
+
+<section class="section">
+  <div class="container">
+    <h1>Moments from our community</h1>
+    <p class="muted" style="max-width: 620px;">Caregivers, families and volunteers at Legacy events. Select any photograph to view it larger.</p>
+
+    <ul class="gallery-grid">
+      {%- for img in gallery %}
+      <li class="gallery-cell">
+        <button type="button" class="gallery-open"
+                data-src="{{ img.src }}" data-alt="{{ img.alt }}" data-caption="{{ img.caption }}"
+                aria-label="View photograph {{ loop.index }} of {{ gallery|length }} larger">
+          <img src="{{ img.src }}" alt="{{ img.alt }}" loading="lazy" decoding="async"
+               width="800" height="600">
+        </button>
+        {%- if img.caption %}
+        <p class="gallery-caption">{{ img.caption }}</p>
+        {%- endif %}
+      </li>
+      {%- endfor %}
+    </ul>
+  </div>
+</section>
+
+{# Native <dialog>, so focus trapping, Esc-to-close and the backdrop are the
+   browser's job rather than ours. If the script never runs, the grid above is
+   still a complete and usable page. #}
+<dialog id="lightbox" class="lightbox" aria-label="Photograph viewer">
+  <button type="button" class="lightbox-close" data-lb-close aria-label="Close viewer">&times;</button>
+  <button type="button" class="lightbox-nav lightbox-prev" data-lb-prev aria-label="Previous photograph">&#8592;</button>
+  <figure class="lightbox-figure">
+    <img id="lightboxImg" src="" alt="">
+    <figcaption id="lightboxCaption" class="lightbox-caption" aria-live="polite"></figcaption>
+  </figure>
+  <button type="button" class="lightbox-nav lightbox-next" data-lb-next aria-label="Next photograph">&#8594;</button>
+</dialog>
+
+{% include '_footer.html.j2' %}
+
+<script src="app.js"></script>
+<script src="nav-v2.js"></script>
+</body>
+</html>

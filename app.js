@@ -590,3 +590,56 @@ document.addEventListener('DOMContentLoaded', function() {
     sync();
   });
 })();
+
+/* Gallery lightbox: progressive enhancement over the plain grid.
+   Uses a native <dialog>, so focus trapping, Esc-to-close and the backdrop come
+   from the browser instead of hand-rolled listeners. If this never runs, the
+   gallery page is still complete - the thumbnails just don't open. */
+(function () {
+  var dlg = document.getElementById('lightbox');
+  var grid = document.querySelectorAll('.gallery-open');
+  if (!dlg || !grid.length || typeof dlg.showModal !== 'function') return;
+
+  var img = document.getElementById('lightboxImg');
+  var cap = document.getElementById('lightboxCaption');
+  var items = Array.prototype.map.call(grid, function (b) {
+    return { src: b.dataset.src, alt: b.dataset.alt, caption: b.dataset.caption || '' };
+  });
+  var at = 0;
+  var opener = null;
+
+  function show(i) {
+    at = (i + items.length) % items.length;
+    var it = items[at];
+    img.src = it.src;
+    img.alt = it.alt;
+    cap.textContent = it.caption || (at + 1) + ' of ' + items.length;
+  }
+
+  Array.prototype.forEach.call(grid, function (btn, i) {
+    btn.addEventListener('click', function () {
+      opener = btn;          // so focus goes back where it came from
+      show(i);
+      dlg.showModal();
+    });
+  });
+
+  dlg.querySelector('[data-lb-close]').addEventListener('click', function () { dlg.close(); });
+  dlg.querySelector('[data-lb-prev]').addEventListener('click', function () { show(at - 1); });
+  dlg.querySelector('[data-lb-next]').addEventListener('click', function () { show(at + 1); });
+
+  dlg.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowLeft') { e.preventDefault(); show(at - 1); }
+    if (e.key === 'ArrowRight') { e.preventDefault(); show(at + 1); }
+  });
+
+  /* Clicking the dark surround closes; clicking the photo itself must not. */
+  dlg.addEventListener('click', function (e) {
+    if (e.target === dlg) dlg.close();
+  });
+
+  dlg.addEventListener('close', function () {
+    img.src = '';
+    if (opener) { opener.focus(); opener = null; }
+  });
+})();
