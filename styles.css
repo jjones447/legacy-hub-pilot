@@ -597,3 +597,49 @@ footer a:hover { color: #fff; }
 /* Arrows overlap the edge on a phone, where the thumb scrolls instead. */
 @media (max-width: 720px) { .carousel-nav { display: none; } }
 @media (prefers-reduced-motion: reduce) { .carousel-track { scroll-behavior: auto; } }
+
+/* ---------- Photo gallery + lightbox ---------- */
+.gallery-grid {
+  list-style: none; margin: 28px 0 0; padding: 0;
+  display: grid; gap: 18px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+.gallery-cell { margin: 0; }
+/* The whole thumbnail is the control - same large-target reasoning as the tiles. */
+.gallery-open {
+  display: block; width: 100%; padding: 0; cursor: pointer;
+  background: var(--white); border: 1px solid #f0e8dd; border-radius: var(--radius);
+  overflow: hidden; box-shadow: var(--shadow); transition: transform .15s, box-shadow .15s;
+}
+.gallery-open:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); }
+.gallery-open:focus-visible { outline: 2px solid var(--coral-dark); outline-offset: 3px; }
+.gallery-open img { width: 100%; height: 220px; object-fit: cover; background: var(--green-soft); }
+.gallery-caption { font-size: 14px; color: var(--ink-soft); margin: 8px 2px 0; }
+
+.lightbox {
+  border: none; padding: 0; background: transparent; max-width: 96vw; max-height: 96vh;
+  overflow: visible;
+}
+.lightbox::backdrop { background: rgba(30, 11, 9, 0.86); }
+.lightbox-figure { margin: 0; display: flex; flex-direction: column; align-items: center; }
+.lightbox-figure img {
+  max-width: 90vw; max-height: 82vh; width: auto; height: auto;
+  border-radius: 10px; box-shadow: var(--shadow-lg); background: var(--plum-dark);
+}
+.lightbox-caption { color: #fff; font-size: 15px; margin-top: 12px; text-align: center; max-width: 70ch; }
+.lightbox-close, .lightbox-nav {
+  position: fixed; z-index: 2; cursor: pointer;
+  background: rgba(255,255,255,0.92); color: var(--ink); border: none; border-radius: 50%;
+  width: 48px; height: 48px; font-size: 22px; line-height: 1; box-shadow: var(--shadow);
+}
+.lightbox-close:hover, .lightbox-nav:hover { background: #fff; }
+.lightbox-close:focus-visible, .lightbox-nav:focus-visible { outline: 3px solid var(--coral); outline-offset: 2px; }
+.lightbox-close { top: 18px; right: 18px; font-size: 26px; }
+.lightbox-prev { left: 18px; top: 50%; transform: translateY(-50%); }
+.lightbox-next { right: 18px; top: 50%; transform: translateY(-50%); }
+@media (max-width: 720px) {
+  .lightbox-prev { left: 8px; } .lightbox-next { right: 8px; }
+  .gallery-open img { height: 180px; }
+}
+/* Link out of the carousel into the full library. */
+.carousel-more { margin-top: 16px; }

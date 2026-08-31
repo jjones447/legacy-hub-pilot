@@ -44,5 +44,8 @@
       <button class="carousel-nav carousel-next" type="button"
               aria-label="More photos" data-carousel-next hidden>&#8594;</button>
     </div>
+    {%- if carousel_more_href %}
+    <p class="carousel-more"><a class="btn btn-outline" href="{{ carousel_more_href }}">{{ carousel_more_label|default("See the full photo gallery") }}</a></p>
+    {%- endif %}
   </div>
 </section>

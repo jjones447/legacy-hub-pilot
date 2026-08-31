@@ -24,6 +24,7 @@ PAGES = {
     "about.html": "about.html.j2",
     "programs.html": "programs.html.j2",
     "request-support.html": "request-support.html.j2",
+    "gallery.html": "gallery.html.j2",
 }
 
 # Hand-authored pages that are NOT template-rendered but DO share the public chrome.
