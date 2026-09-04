@@ -28,6 +28,8 @@ PAGES = {
     "trusted-resources.html": "trusted-resources.html.j2",
     "follow-and-learn.html": "follow-and-learn.html.j2",
     "caregiver-tools.html": "caregiver-tools.html.j2",
+    "community-series.html": "community-series.html.j2",
+    "drop-in-respite.html": "drop-in-respite.html.j2",
 }
 
 # Hand-authored pages that are NOT template-rendered but DO share the public chrome.
