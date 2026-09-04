@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Drop-In Respite &mdash; Legacy Home &amp; Respite Care Foundation</title>
+<meta name="description" content="Drop-in respite for dementia caregivers in Milwaukee — supervised, engaging, non-medical activities for your loved one while you take time for yourself.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+
+{% set active_page = 'drop-in-respite' %}
+{% include '_header.html.j2' %}
+
+{#
+  Same hero treatment as the home page: Shanelle's own footage behind the copy, gradient
+  underneath so the hero still reads if the video fails or reduced-motion is set. Source is
+  720x1280 portrait phone video, so it is inset rather than stretched - see the .hero.has-video
+  rules in styles.css for why.
+#}
+<section class="hero has-video">
+  <video class="hero-video" autoplay muted loop playsinline preload="metadata"
+         poster="media/respite-poster.jpg" aria-hidden="true" tabindex="-1">
+    <source src="media/respite.webm" type="video/webm">
+    <source src="media/respite.mp4" type="video/mp4">
+  </video>
+  <div class="container" style="position: relative; z-index: 2;">
+    <p class="eyebrow" style="color:#eeddd2;"><a href="programs-events.html" style="color:#eeddd2;">Programs &amp; Events</a></p>
+    <h1>Drop-In Respite</h1>
+    <p class="lede">A few hours that are yours. Your loved one spends them somewhere safe and engaged, with people who know how to be with them.</p>
+    <div class="btn-row">
+      <a href="request-support.html" class="btn btn-coral">Ask about a place</a>
+      <a href="#what-happens" class="btn btn-outline-light">What a session looks like</a>
+    </div>
+  </div>
+</section>
+
+<section id="what-happens">
+  <div class="container">
+    <div class="section-head"><h2>What actually happens</h2></div>
+    <p class="muted" style="max-width: 640px;">Drop-in respite is non-medical. Your loved one joins a small group for supervised
+      activities &mdash; music, conversation, movement, things that are engaging without being demanding. Staff
+      are experienced with dementia and know that a good session is measured in comfort, not output.</p>
+    <p class="muted" style="max-width: 640px;">You do not have to justify how you use the time. Some caregivers run errands. Some
+      sleep. Both are the point.</p>
+  </div>
+</section>
+
+<section style="background: var(--sand);">
+  <div class="container">
+    <div class="card-grid">
+      <div class="card">
+        <div class="icon">&#128337;</div>
+        <h3>A few hours at a time</h3>
+        <p>Sessions are short by design, so a first visit is a small step rather than a big decision.</p>
+      </div>
+      <div class="card">
+        <div class="icon">&#129309;</div>
+        <h3>Supervised and non-medical</h3>
+        <p>Experienced staff, structured activity, no clinical care &mdash; we will tell you plainly if we are not the right fit.</p>
+      </div>
+      <div class="card">
+        <div class="icon">&#127968;</div>
+        <h3>Somewhere familiar</h3>
+        <p>The same faces and the same room each time, which matters more than it sounds.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="attend">
+  <div class="container">
+    <div class="section-head"><h2>Coming to a session</h2></div>
+    <p class="muted" style="max-width: 640px;">Places are limited, so sessions are booked in advance. Upcoming dates are listed on
+      the events calendar, and we are happy to talk through a first visit before you commit to one.</p>
+    <span class="badge-phase2">Session dates coming</span>
+    <div class="btn-row mt-24">
+      <a href="programs-events.html#calendar" class="btn btn-outline">See the calendar</a>
+      <a href="request-support.html" class="btn btn-outline">Talk to someone first</a>
+    </div>
+  </div>
+</section>
+
+<section style="background: var(--sand);">
+  <div class="container">
+    <div class="section-head"><h2>Related support</h2></div>
+    <div class="card-grid mt-24">
+      <div class="card">
+        <h3>Event Respite</h3>
+        <p>Respite provided alongside a Legacy event, so you can attend without arranging cover.</p>
+        <a class="more" href="programs-events.html#event-respite">About Event Respite &rarr;</a>
+      </div>
+      <div class="card">
+        <h3>Caregiver Sanctuary Community Series</h3>
+        <p>Gatherings and wellness sessions for caregivers across the community.</p>
+        <a class="more" href="community-series.html">About the series &rarr;</a>
+      </div>
+      <div class="card">
+        <h3>Wellness Grants</h3>
+        <p>Financial help toward the things that keep a caregiver well.</p>
+        <a class="more" href="programs.html#grants">About the grants &rarr;</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+{% include '_footer.html.j2' %}
+
+<script src="app.js"></script>
+<script src="nav-v2.js"></script>
+</body>
+</html>

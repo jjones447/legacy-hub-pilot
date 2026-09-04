@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Caregiver Sanctuary Community Series &mdash; Legacy Home &amp; Respite Care Foundation</title>
+<meta name="description" content="A rotating series of caregiver gatherings and wellness experiences across the Milwaukee community, hosted by Legacy Home &amp; Respite Care Foundation.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+
+{% set active_page = 'community-series' %}
+{% include '_header.html.j2' %}
+
+<section class="hero" style="padding: 56px 0 64px;">
+  <div class="container">
+    <p class="eyebrow" style="color:#eeddd2;"><a href="programs-events.html" style="color:#eeddd2;">Programs &amp; Events</a></p>
+    <h1 style="font-size: clamp(30px, 4vw, 44px);">Caregiver Sanctuary Community Series</h1>
+    <p class="lede">A rotating series of gatherings and wellness experiences for caregivers, hosted around the community &mdash; somewhere to go that is just for you.</p>
+    <div class="btn-row">
+      <a href="#upcoming" class="btn btn-coral">See what's coming up</a>
+      <a href="request-support.html" class="btn btn-outline-light">Ask us a question</a>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="container">
+    <div class="section-head"><h2>What the series is</h2></div>
+    <p class="muted" style="max-width: 640px;">Caring for someone with dementia narrows your world fast. The Community Series
+      exists to widen it again for a few hours at a time &mdash; a gathering, a wellness session, a
+      conversation with people who understand the day you have just had.</p>
+    <p class="muted" style="max-width: 640px;">Sessions move around the community rather than sitting in one building, so there is
+      usually something within reach. You do not need to be enrolled in any Legacy programme to come.</p>
+  </div>
+</section>
+
+<section id="upcoming" style="background: var(--sand);">
+  <div class="container">
+    <div class="section-head"><span class="eyebrow">Dates</span><h2>Upcoming sessions</h2></div>
+    <p class="muted" style="max-width: 640px;">The schedule for the coming season is being finalised. Once dates are set they will
+      be listed here, each with its own registration link.</p>
+    <span class="badge-phase2">Schedule coming</span>
+    <p class="mt-24"><a class="btn btn-outline" href="programs-events.html#calendar">See the full events calendar</a></p>
+  </div>
+</section>
+
+<section id="register">
+  <div class="container">
+    <div class="section-head"><h2>Registering for a session</h2></div>
+    <p class="muted" style="max-width: 640px;">Sessions have limited places, so each one takes registration in advance. When a
+      session opens, its registration link appears beside the date above.</p>
+    {#
+      Registration runs through GiveButter, which Legacy already uses for donations and which
+      supports event pages and ticketing. That keeps this inside the systems the engagement
+      already covers rather than introducing a new one. The link below stays a placeholder until
+      Legacy creates the first event and sends the URL - do not invent a GiveButter URL.
+    #}
+    <span class="badge-phase2">Registration links coming</span>
+    <p class="muted mt-24" style="max-width: 640px;">Cannot find a session that works, or need something to be accessible in a
+      particular way? <a href="request-support.html">Tell us</a> and we will help.</p>
+  </div>
+</section>
+
+<section style="background: var(--sand);">
+  <div class="container">
+    <div class="section-head"><h2>More from Legacy</h2></div>
+    <div class="card-grid mt-24">
+      <div class="card">
+        <h3>Drop-In Respite</h3>
+        <p>Time to breathe while your loved one is somewhere safe, engaged and cared for.</p>
+        <a class="more" href="programs-events.html#drop-in">About Drop-In Respite &rarr;</a>
+      </div>
+      <div class="card">
+        <h3>Virtual Support Group</h3>
+        <p>A regular group you can join from home, no travel needed.</p>
+        <a class="more" href="programs-events.html#support-group">Join the group &rarr;</a>
+      </div>
+      <div class="card">
+        <h3>The Caregiver Sanctuary Network</h3>
+        <p>Dementia-friendly businesses and partners across the community.</p>
+        <a class="more" href="sanctuary.html">About the Network &rarr;</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+{% include '_footer.html.j2' %}
+
+<script src="app.js"></script>
+<script src="nav-v2.js"></script>
+</body>
+</html>
