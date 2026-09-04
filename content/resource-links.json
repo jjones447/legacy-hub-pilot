@@ -1,0 +1,33 @@
+{
+  "content_type": "resource_link",
+  "_note": "Drives the three Resource Hub sub-pages. Shanelle's structure decisions, 2026-09-01. To add a resource, add an entry to the right list and run `python build.py` - no template or CSS change needed. An entry with an empty `url` renders as a name and description with a 'link coming' marker rather than a dead link, which is the agreed treatment while content arrives over time. Never invent a URL: leave it empty until Legacy supplies it.",
+  "trusted_organizations": {
+    "title": "Organizations we refer to",
+    "blurb": "The organizations Legacy regularly points caregivers toward. We know these teams and we trust them with the families we serve.",
+    "items": [
+      { "name": "Milwaukee County ADRC", "note": "The county's Aging & Disability Resource Center — the usual first call for benefits, assessments and county services.", "url": "" },
+      { "name": "Wisconsin Alzheimer's Institute", "note": "Statewide research and education, including dementia-capable care and family programming.", "url": "" },
+      { "name": "Alzheimer's Association", "note": "24/7 helpline, support groups, care navigation and education.", "url": "" },
+      { "name": "Lorenzo's House", "note": "Support built specifically around younger-onset dementia and the families living with it.", "url": "" },
+      { "name": "Life Navigators", "note": "Guidance and advocacy for families supporting a loved one with disabilities.", "url": "" },
+      { "name": "Senior Oasis", "note": "Community programming and day support for older adults.", "url": "" },
+      { "name": "CarePatrol", "note": "Help comparing and choosing senior care options when the time comes.", "url": "" },
+      { "name": "St. Ann Center", "note": "Intergenerational day services, including care for adults living with dementia.", "url": "" }
+    ]
+  },
+  "caregiver_recommended": {
+    "title": "Our caregivers' trusted resources",
+    "blurb": "Recommended by the caregivers in our community, not by us. If something helped you, tell us and we will add it here.",
+    "items": []
+  },
+  "follow_and_learn": {
+    "title": "Voices worth following",
+    "blurb": "Dementia and caregiving accounts, online educators and people whose work we think is worth your time.",
+    "items": []
+  },
+  "caregiver_tools": {
+    "title": "Guides, worksheets and checklists",
+    "blurb": "Practical materials made by Legacy — things to print, fill in and bring with you.",
+    "items": []
+  }
+}

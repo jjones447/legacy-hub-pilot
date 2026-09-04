@@ -1,0 +1,43 @@
+{#
+  One resource collection rendered as a list of cards.
+
+  Shared by all three Resource Hub sub-pages so the treatment stays identical and a new
+  collection needs no new markup. Call it with a collection from content/resource-links.json:
+
+    {% with collection = trusted_organizations %}{% include "_resource-links.html.j2" %}{% endwith %}
+
+  The rule that matters: an entry with no `url` renders as a real card with a "link coming"
+  marker, NOT as a clickable tile. Legacy is supplying these destinations over time, and a
+  tile that invites a click and goes nowhere is worse than a plain one - the same reasoning
+  as the home-page tiles. When the URL arrives, filling it in is the only change needed and
+  the card becomes clickable on the next build.
+#}
+<div class="section-head"><h2>{{ collection.title }}</h2></div>
+{%- if collection.blurb %}
+<p class="muted" style="max-width: 640px;">{{ collection.blurb }}</p>
+{%- endif %}
+
+
+{%- if collection['items'] %}
+<div class="card-grid mt-24">
+  {%- for item in collection['items'] %}
+  <div class="card">
+    <h3>{{ item.name }}</h3>
+    {%- if item.note %}
+    <p>{{ item.note }}</p>
+    {%- endif %}
+    {%- if item.url %}
+    <a class="more" href="{{ item.url }}" target="_blank" rel="noopener">Visit {{ item.name }} &rarr;</a>
+    {%- else %}
+    <span class="badge-phase2">Link coming</span>
+    {%- endif %}
+  </div>
+  {%- endfor %}
+</div>
+{%- else %}
+<p class="muted mt-24" style="max-width: 640px;">
+  We are gathering these now. If you have one to suggest,
+  <a href="request-support.html">tell us</a> and we will add it.
+</p>
+<span class="badge-phase2">Content coming</span>
+{%- endif %}

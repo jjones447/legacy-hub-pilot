@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Caregiver Tools &amp; Downloads &mdash; Legacy Home &amp; Respite Care Foundation</title>
+<meta name="description" content="Guides, worksheets, checklists and downloads made by Legacy for dementia caregivers.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+
+{% set active_page = 'resources' %}
+{% include '_header.html.j2' %}
+
+<section class="hero" style="padding: 56px 0 64px;">
+  <div class="container">
+    <p class="eyebrow" style="color:#eeddd2;"><a href="resources.html" style="color:#eeddd2;">Resource Hub</a></p>
+    <h1 style="font-size: clamp(30px, 4vw, 44px);">Caregiver Tools &amp; Downloads</h1>
+    <p class="lede">Practical things to print, fill in, and take with you — to appointments, to family conversations, to the days that are hard.</p>
+  </div>
+</section>
+
+<section>
+  <div class="container">
+    {% with collection = caregiver_tools %}{% include '_resource-links.html.j2' %}{% endwith %}
+  </div>
+</section>
+
+<section style="background: var(--sand);">
+  <div class="container">
+    <div class="section-head"><h2>Looking for something else?</h2></div>
+    <div class="card-grid mt-24">
+      <div class="card">
+        <h3>Resource Directory</h3>
+        <p>Crisis lines, county services, respite funding and more, searchable in one place.</p>
+        <a class="more" href="directory.html">Browse the directory &rarr;</a>
+      </div>
+      <div class="card">
+        <h3>Frequently Asked Questions</h3>
+        <p>Plain answers to what caregivers ask us most.</p>
+        <a class="more" href="faq.html">Read the FAQ &rarr;</a>
+      </div>
+      <div class="card">
+        <h3>Talk to us</h3>
+        <p>If you cannot find what you need, ask. A person will get back to you.</p>
+        <a class="more" href="request-support.html">Request support &rarr;</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+{% include '_footer.html.j2' %}
+
+<script src="app.js"></script>
+<script src="nav-v2.js"></script>
+</body>
+</html>
