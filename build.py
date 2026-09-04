@@ -25,6 +25,9 @@ PAGES = {
     "programs.html": "programs.html.j2",
     "request-support.html": "request-support.html.j2",
     "gallery.html": "gallery.html.j2",
+    "trusted-resources.html": "trusted-resources.html.j2",
+    "follow-and-learn.html": "follow-and-learn.html.j2",
+    "caregiver-tools.html": "caregiver-tools.html.j2",
 }
 
 # Hand-authored pages that are NOT template-rendered but DO share the public chrome.
@@ -54,8 +57,13 @@ def load_content() -> dict:
     events = json.loads((ROOT / "content" / "events.json").read_text(encoding="utf-8"))
     sections = json.loads((ROOT / "content" / "page-sections.json").read_text(encoding="utf-8"))
     gallery = json.loads((ROOT / "content" / "gallery.json").read_text(encoding="utf-8"))
+    links = json.loads((ROOT / "content" / "resource-links.json").read_text(encoding="utf-8"))
     return {"resources": resources["items"], "events": events["items"],
-            "sections": sections["items"], "gallery": gallery["items"]}
+            "sections": sections["items"], "gallery": gallery["items"],
+            "trusted_organizations": links["trusted_organizations"],
+            "caregiver_recommended": links["caregiver_recommended"],
+            "follow_and_learn": links["follow_and_learn"],
+            "caregiver_tools": links["caregiver_tools"]}
 
 
 def _env() -> Environment:
