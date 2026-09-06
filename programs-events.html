@@ -167,6 +167,73 @@
 </section>
 
 
+<!-- Gallery panel. Jacob flagged this on the 2026-09-01 touch base: opening the full gallery
+     highlights Programs & Events in the nav, and the gallery lives in that dropdown, but this
+     page carried no gallery of its own. Mirrors templates/_carousel.html.j2 -- this page is
+     hand-authored (SHARED_PAGES in build.py syncs only header and footer), so the markup is
+     duplicated rather than included. Keep the two in step until this page is templated, at
+     which point task:legacy-gallery-folder-driven-filters replaces this with a per-area
+     include driven by Shanelle's Drive folders. -->
+<section class="section" aria-labelledby="programs-gallery-heading">
+  <div class="container">
+    <h2 id="programs-gallery-heading">Moments from our programs</h2>
+    <p class="muted">Caregivers, families and volunteers at Legacy programs and events.</p>
+
+    <div class="carousel" data-carousel id="programs-gallery">
+      <button class="carousel-nav carousel-prev" type="button"
+              aria-label="Previous photos" data-carousel-prev hidden>&#8592;</button>
+
+      <ul class="carousel-track" data-carousel-track
+          tabindex="0" role="group" aria-label="Moments from our programs photo carousel">
+        <li class="carousel-item">
+          <img src="media/gallery/img_5053.jpg" alt="Photograph from a Legacy Home & Respite Care Foundation community event"
+               loading="lazy" decoding="async" width="800" height="600">
+        </li>
+        <li class="carousel-item">
+          <img src="media/gallery/img_5055.jpg" alt="Photograph from a Legacy Home & Respite Care Foundation community event"
+               loading="lazy" decoding="async" width="800" height="600">
+        </li>
+        <li class="carousel-item">
+          <img src="media/gallery/img_5057.jpg" alt="Photograph from a Legacy Home & Respite Care Foundation community event"
+               loading="lazy" decoding="async" width="800" height="600">
+        </li>
+        <li class="carousel-item">
+          <img src="media/gallery/img_5058.jpg" alt="Photograph from a Legacy Home & Respite Care Foundation community event"
+               loading="lazy" decoding="async" width="800" height="600">
+        </li>
+        <li class="carousel-item">
+          <img src="media/gallery/img_5059.jpg" alt="Photograph from a Legacy Home & Respite Care Foundation community event"
+               loading="lazy" decoding="async" width="800" height="600">
+        </li>
+        <li class="carousel-item">
+          <img src="media/gallery/img_5060.jpg" alt="Photograph from a Legacy Home & Respite Care Foundation community event"
+               loading="lazy" decoding="async" width="800" height="600">
+        </li>
+        <li class="carousel-item">
+          <img src="media/gallery/img_5061.jpg" alt="Photograph from a Legacy Home & Respite Care Foundation community event"
+               loading="lazy" decoding="async" width="800" height="600">
+        </li>
+        <li class="carousel-item">
+          <img src="media/gallery/img_5064.jpg" alt="Photograph from a Legacy Home & Respite Care Foundation community event"
+               loading="lazy" decoding="async" width="800" height="600">
+        </li>
+        <li class="carousel-item">
+          <img src="media/gallery/img_5065.jpg" alt="Photograph from a Legacy Home & Respite Care Foundation community event"
+               loading="lazy" decoding="async" width="800" height="600">
+        </li>
+        <li class="carousel-item">
+          <img src="media/gallery/img_5067.jpg" alt="Photograph from a Legacy Home & Respite Care Foundation community event"
+               loading="lazy" decoding="async" width="800" height="600">
+        </li>
+      </ul>
+
+      <button class="carousel-nav carousel-next" type="button"
+              aria-label="More photos" data-carousel-next hidden>&#8594;</button>
+    </div>
+    <p class="carousel-more"><a class="btn btn-outline" href="gallery.html">See the full photo gallery</a></p>
+  </div>
+</section>
+
 <!-- SHARED:footer:start -->
 <footer>
   <div class="container">
