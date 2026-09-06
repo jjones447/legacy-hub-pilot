@@ -30,6 +30,7 @@ PAGES = {
     "caregiver-tools.html": "caregiver-tools.html.j2",
     "community-series.html": "community-series.html.j2",
     "drop-in-respite.html": "drop-in-respite.html.j2",
+    "coming-soon.html": "coming-soon.html.j2",
 }
 
 # Hand-authored pages that are NOT template-rendered but DO share the public chrome.
