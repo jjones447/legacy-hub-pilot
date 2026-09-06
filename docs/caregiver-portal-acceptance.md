@@ -20,23 +20,34 @@ promised to anyone.
 So the shape is chosen and the auth spine exists. What is missing is everything a caregiver would
 actually log in *for*.
 
-## The question that decides scope
+## What the portal is for — already answered, 2026-09-06
 
-**What does a caregiver get by logging in that they cannot get from the public site?**
+**Correction to the first version of this document.** It asked Jacob what a caregiver gets by
+logging in. That was the wrong move: the answer already exists in
+`legacy-caregiver-hub/docs/architecture/overview.md` and `data-model.md`, written before this
+engagement was signed. Asking a client to re-decide a settled design is how a project loses time.
 
-Until that has a one-sentence answer, the portal is a login screen in front of nothing. Everything
-the site does today — the Resource Hub, the directory, programme pages, the events calendar — is
-public and should stay public. Putting caregiver help behind a login is a barrier to the people
-least able to cope with one.
+The architecture is explicit:
 
-Three candidate answers, in order of how well they justify a login:
+- **Trust boundary 2:** *"Caregiver → portal: sees exactly their own record slice, via Access
+  identity."*
+- **The `caregiver` row is the design centre**, and four tables hang off it that are inherently
+  personal: `registration`, `grant_application`, `social_visit`, and `followup`.
+- **Sign-in is Cloudflare Access email-link, no passwords**, role-gated for caregiver and staff.
+  The magic-link table already in `schema/0005` is an implementation of that decision.
+- **No public path to D1.** Workers only, and the portal reads a caregiver-scoped view keyed to the
+  Access identity so it *cannot* query another caregiver.
 
-1. **My registrations.** What I have signed up for, what is coming, cancel or change it. Genuinely
-   personal, genuinely useless without knowing who you are.
-2. **My wellness grant.** Application status, what is outstanding, award history. Personal and
-   sensitive — this is the strongest case for a login.
-3. **Saved resources.** Bookmarks from the Resource Hub. Pleasant, but a browser bookmark does the
-   same job; on its own it does not justify an account.
+So the portal's purpose is settled: **it is where a caregiver sees their own slice of the record —
+what they have registered for, where their wellness grant stands, and what Legacy owes them next.**
+Everything informational stays public, which is the right instinct and is what the design already
+does: the Resource Hub, directory, programme pages and calendar are all open.
+
+One genuine gap remains, and it is an X-Centric decision rather than a client one: the current
+build uses a **hand-rolled magic-link table** (`portal_token`), while the architecture specifies
+**Cloudflare Access** email-link sign-in. Those are different mechanisms. Access is free to 50
+users, role-gates the staff console as well, and is what `security.md` assumes. Reconcile that
+before building further, or the portal ships on an auth path the architecture does not describe.
 
 ## Phase 1 — done means all of these
 
@@ -74,6 +85,13 @@ model and its own privacy conversation with Legacy. None should hold up a workin
 
 ## Recommended next step
 
-Put the scope question to Shanelle at a touch base before building further: *what should a caregiver
-be able to do here that they cannot do on the open site?* Her answer decides whether Phase 1 is
-registrations or grants, and that is a cheaper conversation than a rebuild.
+Not a client question. Two internal ones:
+
+1. **Access or the hand-rolled token table?** The architecture says Cloudflare Access; the code has
+   `portal_token`. Pick one before Phase 1 goes further.
+2. **Registrations or grants first?** Both are in the data model. Registrations exercise the whole
+   path at lower sensitivity, so they are the safer first slice — but if Legacy's real pain is grant
+   status enquiries, that ordering should flip.
+
+Worth confirming with Shanelle only that the portal still matters to her at all, since it has not
+come up in her recent notes and everything she has asked for lately has been public-site work.
