@@ -43,11 +43,21 @@ what they have registered for, where their wellness grant stands, and what Legac
 Everything informational stays public, which is the right instinct and is what the design already
 does: the Resource Hub, directory, programme pages and calendar are all open.
 
-One genuine gap remains, and it is an X-Centric decision rather than a client one: the current
-build uses a **hand-rolled magic-link table** (`portal_token`), while the architecture specifies
-**Cloudflare Access** email-link sign-in. Those are different mechanisms. Access is free to 50
-users, role-gates the staff console as well, and is what `security.md` assumes. Reconcile that
-before building further, or the portal ships on an auth path the architecture does not describe.
+**Correction, 2026-09-06.** An earlier version of this document called the `portal_token` table a
+gap against the architecture's "Cloudflare Access" sign-in, and recommended reconciling the two.
+That was wrong, and reading the test suite settles it. The split is deliberate and correct:
+
+- **Staff and agent surfaces use Cloudflare Access**, verified as a real RS256 JWT against the
+  team JWKS in `functions/_middleware.js`, failing closed until Access is provisioned.
+- **Caregivers use the signed `portal_session` cookie** minted from a hashed, single-use, expiring
+  magic link. Putting several hundred caregivers into an Access seat model would be both costly
+  and wrong for the audience.
+
+The portal side is in better shape than this document first credited. `tests/portal-login-v0.test.mjs`
+already covers the parts that matter: a non-member email returns a generic response and does not mint
+a token, tokens are stored hashed, reuse is blocked, the session is domain-separated so a magic-link
+token cannot be pasted in as a session cookie (SEC-3), and auth fails closed with 503 if
+`PORTAL_TOKEN_SECRET` is missing. Several Phase 1 boxes below are effectively already met.
 
 ## Phase 1 — done means all of these
 
@@ -87,11 +97,20 @@ model and its own privacy conversation with Legacy. None should hold up a workin
 
 Not a client question. Two internal ones:
 
-1. **Access or the hand-rolled token table?** The architecture says Cloudflare Access; the code has
-   `portal_token`. Pick one before Phase 1 goes further.
-2. **Registrations or grants first?** Both are in the data model. Registrations exercise the whole
+1. **Registrations or grants first?** Both are in the data model. Registrations exercise the whole
    path at lower sensitivity, so they are the safer first slice — but if Legacy's real pain is grant
    status enquiries, that ordering should flip.
+2. **Build the caregiver-facing read.** The auth spine is done and tested; what is missing is a page
+   that shows a signed-in caregiver their own registrations. That is the remaining Phase 1 work.
+
+## Note on the 2026-09-06 audit
+
+Testing the sign-up and registration paths turned up something separate and more urgent than
+anything in this document: `/api/registrations`, `/api/followups` and `/api/grants` were reachable
+**anonymously in production**, each returning caregiver names and email addresses across all
+caregivers. Only seed data was exposed. Fixed by adding them to the Access guard, with route-coverage
+tests in `tests/console-route-coverage.test.mjs`. The lesson worth keeping: every handler test passed
+throughout, because the tests call handlers directly and never exercise the middleware.
 
 Worth confirming with Shanelle only that the portal still matters to her at all, since it has not
 come up in her recent notes and everything she has asked for lately has been public-site work.

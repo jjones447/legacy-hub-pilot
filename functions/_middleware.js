@@ -13,8 +13,39 @@
 // Until BOTH are set, console surfaces stay 403 (fail closed). A non-prod escape
 // (ALLOW_DEV_CONSOLE="1") lets a preview/dev environment exercise the console.
 
-const CONSOLE_API_PREFIXES = ['/api/staff/', '/api/agent/'];
+// Surfaces that require a verified Access identity.
+//
+// These are the BACK-OFFICE endpoints: every one of them returns or mutates data
+// across caregivers, so none of them is ever safe to serve anonymously.
+//
+// registrations / followups / grants were added 2026-09-06 after an audit found them
+// reachable unauthenticated in production. Each JOINs the caregiver table and returns
+// first_name, last_name and email (grants also returns review_notes), and the POST
+// handlers mutate state while writing an audit_log row that attributes the change to
+// 'staff_console' -- so an anonymous write produced a misleading audit trail. Only
+// staff.html consumes any of them, and staff.html is itself behind this guard, so
+// nothing public depends on them.
+//
+// Deliberately NOT listed, and each for a reason:
+//   /api/intake       public by design -- a caregiver submitting their own details.
+//   /api/portal/*     enforces its own signed portal_session cookie, per caregiver.
+//   /api/events       public event listing, no personal data.
+//   /api/health       liveness only.
+const CONSOLE_API_PREFIXES = [
+  '/api/staff/',
+  '/api/agent/',
+  '/api/registrations',
+  '/api/followups',
+  '/api/grants',
+];
 const CONSOLE_PAGES = ['/staff.html'];
+
+// Prefix match that cannot be widened by a lookalike path: '/api/grants' guards
+// '/api/grants' and '/api/grants/123' but not a hypothetical '/api/grants-public'.
+function matchesPrefix(path, prefix) {
+  if (prefix.endsWith('/')) return path.startsWith(prefix);
+  return path === prefix || path.startsWith(prefix + '/');
+}
 
 let _jwks = { url: null, keys: null, at: 0 };
 const JWKS_TTL_MS = 10 * 60 * 1000;
@@ -117,7 +148,7 @@ export async function onRequest(context) {
   const { request, next, env } = context;
   const path = new URL(request.url).pathname;
   const isConsole =
-    CONSOLE_API_PREFIXES.some((p) => path.startsWith(p)) || CONSOLE_PAGES.includes(path);
+    CONSOLE_API_PREFIXES.some((p) => matchesPrefix(path, p)) || CONSOLE_PAGES.includes(path);
 
   if (isConsole) {
     // Non-prod escape for preview/demo (never set in production).

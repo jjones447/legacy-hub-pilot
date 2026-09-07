@@ -1,0 +1,29 @@
+name: unit tests
+
+# The suite existed from slice 03 but nothing ran it, so a regression could land on
+# main unnoticed -- which is how /api/registrations, /api/followups and /api/grants
+# stayed reachable anonymously in production while every test passed (2026-09-06).
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: node --test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # node:sqlite (the D1 fake in tests/) is experimental and flag-gated on 22.x;
+          # it is stable and unflagged from 24, which is what the suite is run against locally.
+          node-version: "24"
+      - name: Run unit tests
+        run: node --test "tests/*.test.mjs"
