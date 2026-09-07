@@ -10,15 +10,21 @@ promised to anyone.
 
 ## What exists today
 
+**Corrected 2026-09-06 (second pass).** The first version of this table was wrong in the other
+direction: it described `portal.html` as a login screen only and concluded that "everything a
+caregiver would actually log in for" was missing. It is not. Phase 1 is essentially built.
+
 | Piece | State |
 |---|---|
-| `portal.html` | Login screen only — one input, no form element |
-| `functions/api/portal/[[path]].js` | Routes present for `login`, `logout`, `me` |
-| `schema/0005_portal_login.sql` | `portal_token` table: token hash, caregiver id, expiry, single-use flag |
-| Auth model | Magic link. No password is stored, which is the right call for this audience |
+| `portal.html` | Login view **and** a full signed-in dashboard (`#dashView`): welcome, membership, grant status, registered events, socials |
+| `app.js` | `checkPortalSession()` swaps the views on load; `renderPortalData()` populates the dashboard |
+| `functions/api/portal/[[path]].js` | `login`, `verify`, `logout`, `me` — `me` returns profile, grants and registrations, all scoped to the session caregiver |
+| `schema/0005_portal_login.sql` | `portal_token`: token hash, caregiver id, expiry, single-use flag |
+| Auth model | Magic link, hashed and single-use, with a signed `portal_session` cookie. No password stored |
 
-So the shape is chosen and the auth spine exists. What is missing is everything a caregiver would
-actually log in *for*.
+So the honest position is that the caregiver-facing read exists end to end. What it has never had is
+a run against real data with a real caregiver, which is what "test the paths, then walk them with
+Shanelle" is for.
 
 ## What the portal is for — already answered, 2026-09-06
 

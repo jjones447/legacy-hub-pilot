@@ -336,7 +336,27 @@ function submitPortalLogin(e) {
         statusDiv.style.color = '#15803d';
 
         if (data.dev_link) {
-          statusDiv.innerHTML = 'Success! Link generated for demo mode:<br><a href="' + data.dev_link + '" class="btn btn-plum btn-sm mt-8" style="display:inline-block; text-decoration:none;">Click here to sign in</a>';
+          // dev_link is only returned in demo mode, but it still lands in an href.
+          // Accept a same-origin URL only, so a 'javascript:' or off-site value cannot
+          // be rendered as a clickable button.
+          let devHref = null;
+          try {
+            const u = new URL(data.dev_link, window.location.origin);
+            if (u.origin === window.location.origin) devHref = u.pathname + u.search;
+          } catch (err) {
+            devHref = null;
+          }
+          statusDiv.textContent = 'Success! Link generated for demo mode: ';
+          if (devHref) {
+            const a = document.createElement('a');
+            a.href = devHref;
+            a.className = 'btn btn-plum btn-sm mt-8';
+            a.style.display = 'inline-block';
+            a.style.textDecoration = 'none';
+            a.textContent = 'Click here to sign in';
+            statusDiv.appendChild(document.createElement('br'));
+            statusDiv.appendChild(a);
+          }
         } else {
           statusDiv.textContent = "If you're a member, check your email for a secure sign-in link!";
         }
@@ -402,7 +422,12 @@ function renderPortalData(data) {
       if (ga.status === 'submitted' || ga.status === 'in_review') badgeClass = 'badge-amber';
       else if (ga.status === 'awarded') badgeClass = 'badge-green';
 
-      grantStatus.innerHTML = '<span class="badge ' + badgeClass + '">' + ga.status.replace('_', ' ') + '</span>';
+      // badgeClass is chosen from a fixed set above; ga.status still goes in as text.
+      grantStatus.textContent = '';
+      const statusBadge = document.createElement('span');
+      statusBadge.className = 'badge ' + badgeClass;
+      statusBadge.textContent = String(ga.status || '').replace('_', ' ');
+      grantStatus.appendChild(statusBadge);
       grantRequestedFor.textContent = ga.requested_for || 'Wellness grant';
       grantAward.textContent = ga.amount ? 'Awarded: ' + ga.amount + ' (' + (ga.care_package || 'No package') + ')' : 'Personalized on approval';
     } else {
@@ -425,9 +450,33 @@ function renderPortalData(data) {
         else if (e.type === 'memory_social') dotColor = 'var(--amber)';
         else if (e.type === 'wellness') dotColor = 'var(--plum)';
 
-        item.innerHTML = '<div class="timeline-dot" style="background: ' + dotColor + ';"></div>' +
-                         '<div><strong>' + e.title + '</strong> <span class="badge badge-green">' + e.registration_status + '</span>' +
-                         '<div class="when">' + e.starts_at + ' · ' + (e.location || 'Online') + '</div></div>';
+        // Built as DOM nodes, not an HTML string. e.title and e.location are free text
+        // authored in the staff console, and concatenating them into innerHTML made the
+        // caregiver portal a stored-XSS sink. Everywhere else in this file already uses
+        // textContent; these were the outliers.
+        const dot = document.createElement('div');
+        dot.className = 'timeline-dot';
+        dot.style.background = dotColor;
+
+        const title = document.createElement('strong');
+        title.textContent = e.title || 'Event';
+
+        const badge = document.createElement('span');
+        badge.className = 'badge badge-green';
+        badge.textContent = e.registration_status || '';
+
+        const when = document.createElement('div');
+        when.className = 'when';
+        when.textContent = (e.starts_at || '') + ' · ' + (e.location || 'Online');
+
+        const body = document.createElement('div');
+        body.appendChild(title);
+        body.appendChild(document.createTextNode(' '));
+        body.appendChild(badge);
+        body.appendChild(when);
+
+        item.appendChild(dot);
+        item.appendChild(body);
         eventsList.appendChild(item);
       });
     } else {
