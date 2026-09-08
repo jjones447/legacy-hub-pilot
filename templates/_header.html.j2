@@ -12,7 +12,7 @@
   <nav class="main-nav nav-v2">
     <div class="nav-item"><a href="index.html"{% if active_page|default('') == 'index' %} class="active"{% endif %}>Home</a></div>
     <div class="nav-item has-drop">
-      <a href="about.html"{% if active_page|default('') == 'about' %} class="active"{% endif %}>About</a><button class="drop-toggle" aria-expanded="false" aria-label="About menu">&#9662;</button>
+      <a href="about.html"{% if active_page|default('') in ['about', 'blog'] %} class="active"{% endif %}>About</a><button class="drop-toggle" aria-expanded="false" aria-label="About menu">&#9662;</button>
       <div class="drop">
         <a href="about.html">Overview</a>
         <a href="about.html#story">Our Story</a>
@@ -24,7 +24,7 @@
         <a href="about.html#careers">Careers</a>
         <a href="about.html#impact">Our Impact</a>
         <a href="about.html#voices">Caregiver Voices</a>
-        <a href="about.html#blog">Blog &amp; Stories</a>
+        <a href="blog.html">Blog &amp; Stories</a>
         <a href="about.html#contact">Contact</a>
       </div>
     </div>
