@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blog &amp; Stories &mdash; Legacy Home &amp; Respite Care Foundation</title>
+<meta name="description" content="Caregiver stories, reflections and updates from Legacy Home &amp; Respite Care Foundation.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+{# Blog & Stories as its OWN PAGE, 2026-09-08. Shanelle moved it out of the Resource Hub on
+   09-04 without naming a destination. It was first placed as a scroll-to section at the bottom
+   of About (PR #55); Jacob then called for a standalone page, on the pattern Shanelle herself
+   set that day - anything that grows into a list (Trusted Resources, Follow + Learn, Tools &
+   Guides, FAQ) got its own page. A blog is a growing list. It stays grouped under About in the
+   nav until she says otherwise. Placement is still hers to confirm. #}
+{% set active_page = 'blog' %}
+{% include '_header.html.j2' %}
+
+<section class="hero" style="padding: 56px 0 64px;">
+  <div class="container">
+    <p class="eyebrow" style="color:#eeddd2;"><a href="about.html" style="color:#eeddd2;">About</a></p>
+    <h1 style="font-size: clamp(30px, 4vw, 44px);">Blog &amp; Stories</h1>
+    <p class="lede">Reflections, caregiver stories, and updates from Legacy. New posts appear here, most recent first.</p>
+  </div>
+</section>
+
+<section>
+  <div class="container">
+    <div class="grid-3">
+      <div class="card">
+        <span class="eyebrow">Coming soon</span>
+        <h3>A caregiver's story</h3>
+        <p>First-person accounts from the families we walk alongside.</p>
+        <a class="more" href="#">Read more</a>
+      </div>
+      <div class="card">
+        <span class="eyebrow">Coming soon</span>
+        <h3>From the Sanctuary</h3>
+        <p>What's new across the Caregiver Sanctuary Network and its partners.</p>
+        <a class="more" href="#">Read more</a>
+      </div>
+      <div class="card">
+        <span class="eyebrow">Coming soon</span>
+        <h3>Notes from Shanelle</h3>
+        <p>Updates and reflections from Legacy's Executive Director.</p>
+        <a class="more" href="#">Read more</a>
+      </div>
+    </div>
+    <span class="badge-phase2" style="margin-top: 24px;">Placement provisional &mdash; confirm with Legacy</span>
+  </div>
+</section>
+
+<section style="background: var(--sand);">
+  <div class="container">
+    <div class="section-head"><h2>More from Legacy</h2></div>
+    <div class="card-grid mt-24">
+      <div class="card">
+        <h3>Caregiver Voices</h3>
+        <p>In their own words: what Legacy has meant to the caregivers we serve.</p>
+        <a class="more" href="about.html#voices">Hear from caregivers &rarr;</a>
+      </div>
+      <div class="card">
+        <h3>Photo Gallery</h3>
+        <p>Moments from our programs, events and community.</p>
+        <a class="more" href="gallery.html">See the gallery &rarr;</a>
+      </div>
+      <div class="card">
+        <h3>Upcoming Events</h3>
+        <p>Support groups, workshops and respite days on the calendar now.</p>
+        <a class="more" href="events.html">See what's coming &rarr;</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+{% include '_footer.html.j2' %}
+
+<script src="app.js"></script>
+<script src="nav-v2.js"></script>
+</body>
+</html>

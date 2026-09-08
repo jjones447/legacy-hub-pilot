@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Request Support — Legacy Home &amp; Respite Care Foundation</title>
+<title>Blog &amp; Stories &mdash; Legacy Home &amp; Respite Care Foundation</title>
+<meta name="description" content="Caregiver stories, reflections and updates from Legacy Home &amp; Respite Care Foundation.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
@@ -26,7 +27,7 @@
   <nav class="main-nav nav-v2">
     <div class="nav-item"><a href="index.html">Home</a></div>
     <div class="nav-item has-drop">
-      <a href="about.html">About</a><button class="drop-toggle" aria-expanded="false" aria-label="About menu">&#9662;</button>
+      <a href="about.html" class="active">About</a><button class="drop-toggle" aria-expanded="false" aria-label="About menu">&#9662;</button>
       <div class="drop">
         <a href="about.html">Overview</a>
         <a href="about.html#story">Our Story</a>
@@ -99,64 +100,56 @@
 
 <section class="hero" style="padding: 56px 0 64px;">
   <div class="container">
-    <h1 style="font-size: clamp(30px, 4vw, 44px);">Request Support</h1>
-    <p class="lede">For yourself, or for a caregiver you know. One short form — we take it from there.</p>
+    <p class="eyebrow" style="color:#eeddd2;"><a href="about.html" style="color:#eeddd2;">About</a></p>
+    <h1 style="font-size: clamp(30px, 4vw, 44px);">Blog &amp; Stories</h1>
+    <p class="lede">Reflections, caregiver stories, and updates from Legacy. New posts appear here, most recent first.</p>
   </div>
 </section>
 
 <section>
   <div class="container">
-    <div class="split" style="align-items: start;">
-      <div class="login-card" style="max-width: none;">
-        <h2 style="font-size: 24px;">Tell us what you need</h2>
-        <p class="sub">Every request goes straight to our team — no phone tag required.</p>
-        <form id="supportForm" onsubmit="return submitSupport(event)">
-          <div class="field">
-            <label for="supName">Your name</label>
-            <input id="supName" type="text" placeholder="e.g., Maria Gonzalez" required>
-          </div>
-          <div class="field">
-            <label for="supEmail">Email or phone</label>
-            <input id="supEmail" type="text" placeholder="how we reach you" required>
-          </div>
-          <div class="field">
-            <label for="supWho">I am…</label>
-            <select id="supWho">
-              <option>A family caregiver (for myself)</option>
-              <option>Referring a caregiver I know</option>
-              <option>A professional / organization referring a client</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="supWhat">Support needed</label>
-            <select id="supWhat">
-              <option>Respite — Memory Socials</option>
-              <option>Wellness Grant information</option>
-              <option>Virtual Support Group</option>
-              <option>Sanctuary membership</option>
-              <option>Something else / not sure</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="supMsg">Anything you'd like us to know (optional)</label>
-            <textarea id="supMsg" rows="4" placeholder="Your situation, timing, questions…"></textarea>
-          </div>
-          <p class="privacy-line">By sending this form, you consent to Legacy using these details to create or update your caregiver record and follow up about support. Please do not include medical record numbers or emergency details.</p>
-          <button type="submit" class="btn btn-coral" style="width: 100%;">Send request</button>
-          <div class="success-note" id="supSuccess" data-intake-success role="status" aria-live="polite">✓ Request received — our team will reach out within two business days.</div>
-          <div class="error-note" data-intake-error role="alert" aria-live="assertive"></div>
-          <div class="routing-note" id="supRouting" data-intake-routing>Behind the scenes: this request created or updated a caregiver record and queued a follow-up for staff — nothing gets lost in an inbox.</div>
-        </form>
+    <div class="grid-3">
+      <div class="card">
+        <span class="eyebrow">Coming soon</span>
+        <h3>A caregiver's story</h3>
+        <p>First-person accounts from the families we walk alongside.</p>
+        <a class="more" href="#">Read more</a>
       </div>
-      <div>
-        <span class="eyebrow">What happens next</span>
-        <h2 style="font-size: 26px; margin-bottom: 18px;">A person, not a process</h2>
-        <div class="timeline-item"><div class="timeline-dot" style="background: var(--green);"></div><div><strong>1 · We read it same-day</strong><div class="when">Requests route straight to the team's work queue</div></div></div>
-        <div class="timeline-item"><div class="timeline-dot" style="background: var(--green);"></div><div><strong>2 · We reach out</strong><div class="when">Within two business days, by your preferred contact</div></div></div>
-        <div class="timeline-item"><div class="timeline-dot" style="background: var(--amber);"></div><div><strong>3 · We connect you</strong><div class="when">Membership, respite, grants, groups — whatever fits</div></div></div>
-        <div class="card mt-24" style="background: var(--sand); border-style: dashed;">
-          <p class="small" style="margin:0;"><strong>In crisis right now?</strong> Don't wait on a form — see <a href="resources.html">Crisis Help in the Resource Hub</a> for the caregiver support hotline.</p>
-        </div>
+      <div class="card">
+        <span class="eyebrow">Coming soon</span>
+        <h3>From the Sanctuary</h3>
+        <p>What's new across the Caregiver Sanctuary Network and its partners.</p>
+        <a class="more" href="#">Read more</a>
+      </div>
+      <div class="card">
+        <span class="eyebrow">Coming soon</span>
+        <h3>Notes from Shanelle</h3>
+        <p>Updates and reflections from Legacy's Executive Director.</p>
+        <a class="more" href="#">Read more</a>
+      </div>
+    </div>
+    <span class="badge-phase2" style="margin-top: 24px;">Placement provisional &mdash; confirm with Legacy</span>
+  </div>
+</section>
+
+<section style="background: var(--sand);">
+  <div class="container">
+    <div class="section-head"><h2>More from Legacy</h2></div>
+    <div class="card-grid mt-24">
+      <div class="card">
+        <h3>Caregiver Voices</h3>
+        <p>In their own words: what Legacy has meant to the caregivers we serve.</p>
+        <a class="more" href="about.html#voices">Hear from caregivers &rarr;</a>
+      </div>
+      <div class="card">
+        <h3>Photo Gallery</h3>
+        <p>Moments from our programs, events and community.</p>
+        <a class="more" href="gallery.html">See the gallery &rarr;</a>
+      </div>
+      <div class="card">
+        <h3>Upcoming Events</h3>
+        <p>Support groups, workshops and respite days on the calendar now.</p>
+        <a class="more" href="events.html">See what's coming &rarr;</a>
       </div>
     </div>
   </div>
