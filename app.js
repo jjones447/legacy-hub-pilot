@@ -637,6 +637,80 @@ document.addEventListener('DOMContentLoaded', function() {
     track.addEventListener('scroll', sync, { passive: true });
     window.addEventListener('resize', sync);
     sync();
+
+    // Distinguish a tap from a drag so dragging the carousel does not navigate.
+    var startX = 0;
+    var startY = 0;
+    var isDown = false;
+    var isDragging = false;
+    var suppressUntil = 0;
+    var DRAG_THRESHOLD = 6;
+
+    function getCoords(e) {
+      if (e.touches && e.touches.length) {
+        return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      }
+      return { x: e.clientX, y: e.clientY };
+    }
+
+    function onPointerDown(e) {
+      if (e.button !== undefined && e.button !== 0) return;
+      isDown = true;
+      isDragging = false;
+      var c = getCoords(e);
+      startX = c.x;
+      startY = c.y;
+    }
+
+    function onPointerMove(e) {
+      if (!isDown) return;
+      var c = getCoords(e);
+      var dx = Math.abs(c.x - startX);
+      var dy = Math.abs(c.y - startY);
+      if (dx > DRAG_THRESHOLD || dy > DRAG_THRESHOLD) {
+        isDragging = true;
+      }
+    }
+
+    function onPointerUp() {
+      if (isDown && isDragging) {
+        suppressUntil = Date.now() + 500;
+      }
+      isDown = false;
+      isDragging = false;
+    }
+
+    track.addEventListener('dragstart', function (e) {
+      e.preventDefault();
+    });
+
+    track.addEventListener('pointerdown', onPointerDown);
+    track.addEventListener('pointermove', onPointerMove);
+    track.addEventListener('pointerup', onPointerUp);
+    track.addEventListener('pointercancel', onPointerUp);
+
+    track.addEventListener('touchstart', onPointerDown, { passive: true });
+    track.addEventListener('touchmove', onPointerMove, { passive: true });
+    track.addEventListener('touchend', onPointerUp, { passive: true });
+    track.addEventListener('touchcancel', onPointerUp, { passive: true });
+
+    track.addEventListener('scroll', function () {
+      if (isDown) {
+        isDragging = true;
+        suppressUntil = Date.now() + 500;
+      }
+    }, { passive: true });
+
+    track.addEventListener('click', function (e) {
+      var link = e.target.closest('.carousel-link');
+      if (!link) return;
+      if (isDragging || Date.now() < suppressUntil) {
+        e.preventDefault();
+        e.stopPropagation();
+        suppressUntil = 0;
+        isDragging = false;
+      }
+    }, true);
   });
 })();
 

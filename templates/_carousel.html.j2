@@ -32,8 +32,11 @@
           tabindex="0" role="group" aria-label="{{ carousel_title }} photo carousel">
         {%- for img in carousel_images %}
         <li class="carousel-item">
-          <img src="{{ img.src }}" alt="{{ img.alt }}"
-               loading="lazy" decoding="async" width="800" height="600">
+          <a class="carousel-link" href="{{ carousel_more_href|default('gallery.html') }}"
+             aria-label="{% if img.caption %}{{ img.caption }} — {% elif img.alt %}{{ img.alt }} — {% endif %}View full photo gallery">
+            <img src="{{ img.src }}" alt="{{ img.alt }}"
+                 loading="lazy" decoding="async" width="800" height="600" draggable="false">
+          </a>
           {%- if img.caption %}
           <p class="carousel-caption">{{ img.caption }}</p>
           {%- endif %}
