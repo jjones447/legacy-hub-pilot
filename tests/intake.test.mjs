@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { handleIntake, validateIntake } from '../functions/api/_shared.mjs';
+import { onRequestPost as postIntake } from '../functions/api/intake.js';
 
 const SCHEMA = readFileSync(new URL('../schema/0001_init.sql', import.meta.url), 'utf8');
 
@@ -142,4 +143,62 @@ test('audit_log is append-only (UPDATE and DELETE abort)', async () => {
   });
   assert.throws(() => raw.prepare(`UPDATE audit_log SET actor='tamper'`).run(), /append-only/);
   assert.throws(() => raw.prepare(`DELETE FROM audit_log`).run(), /append-only/);
+});
+
+// --- Per-IP request limit on POST /api/intake ---
+
+function intakeRequest(body, ip) {
+  return {
+    headers: { get(name) { return name.toLowerCase() === 'cf-connecting-ip' ? ip : null; } },
+    async json() { return body; },
+  };
+}
+
+test('intake is limited to 10 requests per IP per 60 minutes', async () => {
+  for (let i = 0; i < 10; i++) {
+    const res = await postIntake({
+      request: intakeRequest({ kind: 'support_request', first_name: 'P', email: `p${i}@example.org`, external_ref: `ip-${i}` }, '203.0.113.8'),
+      env: { LEGACY_DB: db },
+    });
+    assert.equal(res.status, 201, `request ${i + 1}`);
+  }
+  const blocked = await postIntake({
+    request: intakeRequest({ kind: 'support_request', first_name: 'P', email: 'p11@example.org', external_ref: 'ip-11' }, '203.0.113.8'),
+    env: { LEGACY_DB: db },
+  });
+  assert.equal(blocked.status, 429);
+  assert.equal((await blocked.json()).error, 'rate_limited');
+  const written = raw.prepare(`SELECT COUNT(*) AS n FROM followup WHERE external_ref = 'ip-11'`).get();
+  assert.equal(written.n, 0);
+
+  const otherIp = await postIntake({
+    request: intakeRequest({ kind: 'support_request', first_name: 'Q', email: 'q@example.org', external_ref: 'ip-other' }, '198.51.100.10'),
+    env: { LEGACY_DB: db },
+  });
+  assert.equal(otherIp.status, 201);
+});
+
+test('intake fails closed with 503 when the request-limit store errors', async () => {
+  const broken = { prepare() { throw new Error('store down'); } };
+  const res = await postIntake({
+    request: intakeRequest({ kind: 'support_request', first_name: 'R', email: 'r@example.org', external_ref: 'ip-e' }, '203.0.113.9'),
+    env: { LEGACY_DB: broken },
+  });
+  assert.equal(res.status, 503);
+  assert.equal((await res.json()).error, 'unavailable');
+});
+
+test('intake limiter stores only a hashed IP, never the raw address', async () => {
+  const ip = '203.0.113.88';
+  const res = await postIntake({
+    request: intakeRequest({ kind: 'support_request', first_name: 'S', email: 's@example.org', external_ref: 'ip-f' }, ip),
+    env: { LEGACY_DB: db },
+  });
+  assert.equal(res.status, 201);
+  const leak = raw
+    .prepare(`SELECT COUNT(*) AS n FROM audit_log WHERE actor LIKE ? OR IFNULL(entity_id, '') LIKE ? OR IFNULL(after_json, '') LIKE ?`)
+    .get(`%${ip}%`, `%${ip}%`, `%${ip}%`);
+  assert.equal(leak.n, 0);
+  const hashed = raw.prepare(`SELECT COUNT(*) AS n FROM audit_log WHERE action = 'intake.submit_ip'`).get();
+  assert.equal(hashed.n, 1);
 });

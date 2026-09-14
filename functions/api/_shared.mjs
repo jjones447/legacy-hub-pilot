@@ -141,3 +141,38 @@ export async function handleIntake(db, body) {
 
   return { status: 201, body: { ok: true, caregiver_id: caregiverId } };
 }
+
+// Per-IP request limits, counted in audit_log (no new binding or table).
+// The client address (CF-Connecting-IP) is only ever used as a SHA-256 digest:
+// the raw address is never bound or stored. Any store error fails closed.
+export const IP_LIMITS = {
+  portalLogin: { action: 'portal.login_ip', limit: 20, windowMinutes: 15 },
+  intake: { action: 'intake.submit_ip', limit: 10, windowMinutes: 60 },
+};
+
+async function sha256Hex(text) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+export async function checkIpRequestLimit(db, request, { action, limit, windowMinutes }) {
+  try {
+    const ip = (request.headers.get('CF-Connecting-IP') || '').trim() || 'unknown';
+    const actor = await sha256Hex('ip:' + ip);
+    const row = await db
+      .prepare(`SELECT COUNT(*) AS n FROM audit_log WHERE action = ? AND actor = ? AND at > datetime('now', ?)`)
+      .bind(action, actor, `-${windowMinutes} minutes`)
+      .first();
+    if (!row || typeof row.n !== 'number') throw new Error('request count unavailable');
+    if (row.n >= limit) return { ok: false, status: 429, error: 'rate_limited' };
+    await db
+      .prepare(`INSERT INTO audit_log (actor, action, entity) VALUES (?, ?, 'request_limit')`)
+      .bind(actor, action)
+      .run();
+    return { ok: true };
+  } catch {
+    return { ok: false, status: 503, error: 'unavailable' };
+  }
+}
