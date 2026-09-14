@@ -81,14 +81,14 @@
                 Listed on: Events page + portal
               </div>
               <div class="confirm-row">
-                <button class="chip-btn chip-confirm" onclick="agentConfirm(this)">Confirm &amp; publish</button>
-                <button class="chip-btn chip-cancel" onclick="agentCancel(this)">Discard</button>
+                <button class="chip-btn chip-confirm" data-action="agent-confirm">Confirm &amp; publish</button>
+                <button class="chip-btn chip-cancel" data-action="agent-cancel">Discard</button>
               </div>
             </div>
           </div>
           <div class="chat-input-row">
-            <input id="chatInput" type="text" placeholder='Try: "add Maria as a caregiver…" or "update the resource hub…"' onkeydown="if(event.key==='Enter'){agentSend();}">
-            <button onclick="agentSend()">Send</button>
+            <input id="chatInput" type="text" placeholder='Try: "add Maria as a caregiver…" or "update the resource hub…"'>
+            <button data-action="agent-send">Send</button>
           </div>
         </div>
         <div class="card mt-16" style="background: var(--sand); border-style: dashed;">
@@ -141,11 +141,11 @@ async function loadFollowups() {
       
       let actionHtml = '';
       if (fu.status === 'open') {
-        actionHtml = `<button class="btn btn-sm btn-coral" style="padding: 4px 10px; font-size: 11px; margin-left: 8px;" onclick="resolveFollowup(${fu.id}, event)">Resolve</button>`;
+        actionHtml = `<button class="btn btn-sm btn-coral" style="padding: 4px 10px; font-size: 11px; margin-left: 8px;" data-action="resolve-followup" data-followup-id="${fu.id}">Resolve</button>`;
       }
       
       return `
-        <tr style="cursor: pointer;" onclick="viewCaregiver('${fu.caregiver_id}')">
+        <tr style="cursor: pointer;" data-action="view-caregiver" data-caregiver-id="${fu.caregiver_id}">
           <td><strong>${caregiverName}</strong></td>
           <td>${fu.kind}: ${fu.detail || ''}</td>
           <td>
@@ -264,7 +264,7 @@ async function loadEvents() {
       const dateText = ev.starts_at ? ev.starts_at.split(' ')[0] : '';
       
       return `
-        <tr style="cursor: pointer; ${isSelected}" onclick="selectEvent('${ev.id}', '${ev.title.replace(/'/g, "\\'")}')">
+        <tr style="cursor: pointer; ${isSelected}" data-action="select-event" data-event-id="${ev.id}" data-event-title="${ev.title.replace(/"/g, '&quot;')}">
           <td><strong>${ev.title}</strong></td>
           <td>${dateText}</td>
           <td>${regText}</td>
@@ -319,14 +319,14 @@ async function loadRegistrations(eventId, eventTitle) {
             if (reg.status === 'cancelled') badgeClass = 'badge-plum';
             
             return `
-              <tr style="cursor: pointer;" onclick="viewCaregiver('${reg.caregiver_id}')">
+              <tr style="cursor: pointer;" data-action="view-caregiver" data-caregiver-id="${reg.caregiver_id}">
                 <td><strong>${caregiverName}</strong></td>
                 <td>${reg.email || ''}</td>
                 <td><span class="badge ${badgeClass}">${reg.status}</span></td>
                 <td>
-                  <button class="btn btn-sm btn-plum" style="padding: 4px 8px; font-size: 11px; margin-right: 4px;" onclick="updateAttendance(${reg.id}, 'attended', event)">Attended</button>
-                  <button class="btn btn-sm btn-outline" style="padding: 4px 8px; font-size: 11px; margin-right: 4px;" onclick="updateAttendance(${reg.id}, 'no_show', event)">No Show</button>
-                  <button class="btn btn-sm btn-outline" style="padding: 4px 8px; font-size: 11px;" onclick="updateAttendance(${reg.id}, 'cancelled', event)">Cancel</button>
+                  <button class="btn btn-sm btn-plum" style="padding: 4px 8px; font-size: 11px; margin-right: 4px;" data-action="update-attendance" data-registration-id="${reg.id}" data-status="attended">Attended</button>
+                  <button class="btn btn-sm btn-outline" style="padding: 4px 8px; font-size: 11px; margin-right: 4px;" data-action="update-attendance" data-registration-id="${reg.id}" data-status="no_show">No Show</button>
+                  <button class="btn btn-sm btn-outline" style="padding: 4px 8px; font-size: 11px;" data-action="update-attendance" data-registration-id="${reg.id}" data-status="cancelled">Cancel</button>
                 </td>
               </tr>
             `;
@@ -359,7 +359,49 @@ async function updateAttendance(id, status, event) {
   }
 }
 
-document.addEventListener('DOMContentLoaded', loadStaffConsole);
+document.addEventListener('DOMContentLoaded', function () {
+  loadStaffConsole();
+  const chatInput = document.getElementById('chatInput');
+  if (chatInput) {
+    chatInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        agentSend();
+      }
+    });
+  }
+});
+
+document.addEventListener('click', function (e) {
+  const target = e.target.closest('[data-action]');
+  if (!target) return;
+  const action = target.getAttribute('data-action');
+  if (action === 'agent-confirm') {
+    e.preventDefault();
+    agentConfirm(target);
+  } else if (action === 'agent-cancel') {
+    e.preventDefault();
+    agentCancel(target);
+  } else if (action === 'agent-send') {
+    e.preventDefault();
+    agentSend();
+  } else if (action === 'resolve-followup') {
+    e.stopPropagation();
+    const id = target.getAttribute('data-followup-id');
+    resolveFollowup(id, e);
+  } else if (action === 'update-attendance') {
+    e.stopPropagation();
+    const id = target.getAttribute('data-registration-id');
+    const status = target.getAttribute('data-status');
+    updateAttendance(id, status, e);
+  } else if (action === 'view-caregiver') {
+    const id = target.getAttribute('data-caregiver-id');
+    viewCaregiver(id);
+  } else if (action === 'select-event') {
+    const id = target.getAttribute('data-event-id');
+    const title = target.getAttribute('data-event-title');
+    selectEvent(id, title);
+  }
+});
 </script>
 </body>
 </html>

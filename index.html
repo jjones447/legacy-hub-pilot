@@ -19,7 +19,7 @@
       <img src="logo-wordmark.png" alt="Legacy" class="brand-wordmark">
       <span class="brand-tagline">Home &amp; Respite Care Foundation, Inc.</span>
     </a>
-    <button class="nav-toggle" aria-label="Menu" onclick="document.querySelector('.main-nav').classList.toggle('open')">☰</button>
+    <button class="nav-toggle" aria-label="Menu" data-action="toggle-nav">☰</button>
   </div>
 </header>
 
@@ -354,17 +354,17 @@
     <span class="eyebrow">Stay Connected</span>
     <h2 style="margin-bottom: 12px;">Don't miss upcoming events, caregiver resources, and community updates.</h2>
     <p style="margin-bottom: 28px;">Join our email list to receive the latest news, upcoming programs, caregiver resources, and opportunities to connect with our community.</p>
-    <a href="#" class="btn btn-coral" onclick="openMembership(); return false;">Stay Connected</a>
+    <a href="#" class="btn btn-coral" data-action="open-membership">Stay Connected</a>
   </div>
 </section>
 
 <!-- Membership modal -->
 <div class="modal-overlay" id="membershipModal">
   <div class="modal">
-    <button class="modal-close" onclick="closeMembership()" aria-label="Close membership form">✕</button>
+    <button class="modal-close" data-action="close-membership" aria-label="Close membership form">✕</button>
     <h3>Join The Caregiver Sanctuary</h3>
     <p class="sub">One short form starts your free membership and creates your caregiver record.</p>
-    <form id="membershipForm" onsubmit="return submitMembership(event)">
+    <form id="membershipForm" data-action="submit-membership">
       <div class="field">
         <label for="memName">Your name</label>
         <input id="memName" type="text" placeholder="e.g., Maria Gonzalez" required>
@@ -400,7 +400,7 @@
     <span class="eyebrow">Donate</span>
     <h2 style="margin-bottom: 14px;">Every caregiver deserves support.</h2>
     <p class="muted" style="max-width: 560px; margin: 0 auto 28px;">Your generosity helps provide respite, wellness opportunities, education, and meaningful community experiences for dementia caregivers and their loved ones. Together, we're creating communities where no caregiver has to navigate dementia alone.</p>
-    <a href="#" class="btn btn-coral" onclick="alert('Demo: this connects to Legacy\'s existing GiveButter donation page.'); return false;">Make a Donation</a>
+    <a href="#" class="btn btn-coral" data-action="demo-donate">Make a Donation</a>
   </div>
 </section>
 

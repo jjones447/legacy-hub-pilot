@@ -18,7 +18,7 @@
       <img src="logo-wordmark.png" alt="Legacy" class="brand-wordmark">
       <span class="brand-tagline">Home &amp; Respite Care Foundation, Inc.</span>
     </a>
-    <button class="nav-toggle" aria-label="Menu" onclick="document.querySelector('.main-nav').classList.toggle('open')">☰</button>
+    <button class="nav-toggle" aria-label="Menu" data-action="toggle-nav">☰</button>
   </div>
 </header>
 
@@ -108,9 +108,9 @@
           <label for="loginEmail">Email</label>
           <input id="loginEmail" type="email" placeholder="you@example.com">
         </div>
-        <button id="loginBtn" class="btn btn-plum" style="width: 100%;" onclick="submitPortalLogin(event)">Send me a sign-in link</button>
+        <button id="loginBtn" class="btn btn-plum" style="width: 100%;" data-action="submit-portal-login">Send me a sign-in link</button>
         <div id="loginStatus" class="mt-16" style="display:none; padding: 10px; border-radius: 4px; font-size: 13.5px; text-align: center;"></div>
-        <p class="hint">Demo: click to preview the portal as <strong style="cursor: pointer; text-decoration: underline;" onclick="document.getElementById('loginEmail').value = 'jane.doe@example.com'; submitPortalLogin(event)">Maria G. (Jane Doe)</strong> (sample caregiver). In production this is a secure email sign-in — no password to remember.</p>
+        <p class="hint">Demo: click to preview the portal as <strong style="cursor: pointer; text-decoration: underline;" data-action="demo-portal-login">Maria G. (Jane Doe)</strong> (sample caregiver). In production this is a secure email sign-in — no password to remember.</p>
       </div>
     </div>
   </div>
@@ -124,7 +124,7 @@
         <span class="eyebrow">Caregiver Portal</span>
         <h2 id="portalWelcome" style="font-size: 30px;">Welcome back</h2>
       </div>
-      <button class="btn btn-outline btn-sm" onclick="portalLogout()">Sign out</button>
+      <button class="btn btn-outline btn-sm" data-action="portal-logout">Sign out</button>
     </div>
 
     <div class="card-grid" style="grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));">
@@ -135,7 +135,7 @@
         <div class="kv-row"><span class="k">Application</span><span class="v" id="portalGrantStatus"><span class="badge badge-gray">No application</span></span></div>
         <div class="kv-row"><span class="k">Requested for</span><span class="v" id="portalGrantRequestedFor">—</span></div>
         <div class="kv-row"><span class="k">Award &amp; care package</span><span class="v" id="portalGrantAward">—</span></div>
-        <a href="#" class="btn btn-plum btn-sm mt-16" style="display:inline-block;" onclick="alert('Demo: your application status, review notes, and award details — all from your caregiver record.'); return false;">View application</a>
+        <a href="#" class="btn btn-plum btn-sm mt-16" style="display:inline-block;" data-action="demo-view-application">View application</a>
       </div>
 
       <div class="panel" style="margin:0;">

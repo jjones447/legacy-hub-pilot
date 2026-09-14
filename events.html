@@ -18,7 +18,7 @@
       <img src="logo-wordmark.png" alt="Legacy" class="brand-wordmark">
       <span class="brand-tagline">Home &amp; Respite Care Foundation, Inc.</span>
     </a>
-    <button class="nav-toggle" aria-label="Menu" onclick="document.querySelector('.main-nav').classList.toggle('open')">☰</button>
+    <button class="nav-toggle" aria-label="Menu" data-action="toggle-nav">☰</button>
   </div>
 </header>
 
@@ -115,7 +115,7 @@
           <div class="event-meta">Every Wednesday · 5:00–6:00 PM CST · Google Meet</div>
           <p class="small muted mb-8">Our Alzheimer&#39;s Association-certified support group — honest conversation and real connection in a judgment-free space. Register once; the link and reminders come to you.</p>
           <div style="display:flex; align-items:center; gap:12px;">
-            <button class="btn btn-plum btn-sm" onclick="openRegister('Virtual Support Group — Wednesdays 5 PM', 'ev_virtual_support_group')">Register</button>
+            <button class="btn btn-plum btn-sm" data-action="open-register" data-event-title="Virtual Support Group — Wednesdays 5 PM" data-event-id="ev_virtual_support_group">Register</button>
             <span class="small muted">18 registered</span>
           </div>
         </div>
@@ -129,7 +129,7 @@
           <div class="event-meta">Saturday · 10:00 AM–1:00 PM · Community Room</div>
           <p class="small muted mb-8">A welcoming, supervised gathering for your loved one — familiar activities, trained staff, no pressure — while you take a real break.</p>
           <div style="display:flex; align-items:center; gap:12px;">
-            <button class="btn btn-plum btn-sm" onclick="openRegister('Memory Social — Jul 18', 'ev_memory_social_jul18')">Register</button>
+            <button class="btn btn-plum btn-sm" data-action="open-register" data-event-title="Memory Social — Jul 18" data-event-id="ev_memory_social_jul18">Register</button>
             <span class="small muted">8 registered · capacity 12</span>
           </div>
         </div>
@@ -143,7 +143,7 @@
           <div class="event-meta">Saturday · 11:00 AM · Virtual</div>
           <p class="small muted mb-8">Everything about Wellness Grants: member eligibility, the application, how awards and care packages are personalized, and Q&amp;A.</p>
           <div style="display:flex; align-items:center; gap:12px;">
-            <button class="btn btn-plum btn-sm" onclick="openRegister('Wellness Grant Info Session — Aug 1', 'ev_wellness_grant_info_aug01')">Register</button>
+            <button class="btn btn-plum btn-sm" data-action="open-register" data-event-title="Wellness Grant Info Session — Aug 1" data-event-id="ev_wellness_grant_info_aug01">Register</button>
             <span class="small muted">9 registered</span>
           </div>
         </div>
@@ -157,7 +157,7 @@
           <div class="event-meta">Saturday · 10:00 AM–1:00 PM · Community Room</div>
           <p class="small muted mb-8">Two rooms, one space: your loved one enjoys a supervised Memory Social while you join fellow caregivers for wellness, connection, and education.</p>
           <div style="display:flex; align-items:center; gap:12px;">
-            <button class="btn btn-plum btn-sm" onclick="openRegister('Memory Social Caregiver Event — Aug 15', 'ev_memory_social_caregiver_aug15')">Register</button>
+            <button class="btn btn-plum btn-sm" data-action="open-register" data-event-title="Memory Social Caregiver Event — Aug 15" data-event-id="ev_memory_social_caregiver_aug15">Register</button>
             <span class="small muted">6 registered · capacity 12</span>
           </div>
         </div>
@@ -174,10 +174,10 @@
 <!-- Registration modal -->
 <div class="modal-overlay" id="registerModal">
   <div class="modal">
-    <button class="modal-close" onclick="closeRegister()">✕</button>
+    <button class="modal-close" data-action="close-register">✕</button>
     <h3 id="regTitle">Register</h3>
     <p class="sub">One quick form — no re-typing your details every time.</p>
-    <form id="regForm" onsubmit="return submitRegister(event)">
+    <form id="regForm" data-action="submit-register">
       <div class="field">
         <label for="regName">Your name</label>
         <input id="regName" type="text" placeholder="e.g., Maria Gonzalez" required>

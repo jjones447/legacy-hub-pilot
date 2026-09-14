@@ -27,7 +27,7 @@
       <div class="login-card" style="max-width: none;">
         <h2 style="font-size: 24px;">{{ sections["request_support.form"].heading }}</h2>
         <p class="sub">{{ sections["request_support.form"].sub }}</p>
-        <form id="supportForm" onsubmit="return submitSupport(event)">
+        <form id="supportForm" data-action="submit-support">
           <div class="field">
             <label for="supName">Your name</label>
             <input id="supName" type="text" placeholder="e.g., Maria Gonzalez" required>

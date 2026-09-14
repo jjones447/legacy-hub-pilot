@@ -18,7 +18,7 @@
       <img src="logo-wordmark.png" alt="Legacy" class="brand-wordmark">
       <span class="brand-tagline">Home &amp; Respite Care Foundation, Inc.</span>
     </a>
-    <button class="nav-toggle" aria-label="Menu" onclick="document.querySelector('.main-nav').classList.toggle('open')">☰</button>
+    <button class="nav-toggle" aria-label="Menu" data-action="toggle-nav">☰</button>
   </div>
 </header>
 
@@ -110,7 +110,7 @@
       <div class="login-card" style="max-width: none;">
         <h2 style="font-size: 24px;">Tell us what you need</h2>
         <p class="sub">Every request goes straight to our team — no phone tag required.</p>
-        <form id="supportForm" onsubmit="return submitSupport(event)">
+        <form id="supportForm" data-action="submit-support">
           <div class="field">
             <label for="supName">Your name</label>
             <input id="supName" type="text" placeholder="e.g., Maria Gonzalez" required>

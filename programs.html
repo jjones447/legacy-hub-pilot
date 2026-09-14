@@ -18,7 +18,7 @@
       <img src="logo-wordmark.png" alt="Legacy" class="brand-wordmark">
       <span class="brand-tagline">Home &amp; Respite Care Foundation, Inc.</span>
     </a>
-    <button class="nav-toggle" aria-label="Menu" onclick="document.querySelector('.main-nav').classList.toggle('open')">☰</button>
+    <button class="nav-toggle" aria-label="Menu" data-action="toggle-nav">☰</button>
   </div>
 </header>
 
@@ -102,7 +102,7 @@
     <h1 style="font-size: clamp(30px, 4vw, 44px);">The Caregiver Sanctuary</h1>
     <p class="lede">A free membership community for caregivers of loved ones living with dementia — support, wellness, and respite, designed by someone who's lived the journey.</p>
     <div class="btn-row">
-      <a href="#" class="btn btn-coral" onclick="openMembership(); return false;">Become a member — free</a>
+      <a href="#" class="btn btn-coral" data-action="open-membership">Become a member — free</a>
     </div>
   </div>
 </section>
@@ -157,7 +157,7 @@
         <h2 style="margin-bottom: 14px;">A personalized stipend for your well-being</h2>
         <p class="muted mb-16">Caregivers spend so much on everyone else. Wellness Grants fund the things that restore <em>you</em> — a massage, counseling, a gym membership — and every award comes with its own care package.</p>
         <p class="muted mb-16"><strong>Sanctuary members are eligible.</strong> Apply online; our team reviews each application and personalizes the award to your wellness plan.</p>
-        <a href="#" class="btn btn-plum btn-sm" onclick="openGrantApply(); return false;">Apply for a Wellness Grant</a>
+        <a href="#" class="btn btn-plum btn-sm" data-action="open-grant-apply">Apply for a Wellness Grant</a>
       </div>
       <div class="visual">
         <h3 style="font-size: 18px; margin-bottom: 14px;">Your grant journey</h3>
@@ -202,7 +202,7 @@
         <h3 style="font-size: 20px; margin: 8px 0 6px;">1:1 Wellness Coaching</h3>
         <p class="muted small" style="margin: 0;">Private sessions with Shanelle — The Dementia Caregiver Wellness Coach. Personal guidance for your caregiving journey, one conversation at a time.</p>
       </div>
-      <a href="#" class="btn btn-outline btn-sm" onclick="openCoachingInterest(); return false;">Join the interest list</a>
+      <a href="#" class="btn btn-outline btn-sm" data-action="open-coaching-interest">Join the interest list</a>
     </div>
   </div>
 </section>
@@ -210,10 +210,10 @@
 <!-- Membership modal -->
 <div class="modal-overlay" id="membershipModal">
   <div class="modal">
-    <button class="modal-close" onclick="closeMembership()" aria-label="Close membership form">✕</button>
+    <button class="modal-close" data-action="close-membership" aria-label="Close membership form">✕</button>
     <h3>Join The Caregiver Sanctuary</h3>
     <p class="sub">One short form starts your free membership and creates your caregiver record.</p>
-    <form id="membershipForm" onsubmit="return submitMembership(event)">
+    <form id="membershipForm" data-action="submit-membership">
       <div class="field">
         <label for="memName">Your name</label>
         <input id="memName" type="text" placeholder="e.g., Maria Gonzalez" required>
@@ -247,10 +247,10 @@
 <!-- Grant application modal -->
 <div class="modal-overlay" id="grantApplyModal">
   <div class="modal">
-    <button class="modal-close" onclick="closeGrantApply()" aria-label="Close grant application">✕</button>
+    <button class="modal-close" data-action="close-grant-apply" aria-label="Close grant application">✕</button>
     <h3>Apply for a Wellness Grant</h3>
     <p class="sub">A short form creates or updates your caregiver record and submits a grant application for staff review.</p>
-    <form id="grantApplyForm" onsubmit="return submitGrantApply(event)">
+    <form id="grantApplyForm" data-action="submit-grant-apply">
       <div class="field">
         <label for="grantName">Your name</label>
         <input id="grantName" type="text" placeholder="e.g., Maria Gonzalez" required>
@@ -275,10 +275,10 @@
 <!-- Coaching interest modal -->
 <div class="modal-overlay" id="coachingInterestModal">
   <div class="modal">
-    <button class="modal-close" onclick="closeCoachingInterest()" aria-label="Close coaching interest form">✕</button>
+    <button class="modal-close" data-action="close-coaching-interest" aria-label="Close coaching interest form">✕</button>
     <h3>Join the coaching interest list</h3>
     <p class="sub">Leave your name and email. We will create or update your caregiver record and let you know when 1:1 sessions open.</p>
-    <form id="coachingInterestForm" onsubmit="return submitCoachingInterest(event)">
+    <form id="coachingInterestForm" data-action="submit-coaching-interest">
       <div class="field">
         <label for="coachName">Your name</label>
         <input id="coachName" type="text" placeholder="e.g., Maria Gonzalez" required>
