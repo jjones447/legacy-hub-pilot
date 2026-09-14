@@ -73,8 +73,9 @@ test('static wiring: every data-action has matching listener in scripts', () => 
 
   const unwiredActions = [];
   for (const action of declaredActions) {
-    // Check if the action string appears in script handling (e.g. action === '...' or case '...' or [data-action="..."])
-    if (!scriptContents.includes(action)) {
+    // Match the exact handler form (action === '<name>')
+    const handlerPattern = new RegExp(`action\\s*===\\s*['"]${action}['"]`);
+    if (!handlerPattern.test(scriptContents)) {
       unwiredActions.push(action);
     }
   }
@@ -83,5 +84,32 @@ test('static wiring: every data-action has matching listener in scripts', () => 
     unwiredActions.length,
     0,
     `Found unwired data-action attributes: ${unwiredActions.join(', ')}`,
+  );
+});
+
+test('single dispatch: each action is handled by exactly one listener branch across scripts loaded by staff.html', () => {
+  const appJs = fs.readFileSync(path.join(rootDir, 'app.js'), 'utf8');
+  const staffHtml = fs.readFileSync(path.join(rootDir, 'staff.html'), 'utf8');
+  const combined = appJs + '\n' + staffHtml;
+
+  const actionMatchRegex = /action\s*===\s*['"]([^'"]+)['"]/g;
+  const actionCounts = new Map();
+  let match;
+  while ((match = actionMatchRegex.exec(combined)) !== null) {
+    const action = match[1];
+    actionCounts.set(action, (actionCounts.get(action) || 0) + 1);
+  }
+
+  const duplicates = [];
+  for (const [action, count] of actionCounts.entries()) {
+    if (count > 1) {
+      duplicates.push(`${action} (handled ${count} times)`);
+    }
+  }
+
+  assert.equal(
+    duplicates.length,
+    0,
+    `Found duplicate action dispatches across app.js and staff.html:\n  ${duplicates.join('\n  ')}`,
   );
 });

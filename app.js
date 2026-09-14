@@ -573,9 +573,7 @@ function loadLiveEvents() {
       
       data.events.forEach(function (e) {
         const btn = Array.from(document.querySelectorAll('button')).find(function (b) {
-          if (b.dataset.eventId === e.id || b.getAttribute('data-event-id') === e.id) return true;
-          const onclickAttr = b.getAttribute('onclick') || '';
-          return onclickAttr.indexOf("'" + e.id + "'") !== -1 || onclickAttr.indexOf('"' + e.id + '"') !== -1;
+          return b.dataset.eventId === e.id || b.getAttribute('data-event-id') === e.id;
         });
 
         if (btn) {
@@ -589,7 +587,6 @@ function loadLiveEvents() {
                 btn.disabled = true;
                 btn.className = 'btn btn-outline btn-sm';
                 btn.removeAttribute('data-action');
-                btn.onclick = null;
               }
             } else {
               noteSpan.textContent = e.registered_count + ' registered';
@@ -860,4 +857,3 @@ document.addEventListener('click', function (e) {
     agentSend();
   }
 });
-

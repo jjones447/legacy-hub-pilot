@@ -375,22 +375,13 @@ document.addEventListener('click', function (e) {
   const target = e.target.closest('[data-action]');
   if (!target) return;
   const action = target.getAttribute('data-action');
-  if (action === 'agent-confirm') {
-    e.preventDefault();
-    agentConfirm(target);
-  } else if (action === 'agent-cancel') {
-    e.preventDefault();
-    agentCancel(target);
-  } else if (action === 'agent-send') {
-    e.preventDefault();
-    agentSend();
-  } else if (action === 'resolve-followup') {
+  if (action === 'resolve-followup') {
     e.stopPropagation();
-    const id = target.getAttribute('data-followup-id');
+    const id = Number(target.getAttribute('data-followup-id'));
     resolveFollowup(id, e);
   } else if (action === 'update-attendance') {
     e.stopPropagation();
-    const id = target.getAttribute('data-registration-id');
+    const id = Number(target.getAttribute('data-registration-id'));
     const status = target.getAttribute('data-status');
     updateAttendance(id, status, e);
   } else if (action === 'view-caregiver') {
