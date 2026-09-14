@@ -550,8 +550,8 @@ function agentSend() {
     'Here\'s a draft — nothing is live yet:' +
     '<div class="preview"><div class="p-title">' + previewTitle + '</div>' + previewBody + '</div>' +
     '<div class="confirm-row">' +
-    '<button class="chip-btn chip-confirm" onclick="agentConfirm(this)">Confirm &amp; publish</button>' +
-    '<button class="chip-btn chip-cancel" onclick="agentCancel(this)">Discard</button>' +
+    '<button class="chip-btn chip-confirm" data-action="agent-confirm">Confirm &amp; publish</button>' +
+    '<button class="chip-btn chip-cancel" data-action="agent-cancel">Discard</button>' +
     '</div>';
 
   setTimeout(function () {
@@ -573,8 +573,7 @@ function loadLiveEvents() {
       
       data.events.forEach(function (e) {
         const btn = Array.from(document.querySelectorAll('button')).find(function (b) {
-          const onclickAttr = b.getAttribute('onclick') || '';
-          return onclickAttr.indexOf("'" + e.id + "'") !== -1 || onclickAttr.indexOf('"' + e.id + '"') !== -1;
+          return b.dataset.eventId === e.id || b.getAttribute('data-event-id') === e.id;
         });
 
         if (btn) {
@@ -587,7 +586,7 @@ function loadLiveEvents() {
                 btn.textContent = 'Full';
                 btn.disabled = true;
                 btn.className = 'btn btn-outline btn-sm';
-                btn.onclick = null;
+                btn.removeAttribute('data-action');
               }
             } else {
               noteSpan.textContent = e.registered_count + ' registered';
@@ -766,3 +765,95 @@ document.addEventListener('DOMContentLoaded', function() {
     if (opener) { opener.focus(); opener = null; }
   });
 })();
+
+/* ---------- Event delegation: data-action wiring ---------- */
+document.addEventListener('submit', function (e) {
+  const form = e.target.closest('form[data-action]');
+  if (!form) return;
+  const action = form.getAttribute('data-action');
+  if (action === 'submit-support') {
+    e.preventDefault();
+    submitSupport(e);
+  } else if (action === 'submit-membership') {
+    e.preventDefault();
+    submitMembership(e);
+  } else if (action === 'submit-grant-apply') {
+    e.preventDefault();
+    submitGrantApply(e);
+  } else if (action === 'submit-coaching-interest') {
+    e.preventDefault();
+    submitCoachingInterest(e);
+  } else if (action === 'submit-register') {
+    e.preventDefault();
+    submitRegister(e);
+  }
+});
+
+document.addEventListener('click', function (e) {
+  const target = e.target.closest('[data-action]');
+  if (!target || target.tagName === 'FORM') return;
+  const action = target.getAttribute('data-action');
+  if (action === 'open-membership') {
+    e.preventDefault();
+    openMembership();
+  } else if (action === 'close-membership') {
+    e.preventDefault();
+    closeMembership();
+  } else if (action === 'open-grant-apply') {
+    e.preventDefault();
+    openGrantApply();
+  } else if (action === 'close-grant-apply') {
+    e.preventDefault();
+    closeGrantApply();
+  } else if (action === 'open-coaching-interest') {
+    e.preventDefault();
+    openCoachingInterest();
+  } else if (action === 'close-coaching-interest') {
+    e.preventDefault();
+    closeCoachingInterest();
+  } else if (action === 'open-register') {
+    e.preventDefault();
+    const title = target.getAttribute('data-event-title') || '';
+    const eventId = target.getAttribute('data-event-id') || '';
+    openRegister(title, eventId);
+  } else if (action === 'close-register') {
+    e.preventDefault();
+    closeRegister();
+  } else if (action === 'toggle-nav') {
+    e.preventDefault();
+    const nav = document.querySelector('.main-nav');
+    if (nav) nav.classList.toggle('open');
+  } else if (action === 'demo-donate') {
+    e.preventDefault();
+    alert("Demo: this connects to Legacy's existing GiveButter donation page.");
+  } else if (action === 'demo-resource-link') {
+    e.preventDefault();
+    alert('Demo resource link');
+  } else if (action === 'demo-grant-status') {
+    e.preventDefault();
+    alert('Demo: your application status is tracked on your caregiver record — staff and you see the same journey.');
+  } else if (action === 'submit-portal-login') {
+    e.preventDefault();
+    submitPortalLogin(e);
+  } else if (action === 'demo-portal-login') {
+    e.preventDefault();
+    const emailInput = document.getElementById('loginEmail');
+    if (emailInput) emailInput.value = 'jane.doe@example.com';
+    submitPortalLogin(e);
+  } else if (action === 'portal-logout') {
+    e.preventDefault();
+    portalLogout();
+  } else if (action === 'demo-view-application') {
+    e.preventDefault();
+    alert('Demo: your application status, review notes, and award details — all from your caregiver record.');
+  } else if (action === 'agent-confirm') {
+    e.preventDefault();
+    agentConfirm(target);
+  } else if (action === 'agent-cancel') {
+    e.preventDefault();
+    agentCancel(target);
+  } else if (action === 'agent-send') {
+    e.preventDefault();
+    agentSend();
+  }
+});

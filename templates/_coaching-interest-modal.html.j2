@@ -1,10 +1,10 @@
 <!-- Coaching interest modal -->
 <div class="modal-overlay" id="coachingInterestModal">
   <div class="modal">
-    <button class="modal-close" onclick="closeCoachingInterest()" aria-label="Close coaching interest form">✕</button>
+    <button class="modal-close" data-action="close-coaching-interest" aria-label="Close coaching interest form">✕</button>
     <h3>Join the coaching interest list</h3>
     <p class="sub">Leave your name and email. We will create or update your caregiver record and let you know when 1:1 sessions open.</p>
-    <form id="coachingInterestForm" onsubmit="return submitCoachingInterest(event)">
+    <form id="coachingInterestForm" data-action="submit-coaching-interest">
       <div class="field">
         <label for="coachName">Your name</label>
         <input id="coachName" type="text" placeholder="e.g., Maria Gonzalez" required>

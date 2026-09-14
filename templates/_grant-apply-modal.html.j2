@@ -1,10 +1,10 @@
 <!-- Grant application modal -->
 <div class="modal-overlay" id="grantApplyModal">
   <div class="modal">
-    <button class="modal-close" onclick="closeGrantApply()" aria-label="Close grant application">✕</button>
+    <button class="modal-close" data-action="close-grant-apply" aria-label="Close grant application">✕</button>
     <h3>Apply for a Wellness Grant</h3>
     <p class="sub">A short form creates or updates your caregiver record and submits a grant application for staff review.</p>
-    <form id="grantApplyForm" onsubmit="return submitGrantApply(event)">
+    <form id="grantApplyForm" data-action="submit-grant-apply">
       <div class="field">
         <label for="grantName">Your name</label>
         <input id="grantName" type="text" placeholder="e.g., Maria Gonzalez" required>

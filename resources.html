@@ -18,7 +18,7 @@
       <img src="logo-wordmark.png" alt="Legacy" class="brand-wordmark">
       <span class="brand-tagline">Home &amp; Respite Care Foundation, Inc.</span>
     </a>
-    <button class="nav-toggle" aria-label="Menu" onclick="document.querySelector('.main-nav').classList.toggle('open')">☰</button>
+    <button class="nav-toggle" aria-label="Menu" data-action="toggle-nav">☰</button>
   </div>
 </header>
 
@@ -158,19 +158,19 @@
         <span class="resource-tag">Crisis Help</span>
         <h3>Caregiver Support Hotline</h3>
         <p>24/7 phone support for caregivers in crisis or feeling overwhelmed. You are not alone — call any time.</p>
-        <a class="more" href="#" onclick="alert('Demo resource link'); return false;">Call / details →</a>
+        <a class="more" href="#" data-action="demo-resource-link">Call / details →</a>
       </div>
       <div class="card resource-item" data-cat="crisis">
         <span class="resource-tag">Crisis Help</span>
         <h3>When to Seek Emergency Care</h3>
         <p>A quick guide to recognizing medical emergencies in loved ones with dementia, and what to tell first responders.</p>
-        <a class="more" href="#" onclick="alert('Demo resource link'); return false;">Read guide →</a>
+        <a class="more" href="#" data-action="demo-resource-link">Read guide →</a>
       </div>
       <div class="card resource-item" data-cat="education">
         <span class="resource-tag">Education</span>
         <h3>Understanding Younger-Onset Dementia</h3>
         <p>What families should know when dementia arrives early — symptoms, progression, and how to plan together.</p>
-        <a class="more" href="#" onclick="alert('Demo resource link'); return false;">Read guide →</a>
+        <a class="more" href="#" data-action="demo-resource-link">Read guide →</a>
       </div>
       <div class="card resource-item" data-cat="education">
         <span class="resource-tag">Education</span>
@@ -182,19 +182,19 @@
         <span class="resource-tag">Education</span>
         <h3>Video: Communication Techniques</h3>
         <p>Practical ways to connect when words get hard — redirection, validation, and meeting your loved one where they are.</p>
-        <a class="more" href="#" onclick="alert('Demo resource link'); return false;">Watch (18 min) →</a>
+        <a class="more" href="#" data-action="demo-resource-link">Watch (18 min) →</a>
       </div>
       <div class="card resource-item" data-cat="selfcare">
         <span class="resource-tag">Self-Care</span>
         <h3>Wellness Grants: How to Apply</h3>
         <p>Who&#39;s eligible, what grants can fund — massage, counseling, a gym membership — and how awards and care packages are personalized.</p>
-        <a class="more" href="#" onclick="alert('Demo: your application status is tracked on your caregiver record — staff and you see the same journey.'); return false;">Read the guide →</a>
+        <a class="more" href="#" data-action="demo-grant-status">Read the guide →</a>
       </div>
       <div class="card resource-item" data-cat="selfcare">
         <span class="resource-tag">Self-Care</span>
         <h3>10-Minute Reset Practices</h3>
         <p>Breathing, grounding, and micro-break practices that fit inside a caregiving day.</p>
-        <a class="more" href="#" onclick="alert('Demo resource link'); return false;">Download PDF →</a>
+        <a class="more" href="#" data-action="demo-resource-link">Download PDF →</a>
       </div>
       <div class="card resource-item" data-cat="support">
         <span class="resource-tag">Support Groups</span>
@@ -212,13 +212,13 @@
         <span class="resource-tag">Financial &amp; Legal</span>
         <h3>Benefits &amp; Assistance Finder</h3>
         <p>A starting map of public benefits, veteran programs, and assistance funds available to family caregivers in our region.</p>
-        <a class="more" href="#" onclick="alert('Demo resource link'); return false;">Open guide →</a>
+        <a class="more" href="#" data-action="demo-resource-link">Open guide →</a>
       </div>
       <div class="card resource-item" data-cat="financial">
         <span class="resource-tag">Financial &amp; Legal</span>
         <h3>Planning Ahead: POA &amp; Care Decisions</h3>
         <p>Plain-language basics on powers of attorney, advance directives, and getting documents in order early.</p>
-        <a class="more" href="#" onclick="alert('Demo resource link'); return false;">Read guide →</a>
+        <a class="more" href="#" data-action="demo-resource-link">Read guide →</a>
       </div>
     </div>
     <p class="small muted mt-24" id="noResults" style="display:none;">No resources match your search — try a different term.</p>

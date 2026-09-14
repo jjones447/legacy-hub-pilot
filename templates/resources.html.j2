@@ -77,9 +77,9 @@
         <h3>{{ r.title | e }}</h3>
         <p>{{ r.description | e }}</p>
 {%- if r.link == "#demo" %}
-        <a class="more" href="#" onclick="alert('Demo resource link'); return false;">{{ r.link_label | e }}</a>
+        <a class="more" href="#" data-action="demo-resource-link">{{ r.link_label | e }}</a>
 {%- elif r.link == "#demo-grant" %}
-        <a class="more" href="#" onclick="alert('Demo: your application status is tracked on your caregiver record — staff and you see the same journey.'); return false;">{{ r.link_label | e }}</a>
+        <a class="more" href="#" data-action="demo-grant-status">{{ r.link_label | e }}</a>
 {%- else %}
         <a class="more" href="{{ r.link }}">{{ r.link_label | e }}</a>
 {%- endif %}

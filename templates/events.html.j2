@@ -33,7 +33,7 @@
           <div class="event-meta">{{ ev.meta | e }}</div>
           <p class="small muted mb-8">{{ ev.description | e }}</p>
           <div style="display:flex; align-items:center; gap:12px;">
-            <button class="btn btn-plum btn-sm" onclick="openRegister('{{ ev.register_label | replace("'", "\\'") }}', '{{ ev.id }}')">Register</button>
+            <button class="btn btn-plum btn-sm" data-action="open-register" data-event-title="{{ ev.register_label | e }}" data-event-id="{{ ev.id }}">Register</button>
             <span class="small muted">{{ ev.registered_note | e }}</span>
           </div>
         </div>
@@ -50,10 +50,10 @@
 <!-- Registration modal -->
 <div class="modal-overlay" id="registerModal">
   <div class="modal">
-    <button class="modal-close" onclick="closeRegister()">✕</button>
+    <button class="modal-close" data-action="close-register">✕</button>
     <h3 id="regTitle">Register</h3>
     <p class="sub">One quick form — no re-typing your details every time.</p>
-    <form id="regForm" onsubmit="return submitRegister(event)">
+    <form id="regForm" data-action="submit-register">
       <div class="field">
         <label for="regName">Your name</label>
         <input id="regName" type="text" placeholder="e.g., Maria Gonzalez" required>

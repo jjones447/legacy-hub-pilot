@@ -1,10 +1,10 @@
 <!-- Membership modal -->
 <div class="modal-overlay" id="membershipModal">
   <div class="modal">
-    <button class="modal-close" onclick="closeMembership()" aria-label="Close membership form">✕</button>
+    <button class="modal-close" data-action="close-membership" aria-label="Close membership form">✕</button>
     <h3>Join The Caregiver Sanctuary</h3>
     <p class="sub">One short form starts your free membership and creates your caregiver record.</p>
-    <form id="membershipForm" onsubmit="return submitMembership(event)">
+    <form id="membershipForm" data-action="submit-membership">
       <div class="field">
         <label for="memName">Your name</label>
         <input id="memName" type="text" placeholder="e.g., Maria Gonzalez" required>

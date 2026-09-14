@@ -57,7 +57,8 @@ test('shared frontend intake client posts JSON to the Worker endpoint', () => {
 
 test('request support form renders privacy copy and live status regions', () => {
   const page = file('request-support.html');
-  assert.match(page, /id="supportForm" onsubmit="return submitSupport\(event\)"/);
+  assert.match(page, /id="supportForm" data-action="submit-support"/);
+  assert.match(file('app.js'), /action === 'submit-support'[\s\S]*submitSupport/);
   assert.match(page, /data-intake-success/);
   assert.match(page, /data-intake-error/);
   assert.match(page, /data-intake-routing/);
@@ -67,8 +68,10 @@ test('request support form renders privacy copy and live status regions', () => 
 test('membership CTA opens the live membership modal instead of an alert stub', () => {
   const page = file('index.html');
   const app = file('app.js');
-  assert.match(page, /onclick="openMembership\(\); return false;"/);
-  assert.match(page, /id="membershipForm" onsubmit="return submitMembership\(event\)"/);
+  assert.match(page, /data-action="open-membership"/);
+  assert.match(app, /action === 'open-membership'[\s\S]*openMembership/);
+  assert.match(page, /id="membershipForm" data-action="submit-membership"/);
+  assert.match(app, /action === 'submit-membership'[\s\S]*submitMembership/);
   assert.match(app, /kind: 'membership'/);
   assert.doesNotMatch(page, /membership interest form/);
 });
@@ -83,7 +86,8 @@ test('event registration buttons carry registerable event ids', () => {
   ]) {
     assert.match(page, new RegExp(id));
   }
-  assert.match(page, /id="regForm" onsubmit="return submitRegister\(event\)"/);
+  assert.match(page, /id="regForm" data-action="submit-register"/);
+  assert.match(file('app.js'), /action === 'submit-register'[\s\S]*submitRegister/);
   assert.match(file('app.js'), /event_id: eventId/);
   assert.match(page, /consent to Legacy using these details/);
 });
@@ -92,12 +96,16 @@ test('programs grant and coaching CTAs open live intake modals instead of alert 
   const page = file('programs.html');
   const tmpl = file('templates/programs.html.j2');
   const app = file('app.js');
-  assert.match(page, /onclick="openGrantApply\(\); return false;"/);
-  assert.match(page, /id="grantApplyForm" onsubmit="return submitGrantApply\(event\)"/);
-  assert.match(page, /onclick="openCoachingInterest\(\); return false;"/);
-  assert.match(page, /id="coachingInterestForm" onsubmit="return submitCoachingInterest\(event\)"/);
-  assert.match(tmpl, /onclick="openGrantApply\(\); return false;"/);
-  assert.match(tmpl, /onclick="openCoachingInterest\(\); return false;"/);
+  assert.match(page, /data-action="open-grant-apply"/);
+  assert.match(app, /action === 'open-grant-apply'[\s\S]*openGrantApply/);
+  assert.match(page, /id="grantApplyForm" data-action="submit-grant-apply"/);
+  assert.match(app, /action === 'submit-grant-apply'[\s\S]*submitGrantApply/);
+  assert.match(page, /data-action="open-coaching-interest"/);
+  assert.match(app, /action === 'open-coaching-interest'[\s\S]*openCoachingInterest/);
+  assert.match(page, /id="coachingInterestForm" data-action="submit-coaching-interest"/);
+  assert.match(app, /action === 'submit-coaching-interest'[\s\S]*submitCoachingInterest/);
+  assert.match(tmpl, /data-action="open-grant-apply"/);
+  assert.match(tmpl, /data-action="open-coaching-interest"/);
   assert.match(app, /kind: 'grant_application'/);
   assert.match(app, /source: 'site_form:coaching'/);
   assert.match(app, /kind: 'support_request'/);
