@@ -113,3 +113,113 @@ test('single dispatch: each action is handled by exactly one listener branch acr
     `Found duplicate action dispatches across app.js and staff.html:\n  ${duplicates.join('\n  ')}`,
   );
 });
+
+test('exact call wiring: every action branch calls its expected function and excludes others', () => {
+  const htmlFiles = fs.readdirSync(rootDir)
+    .filter(f => f.endsWith('.html'))
+    .map(f => path.join(rootDir, f));
+
+  const templatesDir = path.join(rootDir, 'templates');
+  const templateFiles = fs.readdirSync(templatesDir)
+    .filter(f => f.endsWith('.j2'))
+    .map(f => path.join(templatesDir, f));
+
+  const allMarkupFiles = [...htmlFiles, ...templateFiles];
+  const dataActionRegex = /data-action=["']([^"']+)["']/g;
+  const declaredActions = new Set();
+
+  for (const file of allMarkupFiles) {
+    const content = fs.readFileSync(file, 'utf8');
+    let match;
+    while ((match = dataActionRegex.exec(content)) !== null) {
+      declaredActions.add(match[1]);
+    }
+  }
+
+  const actionCallMap = {
+    'submit-support': 'submitSupport(e)',
+    'submit-membership': 'submitMembership(e)',
+    'submit-grant-apply': 'submitGrantApply(e)',
+    'submit-coaching-interest': 'submitCoachingInterest(e)',
+    'submit-register': 'submitRegister(e)',
+    'open-membership': 'openMembership()',
+    'close-membership': 'closeMembership()',
+    'open-grant-apply': 'openGrantApply()',
+    'close-grant-apply': 'closeGrantApply()',
+    'open-coaching-interest': 'openCoachingInterest()',
+    'close-coaching-interest': 'closeCoachingInterest()',
+    'open-register': 'openRegister(title, eventId)',
+    'close-register': 'closeRegister()',
+    'toggle-nav': "classList.toggle('open')",
+    'demo-donate': 'alert("Demo: this connects to Legacy\'s existing GiveButter donation page.")',
+    'demo-resource-link': "alert('Demo resource link')",
+    'demo-grant-status': "alert('Demo: your application status is tracked on your caregiver record \u2014 staff and you see the same journey.')",
+    'submit-portal-login': 'submitPortalLogin(e)',
+    'demo-portal-login': 'submitPortalLogin(e)',
+    'portal-logout': 'portalLogout()',
+    'demo-view-application': "alert('Demo: your application status, review notes, and award details \u2014 all from your caregiver record.')",
+    'agent-confirm': 'agentConfirm(target)',
+    'agent-cancel': 'agentCancel(target)',
+    'agent-send': 'agentSend()',
+    'resolve-followup': 'resolveFollowup(id, e)',
+    'update-attendance': 'updateAttendance(id, status, e)',
+    'view-caregiver': 'viewCaregiver(id)',
+    'select-event': 'selectEvent(id, title)',
+  };
+
+  // Assert every data-action value in markup has a map entry
+  const unmappedActions = [];
+  for (const action of declaredActions) {
+    if (!Object.prototype.hasOwnProperty.call(actionCallMap, action)) {
+      unmappedActions.push(action);
+    }
+  }
+  assert.equal(
+    unmappedActions.length,
+    0,
+    `Found data-action values in markup missing from actionCallMap: ${unmappedActions.join(', ')}`,
+  );
+
+  function extractBranchBody(content, action) {
+    const pattern = new RegExp(`action\\s*===\\s*['"]${action}['"][^{]*\\{`);
+    const match = pattern.exec(content);
+    if (!match) return null;
+    const start = match.index + match[0].length;
+    const endPattern = /(\}\s*else\s*if|\}\s*\n\s*\}\);)/g;
+    endPattern.lastIndex = start;
+    const endMatch = endPattern.exec(content);
+    if (!endMatch) return null;
+    return content.slice(start, endMatch.index).trim();
+  }
+
+  const appJs = fs.readFileSync(path.join(rootDir, 'app.js'), 'utf8');
+  const staffHtml = fs.readFileSync(path.join(rootDir, 'staff.html'), 'utf8');
+
+  for (const [action, expectedCall] of Object.entries(actionCallMap)) {
+    let body = extractBranchBody(appJs, action);
+    let scriptName = 'app.js';
+    if (!body) {
+      body = extractBranchBody(staffHtml, action);
+      scriptName = 'staff.html';
+    }
+
+    assert.ok(
+      body,
+      `Missing action branch for action === '${action}' in app.js and staff.html`,
+    );
+
+    assert.ok(
+      body.includes(expectedCall),
+      `Branch for '${action}' in ${scriptName} does not contain expected call '${expectedCall}'.\nBody:\n${body}`,
+    );
+
+    for (const [otherAction, otherCall] of Object.entries(actionCallMap)) {
+      if (otherCall !== expectedCall) {
+        assert.ok(
+          !body.includes(otherCall),
+          `Branch for '${action}' in ${scriptName} unexpectedly contains call '${otherCall}' from '${otherAction}'.\nBody:\n${body}`,
+        );
+      }
+    }
+  }
+});
