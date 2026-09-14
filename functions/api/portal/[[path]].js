@@ -1,4 +1,5 @@
 // GET/POST /api/portal/[[path]] — Magic-link authentication and gated caregiver portal API endpoints (slice 09).
+import { checkIpRequestLimit, IP_LIMITS } from '../_shared.mjs';
 
 async function getHmacSha256(message, secret) {
   const enc = new TextEncoder();
@@ -85,7 +86,8 @@ async function parseSessionCookie(cookieHeader, secret) {
   // pasted as a cookie fails this check and cannot establish a session.
   const computedSig = await getHmacSha256(`session:${caregiverId}:${exp}`, secret);
   if (!constantTimeEqual(computedSig, signature)) return null;
-  if (Date.now() > Number(exp)) return null;
+  const expMs = Number(exp);
+  if (!Number.isFinite(expMs) || Date.now() > expMs) return null;
   return caregiverId;
 }
 
@@ -212,7 +214,8 @@ export async function onRequestGet({ request, env }) {
 
     return json({ ok: false, error: 'not_found' }, 404);
   } catch (e) {
-    return json({ ok: false, error: e.message }, 500);
+    console.error('portal handler error:', e instanceof Error ? e.name : typeof e);
+    return json({ ok: false, error: 'internal_error' }, 500);
   }
 }
 
@@ -228,6 +231,11 @@ export async function onRequestPost({ request, env }) {
     }
 
     if (action === 'login') {
+      const limited = await checkIpRequestLimit(env.LEGACY_DB, request, IP_LIMITS.portalLogin);
+      if (!limited.ok) {
+        return json({ ok: false, error: limited.error }, limited.status);
+      }
+
       const body = await request.json().catch(() => ({}));
       const email = body.email;
       if (!email || typeof email !== 'string' || !email.includes('@')) {
@@ -313,6 +321,7 @@ export async function onRequestPost({ request, env }) {
 
     return json({ ok: false, error: 'not_found' }, 404);
   } catch (e) {
-    return json({ ok: false, error: e.message }, 500);
+    console.error('portal handler error:', e instanceof Error ? e.name : typeof e);
+    return json({ ok: false, error: 'internal_error' }, 500);
   }
 }

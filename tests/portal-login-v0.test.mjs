@@ -252,3 +252,117 @@ test('auth fails closed with 503 when PORTAL_TOKEN_SECRET is missing', async () 
   assert.equal(data3.ok, false);
   assert.equal(data3.error, 'auth_not_configured');
 });
+
+// --- Error bodies, session expiry parsing, per-IP request limits ---
+
+async function hmacHex(message, secret) {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: { name: 'SHA-256' } }, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(message));
+  return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function sha256Hex(text) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function sessionCookieFor(caregiverId, exp, secret) {
+  const sig = await hmacHex(`session:${caregiverId}:${exp}`, secret);
+  return `portal_session=${encodeURIComponent(`${caregiverId}:${exp}:${sig}`)}`;
+}
+
+function ipRequest(urlStr, method, body, ip, cookie = null) {
+  return {
+    url: urlStr,
+    method,
+    headers: {
+      get(name) {
+        const n = name.toLowerCase();
+        if (n === 'cookie') return cookie;
+        if (n === 'cf-connecting-ip') return ip;
+        return null;
+      }
+    },
+    async json() {
+      if (!body) throw new Error('no body');
+      return body;
+    }
+  };
+}
+
+test('500 responses return a generic error and never the exception text', async () => {
+  const boom = { prepare() { throw new Error('SQLITE_ERROR: internal detail xyz'); } };
+  const envBoom = { ...env, LEGACY_DB: boom };
+  const cookie = await sessionCookieFor('cg_seed_fictional', Date.now() + 60_000, env.PORTAL_TOKEN_SECRET);
+
+  const resGet = await getPortal({ request: mockRequest('http://localhost/api/portal/me', 'GET', null, cookie), env: envBoom });
+  assert.equal(resGet.status, 500);
+  const textGet = await resGet.text();
+  assert.ok(!textGet.includes('internal detail'));
+  assert.equal(JSON.parse(textGet).error, 'internal_error');
+
+  const resPost = await postPortal({ request: mockRequest('http://localhost/api/portal/logout', 'POST', null, cookie), env: envBoom });
+  assert.equal(resPost.status, 500);
+  const textPost = await resPost.text();
+  assert.ok(!textPost.includes('internal detail'));
+  assert.equal(JSON.parse(textPost).error, 'internal_error');
+});
+
+test('a correctly signed session cookie with a non-finite expiry is rejected', async () => {
+  for (const exp of ['Infinity', 'NaN', 'abc']) {
+    const cookie = await sessionCookieFor('cg_seed_fictional', exp, env.PORTAL_TOKEN_SECRET);
+    const res = await getPortal({ request: mockRequest('http://localhost/api/portal/me', 'GET', null, cookie), env });
+    assert.equal(res.status, 401, `exp=${exp}`);
+  }
+});
+
+test('login is limited to 20 requests per IP per 15 minutes, across different emails', async () => {
+  for (let i = 0; i < 20; i++) {
+    const res = await postPortal({ request: ipRequest('http://localhost/api/portal/login', 'POST', { email: `rotating${i}@example.com` }, '203.0.113.7'), env });
+    assert.equal(res.status, 200, `request ${i + 1}`);
+  }
+  const blocked = await postPortal({ request: ipRequest('http://localhost/api/portal/login', 'POST', { email: 'rotating21@example.com' }, '203.0.113.7'), env });
+  assert.equal(blocked.status, 429);
+  assert.equal((await blocked.json()).error, 'rate_limited');
+
+  const otherIp = await postPortal({ request: ipRequest('http://localhost/api/portal/login', 'POST', { email: 'rotating22@example.com' }, '198.51.100.9'), env });
+  assert.equal(otherIp.status, 200);
+});
+
+test('login fails closed with 503 when the request-limit store errors', async () => {
+  let tokenInserts = 0;
+  const base = env.LEGACY_DB;
+  const flaky = {
+    prepare(sql) {
+      if (/audit_log/.test(sql)) throw new Error('store down');
+      if (/INSERT INTO portal_token/.test(sql)) tokenInserts++;
+      return base.prepare(sql);
+    }
+  };
+  const res = await postPortal({ request: ipRequest('http://localhost/api/portal/login', 'POST', { email: 'jane.doe@example.com' }, '203.0.113.7'), env: { ...env, LEGACY_DB: flaky } });
+  assert.equal(res.status, 503);
+  assert.equal((await res.json()).error, 'unavailable');
+  assert.equal(tokenInserts, 0);
+});
+
+test('the per-IP limiter binds and stores only a hashed IP, never the raw address', async () => {
+  const ip = '203.0.113.77';
+  const seen = [];
+  const base = env.LEGACY_DB;
+  const spy = {
+    prepare(sql) {
+      const st = base.prepare(sql);
+      return { ...st, bind(...params) { seen.push(...params); return st.bind(...params); } };
+    }
+  };
+  const res = await postPortal({ request: ipRequest('http://localhost/api/portal/login', 'POST', { email: 'jane.doe@example.com' }, ip), env: { ...env, LEGACY_DB: spy } });
+  assert.equal(res.status, 200);
+  assert.ok(!seen.some(v => typeof v === 'string' && v.includes(ip)));
+
+  const expected = await sha256Hex('ip:' + ip);
+  const hashed = raw.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'portal.login_ip' AND actor = ?").get(expected);
+  assert.equal(hashed.n, 1);
+  const leak = raw.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE actor LIKE ? OR IFNULL(entity_id, '') LIKE ? OR IFNULL(after_json, '') LIKE ?").get(`%${ip}%`, `%${ip}%`, `%${ip}%`);
+  assert.equal(leak.n, 0);
+});

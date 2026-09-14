@@ -1,8 +1,11 @@
 // POST /api/intake — the single form-intake endpoint (slice 03).
 // All three site forms post here with a `kind` field; slice 04 wires them up.
-import { handleIntake } from './_shared.mjs';
+import { handleIntake, checkIpRequestLimit, IP_LIMITS } from './_shared.mjs';
 
 export async function onRequestPost({ request, env }) {
+  const limited = await checkIpRequestLimit(env.LEGACY_DB, request, IP_LIMITS.intake);
+  if (!limited.ok) return json({ ok: false, error: limited.error }, limited.status);
+
   let body;
   try {
     body = await request.json();
