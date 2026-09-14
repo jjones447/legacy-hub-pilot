@@ -65,7 +65,7 @@ test('static wiring: every data-action has matching listener in scripts', () => 
   }
 
   // Load scripts where actions can be wired
-  const scriptFiles = ['app.js', 'staff.html'] // staff.html has inline script block
+  const scriptFiles = ['app.js', 'staff.js']
     .map(f => path.join(rootDir, f))
     .filter(f => fs.existsSync(f));
 
@@ -89,8 +89,8 @@ test('static wiring: every data-action has matching listener in scripts', () => 
 
 test('single dispatch: each action is handled by exactly one listener branch across scripts loaded by staff.html', () => {
   const appJs = fs.readFileSync(path.join(rootDir, 'app.js'), 'utf8');
-  const staffHtml = fs.readFileSync(path.join(rootDir, 'staff.html'), 'utf8');
-  const combined = appJs + '\n' + staffHtml;
+  const staffJs = fs.readFileSync(path.join(rootDir, 'staff.js'), 'utf8');
+  const combined = appJs + '\n' + staffJs;
 
   const actionMatchRegex = /action\s*===\s*['"]([^'"]+)['"]/g;
   const actionCounts = new Map();
@@ -110,7 +110,7 @@ test('single dispatch: each action is handled by exactly one listener branch acr
   assert.equal(
     duplicates.length,
     0,
-    `Found duplicate action dispatches across app.js and staff.html:\n  ${duplicates.join('\n  ')}`,
+    `Found duplicate action dispatches across app.js and staff.js:\n  ${duplicates.join('\n  ')}`,
   );
 });
 
@@ -193,19 +193,19 @@ test('exact call wiring: every action branch calls its expected function and exc
   }
 
   const appJs = fs.readFileSync(path.join(rootDir, 'app.js'), 'utf8');
-  const staffHtml = fs.readFileSync(path.join(rootDir, 'staff.html'), 'utf8');
+  const staffJs = fs.readFileSync(path.join(rootDir, 'staff.js'), 'utf8');
 
   for (const [action, expectedCall] of Object.entries(actionCallMap)) {
     let body = extractBranchBody(appJs, action);
     let scriptName = 'app.js';
     if (!body) {
-      body = extractBranchBody(staffHtml, action);
-      scriptName = 'staff.html';
+      body = extractBranchBody(staffJs, action);
+      scriptName = 'staff.js';
     }
 
     assert.ok(
       body,
-      `Missing action branch for action === '${action}' in app.js and staff.html`,
+      `Missing action branch for action === '${action}' in app.js and staff.js`,
     );
 
     assert.ok(
@@ -222,4 +222,33 @@ test('exact call wiring: every action branch calls its expected function and exc
       }
     }
   }
+});
+test('staff console script isolation: staff.html has zero inline script blocks with body and loads staff.js after app.js', () => {
+  const staffHtml = fs.readFileSync(path.join(rootDir, 'staff.html'), 'utf8');
+
+  const scriptTagRegex = /<script(?:\s+[^>]*)?>([\s\S]*?)<\/script>/gi;
+  const inlineScriptsWithBody = [];
+  let match;
+  while ((match = scriptTagRegex.exec(staffHtml)) !== null) {
+    const scriptBody = match[1].trim();
+    if (scriptBody.length > 0) {
+      inlineScriptsWithBody.push(scriptBody.slice(0, 80));
+    }
+  }
+
+  assert.equal(
+    inlineScriptsWithBody.length,
+    0,
+    `Found inline script blocks with a body in staff.html:\n  ${inlineScriptsWithBody.join('\n  ')}`,
+  );
+
+  const appJsIdx = staffHtml.indexOf('<script src="app.js"></script>');
+  const staffJsIdx = staffHtml.indexOf('<script src="staff.js"></script>');
+
+  assert.ok(appJsIdx !== -1, 'staff.html must include <script src="app.js"></script>');
+  assert.ok(staffJsIdx !== -1, 'staff.html must include <script src="staff.js"></script>');
+  assert.ok(
+    staffJsIdx > appJsIdx,
+    'staff.html must load staff.js after app.js',
+  );
 });
