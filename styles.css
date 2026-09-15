@@ -675,3 +675,12 @@ footer a:hover { color: #fff; }
 }
 /* Link out of the carousel into the full library. */
 .carousel-more { margin-top: 16px; }
+
+/* Gallery folder selector (folder-driven gallery, 2026-09-15) */
+.gallery-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin-bottom: 22px; }
+.gallery-head h1 { margin-bottom: 6px; }
+.gallery-head .muted { margin: 0; }
+.gallery-filter select { min-height: 44px; padding: 8px 40px 8px 14px; border: 1.5px solid var(--plum-light); border-radius: 999px; background: #fff; color: var(--plum); font-family: var(--font-body); font-size: 15px; font-weight: 600; cursor: pointer; }
+.gallery-filter select:focus-visible { outline: 2.5px solid var(--amber); outline-offset: 2px; }
+.gallery-cell[hidden] { display: none; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
