@@ -725,23 +725,39 @@ document.addEventListener('DOMContentLoaded', function() {
   var img = document.getElementById('lightboxImg');
   var cap = document.getElementById('lightboxCaption');
   var items = Array.prototype.map.call(grid, function (b) {
-    return { src: b.dataset.src, alt: b.dataset.alt, caption: b.dataset.caption || '' };
+    return { src: b.dataset.src, alt: b.dataset.alt, caption: b.dataset.caption || '', cell: b.closest('.gallery-cell') };
   });
+  function visible() {
+    return items.filter(function (it) { return !it.cell || !it.cell.hidden; });
+  }
+  /* Folder selector: options come from the folders in content/gallery.json, so a new
+     folder in the client's Drive becomes a new option with no code change. */
+  var filter = document.querySelector('[data-gallery-filter]');
+  if (filter) {
+    filter.addEventListener('change', function () {
+      var want = filter.value;
+      items.forEach(function (it) {
+        if (it.cell) it.cell.hidden = !!want && it.cell.dataset.folder !== want;
+      });
+    });
+  }
   var at = 0;
   var opener = null;
 
   function show(i) {
-    at = (i + items.length) % items.length;
-    var it = items[at];
+    var list = visible();
+    if (!list.length) return;
+    at = (i + list.length) % list.length;
+    var it = list[at];
     img.src = it.src;
     img.alt = it.alt;
-    cap.textContent = it.caption || (at + 1) + ' of ' + items.length;
+    cap.textContent = it.caption || (at + 1) + ' of ' + list.length;
   }
 
   Array.prototype.forEach.call(grid, function (btn, i) {
     btn.addEventListener('click', function () {
       opener = btn;          // so focus goes back where it came from
-      show(i);
+      show(visible().indexOf(items[i]));
       dlg.showModal();
     });
   });

@@ -100,11 +100,22 @@
 
 <section class="section">
   <div class="container">
-    <h1>Moments from our community</h1>
-    <p class="muted" style="max-width: 620px;">Caregivers, families and volunteers at Legacy events.</p>
+    <div class="gallery-head">
+      <div>
+        <h1>Moments from our community</h1>
+        <p class="muted" style="max-width: 620px;">Caregivers, families and volunteers at Legacy events.</p>
+      </div>
+      <label class="gallery-filter">
+        <span class="sr-only">Show photographs from</span>
+        <select id="galleryFilter" data-gallery-filter>
+          <option value="">All photos</option>
+          <option value="Main Page Gallery Preview Photos">Main Page Gallery Preview Photos</option>
+        </select>
+      </label>
+    </div>
 
     <ul class="gallery-grid">
-      <li class="gallery-cell">
+      <li class="gallery-cell" data-folder="Main Page Gallery Preview Photos">
         <button type="button" class="gallery-open"
                 data-src="media/gallery/shoot-238.jpg" data-alt="Photograph from a Legacy Home & Respite Care Foundation community event" data-caption=""
                 aria-label="View photograph 1 of 19 larger">
@@ -112,7 +123,7 @@
                width="800" height="600">
         </button>
       </li>
-      <li class="gallery-cell">
+      <li class="gallery-cell" data-folder="Main Page Gallery Preview Photos">
         <button type="button" class="gallery-open"
                 data-src="media/gallery/shoot-099.jpg" data-alt="Photograph from a Legacy Home & Respite Care Foundation community event" data-caption=""
                 aria-label="View photograph 2 of 19 larger">
@@ -120,7 +131,7 @@
                width="800" height="600">
         </button>
       </li>
-      <li class="gallery-cell">
+      <li class="gallery-cell" data-folder="Main Page Gallery Preview Photos">
         <button type="button" class="gallery-open"
                 data-src="media/gallery/img9218.jpg" data-alt="Photograph from a Legacy Home & Respite Care Foundation community event" data-caption=""
                 aria-label="View photograph 3 of 19 larger">
@@ -128,7 +139,7 @@
                width="800" height="600">
         </button>
       </li>
-      <li class="gallery-cell">
+      <li class="gallery-cell" data-folder="Main Page Gallery Preview Photos">
         <button type="button" class="gallery-open"
                 data-src="media/gallery/img0790.jpg" data-alt="Photograph from a Legacy Home & Respite Care Foundation community event" data-caption=""
                 aria-label="View photograph 4 of 19 larger">
@@ -136,7 +147,7 @@
                width="800" height="600">
         </button>
       </li>
-      <li class="gallery-cell">
+      <li class="gallery-cell" data-folder="Main Page Gallery Preview Photos">
         <button type="button" class="gallery-open"
                 data-src="media/gallery/img4258.jpg" data-alt="Photograph from a Legacy Home & Respite Care Foundation community event" data-caption=""
                 aria-label="View photograph 5 of 19 larger">
@@ -144,7 +155,7 @@
                width="800" height="600">
         </button>
       </li>
-      <li class="gallery-cell">
+      <li class="gallery-cell" data-folder="Main Page Gallery Preview Photos">
         <button type="button" class="gallery-open"
                 data-src="media/gallery/img2552.jpg" data-alt="Photograph from a Legacy Home & Respite Care Foundation community event" data-caption=""
                 aria-label="View photograph 6 of 19 larger">
@@ -152,7 +163,7 @@
                width="800" height="600">
         </button>
       </li>
-      <li class="gallery-cell">
+      <li class="gallery-cell" data-folder="Main Page Gallery Preview Photos">
         <button type="button" class="gallery-open"
                 data-src="media/gallery/img7982.jpg" data-alt="Photograph from a Legacy Home & Respite Care Foundation community event" data-caption=""
                 aria-label="View photograph 7 of 19 larger">
@@ -160,7 +171,7 @@
                width="800" height="600">
         </button>
       </li>
-      <li class="gallery-cell">
+      <li class="gallery-cell" data-folder="Main Page Gallery Preview Photos">
         <button type="button" class="gallery-open"
                 data-src="media/gallery/img7987.jpg" data-alt="Photograph from a Legacy Home & Respite Care Foundation community event" data-caption=""
                 aria-label="View photograph 8 of 19 larger">
@@ -168,7 +179,7 @@
                width="800" height="600">
         </button>
       </li>
-      <li class="gallery-cell">
+      <li class="gallery-cell" data-folder="Main Page Gallery Preview Photos">
         <button type="button" class="gallery-open"
                 data-src="media/gallery/img8693.jpg" data-alt="Photograph from a Legacy Home & Respite Care Foundation community event" data-caption=""
                 aria-label="View photograph 9 of 19 larger">
@@ -176,7 +187,7 @@
                width="800" height="600">
         </button>
       </li>
-      <li class="gallery-cell">
+      <li class="gallery-cell" data-folder="Main Page Gallery Preview Photos">
         <button type="button" class="gallery-open"
                 data-src="media/gallery/img6921.jpg" data-alt="Photograph from a Legacy Home & Respite Care Foundation community event" data-caption=""
                 aria-label="View photograph 10 of 19 larger">
@@ -184,7 +195,7 @@
                width="800" height="600">
         </button>
       </li>
-      <li class="gallery-cell">
+      <li class="gallery-cell" data-folder="Main Page Gallery Preview Photos">
         <button type="button" class="gallery-open"
                 data-src="media/gallery/img8281.jpg" data-alt="Photograph from a Legacy Home & Respite Care Foundation community event" data-caption=""
                 aria-label="View photograph 11 of 19 larger">
@@ -192,7 +203,7 @@
                width="800" height="600">
         </button>
       </li>
-      <li class="gallery-cell">
+      <li class="gallery-cell" data-folder="Main Page Gallery Preview Photos">
         <button type="button" class="gallery-open"
                 data-src="media/gallery/shoot-015.jpg" data-alt="Photograph from a Legacy Home & Respite Care Foundation community event" data-caption=""
                 aria-label="View photograph 12 of 19 larger">
@@ -200,7 +211,7 @@
                width="800" height="600">
         </button>
       </li>
-      <li class="gallery-cell">
+      <li class="gallery-cell" data-folder="Main Page Gallery Preview Photos">
         <button type="button" class="gallery-open"
                 data-src="media/gallery/shoot-024.jpg" data-alt="Photograph from a Legacy Home & Respite Care Foundation community event" data-caption=""
                 aria-label="View photograph 13 of 19 larger">
@@ -208,7 +219,7 @@
                width="800" height="600">
         </button>
       </li>
-      <li class="gallery-cell">
+      <li class="gallery-cell" data-folder="Main Page Gallery Preview Photos">
         <button type="button" class="gallery-open"
                 data-src="media/gallery/shoot-076.jpg" data-alt="Photograph from a Legacy Home & Respite Care Foundation community event" data-caption=""
                 aria-label="View photograph 14 of 19 larger">
@@ -216,7 +227,7 @@
                width="800" height="600">
         </button>
       </li>
-      <li class="gallery-cell">
+      <li class="gallery-cell" data-folder="Main Page Gallery Preview Photos">
         <button type="button" class="gallery-open"
                 data-src="media/gallery/shoot-066.jpg" data-alt="Photograph from a Legacy Home & Respite Care Foundation community event" data-caption=""
                 aria-label="View photograph 15 of 19 larger">
@@ -224,7 +235,7 @@
                width="800" height="600">
         </button>
       </li>
-      <li class="gallery-cell">
+      <li class="gallery-cell" data-folder="Main Page Gallery Preview Photos">
         <button type="button" class="gallery-open"
                 data-src="media/gallery/img2134.jpg" data-alt="Photograph from a Legacy Home & Respite Care Foundation community event" data-caption=""
                 aria-label="View photograph 16 of 19 larger">
@@ -232,7 +243,7 @@
                width="800" height="600">
         </button>
       </li>
-      <li class="gallery-cell">
+      <li class="gallery-cell" data-folder="Main Page Gallery Preview Photos">
         <button type="button" class="gallery-open"
                 data-src="media/gallery/img0894.jpg" data-alt="Photograph from a Legacy Home & Respite Care Foundation community event" data-caption=""
                 aria-label="View photograph 17 of 19 larger">
@@ -240,7 +251,7 @@
                width="800" height="600">
         </button>
       </li>
-      <li class="gallery-cell">
+      <li class="gallery-cell" data-folder="Main Page Gallery Preview Photos">
         <button type="button" class="gallery-open"
                 data-src="media/gallery/img2772.jpg" data-alt="Photograph from a Legacy Home & Respite Care Foundation community event" data-caption=""
                 aria-label="View photograph 18 of 19 larger">
@@ -248,7 +259,7 @@
                width="800" height="600">
         </button>
       </li>
-      <li class="gallery-cell">
+      <li class="gallery-cell" data-folder="Main Page Gallery Preview Photos">
         <button type="button" class="gallery-open"
                 data-src="media/gallery/img1236.jpg" data-alt="Photograph from a Legacy Home & Respite Care Foundation community event" data-caption=""
                 aria-label="View photograph 19 of 19 larger">

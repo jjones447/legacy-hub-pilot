@@ -17,12 +17,26 @@
 
 <section class="section">
   <div class="container">
-    <h1>Moments from our community</h1>
-    <p class="muted" style="max-width: 620px;">Caregivers, families and volunteers at Legacy events.</p>
+    {%- set folders = gallery|map(attribute='folder')|unique|list %}
+    <div class="gallery-head">
+      <div>
+        <h1>Moments from our community</h1>
+        <p class="muted" style="max-width: 620px;">Caregivers, families and volunteers at Legacy events.</p>
+      </div>
+      <label class="gallery-filter">
+        <span class="sr-only">Show photographs from</span>
+        <select id="galleryFilter" data-gallery-filter>
+          <option value="">All photos</option>
+          {%- for f in folders %}
+          <option value="{{ f }}">{{ f }}</option>
+          {%- endfor %}
+        </select>
+      </label>
+    </div>
 
     <ul class="gallery-grid">
       {%- for img in gallery %}
-      <li class="gallery-cell">
+      <li class="gallery-cell" data-folder="{{ img.folder }}">
         <button type="button" class="gallery-open"
                 data-src="{{ img.src }}" data-alt="{{ img.alt }}" data-caption="{{ img.caption }}"
                 aria-label="View photograph {{ loop.index }} of {{ gallery|length }} larger">
