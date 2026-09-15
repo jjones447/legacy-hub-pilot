@@ -133,6 +133,48 @@
       "caption": "",
       "source_drive_id": "1iUiPjoi0Stwl2yd6vpmFCogii_JWb1Av",
       "folder": "Main Page Gallery Preview Photos"
+    },
+    {
+      "src": "media/headers/about.jpg",
+      "alt": "Photograph from a Legacy Home & Respite Care Foundation community event",
+      "caption": "",
+      "folder": "About Us",
+      "source_drive_folder_id": "15WlclwmhGM85tmxhjWggFAdWdl0MwQT5"
+    },
+    {
+      "src": "media/headers/programs-events.jpg",
+      "alt": "Photograph from a Legacy Home & Respite Care Foundation community event",
+      "caption": "",
+      "folder": "Programs and Events",
+      "source_drive_folder_id": "1oN6W1jreZ_pPR0XncnyEESgNr8pYRwuY"
+    },
+    {
+      "src": "media/headers/resources.jpg",
+      "alt": "Photograph from a Legacy Home & Respite Care Foundation community event",
+      "caption": "",
+      "folder": "Resource Hub",
+      "source_drive_folder_id": "1xF06eROENeR2Hn2-3-NPQMUVQ1UefLxa"
+    },
+    {
+      "src": "media/headers/get-involved.jpg",
+      "alt": "Photograph from a Legacy Home & Respite Care Foundation community event",
+      "caption": "",
+      "folder": "Get Involved",
+      "source_drive_folder_id": "1CslxUixK4DTHkuZX0_5QZWNUXMPseMAD"
+    },
+    {
+      "src": "media/headers/sanctuary.jpg",
+      "alt": "Photograph from a Legacy Home & Respite Care Foundation community event",
+      "caption": "",
+      "folder": "The Sanctuary",
+      "source_drive_folder_id": "1ywwqtz0M-JgaO2QXWKR5nEcbWcf0SSOb"
+    },
+    {
+      "src": "media/headers/donate.jpg",
+      "alt": "Photograph from a Legacy Home & Respite Care Foundation community event",
+      "caption": "",
+      "folder": "Donate",
+      "source_drive_folder_id": "19EXzdZvmsUeOs3fG1zLaiAMiMAie0HuC"
     }
   ],
   "_source": {

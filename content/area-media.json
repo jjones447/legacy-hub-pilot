@@ -41,6 +41,13 @@
       "media": "media/headers/sanctuary.jpg",
       "kind": "photo",
       "source_name": "header-sample-img_8281.jpg"
+    },
+    "donate": {
+      "folder": "Donate",
+      "folder_id": "19EXzdZvmsUeOs3fG1zLaiAMiMAie0HuC",
+      "media": "media/headers/donate.jpg",
+      "kind": "photo",
+      "source_name": "header-sample-img_0894.jpg"
     }
   }
 }

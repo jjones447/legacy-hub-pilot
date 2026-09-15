@@ -32,6 +32,7 @@ PAGES = {
     "drop-in-respite.html": "drop-in-respite.html.j2",
     "coming-soon.html": "coming-soon.html.j2",
     "blog.html": "blog.html.j2",
+    "donate.html": "donate.html.j2",
 }
 
 # Hand-authored pages that are NOT template-rendered but DO share the public chrome.
