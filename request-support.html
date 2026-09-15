@@ -97,18 +97,18 @@
 </div>
 
 
-<section class="hero" style="padding: 56px 0 64px;">
+<section class="hero py-56-64">
   <div class="container">
-    <h1 style="font-size: clamp(30px, 4vw, 44px);">Request Support</h1>
+    <h1 class="hero-title-clamp">Request Support</h1>
     <p class="lede">For yourself, or for a caregiver you know. One short form — we take it from there.</p>
   </div>
 </section>
 
 <section>
   <div class="container">
-    <div class="split" style="align-items: start;">
-      <div class="login-card" style="max-width: none;">
-        <h2 style="font-size: 24px;">Tell us what you need</h2>
+    <div class="split align-start">
+      <div class="login-card measure-none">
+        <h2 class="fs-24">Tell us what you need</h2>
         <p class="sub">Every request goes straight to our team — no phone tag required.</p>
         <form id="supportForm" data-action="submit-support">
           <div class="field">
@@ -142,7 +142,7 @@
             <textarea id="supMsg" rows="4" placeholder="Your situation, timing, questions…"></textarea>
           </div>
           <p class="privacy-line">By sending this form, you consent to Legacy using these details to create or update your caregiver record and follow up about support. Please do not include medical record numbers or emergency details.</p>
-          <button type="submit" class="btn btn-coral" style="width: 100%;">Send request</button>
+          <button type="submit" class="btn btn-coral w-100">Send request</button>
           <div class="success-note" id="supSuccess" data-intake-success role="status" aria-live="polite">✓ Request received — our team will reach out within two business days.</div>
           <div class="error-note" data-intake-error role="alert" aria-live="assertive"></div>
           <div class="routing-note" id="supRouting" data-intake-routing>Behind the scenes: this request created or updated a caregiver record and queued a follow-up for staff — nothing gets lost in an inbox.</div>
@@ -150,12 +150,12 @@
       </div>
       <div>
         <span class="eyebrow">What happens next</span>
-        <h2 style="font-size: 26px; margin-bottom: 18px;">A person, not a process</h2>
-        <div class="timeline-item"><div class="timeline-dot" style="background: var(--green);"></div><div><strong>1 · We read it same-day</strong><div class="when">Requests route straight to the team's work queue</div></div></div>
-        <div class="timeline-item"><div class="timeline-dot" style="background: var(--green);"></div><div><strong>2 · We reach out</strong><div class="when">Within two business days, by your preferred contact</div></div></div>
-        <div class="timeline-item"><div class="timeline-dot" style="background: var(--amber);"></div><div><strong>3 · We connect you</strong><div class="when">Membership, respite, grants, groups — whatever fits</div></div></div>
-        <div class="card mt-24" style="background: var(--sand); border-style: dashed;">
-          <p class="small" style="margin:0;"><strong>In crisis right now?</strong> Don't wait on a form — see <a href="resources.html">Crisis Help in the Resource Hub</a> for the caregiver support hotline.</p>
+        <h2 class="fs-26-mb-18">A person, not a process</h2>
+        <div class="timeline-item"><div class="timeline-dot bg-green"></div><div><strong>1 · We read it same-day</strong><div class="when">Requests route straight to the team's work queue</div></div></div>
+        <div class="timeline-item"><div class="timeline-dot bg-green"></div><div><strong>2 · We reach out</strong><div class="when">Within two business days, by your preferred contact</div></div></div>
+        <div class="timeline-item"><div class="timeline-dot bg-amber"></div><div><strong>3 · We connect you</strong><div class="when">Membership, respite, grants, groups — whatever fits</div></div></div>
+        <div class="card mt-24 card-sand-dashed">
+          <p class="small m-0"><strong>In crisis right now?</strong> Don't wait on a form — see <a href="resources.html">Crisis Help in the Resource Hub</a> for the caregiver support hotline.</p>
         </div>
       </div>
     </div>

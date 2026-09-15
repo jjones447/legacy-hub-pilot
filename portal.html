@@ -98,7 +98,7 @@
 <!-- SHARED:header:end -->
 
 <!-- LOGIN VIEW -->
-<section id="loginView" style="padding: 70px 0;">
+<section class="py-70" id="loginView">
   <div class="container">
     <div class="login-wrap">
       <div class="login-card">
@@ -108,62 +108,62 @@
           <label for="loginEmail">Email</label>
           <input id="loginEmail" type="email" placeholder="you@example.com">
         </div>
-        <button id="loginBtn" class="btn btn-plum" style="width: 100%;" data-action="submit-portal-login">Send me a sign-in link</button>
-        <div id="loginStatus" class="mt-16" style="display:none; padding: 10px; border-radius: 4px; font-size: 13.5px; text-align: center;"></div>
-        <p class="hint">Preview the portal as <strong style="cursor: pointer; text-decoration: underline;" data-action="demo-portal-login">Maria G. (Jane Doe)</strong> (sample caregiver). In production this is a secure email sign-in — no password to remember.</p>
+        <button id="loginBtn" class="btn btn-plum w-100" data-action="submit-portal-login">Send me a sign-in link</button>
+        <div id="loginStatus" class="mt-16 alert-inline-banner"></div>
+        <p class="hint">Preview the portal as <strong class="cursor-pointer-underline" data-action="demo-portal-login">Maria G. (Jane Doe)</strong> (sample caregiver). In production this is a secure email sign-in — no password to remember.</p>
       </div>
     </div>
   </div>
 </section>
 
 <!-- DASHBOARD VIEW -->
-<section id="dashView" style="display:none; padding: 44px 0;">
+<section class="d-none-py-44" id="dashView">
   <div class="container">
-    <div style="display:flex; justify-content: space-between; align-items:center; flex-wrap: wrap; gap: 12px; margin-bottom: 26px;">
+    <div class="portal-head-row">
       <div>
         <span class="eyebrow">Caregiver Portal</span>
-        <h2 id="portalWelcome" style="font-size: 30px;">Welcome back</h2>
+        <h2 class="fs-30" id="portalWelcome">Welcome back</h2>
       </div>
       <button class="btn btn-outline btn-sm" data-action="portal-logout">Sign out</button>
     </div>
 
-    <div class="card-grid" style="grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));">
+    <div class="card-grid grid-autofit-320">
 
-      <div class="panel" style="margin:0;">
+      <div class="panel m-0">
         <h4>🌱 My Wellness Grant</h4>
         <div class="kv-row"><span class="k">Membership</span><span class="v" id="portalMembershipStatus"><span class="badge badge-green">Sanctuary member</span></span></div>
         <div class="kv-row"><span class="k">Application</span><span class="v" id="portalGrantStatus"><span class="badge badge-gray">No application</span></span></div>
         <div class="kv-row"><span class="k">Requested for</span><span class="v" id="portalGrantRequestedFor">—</span></div>
         <div class="kv-row"><span class="k">Award &amp; care package</span><span class="v" id="portalGrantAward">—</span></div>
-        <a href="#" class="btn btn-plum btn-sm mt-16" style="display:inline-block;" data-action="demo-view-application">View application</a>
+        <a href="#" class="btn btn-plum btn-sm mt-16 d-inline-block" data-action="demo-view-application">View application</a>
       </div>
 
-      <div class="panel" style="margin:0;">
+      <div class="panel m-0">
         <h4>📅 My Events</h4>
         <div id="portalEventsList">
-          <p class="small muted" style="margin:0;">No registered events yet.</p>
+          <p class="small muted m-0">No registered events yet.</p>
         </div>
-        <a href="events.html" class="btn btn-outline btn-sm mt-16" style="display:inline-block;">Browse all events</a>
+        <a href="events.html" class="btn btn-outline btn-sm mt-16 d-inline-block">Browse all events</a>
       </div>
 
-      <div class="panel" style="margin:0;">
+      <div class="panel m-0">
         <h4>🏡 My Memory Socials</h4>
         <div class="kv-row"><span class="k">Attended (2026)</span><span class="v" id="portalSocialsCount">0 socials</span></div>
         <div class="kv-row"><span class="k">Last visit</span><span class="v" id="portalSocialsLastVisit">—</span></div>
         <div class="kv-row"><span class="k">Next up</span><span class="v" id="portalSocialsNext">—</span></div>
       </div>
 
-      <div class="panel" style="margin:0;">
+      <div class="panel m-0">
         <h4>📚 Saved Resources</h4>
-        <div class="timeline-item"><div class="timeline-dot" style="background: var(--blue);"></div><div><strong>10-Minute Reset Practices</strong><div class="when">Self-Care · saved Jun 18</div></div></div>
-        <div class="timeline-item"><div class="timeline-dot" style="background: var(--blue);"></div><div><strong>Benefits &amp; Assistance Finder</strong><div class="when">Financial &amp; Legal · saved Jun 5</div></div></div>
-        <a href="resources.html" class="btn btn-outline btn-sm mt-16" style="display:inline-block;">Open Resource Hub</a>
+        <div class="timeline-item"><div class="timeline-dot bg-blue"></div><div><strong>10-Minute Reset Practices</strong><div class="when">Self-Care · saved Jun 18</div></div></div>
+        <div class="timeline-item"><div class="timeline-dot bg-blue"></div><div><strong>Benefits &amp; Assistance Finder</strong><div class="when">Financial &amp; Legal · saved Jun 5</div></div></div>
+        <a href="resources.html" class="btn btn-outline btn-sm mt-16 d-inline-block">Open Resource Hub</a>
       </div>
 
     </div>
 
-    <div class="card mt-24" style="background: var(--sand); border-style: dashed;">
-      <p class="small" style="margin:0;"><strong>Why this matters:</strong> everything on this page is one caregiver record underneath — the same record staff see, that events update, that the grant workflow drives. The portal is just a secure window into it.</p>
+    <div class="card mt-24 card-sand-dashed">
+      <p class="small m-0"><strong>Why this matters:</strong> everything on this page is one caregiver record underneath — the same record staff see, that events update, that the grant workflow drives. The portal is just a secure window into it.</p>
     </div>
   </div>
 </section>

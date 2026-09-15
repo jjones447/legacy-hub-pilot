@@ -15,10 +15,10 @@
 {% set active_page = 'resources' %}
 {% include '_header.html.j2' %}
 
-<section class="hero" style="padding: 56px 0 64px;">
+<section class="hero py-56-64">
   <div class="container">
-    <p class="eyebrow" style="color:#eeddd2;"><a href="resources.html" style="color:#eeddd2;">Resource Hub</a></p>
-    <h1 style="font-size: clamp(30px, 4vw, 44px);">Caregiver Tools &amp; Guides</h1>
+    <p class="eyebrow text-sand-light"><a class="text-sand-light" href="resources.html">Resource Hub</a></p>
+    <h1 class="hero-title-clamp">Caregiver Tools &amp; Guides</h1>
     <p class="lede">Practical things to print, fill in, and take with you — to appointments, to family conversations, to the days that are hard.</p>
   </div>
 </section>
@@ -27,19 +27,19 @@
   <div class="container">
     {% with collection = caregiver_tools %}{% include '_resource-links.html.j2' %}{% endwith %}
 
-    <div class="section-head" style="margin-top: 48px;"><h2>Caregiver Wellness Toolkit</h2></div>
-    <p class="muted" style="max-width: 640px;">A curated kit of self-care practices, checklists and wellness tools built for
+    <div class="section-head mt-48"><h2>Caregiver Wellness Toolkit</h2></div>
+    <p class="muted measure-640">A curated kit of self-care practices, checklists and wellness tools built for
       dementia caregivers. Previously its own section on the Resource Hub; it lives here now, alongside the guides.</p>
     <span class="badge-phase2">Content coming</span>
 
-    <div class="section-head" style="margin-top: 48px;"><h2>Downloadable guides</h2></div>
-    <p class="muted" style="max-width: 640px;">Printable guides on caregiving topics &mdash; from first steps after a diagnosis
+    <div class="section-head mt-48"><h2>Downloadable guides</h2></div>
+    <p class="muted measure-640">Printable guides on caregiving topics &mdash; from first steps after a diagnosis
       to planning respite.</p>
     <span class="badge-phase2">Content coming</span>
   </div>
 </section>
 
-<section style="background: var(--sand);">
+<section class="section-sand">
   <div class="container">
     <div class="section-head"><h2>Looking for something else?</h2></div>
     <div class="card-grid mt-24">
