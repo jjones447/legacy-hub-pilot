@@ -346,7 +346,7 @@ function submitPortalLogin(e) {
           } catch (err) {
             devHref = null;
           }
-          statusDiv.textContent = 'Success! Link generated for demo mode: ';
+          statusDiv.textContent = 'Success! Your sign-in link: ';
           if (devHref) {
             const a = document.createElement('a');
             a.href = devHref;
@@ -782,6 +782,10 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 })();
 
+/* Resource links whose destination the client has not supplied yet (link-class stubs):
+   nothing happens on click until the URL lands in content/resource-links.json. */
+function resourceLinkPending(el) { if (el) el.blur(); }
+
 /* ---------- Event delegation: data-action wiring ---------- */
 document.addEventListener('submit', function (e) {
   const form = e.target.closest('form[data-action]');
@@ -839,15 +843,12 @@ document.addEventListener('click', function (e) {
     e.preventDefault();
     const nav = document.querySelector('.main-nav');
     if (nav) nav.classList.toggle('open');
-  } else if (action === 'demo-donate') {
-    e.preventDefault();
-    alert("Demo: this connects to Legacy's existing GiveButter donation page.");
   } else if (action === 'demo-resource-link') {
     e.preventDefault();
-    alert('Demo resource link');
+    resourceLinkPending(target);
   } else if (action === 'demo-grant-status') {
     e.preventDefault();
-    alert('Demo: your application status is tracked on your caregiver record — staff and you see the same journey.');
+    alert('Your application status is tracked on your caregiver record. Staff and you see the same journey.');
   } else if (action === 'submit-portal-login') {
     e.preventDefault();
     submitPortalLogin(e);
@@ -861,7 +862,7 @@ document.addEventListener('click', function (e) {
     portalLogout();
   } else if (action === 'demo-view-application') {
     e.preventDefault();
-    alert('Demo: your application status, review notes, and award details — all from your caregiver record.');
+    alert('Your application status, review notes and award details, all from your caregiver record.');
   } else if (action === 'agent-confirm') {
     e.preventDefault();
     agentConfirm(target);
