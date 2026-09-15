@@ -480,7 +480,7 @@ function renderPortalData(data) {
         eventsList.appendChild(item);
       });
     } else {
-      eventsList.innerHTML = '<p class="small muted" style="margin:0;">No registered events yet.</p>';
+      eventsList.innerHTML = '<p class="small muted m-0">No registered events yet.</p>';
     }
   }
 
@@ -508,11 +508,11 @@ function renderPortalData(data) {
 function agentConfirm(btn) {
   const msg = btn.closest('.msg');
   btn.closest('.confirm-row').innerHTML =
-    '<span style="font-size:12.5px; font-weight:700; color: var(--green);">✓ Published — logged to the audit trail. Live on the Events page & portal.</span>';
+    '<span class="chat-confirm-published">✓ Published — logged to the audit trail. Live on the Events page & portal.</span>';
 }
 function agentCancel(btn) {
   btn.closest('.confirm-row').innerHTML =
-    '<span style="font-size:12.5px; font-weight:700; color: var(--ink-soft);">Draft discarded — nothing changed.</span>';
+    '<span class="chat-confirm-discarded">Draft discarded — nothing changed.</span>';
 }
 
 function agentSend() {

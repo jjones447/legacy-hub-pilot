@@ -28,11 +28,11 @@ async function loadFollowups() {
       
       let actionHtml = '';
       if (fu.status === 'open') {
-        actionHtml = `<button class="btn btn-sm btn-coral" style="padding: 4px 10px; font-size: 11px; margin-left: 8px;" data-action="resolve-followup" data-followup-id="${fu.id}">Resolve</button>`;
+        actionHtml = `<button class="btn btn-sm btn-coral btn-compact-ml" data-action="resolve-followup" data-followup-id="${fu.id}">Resolve</button>`;
       }
       
       return `
-        <tr style="cursor: pointer;" data-action="view-caregiver" data-caregiver-id="${fu.caregiver_id}">
+        <tr class="cursor-pointer" data-action="view-caregiver" data-caregiver-id="${fu.caregiver_id}">
           <td><strong>${caregiverName}</strong></td>
           <td>${fu.kind}: ${fu.detail || ''}</td>
           <td>
@@ -147,11 +147,11 @@ async function loadEvents() {
     
     body.innerHTML = data.events.map(ev => {
       const regText = ev.capacity ? `${ev.registered_count} / ${ev.capacity} capacity` : `${ev.registered_count}`;
-      const isSelected = ev.id === currentEventId ? 'background: #fbf6f0; font-weight: bold;' : '';
+      const isSelected = ev.id === currentEventId ? ' row-selected' : '';
       const dateText = ev.starts_at ? ev.starts_at.split(' ')[0] : '';
       
       return `
-        <tr style="cursor: pointer; ${isSelected}" data-action="select-event" data-event-id="${ev.id}" data-event-title="${ev.title.replace(/"/g, '&quot;')}">
+        <tr class="cursor-pointer${isSelected}" data-action="select-event" data-event-id="${ev.id}" data-event-title="${ev.title.replace(/"/g, '&quot;')}">
           <td><strong>${ev.title}</strong></td>
           <td>${dateText}</td>
           <td>${regText}</td>
@@ -206,14 +206,14 @@ async function loadRegistrations(eventId, eventTitle) {
             if (reg.status === 'cancelled') badgeClass = 'badge-plum';
             
             return `
-              <tr style="cursor: pointer;" data-action="view-caregiver" data-caregiver-id="${reg.caregiver_id}">
+              <tr class="cursor-pointer" data-action="view-caregiver" data-caregiver-id="${reg.caregiver_id}">
                 <td><strong>${caregiverName}</strong></td>
                 <td>${reg.email || ''}</td>
                 <td><span class="badge ${badgeClass}">${reg.status}</span></td>
                 <td>
-                  <button class="btn btn-sm btn-plum" style="padding: 4px 8px; font-size: 11px; margin-right: 4px;" data-action="update-attendance" data-registration-id="${reg.id}" data-status="attended">Attended</button>
-                  <button class="btn btn-sm btn-outline" style="padding: 4px 8px; font-size: 11px; margin-right: 4px;" data-action="update-attendance" data-registration-id="${reg.id}" data-status="no_show">No Show</button>
-                  <button class="btn btn-sm btn-outline" style="padding: 4px 8px; font-size: 11px;" data-action="update-attendance" data-registration-id="${reg.id}" data-status="cancelled">Cancel</button>
+                  <button class="btn btn-sm btn-plum btn-compact-mr" data-action="update-attendance" data-registration-id="${reg.id}" data-status="attended">Attended</button>
+                  <button class="btn btn-sm btn-outline btn-compact-mr" data-action="update-attendance" data-registration-id="${reg.id}" data-status="no_show">No Show</button>
+                  <button class="btn btn-sm btn-outline btn-compact" data-action="update-attendance" data-registration-id="${reg.id}" data-status="cancelled">Cancel</button>
                 </td>
               </tr>
             `;

@@ -14,7 +14,7 @@
 #}
 <div class="section-head"><h2>{{ collection.title }}</h2></div>
 {%- if collection.blurb %}
-<p class="muted" style="max-width: 640px;">{{ collection.blurb }}</p>
+<p class="muted measure-640">{{ collection.blurb }}</p>
 {%- endif %}
 
 
@@ -35,7 +35,7 @@
   {%- endfor %}
 </div>
 {%- else %}
-<p class="muted mt-24" style="max-width: 640px;">
+<p class="muted mt-24 measure-640">
   We are gathering these now. If you have one to suggest,
   <a href="request-support.html">tell us</a> and we will add it.
 </p>

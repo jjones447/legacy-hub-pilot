@@ -691,3 +691,76 @@ footer a:hover { color: #fff; }
 .hero.has-media .hero-scrim { position: absolute; inset: 0; z-index: 1; background: linear-gradient(100deg, rgba(90,53,38,0.78) 0%, rgba(94,50,38,0.52) 42%, rgba(94,50,38,0.30) 72%, rgba(94,50,38,0.22) 100%); }
 .hero.has-media .hero-content { position: relative; z-index: 2; }
 .hero.has-media::before, .hero.has-media::after { z-index: 1; }
+/* SEC-5b-2: former inline styles */
+.section-sand { background: var(--sand); }
+.measure-640 { max-width: 640px; }
+.measure-620 { max-width: 620px; }
+.hero-title-clamp { font-size: clamp(30px, 4vw, 44px); }
+.py-56-64 { padding: 56px 0 64px; }
+.text-sand-light { color: #eeddd2; }
+.mb-14 { margin-bottom: 14px; }
+.w-100 { width: 100%; }
+.fs-18-mb-14 { font-size: 18px; margin-bottom: 14px; }
+.m-0 { margin: 0; }
+.hero-title { font-family: var(--font-display); font-size: 42px; font-weight: 700; color: var(--coral); }
+.mt-40 { margin-top: 40px; }
+.py-40-8 { padding: 40px 0 8px; }
+.card-sand-dashed { background: var(--sand); border-style: dashed; }
+.bg-coral { background: var(--coral); }
+.flex-center-gap-12 { display: flex; align-items: center; gap: 12px; }
+.d-inline-block { display: inline-block; }
+.flex-1 { flex: 1; }
+.fs-19-m-8-0-4 { font-size: 19px; margin: 8px 0 4px; }
+.grid-autofit-240 { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.mb-28 { margin-bottom: 28px; }
+.bg-white { background: #fff; }
+.bg-green { background: var(--green); }
+.mt-48 { margin-top: 48px; }
+.measure-620-italic { max-width: 620px; font-style: italic; }
+.fs-18-m-8-0-4 { font-size: 18px; margin: 8px 0 4px; }
+.text-center-aligned { text-align: center; }
+.measure-540-center-mb-28 { max-width: 540px; margin: 0 auto 28px; }
+.p-0 { padding: 0; }
+.mt-12 { margin-top: 12px; }
+.pos-rel-z2 { position: relative; z-index: 2; }
+.mx-auto { margin-left: auto; margin-right: auto; }
+.measure-560 { max-width: 560px; }
+.mb-12 { margin-bottom: 12px; }
+.measure-560-center-mb-28 { max-width: 560px; margin: 0 auto 28px; }
+.bg-blue { background: var(--blue); }
+.measure-660 { max-width: 660px; }
+.bg-amber { background: var(--amber); }
+.flex-wrap-center-gap-24 { display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }
+.m-0-flex-shrink-0 { margin: 0; flex-shrink: 0; }
+.flex-1-min-260 { flex: 1; min-width: 260px; }
+.fs-20-m-8-0-6 { font-size: 20px; margin: 8px 0 6px; }
+.align-start { align-items: start; }
+.measure-none { max-width: none; }
+.fs-24 { font-size: 24px; }
+.fs-26-mb-18 { font-size: 26px; margin-bottom: 18px; }
+.grid-autofit-280 { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.d-none { display: none; }
+.cursor-pointer { cursor: pointer; }
+.row-selected { background: #fbf6f0; font-weight: bold; }
+.btn-compact-mr { padding: 4px 8px; font-size: 11px; margin-right: 4px; }
+.text-white-underline { color: #fff; text-decoration: underline; }
+.py-70 { padding: 70px 0; }
+.alert-inline-banner { display: none; padding: 10px; border-radius: 4px; font-size: 13.5px; text-align: center; }
+.cursor-pointer-underline { cursor: pointer; text-decoration: underline; }
+.d-none-py-44 { display: none; padding: 44px 0; }
+.portal-head-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 26px; }
+.fs-30 { font-size: 30px; }
+.grid-autofit-320 { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+.mt-16-util { margin-top: 16px; }
+.mt-24-util { margin-top: 24px; }
+.d-flex { display: flex; }
+.py-44 { padding: 44px 0; }
+.split-align-start-12-1 { align-items: start; grid-template-columns: 1.2fr 1fr; }
+.d-none-mt-24 { display: none; margin-top: 24px; }
+.chat-hint-right { margin-left: auto; font-size: 11px; opacity: .8; }
+.border-top-none-pt-0 { border-top: none; padding-top: 0; }
+.btn-compact-ml { padding: 4px 10px; font-size: 11px; margin-left: 8px; }
+.btn-compact { padding: 4px 8px; font-size: 11px; }
+.my-20 { margin: 20px 0; }
+.chat-confirm-published { font-size: 12.5px; font-weight: 700; color: var(--green); }
+.chat-confirm-discarded { font-size: 12.5px; font-weight: 700; color: var(--ink-soft); }

@@ -17,22 +17,22 @@
       <div class="brand-mark">L</div>
       <div class="brand-name">Legacy Hub<small>Staff Console — Demo</small></div>
     </a>
-    <nav class="main-nav" style="display:flex;">
+    <nav class="main-nav d-flex">
       <a href="index.html">← Public site</a>
       <a href="portal.html">Caregiver Portal</a>
     </nav>
   </div>
 </header>
 
-<section style="padding: 44px 0;">
+<section class="py-44">
   <div class="container">
-    <div class="section-head" style="margin-bottom: 28px;">
+    <div class="section-head mb-28">
       <span class="eyebrow">One caregiver record · every workflow</span>
       <h2>Today at Legacy</h2>
       <p>Every registration, grant application, respite visit, and follow-up — one system, no spreadsheets. Staff work it by chat.</p>
     </div>
 
-    <div class="split" style="align-items: start; grid-template-columns: 1.2fr 1fr;">
+    <div class="split split-align-start-12-1">
       <div>
         <div class="panel">
           <h4>📥 Needs attention</h4>
@@ -54,22 +54,22 @@
           </table>
         </div>
 
-        <div class="panel" id="attendancePanel" style="display:none; margin-top:24px;">
+        <div class="panel d-none-mt-24" id="attendancePanel">
           <h4>👥 Event Attendance</h4>
-          <p class="small muted" style="margin-bottom:12px;">Capture attendance for registered caregivers.</p>
+          <p class="small muted mb-12">Capture attendance for registered caregivers.</p>
           <div id="attendanceContent"></div>
         </div>
 
 
         <div class="panel" id="caregiverRecordPanel">
           <h4>👤 Caregiver record</h4>
-          <p class="muted small text-center" style="margin: 20px 0;">Select a caregiver from the follow-up queue or attendance list to view their full record.</p>
+          <p class="muted small text-center my-20">Select a caregiver from the follow-up queue or attendance list to view their full record.</p>
         </div>
       </div>
 
       <div>
         <div class="chat-shell">
-          <div class="chat-head"><span class="bot-dot"></span> Legacy Assistant — staff chat <span style="margin-left:auto; font-size: 11px; opacity:.8;">draft → preview → confirm</span></div>
+          <div class="chat-head"><span class="bot-dot"></span> Legacy Assistant — staff chat <span class="chat-hint-right">draft → preview → confirm</span></div>
           <div class="chat-body" id="chatBody">
             <div class="msg user">add a Memory Social next Saturday 10 to 1 in the community room, registration open, capacity 12</div>
             <div class="msg bot">
@@ -91,8 +91,8 @@
             <button data-action="agent-send">Send</button>
           </div>
         </div>
-        <div class="card mt-16" style="background: var(--sand); border-style: dashed;">
-          <p class="small" style="margin:0;"><strong>The governed assistant:</strong> staff make changes by asking. The assistant edits <em>content and data only</em> — never code, design, or security — and every change is previewed, confirmed, and logged. A bad request becomes a draft someone declines; it can't break the site.</p>
+        <div class="card mt-16 card-sand-dashed">
+          <p class="small m-0"><strong>The governed assistant:</strong> staff make changes by asking. The assistant edits <em>content and data only</em> — never code, design, or security — and every change is previewed, confirmed, and logged. A bad request becomes a draft someone declines; it can't break the site.</p>
         </div>
       </div>
     </div>
@@ -101,7 +101,7 @@
 
 <footer>
   <div class="container">
-    <div class="footer-bottom" style="border-top: none; padding-top: 0;">
+    <div class="footer-bottom border-top-none-pt-0">
       <span>© 2026 Legacy Home &amp; Respite Care Foundation</span>
       <span>Built &amp; hosted by X-Centric · Managed Hosted Hub</span>
     </div>

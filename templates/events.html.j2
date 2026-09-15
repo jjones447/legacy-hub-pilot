@@ -14,9 +14,9 @@
 {% set active_page = 'events' %}
 {% include '_header.html.j2' %}
 
-<section class="hero" style="padding: 56px 0 64px;">
+<section class="hero py-56-64">
   <div class="container">
-    <h1 style="font-size: clamp(30px, 4vw, 44px);">Events</h1>
+    <h1 class="hero-title-clamp">Events</h1>
     <p class="lede">Register in one click — your registration, attendance, and follow-up all connect to your caregiver profile automatically.</p>
   </div>
 </section>
@@ -27,12 +27,12 @@
 {%- for ev in events %}
       <div class="card event-card">
         <div class="event-date"><div class="month">{{ ev.month | e }}</div><div class="day">{{ ev.day | e }}</div></div>
-        <div style="flex:1;">
+        <div class="flex-1">
           <span class="badge {{ ev.badge_class }}">{{ ev.badge | e }}</span>
-          <h3 style="font-size: 19px; margin: 8px 0 4px;">{{ ev.title | e }}{% if ev.title_badge %} <span class="badge {{ ev.title_badge_class }}">{{ ev.title_badge | e }}</span>{% endif %}</h3>
+          <h3 class="fs-19-m-8-0-4">{{ ev.title | e }}{% if ev.title_badge %} <span class="badge {{ ev.title_badge_class }}">{{ ev.title_badge | e }}</span>{% endif %}</h3>
           <div class="event-meta">{{ ev.meta | e }}</div>
           <p class="small muted mb-8">{{ ev.description | e }}</p>
-          <div style="display:flex; align-items:center; gap:12px;">
+          <div class="flex-center-gap-12">
             <button class="btn btn-plum btn-sm" data-action="open-register" data-event-title="{{ ev.register_label | e }}" data-event-id="{{ ev.id }}">Register</button>
             <span class="small muted">{{ ev.registered_note | e }}</span>
           </div>
@@ -41,8 +41,8 @@
 {% endfor %}
     </div>
 
-    <div class="card mt-32" style="background: var(--sand); border-style: dashed;">
-      <p class="small" style="margin: 0;"><strong>How staff manage this page:</strong> by chat — <em>"post a Memory Social next Saturday 10–1 in the community room, registration open, capacity 12."</em> The assistant drafts it, staff preview and confirm, and it goes live. Attendance flows back to each caregiver's record for follow-up.</p>
+    <div class="card mt-32 card-sand-dashed">
+      <p class="small m-0"><strong>How staff manage this page:</strong> by chat — <em>"post a Memory Social next Saturday 10–1 in the community room, registration open, capacity 12."</em> The assistant drafts it, staff preview and confirm, and it goes live. Attendance flows back to each caregiver's record for follow-up.</p>
     </div>
   </div>
 </section>
@@ -72,7 +72,7 @@
         </select>
       </div>
       <p class="privacy-line">By registering, you consent to Legacy using these details to create or update your caregiver record, manage attendance, and send event follow-up. Please do not include medical record numbers or emergency details.</p>
-      <button type="submit" class="btn btn-coral" style="width: 100%;">Complete registration</button>
+      <button type="submit" class="btn btn-coral w-100">Complete registration</button>
       <div class="success-note" id="regSuccess" data-intake-success role="status" aria-live="polite">✓ You're registered! A confirmation is on its way.</div>
       <div class="error-note" data-intake-error role="alert" aria-live="assertive"></div>
       <div class="routing-note" id="regRouting" data-intake-routing>Behind the scenes: this registration routed into the caregiver record — profile matched, attendance list updated, follow-up queued for staff.</div>
