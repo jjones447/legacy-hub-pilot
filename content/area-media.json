@@ -1,0 +1,46 @@
+{
+  "_note": "Header media per site area, sourced from the matching folder in the client's Drive. A video in the folder wins over a photo; Home carries its video today. Sample photos were copied into each area folder on 2026-09-15 to prove the model; the client replaces them.",
+  "areas": {
+    "home": {
+      "folder": "Home",
+      "folder_id": "1Q_DuyXG7IaUCEUMixJVw40Kw7IfekJP7",
+      "media": "media/hero.mp4",
+      "kind": "video"
+    },
+    "about": {
+      "folder": "About Us",
+      "folder_id": "15WlclwmhGM85tmxhjWggFAdWdl0MwQT5",
+      "media": "media/headers/about.jpg",
+      "kind": "photo",
+      "source_name": "header-sample-img_2552.jpeg"
+    },
+    "programs-events": {
+      "folder": "Programs and Events",
+      "folder_id": "1oN6W1jreZ_pPR0XncnyEESgNr8pYRwuY",
+      "media": "media/headers/programs-events.jpg",
+      "kind": "photo",
+      "source_name": "header-sample-img_7982.jpg"
+    },
+    "resources": {
+      "folder": "Resource Hub",
+      "folder_id": "1xF06eROENeR2Hn2-3-NPQMUVQ1UefLxa",
+      "media": "media/headers/resources.jpg",
+      "kind": "photo",
+      "source_name": "header-sample-img_7987.jpg"
+    },
+    "get-involved": {
+      "folder": "Get Involved",
+      "folder_id": "1CslxUixK4DTHkuZX0_5QZWNUXMPseMAD",
+      "media": "media/headers/get-involved.jpg",
+      "kind": "photo",
+      "source_name": "header-sample-img_6921.jpg"
+    },
+    "sanctuary": {
+      "folder": "The Sanctuary",
+      "folder_id": "1ywwqtz0M-JgaO2QXWKR5nEcbWcf0SSOb",
+      "media": "media/headers/sanctuary.jpg",
+      "kind": "photo",
+      "source_name": "header-sample-img_8281.jpg"
+    }
+  }
+}
