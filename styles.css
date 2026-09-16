@@ -157,7 +157,8 @@ nav.main-nav a.active { color: var(--plum); border-bottom-color: var(--coral); }
 .hero .btn-coral:hover { background: var(--coral-dark); }
 .hero h1 { color: #fff; font-size: clamp(34px, 5vw, 54px); max-width: 640px; margin-bottom: 20px; }
 .hero p.lede { font-size: 19px; max-width: 560px; color: #eeddd2; margin-bottom: 34px; }
-.hero .btn-row { display: flex; gap: 14px; flex-wrap: wrap; }
+.hero .btn-row { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+.btn-row { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
 
 /* ---------- Hero video (Shanelle's community footage, 2026-08) ----------
    Source is 720x1280 PORTRAIT phone video. A full-bleed landscape background would
@@ -221,23 +222,58 @@ nav.main-nav a.active { color: var(--plum); border-bottom-color: var(--coral); }
 
 .btn {
   display: inline-flex; align-items: center; justify-content: center;
-  text-decoration: none; font-weight: 600; font-size: 16px;
-  min-height: 44px; padding: 12px 26px; border-radius: 999px;
-  transition: transform .12s, background .15s, box-shadow .15s;
-  border: none; cursor: pointer; font-family: var(--font-body);
+  text-decoration: none; font-weight: 600; font-size: 16px; line-height: 1.25;
+  min-height: 48px; padding: 12px 26px; border-radius: 999px;
+  border: 1.5px solid transparent; cursor: pointer; font-family: var(--font-body);
+  transition: transform .12s, background .15s, color .15s, border-color .15s, box-shadow .15s;
+  box-sizing: border-box; vertical-align: middle;
 }
 .btn:hover { transform: translateY(-1px); }
+.btn:active { transform: translateY(0); }
 /* Coral CTAs carry white text — kept >=18px/bold so AA holds at this contrast (WCAG large-text exception) */
-.btn-coral { background: var(--coral); color: #fff; font-size: 19px; font-weight: 700; }
-.btn-coral:hover { background: var(--coral-dark); }
-.btn-outline-light { border: 1.5px solid rgba(255,255,255,0.6); color: #fff; background: transparent; }
-.btn-outline-light:hover { background: rgba(255,255,255,0.1); }
-.btn-plum { background: var(--plum); color: #fff; }
-.btn-plum:hover { background: var(--plum-dark); }
-.btn-outline { border: 1.5px solid var(--plum-light); color: var(--plum); background: transparent; }
-.btn-outline:hover { background: #f3e6dc; }
+.btn-coral {
+  background: var(--coral); color: #fff; font-size: 19px; font-weight: 700;
+  padding: 10px 26px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+.btn-coral:hover {
+  background: var(--coral-dark);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.18);
+}
+.btn-coral:active {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
+}
+.btn-plum {
+  background: var(--plum); color: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+.btn-plum:hover {
+  background: var(--plum-dark);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.18);
+}
+.btn-plum:active {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
+}
+.btn-outline-light {
+  border: 1.5px solid rgba(255, 255, 255, 0.6); color: #fff; background: transparent;
+}
+.btn-outline-light:hover,
+.btn-outline-light:focus,
+.btn-outline-light:focus-visible {
+  background: #fff; color: var(--plum); border-color: #fff;
+}
+.btn-outline {
+  border: 1.5px solid var(--plum-light); color: var(--plum); background: transparent;
+}
+.btn-outline:hover,
+.btn-outline:focus,
+.btn-outline:focus-visible {
+  background: var(--plum); color: #fff; border-color: var(--plum);
+}
 .btn:focus-visible, a:focus-visible { outline: 2.5px solid var(--amber); outline-offset: 2px; border-radius: 4px; }
-.btn-sm { padding: 8px 18px; font-size: 13.5px; }
+.btn-sm, .btn-coral.btn-sm {
+  padding: 8px 18px; font-size: 13.5px; font-weight: 600; min-height: 36px; line-height: 1.25;
+}
 
 /* ---------- Sections ---------- */
 section { padding: 64px 0; }
@@ -259,21 +295,24 @@ section { padding: 64px 0; }
 .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 22px; }
 .card {
   background: var(--white); border-radius: var(--radius); padding: 28px;
-  box-shadow: var(--shadow); border: 1px solid #f0e8dd;
-  transition: transform .15s, box-shadow .15s;
+  box-shadow: 0 4px 16px rgba(30, 11, 9, 0.09); border: 1px solid #f0e8dd;
+  border-top: 3px solid transparent;
+  transition: transform .15s, box-shadow .15s, border-color .15s;
+  position: relative;
 }
-.card:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); }
+.card:hover, .card:focus-within {
+  transform: translateY(-3px); box-shadow: var(--shadow-lg); border-top-color: var(--sage);
+}
 .card .icon {
   width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
   font-size: 22px; margin-bottom: 16px;
   background: linear-gradient(145deg, var(--green-soft) 0%, var(--sage) 100%);
   border: 1px solid var(--sage);
 }
-.card { border-top: 3px solid transparent; }
-.card:hover { border-top-color: var(--sage); }
 .card h3 { font-size: 20px; margin-bottom: 10px; }
 .card p { color: var(--ink-soft); font-size: 16px; margin-bottom: 14px; }
-.card a.more { font-weight: 600; font-size: 14px; text-decoration: none; color: var(--coral-dark); }
+.card a.more { font-weight: 600; font-size: 14px; text-decoration: underline; text-underline-offset: 3px; color: var(--coral-dark); }
+.card:hover a.more, .card:focus-within a.more { color: var(--coral); }
 
 /* Whole-tile click target (agreed with Shanelle 2026-08-21).
    The small "more" link was the only hit area; the tile now carries it. This is as
@@ -282,7 +321,9 @@ section { padding: 64px 0; }
    The ::after overlay is scoped to real destinations: cards whose only link is a
    placeholder (href="#", awaiting a client URL) are excluded, because a tile that
    invites a click and then does nothing is worse than a plain tile. */
-.card { position: relative; }
+.card:has(> a.more:not([href="#"]):not([href=""])) {
+  cursor: pointer; border-top-color: #dbe8d8;
+}
 .card > a.more::after {
   content: ''; position: absolute; inset: 0;
   border-radius: inherit; z-index: 1;
@@ -293,9 +334,11 @@ section { padding: 64px 0; }
    containing block for its own ::after and the overlay collapses to the width of the
    link text instead of covering the tile. */
 /* Keyboard users get the same affordance the mouse hover gives. */
-.card:focus-within { border-top-color: var(--sage); box-shadow: var(--shadow-lg); }
 .card:focus-within a.more { outline: 2px solid var(--coral-dark); outline-offset: 3px; }
-@media (prefers-reduced-motion: reduce) { .card { transition: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .btn, .card { transition: none; transform: none !important; }
+  .btn:hover, .btn:active, .card:hover, .card:focus-within { transform: none !important; }
+}
 
 /* ---------- Stats band ---------- */
 /* Dark surface so amber numerals never render as text-on-light (client hard rule) */
