@@ -18,8 +18,9 @@ database_id = "dab02f78-f131-4d17-abaa-db9e6b45fb1b"
 # Pages environments are fixed: "production" + per-branch "preview" deployments.
 # (A separate staging D1 can bind to the preview environment later if slice 04 needs it.)
 
-# MEDIA (R2) binding, ADR 0007: enable once the bucket legacy-hub-media exists in the account.
-# Declaring it before the bucket exists makes every Pages deploy fail at the Functions step (2026-09-16).
-# [[r2_buckets]]
-# binding = "MEDIA"
-# bucket_name = "legacy-hub-media"
+# MEDIA (R2) binding, ADR 0007. The bucket legacy-hub-media must exist in the account
+# before this is merged: declaring the binding without the bucket makes every Pages deploy
+# fail at the Functions step (proven 2026-09-16, #81).
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "legacy-hub-media"
