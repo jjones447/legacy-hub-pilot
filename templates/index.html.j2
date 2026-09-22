@@ -23,8 +23,8 @@
   </video>
   <div class="hero-scrim" aria-hidden="true"></div>
   <div class="container hero-content">
-    <h1>Supporting Dementia Caregivers Through Community, Wellness, and Respite.</h1>
-    <p class="lede">At Legacy Home and Respite Care Foundation, we believe caregivers deserve support, too. Through respite, wellness programming, education, and meaningful community connections, we help family caregivers navigate the dementia journey without feeling alone.</p>
+    <h1>{{ sections["home.hero"].title }}</h1>
+    <p class="lede">{{ sections["home.hero"].lede }}</p>
     <div class="btn-row">
       <a href="request-support.html" class="btn btn-coral">Find Support</a>
       <a href="donate.html" class="btn btn-outline-light">Donate</a>
@@ -35,9 +35,8 @@
 <section>
   <div class="container">
     <div class="section-head">
-      <span class="eyebrow">You are not alone</span>
-      <h2>Caring for someone living with dementia is one of life's most challenging journeys.</h2>
-      <p>Whether you've recently received a diagnosis or have been caregiving for years, you don't have to navigate it alone. Legacy Home and Respite Care Foundation exists to create spaces where caregivers feel supported, connected, and empowered. We believe that when caregivers are cared for, families are stronger, communities are healthier, and individuals living with dementia experience better quality of life.</p>
+      <h2>{{ sections["home.journey"].heading }}</h2>
+      <p>{{ sections["home.journey"].paragraph }}</p>
     </div>
   </div>
 </section>
@@ -45,50 +44,16 @@
 <section class="section-sand">
   <div class="container">
     <div class="section-head">
-      <span class="eyebrow">How we help</span>
-      <h2>Supporting caregivers in every stage of the journey.</h2>
+      <h2>{{ sections["home.support"].heading }}</h2>
     </div>
     <div class="card-grid">
+{%- for tile in sections["home.support"].tiles %}
       <div class="card">
-        <div class="icon">🤝</div>
-        <h3>Community</h3>
-        <p>Build meaningful connections with other caregivers who understand your experience.</p>
-        <a class="more" href="programs-events.html#community-series">See the Community Series →</a>
+        <h3>{{ tile.title }}</h3>
       </div>
-      <div class="card">
-        <div class="icon">💚</div>
-        <h3>Wellness</h3>
-        <p>Prioritize your own health through wellness programming, self-care opportunities, and caregiver-centered experiences.</p>
-        {# Was resources.html#toolkit, a dead anchor since PR #47: Shanelle absorbed the Wellness
-           Toolkit into Caregiver Tools & Guides on 2026-09-04. Same destination, her wording. #}
-        <a class="more" href="caregiver-tools.html">Open Caregiver Tools &amp; Guides →</a>
-      </div>
-      <div class="card">
-        <div class="icon">📚</div>
-        <h3>Education</h3>
-        <p>Gain practical knowledge, tools, and confidence through workshops, support groups, and educational resources.</p>
-        <a class="more" href="programs-events.html#family-ed">Education &amp; workshops →</a>
-      </div>
-      <div class="card">
-        <div class="icon">🏡</div>
-        <h3>Respite</h3>
-        <p>Take time to recharge while your loved one participates in engaging, supervised, non-medical activities.</p>
-        <a class="more" href="programs-events.html#drop-in">Drop-in respite →</a>
-      </div>
-      <div class="card">
-        <div class="icon">🧭</div>
-        <h3>Resources</h3>
-        <p>Access trusted information, community services, and caregiver support tailored to your family's needs.</p>
-        <a class="more" href="resources.html">Go to the Resource Hub →</a>
-      </div>
-      <div class="card">
-        <div class="icon">🌐</div>
-        <h3>Community Partnerships</h3>
-        <p>Connecting caregivers to dementia-friendly businesses, organizations, and experiences throughout the community.</p>
-        <a class="more" href="sanctuary.html#partners">Meet our partners →</a>
-      </div>
+{%- endfor %}
     </div>
-    <p class="mt-32"><a href="programs.html" class="btn btn-outline">Explore Our Programs</a></p>
+    <p class="mt-32">{{ sections["home.support"].secondary }}</p>
   </div>
 </section>
 
@@ -101,10 +66,10 @@
 
 <section class="band-teal">
   <div class="container">
-    <span class="eyebrow">Caregiver Sanctuary Network</span>
-    <h2 class="mb-14">Building communities where caregivers don't have to navigate dementia alone.</h2>
-    <p class="mb-28">The Caregiver Sanctuary Network is Legacy's innovative approach to caregiver support. By partnering with local businesses, organizations, and community spaces, we're creating welcoming environments where caregivers can access support, build relationships, prioritize their well-being, and find trusted resources throughout their community.</p>
-    <a href="programs.html" class="btn btn-coral">Learn About the Caregiver Sanctuary Network</a>
+    <span class="eyebrow">{{ sections["home.community_wellness_partners"].eyebrow }}</span>
+    <h2 class="mb-14">{{ sections["home.community_wellness_partners"].heading }}</h2>
+    <p class="mb-28">{{ sections["home.community_wellness_partners"].paragraph }}</p>
+    <a href="{{ sections["home.community_wellness_partners"].cta_href }}" class="btn btn-coral">{{ sections["home.community_wellness_partners"].cta_label }}</a>
   </div>
 </section>
 
