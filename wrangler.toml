@@ -23,3 +23,8 @@ database_id = "dab02f78-f131-4d17-abaa-db9e6b45fb1b"
 # [[r2_buckets]]
 # binding = "MEDIA"
 # bucket_name = "legacy-hub-media"
+
+# GiveButter webhook secret: enable once GIVEBUTTER_WEBHOOK_SECRET is set in Pages settings.
+# Declaring a secret binding before it exists breaks every Pages deploy (same as MEDIA R2).
+# [vars]
+# GIVEBUTTER_WEBHOOK_SECRET = "placeholder-set-in-dashboard"
