@@ -34,6 +34,9 @@ PAGES = {
     "blog.html": "blog.html.j2",
     "donate.html": "donate.html.j2",
     "crisis-help.html": "crisis-help.html.j2",
+    "community-wellness-partners.html": "community-wellness-partners.html.j2",
+    "dementia-friendly-training.html": "dementia-friendly-training.html.j2",
+    "wellness-passport.html": "wellness-passport.html.j2",
 }
 
 # Hand-authored pages that are NOT template-rendered but DO share the public chrome.

@@ -29,13 +29,13 @@
       </div>
     </div>
     <div class="nav-item has-drop">
-      <a href="programs-events.html"{% if active_page|default('') in ['programs', 'events', 'programs-events', 'gallery', 'community-series', 'drop-in-respite'] %} class="active"{% endif %}>Programs &amp; Events</a><button class="drop-toggle" aria-expanded="false" aria-label="Programs &amp; Events menu">&#9662;</button>
+      <a href="programs-events.html"{% if active_page|default('') in ['programs', 'events', 'programs-events', 'gallery', 'community-series', 'drop-in-respite', 'wellness-passport'] %} class="active"{% endif %}>Programs &amp; Events</a><button class="drop-toggle" aria-expanded="false" aria-label="Programs &amp; Events menu">&#9662;</button>
       <div class="drop">
         <a href="programs-events.html">Overview</a>
         <a href="programs-events.html#support-group">Virtual Support Group</a>
         <a href="community-series.html">Caregiver Sanctuary Community Series</a>
         <a href="drop-in-respite.html">Drop-In Respite</a>
-        <a href="programs.html#grants">Wellness Grants</a>
+        <a href="wellness-passport.html">Caregiver Wellness Passport</a>
         <a href="programs-events.html#event-respite">Event Respite</a>
         <a href="programs-events.html#family-ed">Family Education</a>
         <a href="events.html">Upcoming Events</a>
@@ -47,7 +47,7 @@
       <a href="get-involved.html"{% if active_page|default('') == 'get-involved' %} class="active"{% endif %}>Get Involved</a><button class="drop-toggle" aria-expanded="false" aria-label="Get Involved menu">&#9662;</button>
       <div class="drop">
         <a href="get-involved.html">Overview</a>
-        <a href="get-involved.html#partner">Become a Wellness Partner</a>
+        <a href="get-involved.html#partner">Become a Community Wellness Partner</a>
         <a href="get-involved.html#corporate">Corporate Partnerships</a>
         <a href="get-involved.html#volunteer">Volunteer</a>
         <a href="get-involved.html#sponsorship">Sponsorship</a>
@@ -67,15 +67,11 @@
       </div>
     </div>
     <div class="nav-item has-drop">
-      <a href="sanctuary.html"{% if active_page|default('') == 'sanctuary' %} class="active"{% endif %}>The Sanctuary</a><button class="drop-toggle" aria-expanded="false" aria-label="The Sanctuary menu">&#9662;</button>
+      <a href="sanctuary.html"{% if active_page|default('') in ['sanctuary', 'community-wellness-partners', 'dementia-friendly-training'] %} class="active"{% endif %}>The Sanctuary</a><button class="drop-toggle" aria-expanded="false" aria-label="The Sanctuary menu">&#9662;</button>
       <div class="drop">
         <a href="sanctuary.html">Overview</a>
-        <a href="sanctuary.html#what">What is the Network?</a>
-        <a href="sanctuary.html#how">How It Works</a>
-        <a href="sanctuary.html#partners">Community Partners</a>
-        <a href="sanctuary.html#become">Become a Partner</a>
-        <a href="sanctuary.html#training">Dementia-Friendly Training</a>
-        <a href="sanctuary.html#passport">Caregiver Wellness Passport</a>
+        <a href="community-wellness-partners.html">Community Wellness Partners</a>
+        <a href="dementia-friendly-training.html">Dementia-Friendly Training</a>
       </div>
     </div>
     <a href="portal.html" class="nav-portal">Caregiver Portal</a>

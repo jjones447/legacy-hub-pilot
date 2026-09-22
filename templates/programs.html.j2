@@ -65,22 +65,25 @@
   </div>
 </section>
 
-<section id="grants">
+<section id="passport">
   <div class="container">
     <div class="split">
       <div>
-        <span class="eyebrow">{{ sections["programs.grants"].eyebrow }}</span>
-        <h2 class="mb-14">{{ sections["programs.grants"].heading }}</h2>
-{%- for p in sections["programs.grants"].paragraphs %}
-        <p class="muted mb-16">{{ p }}</p>
-{%- endfor %}
-        <a href="#" class="btn btn-plum btn-sm" data-action="open-grant-apply">{{ sections["programs.grants"].cta_label }}</a>
+        <span class="eyebrow">Program</span>
+        <h2 class="mb-14">Caregiver Wellness Passport</h2>
+        <p class="muted mb-16">A way for caregivers to engage in wellness activities, Legacy programs, community experiences, and participating Community Wellness Partner locations.</p>
+        <p class="muted mb-16">Participation connects you to community wellness experiences and unlocks <strong>Wellness Grant eligibility as a benefit of participation</strong>.</p>
+        <div class="btn-row mt-16-util">
+          <a href="wellness-passport.html" class="btn btn-coral btn-sm">Explore the Wellness Passport</a>
+          <a href="#" class="btn btn-plum btn-sm" data-action="open-grant-apply">Apply for a Wellness Grant</a>
+        </div>
       </div>
-      <div class="visual">
-        <h3 class="fs-18-mb-14">{{ sections["programs.grants"].panel_heading }}</h3>
-{%- for it in sections["programs.grants"].timeline %}
-        <div class="timeline-item"><div class="timeline-dot{% if it.dot == 'var(--green)' %} bg-green{% elif it.dot == 'var(--amber)' %} bg-amber{% elif it.dot %} section-sand{% endif %}"></div><div><strong>{{ it.title }}</strong><div class="when">{{ it.when }}</div></div></div>
-{%- endfor %}
+      <div class="visual" id="grants">
+        <h3 class="fs-18-mb-14">Passport &amp; Grant Journey</h3>
+        <div class="timeline-item"><div class="timeline-dot bg-green"></div><div><strong>1 · Join Caregiver Sanctuary</strong><div class="when">Free membership — get your Passport</div></div></div>
+        <div class="timeline-item"><div class="timeline-dot bg-green"></div><div><strong>2 · Engage in Wellness &amp; Programs</strong><div class="when">Activities, groups, and partner locations</div></div></div>
+        <div class="timeline-item"><div class="timeline-dot bg-amber"></div><div><strong>3 · Wellness Grant Eligibility</strong><div class="when">Stipend benefit for personal wellness</div></div></div>
+        <div class="timeline-item"><div class="timeline-dot section-sand"></div><div><strong>4 · Check-in &amp; Outcomes</strong><div class="when">We follow your journey, not just the award</div></div></div>
       </div>
     </div>
   </div>
