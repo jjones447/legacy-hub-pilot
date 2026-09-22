@@ -33,6 +33,7 @@ PAGES = {
     "coming-soon.html": "coming-soon.html.j2",
     "blog.html": "blog.html.j2",
     "donate.html": "donate.html.j2",
+    "crisis-help.html": "crisis-help.html.j2",
 }
 
 # Hand-authored pages that are NOT template-rendered but DO share the public chrome.
@@ -47,7 +48,6 @@ PAGES = {
 # staff.html is deliberately EXCLUDED: the staff console has its own minimal nav by
 # design, not the public one.
 SHARED_PAGES = [
-    "directory.html",
     "faq.html",
     "get-involved.html",
     "portal.html",
