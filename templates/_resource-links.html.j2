@@ -1,5 +1,5 @@
 {#
-  One resource collection rendered as a list of cards.
+  One resource collection rendered as a list of cards, or grouped lists of cards.
 
   Shared by all three Resource Hub sub-pages so the treatment stays identical and a new
   collection needs no new markup. Call it with a collection from content/resource-links.json:
@@ -13,20 +13,53 @@
   the card becomes clickable on the next build.
 #}
 <div class="section-head"><h2>{{ collection.title }}</h2></div>
-{%- if collection.blurb %}
+{%- if collection.get('blurb') %}
 <p class="muted measure-640">{{ collection.blurb }}</p>
 {%- endif %}
 
-
-{%- if collection['items'] %}
+{%- if collection.get('groups') %}
+  {%- for group in collection['groups'] %}
+  <div class="mt-40">
+    <h3>{{ group.title }}</h3>
+    {%- if group.get('blurb') %}
+    <p class="muted measure-640">{{ group.blurb }}</p>
+    {%- endif %}
+    {%- if group.get('items') %}
+    <div class="card-grid mt-24">
+      {%- for item in group['items'] %}
+      <div class="card">
+        <h3>{{ item.name }}</h3>
+        {%- if item.get('note') %}
+        <p>{{ item.note }}</p>
+        {%- endif %}
+        {%- if item.get('links') %}
+        <p class="mt-12">
+          {%- for link in item['links'] %}<a class="more" href="{{ link.url }}" target="_blank" rel="noopener">{{ link.label }}</a>{% if not loop.last %} &middot; {% endif %}{% endfor %}
+        </p>
+        {%- elif item.get('url') %}
+        <a class="more" href="{{ item.url }}" target="_blank" rel="noopener">Visit {{ item.name }} &rarr;</a>
+        {%- else %}
+        <span class="badge-phase2">Link coming</span>
+        {%- endif %}
+      </div>
+      {%- endfor %}
+    </div>
+    {%- endif %}
+  </div>
+  {%- endfor %}
+{%- elif collection.get('items') %}
 <div class="card-grid mt-24">
   {%- for item in collection['items'] %}
   <div class="card">
     <h3>{{ item.name }}</h3>
-    {%- if item.note %}
+    {%- if item.get('note') %}
     <p>{{ item.note }}</p>
     {%- endif %}
-    {%- if item.url %}
+    {%- if item.get('links') %}
+    <p class="mt-12">
+      {%- for link in item['links'] %}<a class="more" href="{{ link.url }}" target="_blank" rel="noopener">{{ link.label }}</a>{% if not loop.last %} &middot; {% endif %}{% endfor %}
+    </p>
+    {%- elif item.get('url') %}
     <a class="more" href="{{ item.url }}" target="_blank" rel="noopener">Visit {{ item.name }} &rarr;</a>
     {%- else %}
     <span class="badge-phase2">Link coming</span>
