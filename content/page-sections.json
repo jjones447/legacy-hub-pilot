@@ -2,6 +2,30 @@
   "content_type": "page_section",
   "note": "Editable page copy (slice 02.1). Values are HTML fragments rendered verbatim - inline <strong>/<em>/<a> allowed, structure lives in templates/*.j2. The agent edits items here, never templates.",
   "items": {
+    "home.hero": {
+      "title": "A place for caregivers to find support, respite, wellness and community.",
+      "lede": "We support family caregivers through respite, wellness, education, resources and meaningful community connection, with specialized support for families navigating dementia and other care needs."
+    },
+    "home.journey": {
+      "heading": "Caregiving can change every part of life.<br>You shouldn't have to navigate it alone.",
+      "paragraph": "Caring for someone living with dementia can change every part of life. As needs evolve, caregivers often find themselves navigating new roles, responsibilities, and decisions while trying to care for themselves, too. Caregiver Sanctuary provides respite, wellness, practical support, and community to help caregivers feel supported throughout the journey."
+    },
+    "home.support": {
+      "heading": "HOW WE SUPPORT CAREGIVERS",
+      "tiles": [
+        {"title": "Wellness"},
+        {"title": "Respite"},
+        {"title": "Community"}
+      ],
+      "secondary": "Plus education, practical resources and connections to trusted support."
+    },
+    "home.community_wellness_partners": {
+      "eyebrow": "Community Wellness Partners",
+      "heading": "Building a Caregiver-Supportive Community",
+      "paragraph": "Caregiver support shouldn't stop at home or within traditional care settings. Through our Community Wellness Partners, we work with local businesses and organizations to create welcoming spaces where caregivers can connect, prioritize their well-being, and feel supported in their community.",
+      "cta_label": "Learn About Community Wellness Partners",
+      "cta_href": "sanctuary.html"
+    },
     "about.hero": {
       "title": "Born from the journey we lived",
       "lede": "Legacy exists to be the support we wish our own family had."
