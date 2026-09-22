@@ -27,115 +27,35 @@
   <div class="container">
     <div class="card-grid grid-autofit-280">
       <div class="card">
-        <h3>Frequently Asked Questions</h3>
-        <p>Plain answers to what caregivers ask us most — about caregiving, respite, and how Legacy's programs work.</p>
-        <a class="more" href="faq.html">Read the FAQ →</a>
-      </div>
-      <div class="card">
-        <h3>Resource Directory</h3>
-        <p>Trusted organizations serving dementia caregivers — crisis lines, county services, respite funding, and more.</p>
-        <a class="more" href="directory.html">Browse the directory →</a>
-      </div>
-      <div class="card">
         <h3>Find Local Services</h3>
         <p>Search services near you — home care, housing, transport and more — through Senior Resources Online.</p>
         <a class="more" href="https://seniorresourcesonline.com/results/" target="_blank" rel="noopener">Search local services →</a>
       </div>
       <div class="card">
         <h3>Our Trusted Resources</h3>
-        <p>The organizations we refer caregivers to, plus resources recommended by our own caregivers.</p>
+        <p>Where we send caregivers when they need more than we can give them ourselves — and what other caregivers told us helped.</p>
         <a class="more" href="trusted-resources.html">See who we trust →</a>
       </div>
       <div class="card">
         <h3>Follow + Learn</h3>
-        <p>Dementia and caregiving accounts, online educators, and voices whose work is worth your time.</p>
+        <p>Good information is hard to find and easy to fake. These are people whose work we think is worth your time.</p>
         <a class="more" href="follow-and-learn.html">Find voices to follow →</a>
       </div>
       <div class="card">
         <h3>Caregiver Tools &amp; Guides</h3>
-        <p>Guides, worksheets and checklists made by Legacy — things to print, fill in and bring with you.</p>
+        <p>Practical things to print, fill in, and take with you — to appointments, to family conversations, to the days that are hard.</p>
         <a class="more" href="caregiver-tools.html">Get the tools →</a>
       </div>
-    </div>
-  </div>
-</section>
-
-<section>
-  <div class="container">
-    <input type="search" class="resource-search" id="resourceSearch" placeholder="Search resources… (try 'respite' or 'hotline')" aria-label="Search resources">
-    <div class="filter-row" id="filterRow">
-      <button class="filter-chip active" data-cat="all">All</button>
-      <button class="filter-chip" data-cat="crisis">Crisis Help</button>
-      <button class="filter-chip" data-cat="education">Education</button>
-      <button class="filter-chip" data-cat="selfcare">Self-Care</button>
-      <button class="filter-chip" data-cat="support">Support Groups</button>
-      <button class="filter-chip" data-cat="financial">Financial &amp; Legal</button>
-    </div>
-
-    <div class="card-grid" id="resourceGrid">
-{%- for r in resources %}
-      <div class="card resource-item" data-cat="{{ r.category }}">
-        <span class="resource-tag">{{ r.category_label | e }}</span>
-        <h3>{{ r.title | e }}</h3>
-        <p>{{ r.description | e }}</p>
-{%- if r.link == "#demo" %}
-        <a class="more" href="#" data-action="demo-resource-link">{{ r.link_label | e }}</a>
-{%- elif r.link == "#demo-grant" %}
-        <a class="more" href="#" data-action="demo-grant-status">{{ r.link_label | e }}</a>
-{%- else %}
-        <a class="more" href="{{ r.link }}">{{ r.link_label | e }}</a>
-{%- endif %}
-      </div>
-{%- endfor %}
-    </div>
-    <p class="small muted mt-24 d-none" id="noResults">No resources match your search — try a different term.</p>
-    <p class="small muted mt-24">Staff add or update resources by chat — <em>"add the new caregiver support hotline under Crisis Help"</em> — previewed and confirmed before going live.</p>
-  </div>
-</section>
-
-<section id="legacy-programs">
-  <div class="container">
-    <div class="section-head"><span class="eyebrow">From Legacy</span><h2>Legacy Programs &amp; Support</h2></div>
-    <p class="muted measure-640">What we run ourselves. If you are not sure where to start, start here.</p>
-    <div class="card-grid mt-24">
       <div class="card">
-        <h3>Respite</h3>
-        <p>Time to breathe while your loved one is somewhere safe, engaged and cared for.</p>
-        <a class="more" href="programs-events.html#drop-in">Drop-In Respite →</a>
+        <h3>FAQ</h3>
+        <p>Plain answers to what caregivers ask us most — about caregiving, respite, and how Legacy's programs work.</p>
+        <a class="more" href="faq.html">Read the FAQ →</a>
       </div>
       <div class="card">
-        <h3>Caregiver Sanctuary Support Group</h3>
-        <p>A regular group of people who understand the day you have just had, because they had one too.</p>
-        <a class="more" href="programs-events.html#support-group">Join the group →</a>
+        <h3>Crisis &amp; Emergency Help</h3>
+        <p>If you or the person you care for is in crisis, do not work through this site. Call or text <strong>988</strong> for the Suicide &amp; Crisis Lifeline, or <strong>911</strong> in a medical emergency.</p>
+        <a class="more" href="crisis-help.html">Crisis resources →</a>
       </div>
-      <div class="card">
-        <h3>Wellness Grants</h3>
-        <p>Financial help toward the things that keep a caregiver well.</p>
-        <a class="more" href="programs.html#grants">About the grants →</a>
-      </div>
-      <div class="card">
-        <h3>Community Events</h3>
-        <p>Memory socials, education sessions and community gatherings throughout the year.</p>
-        <a class="more" href="programs-events.html#calendar">See what's on →</a>
-      </div>
-      <div class="card">
-        <h3>Caregiver Wellness Passport</h3>
-        <p>Local businesses and partners offering something back to caregivers.</p>
-        <a class="more" href="sanctuary.html#passport">About the Passport →</a>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section class="section-sand" id="crisis">
-  <div class="container">
-    <div class="section-head"><span class="eyebrow">If you need help now</span><h2>Crisis &amp; Emergency</h2></div>
-    <p class="muted measure-640">If you or the person you care for is in crisis, do not work through this site.
-      Call or text <strong>988</strong> for the Suicide &amp; Crisis Lifeline, or <strong>911</strong> in a medical emergency.
-      Tell responders your loved one has dementia &mdash; it changes how they approach and communicate.</p>
-    <div class="btn-row mt-24">
-      <a href="tel:988" class="btn btn-coral">Call or text 988</a>
-      <a href="directory.html" class="btn btn-outline">Crisis &amp; emergency resources</a>
     </div>
   </div>
 </section>

@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Crisis &amp; Emergency Help — Legacy Home &amp; Respite Care Foundation</title>
+<meta name="description" content="Immediate crisis lines and emergency guidance for dementia caregivers in crisis or urgent need.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+
+{% set active_page = 'resources' %}
+{% include '_header.html.j2' %}
+
+<section class="hero py-56-64">
+  <div class="container">
+    <p class="eyebrow text-sand-light"><a class="text-sand-light" href="resources.html">Resource Hub</a></p>
+    <h1 class="hero-title-clamp">Crisis &amp; Emergency Help</h1>
+    <p class="lede">If you or the person you care for is in crisis, do not work through this site. Call or text <strong>988</strong> for the Suicide &amp; Crisis Lifeline, or <strong>911</strong> in a medical emergency.</p>
+  </div>
+</section>
+
+<section class="section-sand" id="crisis">
+  <div class="container">
+    <div class="section-head"><span class="eyebrow">If you need help now</span><h2>Crisis &amp; Emergency</h2></div>
+    <p class="muted measure-640">If you or the person you care for is in crisis, do not work through this site.
+      Call or text <strong>988</strong> for the Suicide &amp; Crisis Lifeline, or <strong>911</strong> in a medical emergency.
+      Tell responders your loved one has dementia &mdash; it changes how they approach and communicate.</p>
+    <div class="btn-row mt-24">
+      <a href="tel:988" class="btn btn-coral">Call or text 988</a>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="container">
+    <div class="section-head"><span class="eyebrow">Right now</span>
+      <h2>Crisis &amp; urgent help</h2>
+    </div>
+    <div class="card-grid">
+      <div class="card resource-item">
+        <span class="resource-tag">Crisis Help</span>
+        <h3>988 Suicide &amp; Crisis Lifeline</h3>
+        <p>Call or text <strong>988</strong> — free, confidential support 24/7 for anyone in emotional distress, including overwhelmed caregivers.</p>
+        <a class="more" href="tel:988">Call or text 988 →</a>
+      </div>
+      <div class="card resource-item">
+        <span class="resource-tag">Crisis Help</span>
+        <h3>Alzheimer's Association 24/7 Helpline</h3>
+        <p>Call <strong>1-800-272-3900</strong> any time, day or night — trained staff answer questions about dementia, caregiving, and local support.</p>
+        <a class="more" href="https://www.alz.org/help-support" rel="noopener" target="_blank">alz.org/help-support →</a>
+      </div>
+      <div class="card resource-item">
+        <span class="resource-tag">Crisis Help</span>
+        <h3>IMPACT 211</h3>
+        <p>Dial <strong>211</strong> for connections to help of every kind across Greater Milwaukee — food, housing, care services, and caregiver support.</p>
+        <a class="more" href="https://www.impactinc.org/impact-211/" rel="noopener" target="_blank">impactinc.org →</a>
+      </div>
+      <div class="card resource-item">
+        <span class="resource-tag">Crisis Help</span>
+        <h3>Medical emergency</h3>
+        <p>Call <strong>911</strong>. Tell responders your loved one has dementia — it changes how they approach and communicate.</p>
+        <a class="more" href="tel:911">Call 911 →</a>
+      </div>
+      <div class="card resource-item">
+        <span class="resource-tag">Crisis Help</span>
+        <h3>Caregiver Support Hotline</h3>
+        <p>24/7 phone support for caregivers in crisis or feeling overwhelmed. You are not alone — call any time.</p>
+        <a class="more" href="#" data-action="demo-resource-link">Call / details →</a>
+      </div>
+      <div class="card resource-item">
+        <span class="resource-tag">Crisis Help</span>
+        <h3>When to Seek Emergency Care</h3>
+        <p>A quick guide to recognizing medical emergencies in loved ones with dementia, and what to tell first responders.</p>
+        <a class="more" href="#" data-action="demo-resource-link">Read guide →</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+{% include '_footer.html.j2' %}
+
+<script src="app.js"></script>
+<script src="nav-v2.js"></script>
+</body>
+</html>

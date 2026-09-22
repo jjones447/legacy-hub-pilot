@@ -25,7 +25,37 @@
 
 <section>
   <div class="container">
-    {% with collection = caregiver_tools %}{% include '_resource-links.html.j2' %}{% endwith %}
+    <div class="section-head">
+      <h2>Search Caregiver Tools &amp; Guides</h2>
+    </div>
+    <input type="search" class="resource-search" id="resourceSearch" placeholder="Search resources… (try 'respite' or 'hotline')" aria-label="Search resources">
+    <div class="filter-row" id="filterRow">
+      <button class="filter-chip active" data-cat="all">All</button>
+      <button class="filter-chip" data-cat="dementia-education">Dementia Education</button>
+      <button class="filter-chip" data-cat="communication">Communication</button>
+      <button class="filter-chip" data-cat="care-skills">Care Skills</button>
+      <button class="filter-chip" data-cat="caregiver-wellness">Caregiver Wellness</button>
+      <button class="filter-chip" data-cat="planning-safety">Planning &amp; Safety</button>
+      <button class="filter-chip" data-cat="financial-legal">Financial &amp; Legal</button>
+    </div>
+
+    <div class="card-grid" id="resourceGrid">
+{%- for r in resources %}
+      <div class="card resource-item" data-cat="{{ r.category }}">
+        <span class="resource-tag">{{ r.category_label | e }}</span>
+        <h3>{{ r.title | e }}</h3>
+        <p>{{ r.description | e }}</p>
+{%- if r.link == "#demo" %}
+        <a class="more" href="#" data-action="demo-resource-link">{{ r.link_label | e }}</a>
+{%- elif r.link == "#demo-grant" %}
+        <a class="more" href="#" data-action="demo-grant-status">{{ r.link_label | e }}</a>
+{%- else %}
+        <a class="more" href="{{ r.link }}">{{ r.link_label | e }}</a>
+{%- endif %}
+      </div>
+{%- endfor %}
+    </div>
+    <p class="small muted mt-24 d-none" id="noResults">No resources match your search — try a different term.</p>
 
     <div class="section-head mt-48"><h2>Caregiver Wellness Toolkit</h2></div>
     <p class="muted measure-640">A curated kit of self-care practices, checklists and wellness tools built for
@@ -44,11 +74,6 @@
     <div class="section-head"><h2>Looking for something else?</h2></div>
     <div class="card-grid mt-24">
       <div class="card">
-        <h3>Resource Directory</h3>
-        <p>Crisis lines, county services, respite funding and more, searchable in one place.</p>
-        <a class="more" href="directory.html">Browse the directory &rarr;</a>
-      </div>
-      <div class="card">
         <h3>Frequently Asked Questions</h3>
         <p>Plain answers to what caregivers ask us most.</p>
         <a class="more" href="faq.html">Read the FAQ &rarr;</a>
@@ -59,6 +84,16 @@
         <a class="more" href="request-support.html">Request support &rarr;</a>
       </div>
     </div>
+  </div>
+</section>
+
+<section>
+  <div class="container">
+    <div class="section-head">
+      <h2>Looking for more support?</h2>
+      <p>Explore Caregiver Sanctuary programs, including respite, caregiver support groups, wellness opportunities, community experiences, and more.</p>
+    </div>
+    <a href="programs.html" class="btn btn-coral">Explore Programs &amp; Support</a>
   </div>
 </section>
 
