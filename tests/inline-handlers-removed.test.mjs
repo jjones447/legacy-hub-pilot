@@ -164,6 +164,9 @@ test('exact call wiring: every action branch calls its expected function and exc
     'update-attendance': 'updateAttendance(id, status, e)',
     'view-caregiver': 'viewCaregiver(id)',
     'select-event': 'selectEvent(id, title)',
+    'search-caregivers': 'searchCaregivers(0)',
+    'search-prev': 'searchPrev()',
+    'search-next': 'searchNext()',
   };
 
   // Assert every data-action value in markup has a map entry
