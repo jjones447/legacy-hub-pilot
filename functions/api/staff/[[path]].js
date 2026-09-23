@@ -322,6 +322,129 @@ export async function onRequestPost({ request, env }) {
       }, 201);
     }
 
+    // 3. POST /api/staff/caregiver/:id/note
+    if (pathSegments.length === 5 && pathSegments[2] === 'caregiver' && pathSegments[4] === 'note') {
+      const caregiverId = pathSegments[3];
+      if (!caregiverId) {
+        return json({ ok: false, error: 'missing caregiver id' }, 400);
+      }
+
+      const caregiver = await env.LEGACY_DB.prepare(`
+        SELECT id FROM caregiver WHERE id = ?
+      `).bind(caregiverId).first();
+
+      if (!caregiver) {
+        return json({ ok: false, error: 'caregiver not found' }, 404);
+      }
+
+      let body;
+      try {
+        body = await request.json();
+      } catch (e) {
+        return json({ ok: false, error: 'invalid JSON body' }, 400);
+      }
+
+      if (!body || typeof body !== 'object' || Array.isArray(body)) {
+        return json({ ok: false, error: 'body must be a JSON object' }, 400);
+      }
+
+      const allowedKeys = ['body'];
+      for (const key of Object.keys(body)) {
+        if (!allowedKeys.includes(key)) {
+          return json({ ok: false, error: `unknown or forbidden field: ${key}` }, 400);
+        }
+      }
+
+      if (!('body' in body)) {
+        return json({ ok: false, error: 'body is required' }, 400);
+      }
+
+      if (typeof body.body !== 'string') {
+        return json({ ok: false, error: 'body must be a string' }, 400);
+      }
+
+      const trimmedBody = body.body.trim();
+      if (!trimmedBody) {
+        return json({ ok: false, error: 'body is required and must not be empty' }, 400);
+      }
+
+      if (trimmedBody.length > 2000) {
+        return json({ ok: false, error: 'body exceeds maximum length of 2000 characters' }, 400);
+      }
+
+      const actor = getActor(request, env);
+
+      const insertResult = await env.LEGACY_DB.prepare(`
+        INSERT INTO note (caregiver_id, author, body, visibility, status)
+        VALUES (?, ?, ?, 'staff', 'active')
+      `).bind(caregiverId, actor, trimmedBody).run();
+
+      const newId = insertResult?.meta?.last_row_id || insertResult?.lastRowId || null;
+
+      // Audit log caregiver.note_added
+      await env.LEGACY_DB.prepare(`
+        INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
+        VALUES (?, 'caregiver.note_added', 'caregiver', ?, NULL, ?)
+      `).bind(
+        actor,
+        caregiverId,
+        JSON.stringify({
+          note_id: newId,
+          author: actor,
+          body: trimmedBody
+        })
+      ).run();
+
+      const createdNote = await env.LEGACY_DB.prepare(`
+        SELECT id, caregiver_id, author, body, visibility, status, created_at
+        FROM note WHERE id = ?
+      `).bind(newId).first();
+
+      return json({
+        ok: true,
+        note: createdNote
+      }, 201);
+    }
+
+    // 4. POST /api/staff/note/:id/archive
+    if (pathSegments.length === 5 && pathSegments[2] === 'note' && pathSegments[4] === 'archive') {
+      const id = parseInt(pathSegments[3], 10);
+      if (isNaN(id)) {
+        return json({ ok: false, error: 'invalid note id' }, 400);
+      }
+
+      const note = await env.LEGACY_DB.prepare(`
+        SELECT id, caregiver_id, author, body, status, created_at FROM note WHERE id = ?
+      `).bind(id).first();
+
+      if (!note) {
+        return json({ ok: false, error: 'note not found' }, 404);
+      }
+
+      if (note.status === 'archived') {
+        return json({ ok: false, error: 'note is already archived' }, 409);
+      }
+
+      const actor = getActor(request, env);
+
+      await env.LEGACY_DB.prepare(`
+        UPDATE note SET status = 'archived' WHERE id = ?
+      `).bind(id).run();
+
+      // Audit log caregiver.note_archived
+      await env.LEGACY_DB.prepare(`
+        INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
+        VALUES (?, 'caregiver.note_archived', 'caregiver', ?, ?, ?)
+      `).bind(
+        actor,
+        note.caregiver_id,
+        JSON.stringify({ note_id: id, status: note.status }),
+        JSON.stringify({ note_id: id, status: 'archived' })
+      ).run();
+
+      return json({ ok: true });
+    }
+
     return json({ ok: false, error: 'invalid route parameters' }, 400);
   } catch (e) {
     return json({ ok: false, error: e.message }, 500);

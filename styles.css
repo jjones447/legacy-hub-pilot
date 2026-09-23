@@ -807,3 +807,15 @@ footer a:hover { color: #fff; }
 .my-20 { margin: 20px 0; }
 .chat-confirm-published { font-size: 12.5px; font-weight: 700; color: var(--green); }
 .chat-confirm-discarded { font-size: 12.5px; font-weight: 700; color: var(--ink-soft); }
+
+/* Staff notes and forms (D2) */
+.note-section-summary { font-weight: 600; color: var(--plum-dark); }
+.record-form-panel { margin-top: 12px; padding: 12px; border: 1px solid #efdfd3; border-radius: 8px; background: #faf6f1; }
+.form-label-small { font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px; }
+.form-textarea-full { padding: 6px 10px; border-radius: 6px; font-size: 13px; width: 100%; box-sizing: border-box; border: 1.5px solid #ddd0c2; font-family: inherit; }
+.form-error-banner { color: #a84a32; background: #f9efdc; margin-bottom: 8px; padding: 6px; border-radius: 4px; font-size: 12.5px; }
+.mb-8 { margin-bottom: 8px; }
+.note-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding: 6px 0; border-bottom: 1px solid #f0e6dc; gap: 8px; }
+.note-row:last-child { border-bottom: none; margin-bottom: 0; }
+.note-content { flex: 1; word-break: break-word; }
+.note-list { margin-top: 4px; }

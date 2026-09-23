@@ -389,6 +389,106 @@ async function submitAddContact(form) {
   }
 }
 
+async function submitAddNote(form) {
+  const panel = document.getElementById('caregiverRecordPanel');
+  const caregiverId = panel?.dataset?.caregiverId;
+  if (!caregiverId) return;
+
+  const errBox = form.querySelector('.form-error-msg');
+  if (errBox) {
+    errBox.textContent = '';
+    errBox.classList.add('d-none');
+  }
+
+  const bodyInput = form.querySelector('[name="body"]');
+  const noteBody = bodyInput ? bodyInput.value.trim() : '';
+  if (!noteBody) {
+    if (errBox) {
+      errBox.textContent = 'Note body is required and must not be empty';
+      errBox.classList.remove('d-none');
+    } else {
+      alert('Note body is required and must not be empty');
+    }
+    return;
+  }
+
+  if (noteBody.length > 2000) {
+    if (errBox) {
+      errBox.textContent = 'Note exceeds maximum length of 2000 characters';
+      errBox.classList.remove('d-none');
+    } else {
+      alert('Note exceeds maximum length of 2000 characters');
+    }
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/staff/caregiver/${caregiverId}/note`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body: noteBody })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) {
+      const errMsg = data.error || 'Failed to add note';
+      if (errBox) {
+        errBox.textContent = errMsg;
+        errBox.classList.remove('d-none');
+      } else {
+        alert(errMsg);
+      }
+      return;
+    }
+    await viewCaregiver(caregiverId);
+  } catch (e) {
+    if (errBox) {
+      errBox.textContent = e.message;
+      errBox.classList.remove('d-none');
+    } else {
+      alert(e.message);
+    }
+  }
+}
+
+async function archiveNote(id, target) {
+  if (!id) return;
+  const panel = document.getElementById('caregiverRecordPanel');
+  const caregiverId = panel?.dataset?.caregiverId;
+
+  const errBox = panel ? panel.querySelector('.note-error-msg') : null;
+  if (errBox) {
+    errBox.textContent = '';
+    errBox.classList.add('d-none');
+  }
+
+  try {
+    const res = await fetch(`/api/staff/note/${id}/archive`, {
+      method: 'POST'
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) {
+      const errMsg = data.error || 'Failed to archive note';
+      if (errBox) {
+        errBox.textContent = errMsg;
+        errBox.classList.remove('d-none');
+      } else {
+        alert(errMsg);
+      }
+      return;
+    }
+    if (caregiverId) {
+      await viewCaregiver(caregiverId);
+    }
+  } catch (e) {
+    if (errBox) {
+      errBox.textContent = e.message;
+      errBox.classList.remove('d-none');
+    } else {
+      alert(e.message);
+    }
+  }
+}
+
 
 async function loadFollowups() {
   try {
@@ -545,7 +645,17 @@ async function viewCaregiver(id) {
 
     const socialsCount = data.registrations.filter(r => r.status === 'attended').length;
 
-    const notesHtml = data.notes.map(n => `<div><strong>${escapeHtml(n.author)}:</strong> ${escapeHtml(n.body)} <span class="small muted">(${escapeHtml(n.created_at.split(' ')[0])})</span></div>`).join('<br>') || 'None';
+    let notesHtml = '<div class="small muted">None</div>';
+    if (data.notes && data.notes.length > 0) {
+      notesHtml = `<div class="note-list">${data.notes.map(n => `
+        <div class="note-row" data-note-id="${escapeHtml(n.id)}">
+          <div class="note-content">
+            <strong>${escapeHtml(n.author)}:</strong> ${escapeHtml(n.body)} <span class="small muted">(${escapeHtml(n.created_at.split(' ')[0])})</span>
+          </div>
+          <button type="button" class="btn btn-sm btn-outline btn-compact-ml" data-action="archive-note" data-note-id="${escapeHtml(n.id)}">Archive</button>
+        </div>
+      `).join('')}</div>`;
+    }
 
     const contactInfo = `Email: ${escapeHtml(p.email || 'N/A')} · Phone: ${escapeHtml(p.phone || 'N/A')} (Prefers: ${escapeHtml(p.preferred_contact || 'email')})`;
 
@@ -600,7 +710,7 @@ async function viewCaregiver(id) {
       <div class="kv-row"><span class="k">Registered Events</span><span class="v">${uniquePrograms}</span></div>
       <div class="kv-row"><span class="k">Last attended</span><span class="v">${lastAttended}</span></div>
       <div class="kv-row"><span class="k">Total attended</span><span class="v">${socialsCount} event(s)</span></div>
-      <div class="kv-row"><span class="k">Staff Notes</span><span class="v">${notesHtml}</span></div>
+      <div class="kv-row"><span class="k">Staff Notes</span><span class="v"><div class="note-error-msg alert-inline-banner form-error-banner d-none"></div>${notesHtml}</span></div>
       <div style="margin-top: 14px;">
         <span class="k" style="font-weight: 700; color: var(--plum-dark);">Grants &amp; Workflow:</span>
         <div style="margin-top: 8px;">${grantsHtml}</div>
@@ -643,6 +753,18 @@ async function viewCaregiver(id) {
           </div>
           <div class="form-error-msg alert-inline-banner" style="display:none; color: #a84a32; background: #f9efdc; margin-bottom: 8px; padding: 6px; border-radius: 4px; font-size: 12.5px;"></div>
           <button type="submit" class="btn btn-sm btn-plum">Save Contact</button>
+        </form>
+      </details>
+
+      <details class="mt-16-util">
+        <summary class="cursor-pointer note-section-summary"><strong>Add Note</strong></summary>
+        <form data-action="submit-add-note" class="record-form-panel">
+          <div class="field mb-8">
+            <label class="form-label-small">Note text:</label>
+            <textarea name="body" rows="3" class="form-textarea-full" placeholder="Add a staff note about this caregiver..." maxlength="2000" required></textarea>
+          </div>
+          <div class="form-error-msg alert-inline-banner form-error-banner d-none"></div>
+          <button type="submit" class="btn btn-sm btn-plum">Save Note</button>
         </form>
       </details>
 
@@ -892,6 +1014,9 @@ document.addEventListener('submit', function (e) {
   } else if (formAction === 'submit-add-contact') {
     e.preventDefault();
     submitAddContact(form);
+  } else if (formAction === 'submit-add-note') {
+    e.preventDefault();
+    submitAddNote(form);
   }
 });
 
@@ -941,6 +1066,10 @@ document.addEventListener('click', function (e) {
     e.stopPropagation();
     const id = target.getAttribute('data-grant-id');
     handleGrantClose(id, target);
+  } else if (action === 'archive-note') {
+    e.stopPropagation();
+    const id = target.getAttribute('data-note-id');
+    archiveNote(id, target);
   }
 });
 
