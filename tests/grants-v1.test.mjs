@@ -8,6 +8,7 @@ import { onRequestGet as getGrants, onRequestPost as postGrants } from '../funct
 
 const SCHEMA_1 = readFileSync(new URL('../schema/0001_init.sql', import.meta.url), 'utf8');
 const SCHEMA_3 = readFileSync(new URL('../schema/0003_grant_award.sql', import.meta.url), 'utf8');
+const SCHEMA_7 = readFileSync(new URL('../schema/0007_grant_course_complete.sql', import.meta.url), 'utf8');
 
 function d1(db) {
   return {
@@ -47,6 +48,7 @@ beforeEach(() => {
   raw = new DatabaseSync(':memory:');
   raw.exec(SCHEMA_1);
   raw.exec(SCHEMA_3);
+  raw.exec(SCHEMA_7);
   env = { LEGACY_DB: d1(raw) };
 });
 
@@ -127,7 +129,7 @@ test('GET /api/grants?status=in_review filters results', async () => {
   assert.equal(dataMatch.grants.length, 1);
 });
 
-test('workflow transition: submitted -> in_review -> awarded -> closed', async () => {
+test('workflow transition: submitted -> in_review -> awarded -> course_complete -> closed', async () => {
   // 1. review
   const reqReview = new Request('http://localhost/api/grants/1001/review', {
     method: 'POST',
@@ -160,7 +162,31 @@ test('workflow transition: submitted -> in_review -> awarded -> closed', async (
   assert.ok(followup);
   assert.equal(followup.detail, 'Deliver care package');
 
-  // 3. close
+  // 3. premature close is refused with 409
+  const reqPrematureClose = new Request('http://localhost/api/grants/1001/close', {
+    method: 'POST',
+    body: JSON.stringify({ outcome: 'Premature close' })
+  });
+  const resPrematureClose = await postGrants({ request: reqPrematureClose, env });
+  assert.equal(resPrematureClose.status, 409);
+  const prematureData = await resPrematureClose.json();
+  assert.equal(prematureData.ok, false);
+  assert.match(prematureData.error, /course_complete/i);
+
+  // 4. course_complete
+  const reqCourseComplete = new Request('http://localhost/api/grants/1001/course_complete', {
+    method: 'POST'
+  });
+  const resCourseComplete = await postGrants({ request: reqCourseComplete, env });
+  assert.equal(resCourseComplete.status, 200);
+
+  const appCourseComplete = raw.prepare(`SELECT status FROM grant_application WHERE id = 1001`).get();
+  assert.equal(appCourseComplete.status, 'course_complete');
+
+  const auditCourseComplete = raw.prepare(`SELECT * FROM audit_log WHERE action = 'grant_application.course_complete' AND entity_id = '1001'`).get();
+  assert.ok(auditCourseComplete);
+
+  // 5. close
   const reqClose = new Request('http://localhost/api/grants/1001/close', {
     method: 'POST',
     body: JSON.stringify({ outcome: 'Delivered caregiver respite' })

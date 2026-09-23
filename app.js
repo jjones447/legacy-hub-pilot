@@ -420,13 +420,13 @@ function renderPortalData(data) {
       const ga = data.grants[0];
       let badgeClass = 'badge-gray';
       if (ga.status === 'submitted' || ga.status === 'in_review') badgeClass = 'badge-amber';
-      else if (ga.status === 'awarded') badgeClass = 'badge-green';
+      else if (ga.status === 'awarded' || ga.status === 'course_complete') badgeClass = 'badge-green';
 
       // badgeClass is chosen from a fixed set above; ga.status still goes in as text.
       grantStatus.textContent = '';
       const statusBadge = document.createElement('span');
       statusBadge.className = 'badge ' + badgeClass;
-      statusBadge.textContent = String(ga.status || '').replace('_', ' ');
+      statusBadge.textContent = ga.status === 'course_complete' ? 'Course complete' : String(ga.status || '').replace('_', ' ');
       grantStatus.appendChild(statusBadge);
       grantRequestedFor.textContent = ga.requested_for || 'Wellness grant';
       grantAward.textContent = ga.amount ? 'Awarded: ' + ga.amount + ' (' + (ga.care_package || 'No package') + ')' : 'Personalized on approval';

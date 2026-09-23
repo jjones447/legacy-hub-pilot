@@ -98,8 +98,10 @@ async function viewCaregiver(id) {
       let gBadge = 'badge-plum';
       if (g.status === 'in_review') gBadge = 'badge-amber';
       if (g.status === 'awarded') gBadge = 'badge-green';
+      if (g.status === 'course_complete') gBadge = 'badge-green';
       if (g.status === 'closed') gBadge = 'badge-outline';
-      grantStatusHtml = `<span class="badge ${gBadge}">${g.status}</span>`;
+      const label = g.status === 'course_complete' ? 'Course complete' : g.status;
+      grantStatusHtml = `<span class="badge ${gBadge}">${label}</span>`;
       if (g.award_amount) {
         grantStatusHtml += ` (Awarded: ${g.award_amount})`;
       }
