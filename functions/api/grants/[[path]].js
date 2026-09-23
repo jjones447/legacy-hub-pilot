@@ -1,4 +1,6 @@
 // GET/POST /api/grants — staff endpoints for managing grant applications (slice 06).
+import { getActor } from '../../_lib/actor.js';
+
 export async function onRequestGet({ request, env }) {
   try {
     const url = new URL(request.url);
@@ -59,6 +61,7 @@ export async function onRequestPost({ request, env }) {
       return json({ ok: false, error: 'grant application not found' }, 404);
     }
 
+    const actor = getActor(request, env);
     const body = await request.json().catch(() => ({}));
 
     if (action === 'review') {
@@ -75,9 +78,10 @@ export async function onRequestPost({ request, env }) {
       await env.LEGACY_DB
         .prepare(`
           INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
-          VALUES ('staff_console', 'grant_application.review', 'grant_application', ?, ?, ?)
+          VALUES (?, 'grant_application.review', 'grant_application', ?, ?, ?)
         `)
         .bind(
+          actor,
           id.toString(),
           JSON.stringify({ status: app.status, review_notes: app.review_notes }),
           JSON.stringify({ status: 'in_review', review_notes })
@@ -122,9 +126,10 @@ export async function onRequestPost({ request, env }) {
       await env.LEGACY_DB
         .prepare(`
           INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
-          VALUES ('staff_console', 'grant_application.decision', 'grant_application', ?, ?, ?)
+          VALUES (?, 'grant_application.decision', 'grant_application', ?, ?, ?)
         `)
         .bind(
+          actor,
           id.toString(),
           JSON.stringify({ status: app.status, review_notes: app.review_notes }),
           JSON.stringify({
@@ -151,9 +156,10 @@ export async function onRequestPost({ request, env }) {
       await env.LEGACY_DB
         .prepare(`
           INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
-          VALUES ('staff_console', 'grant_application.course_complete', 'grant_application', ?, ?, ?)
+          VALUES (?, 'grant_application.course_complete', 'grant_application', ?, ?, ?)
         `)
         .bind(
+          actor,
           id.toString(),
           JSON.stringify({ status: app.status }),
           JSON.stringify({ status: 'course_complete' })
@@ -192,9 +198,10 @@ export async function onRequestPost({ request, env }) {
       await env.LEGACY_DB
         .prepare(`
           INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
-          VALUES ('staff_console', 'grant_application.close', 'grant_application', ?, ?, ?)
+          VALUES (?, 'grant_application.close', 'grant_application', ?, ?, ?)
         `)
         .bind(
+          actor,
           id.toString(),
           JSON.stringify({ status: app.status }),
           JSON.stringify({ status: 'closed', outcome })
