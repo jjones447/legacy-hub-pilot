@@ -6,6 +6,7 @@ import { onRequestGet as getStaff, onRequestPost as postStaff } from '../functio
 
 const SCHEMA_1 = readFileSync(new URL('../schema/0001_init.sql', import.meta.url), 'utf8');
 const SCHEMA_3 = readFileSync(new URL('../schema/0003_grant_award.sql', import.meta.url), 'utf8');
+const SCHEMA_6 = readFileSync(new URL('../schema/0006_caregiver_contact_history_outcomes.sql', import.meta.url), 'utf8');
 
 function d1(db) {
   return {
@@ -69,6 +70,7 @@ beforeEach(() => {
   raw = new DatabaseSync(':memory:');
   raw.exec(SCHEMA_1);
   raw.exec(SCHEMA_3);
+  raw.exec(SCHEMA_6);
   env = { LEGACY_DB: d1(raw) };
 
   // Seed an open followup for testing
