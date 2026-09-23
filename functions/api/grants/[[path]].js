@@ -46,7 +46,7 @@ export async function onRequestPost({ request, env }) {
       return json({ ok: false, error: 'invalid grant application id' }, 400);
     }
 
-    if (!['review', 'decision', 'close'].includes(action)) {
+    if (!['review', 'decision', 'course_complete', 'course-complete', 'close'].includes(action)) {
       return json({ ok: false, error: 'invalid action' }, 404);
     }
 
@@ -138,8 +138,36 @@ export async function onRequestPost({ request, env }) {
       return json({ ok: true });
     }
 
+    if (action === 'course_complete' || action === 'course-complete') {
+      if (app.status !== 'awarded') {
+        return json({ ok: false, error: `cannot mark course complete from status ${app.status}` }, 409);
+      }
+
+      await env.LEGACY_DB
+        .prepare(`UPDATE grant_application SET status = 'course_complete', updated_at = datetime('now') WHERE id = ?`)
+        .bind(id)
+        .run();
+
+      await env.LEGACY_DB
+        .prepare(`
+          INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
+          VALUES ('staff_console', 'grant_application.course_complete', 'grant_application', ?, ?, ?)
+        `)
+        .bind(
+          id.toString(),
+          JSON.stringify({ status: app.status }),
+          JSON.stringify({ status: 'course_complete' })
+        )
+        .run();
+
+      return json({ ok: true });
+    }
+
     if (action === 'close') {
-      if (app.status !== 'awarded' && app.status !== 'declined') {
+      if (app.status === 'awarded') {
+        return json({ ok: false, error: 'awarded grant must be course_complete before closing' }, 409);
+      }
+      if (app.status !== 'course_complete' && app.status !== 'declined') {
         return json({ ok: false, error: `cannot close from status ${app.status}` }, 409);
       }
 
