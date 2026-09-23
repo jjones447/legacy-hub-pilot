@@ -1,3 +1,13 @@
+function escapeHtml(str) {
+  if (str == null) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 let currentEventId = null;
 let currentEventTitle = '';
 
@@ -22,19 +32,22 @@ async function loadFollowups() {
     }
     
     body.innerHTML = data.queue.map(fu => {
-      const caregiverName = `${fu.caregiver_first_name || ''} ${fu.caregiver_last_name || ''}`.trim() || 'Anonymous';
+      const first = (fu.caregiver_first_name || '').trim();
+      const last = (fu.caregiver_last_name || '').trim();
+      const rawName = `${first} ${last}`.trim() || 'Anonymous';
+      const caregiverName = escapeHtml(rawName);
       const badgeClass = fu.status === 'open' ? 'badge-plum' : 'badge-green';
       const statusText = fu.status === 'open' ? 'Queued' : 'Resolved';
       
       let actionHtml = '';
       if (fu.status === 'open') {
-        actionHtml = `<button class="btn btn-sm btn-coral btn-compact-ml" data-action="resolve-followup" data-followup-id="${fu.id}">Resolve</button>`;
+        actionHtml = `<button class="btn btn-sm btn-coral btn-compact-ml" data-action="resolve-followup" data-followup-id="${escapeHtml(fu.id)}">Resolve</button>`;
       }
       
       return `
-        <tr class="cursor-pointer" data-action="view-caregiver" data-caregiver-id="${fu.caregiver_id}">
+        <tr class="cursor-pointer" data-action="view-caregiver" data-caregiver-id="${escapeHtml(fu.caregiver_id)}">
           <td><strong>${caregiverName}</strong></td>
-          <td>${fu.kind}: ${fu.detail || ''}</td>
+          <td>${escapeHtml(fu.kind)}: ${escapeHtml(fu.detail || '')}</td>
           <td>
             <span class="badge ${badgeClass}">${statusText}</span>
             ${actionHtml}
@@ -79,18 +92,21 @@ async function viewCaregiver(id) {
     panel.dataset.caregiverId = id;
 
     const p = data.profile;
-    const name = `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Anonymous';
+    const first = (p.first_name || '').trim();
+    const last = (p.last_name || '').trim();
+    const rawName = `${first} ${last}`.trim() || 'Anonymous';
+    const name = escapeHtml(rawName);
     
     const memberBadge = p.sanctuary_member === 1 
       ? `<span class="badge badge-green">Sanctuary Member</span>` 
       : `<span class="badge badge-outline">Non-member</span>`;
 
-    const caringFor = p.caring_for || 'None specified';
-    const relationship = p.relationship ? `(${p.relationship})` : '';
-    const memberSince = p.member_since ? p.member_since.split(' ')[0] : 'N/A';
+    const caringFor = escapeHtml(p.caring_for || 'None specified');
+    const relationship = p.relationship ? `(${escapeHtml(p.relationship)})` : '';
+    const memberSince = p.member_since ? escapeHtml(p.member_since.split(' ')[0]) : 'N/A';
 
     const programList = data.registrations.map(r => r.event_title).filter(Boolean);
-    const uniquePrograms = Array.from(new Set(programList)).join(' · ') || 'None';
+    const uniquePrograms = Array.from(new Set(programList)).map(t => escapeHtml(t)).join(' · ') || 'None';
 
     let grantStatusHtml = 'None';
     if (data.grants && data.grants.length > 0) {
@@ -101,22 +117,22 @@ async function viewCaregiver(id) {
       if (g.status === 'course_complete') gBadge = 'badge-green';
       if (g.status === 'closed') gBadge = 'badge-outline';
       const label = g.status === 'course_complete' ? 'Course complete' : g.status;
-      grantStatusHtml = `<span class="badge ${gBadge}">${label}</span>`;
+      grantStatusHtml = `<span class="badge ${gBadge}">${escapeHtml(label)}</span>`;
       if (g.award_amount) {
-        grantStatusHtml += ` (Awarded: ${g.award_amount})`;
+        grantStatusHtml += ` (Awarded: ${escapeHtml(g.award_amount)})`;
       }
     }
 
     const attendedEvents = data.registrations.filter(r => r.status === 'attended');
     const lastAttended = attendedEvents.length > 0 
-      ? `${attendedEvents[0].event_title} · ${attendedEvents[0].event_starts_at.split(' ')[0]}`
+      ? `${escapeHtml(attendedEvents[0].event_title)} · ${escapeHtml(attendedEvents[0].event_starts_at.split(' ')[0])}`
       : 'N/A';
 
     const socialsCount = data.registrations.filter(r => r.status === 'attended').length;
 
-    const notesHtml = data.notes.map(n => `<div><strong>${n.author}:</strong> ${n.body} <span class="small muted">(${n.created_at.split(' ')[0]})</span></div>`).join('<br>') || 'None';
+    const notesHtml = data.notes.map(n => `<div><strong>${escapeHtml(n.author)}:</strong> ${escapeHtml(n.body)} <span class="small muted">(${escapeHtml(n.created_at.split(' ')[0])})</span></div>`).join('<br>') || 'None';
 
-    const contactInfo = `Email: ${p.email || 'N/A'} · Phone: ${p.phone || 'N/A'} (Prefers: ${p.preferred_contact || 'email'})`;
+    const contactInfo = `Email: ${escapeHtml(p.email || 'N/A')} · Phone: ${escapeHtml(p.phone || 'N/A')} (Prefers: ${escapeHtml(p.preferred_contact || 'email')})`;
 
     panel.innerHTML = `
       <h4>👤 Caregiver record — ${name} ${memberBadge}</h4>
@@ -148,13 +164,13 @@ async function loadEvents() {
     }
     
     body.innerHTML = data.events.map(ev => {
-      const regText = ev.capacity ? `${ev.registered_count} / ${ev.capacity} capacity` : `${ev.registered_count}`;
+      const regText = ev.capacity ? `${escapeHtml(ev.registered_count)} / ${escapeHtml(ev.capacity)} capacity` : `${escapeHtml(ev.registered_count)}`;
       const isSelected = ev.id === currentEventId ? ' row-selected' : '';
-      const dateText = ev.starts_at ? ev.starts_at.split(' ')[0] : '';
+      const dateText = ev.starts_at ? escapeHtml(ev.starts_at.split(' ')[0]) : '';
       
       return `
-        <tr class="cursor-pointer${isSelected}" data-action="select-event" data-event-id="${ev.id}" data-event-title="${ev.title.replace(/"/g, '&quot;')}">
-          <td><strong>${ev.title}</strong></td>
+        <tr class="cursor-pointer${isSelected}" data-action="select-event" data-event-id="${escapeHtml(ev.id)}" data-event-title="${escapeHtml(ev.title)}">
+          <td><strong>${escapeHtml(ev.title)}</strong></td>
           <td>${dateText}</td>
           <td>${regText}</td>
         </tr>
@@ -201,21 +217,24 @@ async function loadRegistrations(eventId, eventTitle) {
         </thead>
         <tbody>
           ${data.registrations.map(reg => {
-            const caregiverName = `${reg.first_name || ''} ${reg.last_name || ''}`.trim() || 'Anonymous';
+            const first = (reg.first_name || '').trim();
+            const last = (reg.last_name || '').trim();
+            const rawName = `${first} ${last}`.trim() || 'Anonymous';
+            const caregiverName = escapeHtml(rawName);
             let badgeClass = 'badge-blue';
             if (reg.status === 'attended') badgeClass = 'badge-green';
             if (reg.status === 'no_show') badgeClass = 'badge-amber';
             if (reg.status === 'cancelled') badgeClass = 'badge-plum';
             
             return `
-              <tr class="cursor-pointer" data-action="view-caregiver" data-caregiver-id="${reg.caregiver_id}">
+              <tr class="cursor-pointer" data-action="view-caregiver" data-caregiver-id="${escapeHtml(reg.caregiver_id)}">
                 <td><strong>${caregiverName}</strong></td>
-                <td>${reg.email || ''}</td>
-                <td><span class="badge ${badgeClass}">${reg.status}</span></td>
+                <td>${escapeHtml(reg.email || '')}</td>
+                <td><span class="badge ${badgeClass}">${escapeHtml(reg.status)}</span></td>
                 <td>
-                  <button class="btn btn-sm btn-plum btn-compact-mr" data-action="update-attendance" data-registration-id="${reg.id}" data-status="attended">Attended</button>
-                  <button class="btn btn-sm btn-outline btn-compact-mr" data-action="update-attendance" data-registration-id="${reg.id}" data-status="no_show">No Show</button>
-                  <button class="btn btn-sm btn-outline btn-compact" data-action="update-attendance" data-registration-id="${reg.id}" data-status="cancelled">Cancel</button>
+                  <button class="btn btn-sm btn-plum btn-compact-mr" data-action="update-attendance" data-registration-id="${escapeHtml(reg.id)}" data-status="attended">Attended</button>
+                  <button class="btn btn-sm btn-outline btn-compact-mr" data-action="update-attendance" data-registration-id="${escapeHtml(reg.id)}" data-status="no_show">No Show</button>
+                  <button class="btn btn-sm btn-outline btn-compact" data-action="update-attendance" data-registration-id="${escapeHtml(reg.id)}" data-status="cancelled">Cancel</button>
                 </td>
               </tr>
             `;
