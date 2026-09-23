@@ -110,13 +110,88 @@ export async function onRequestGet({ request, env }) {
         ORDER BY created_at DESC
       `).bind(caregiverId).all();
 
+      // 6. Contact history
+      const { results: contact_history } = await env.LEGACY_DB.prepare(`
+        SELECT id, caregiver_id, occurred_at, channel, direction, summary, recorded_by, created_at
+        FROM contact_history
+        WHERE caregiver_id = ?
+        ORDER BY occurred_at DESC, created_at DESC
+      `).bind(caregiverId).all();
+
       return json({
         ok: true,
         profile,
         registrations,
         grants,
         followups,
-        notes
+        notes,
+        contact_history
+      });
+    }
+
+    if (subRoute === 'caregivers') {
+      // GET /api/staff/caregivers — caregiver search/filter
+      const q = (url.searchParams.get('q') || '').trim();
+      const segment = (url.searchParams.get('segment') || '').trim();
+      const status = (url.searchParams.get('status') || '').trim();
+      const limitRaw = parseInt(url.searchParams.get('limit') || '25', 10);
+      const offsetRaw = parseInt(url.searchParams.get('offset') || '0', 10);
+
+      const limit = Math.min(Math.max(isNaN(limitRaw) ? 25 : limitRaw, 1), 100);
+      const offset = Math.max(isNaN(offsetRaw) ? 0 : offsetRaw, 0);
+
+      const conditions = [];
+      const params = [];
+
+      if (q) {
+        const pattern = `%${q}%`;
+        conditions.push(`(
+          c.first_name LIKE ? OR
+          c.last_name LIKE ? OR
+          (c.first_name || ' ' || c.last_name) LIKE ? OR
+          c.email LIKE ? OR
+          c.phone LIKE ?
+        )`);
+        params.push(pattern, pattern, pattern, pattern, pattern);
+      }
+
+      if (segment) {
+        conditions.push(`EXISTS (
+          SELECT 1 FROM json_each(COALESCE(NULLIF(c.segment_tags, ''), '[]'))
+          WHERE value = ?
+        )`);
+        params.push(segment);
+      }
+
+      if (status) {
+        conditions.push(`c.status = ?`);
+        params.push(status);
+      }
+
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+      // Count total
+      const countSql = `SELECT COUNT(*) AS total FROM caregiver c ${whereClause}`;
+      const countRow = await env.LEGACY_DB.prepare(countSql).bind(...params).first();
+      const total = countRow ? countRow.total : 0;
+
+      // Select caregivers
+      const selectSql = `
+        SELECT c.*
+        FROM caregiver c
+        ${whereClause}
+        ORDER BY c.updated_at DESC, c.id DESC
+        LIMIT ? OFFSET ?
+      `;
+      const selectParams = [...params, limit, offset];
+      const { results: caregivers } = await env.LEGACY_DB.prepare(selectSql).bind(...selectParams).all();
+
+      return json({
+        ok: true,
+        caregivers,
+        total,
+        limit,
+        offset
       });
     }
 
@@ -129,56 +204,301 @@ export async function onRequestGet({ request, env }) {
 export async function onRequestPost({ request, env }) {
   try {
     const url = new URL(request.url);
-    const pathSegments = url.pathname.split('/').filter(Boolean); // ['api', 'staff', 'followup', ':id', 'resolve']
+    const pathSegments = url.pathname.split('/').filter(Boolean);
 
-    if (pathSegments.length !== 5 || pathSegments[2] !== 'followup' || pathSegments[4] !== 'resolve') {
-      return json({ ok: false, error: 'invalid route parameters' }, 400);
+    // 1. POST /api/staff/followup/:id/resolve
+    if (pathSegments.length === 5 && pathSegments[2] === 'followup' && pathSegments[4] === 'resolve') {
+      const id = parseInt(pathSegments[3], 10);
+      if (isNaN(id)) {
+        return json({ ok: false, error: 'invalid followup id' }, 400);
+      }
+
+      const actor = getActor(request, env);
+
+      // Fetch followup status
+      const followup = await env.LEGACY_DB.prepare(`
+        SELECT status, caregiver_id FROM followup WHERE id = ?
+      `).bind(id).first();
+
+      if (!followup) {
+        return json({ ok: false, error: 'followup not found' }, 404);
+      }
+
+      if (followup.status !== 'open') {
+        return json({ ok: false, error: `cannot resolve from status ${followup.status}` }, 409);
+      }
+
+      const body = await request.json().catch(() => ({}));
+      const targetStatus = body.status || 'done';
+      if (!['done', 'dismissed'].includes(targetStatus)) {
+        return json({ ok: false, error: "status must be 'done' or 'dismissed'" }, 400);
+      }
+
+      // Update status
+      await env.LEGACY_DB.prepare(`
+        UPDATE followup SET status = ? WHERE id = ?
+      `).bind(targetStatus, id).run();
+
+      // Audit log followup.resolve
+      await env.LEGACY_DB.prepare(`
+        INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
+        VALUES (?, 'followup.resolve', 'followup', ?, ?, ?)
+      `).bind(
+        actor,
+        id.toString(),
+        JSON.stringify({ status: followup.status }),
+        JSON.stringify({ status: targetStatus })
+      ).run();
+
+      return json({ ok: true });
     }
 
-    const id = parseInt(pathSegments[3], 10);
-    if (isNaN(id)) {
-      return json({ ok: false, error: 'invalid followup id' }, 400);
+    // 2. POST /api/staff/caregiver/:id/contact
+    if (pathSegments.length === 5 && pathSegments[2] === 'caregiver' && pathSegments[4] === 'contact') {
+      const caregiverId = pathSegments[3];
+      if (!caregiverId) {
+        return json({ ok: false, error: 'missing caregiver id' }, 400);
+      }
+
+      const caregiver = await env.LEGACY_DB.prepare(`
+        SELECT id FROM caregiver WHERE id = ?
+      `).bind(caregiverId).first();
+
+      if (!caregiver) {
+        return json({ ok: false, error: 'caregiver not found' }, 404);
+      }
+
+      let body;
+      try {
+        body = await request.json();
+      } catch (e) {
+        return json({ ok: false, error: 'invalid JSON body' }, 400);
+      }
+
+      if (!body || typeof body !== 'object' || Array.isArray(body)) {
+        return json({ ok: false, error: 'body must be a JSON object' }, 400);
+      }
+
+      const allowedKeys = ['occurred_at', 'channel', 'direction', 'summary'];
+      for (const key of Object.keys(body)) {
+        if (!allowedKeys.includes(key)) {
+          return json({ ok: false, error: `unknown or forbidden field: ${key}` }, 400);
+        }
+      }
+
+      const { occurred_at, channel, direction, summary } = body;
+
+      if (!occurred_at || typeof occurred_at !== 'string' || isNaN(Date.parse(occurred_at))) {
+        return json({ ok: false, error: 'occurred_at must be a valid ISO timestamp string' }, 400);
+      }
+
+      const validChannels = ['phone', 'email', 'in_person', 'event', 'other'];
+      if (!channel || !validChannels.includes(channel)) {
+        return json({ ok: false, error: `channel must be one of: ${validChannels.join(', ')}` }, 400);
+      }
+
+      const validDirections = ['inbound', 'outbound'];
+      if (!direction || !validDirections.includes(direction)) {
+        return json({ ok: false, error: `direction must be one of: ${validDirections.join(', ')}` }, 400);
+      }
+
+      if (!summary || typeof summary !== 'string' || !summary.trim()) {
+        return json({ ok: false, error: 'summary is required and must not be empty' }, 400);
+      }
+
+      const actor = getActor(request, env);
+
+      // Insert contact history
+      const insertResult = await env.LEGACY_DB.prepare(`
+        INSERT INTO contact_history (caregiver_id, occurred_at, channel, direction, summary, recorded_by)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).bind(caregiverId, occurred_at, channel, direction, summary.trim(), actor).run();
+
+      const newId = insertResult?.meta?.last_row_id || insertResult?.lastRowId || null;
+
+      // Audit log caregiver.contact_added
+      await env.LEGACY_DB.prepare(`
+        INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
+        VALUES (?, 'caregiver.contact_added', 'caregiver', ?, NULL, ?)
+      `).bind(
+        actor,
+        caregiverId,
+        JSON.stringify({
+          contact_id: newId,
+          occurred_at,
+          channel,
+          direction,
+          summary: summary.trim(),
+          recorded_by: actor
+        })
+      ).run();
+
+      return json({
+        ok: true,
+        contact: {
+          id: newId,
+          caregiver_id: caregiverId,
+          occurred_at,
+          channel,
+          direction,
+          summary: summary.trim(),
+          recorded_by: actor
+        }
+      }, 201);
     }
 
-    const actor = getActor(request, env);
-
-    // Fetch followup status
-    const followup = await env.LEGACY_DB.prepare(`
-      SELECT status, caregiver_id FROM followup WHERE id = ?
-    `).bind(id).first();
-
-    if (!followup) {
-      return json({ ok: false, error: 'followup not found' }, 404);
-    }
-
-    if (followup.status !== 'open') {
-      return json({ ok: false, error: `cannot resolve from status ${followup.status}` }, 409);
-    }
-
-    const body = await request.json().catch(() => ({}));
-    const targetStatus = body.status || 'done';
-    if (!['done', 'dismissed'].includes(targetStatus)) {
-      return json({ ok: false, error: "status must be 'done' or 'dismissed'" }, 400);
-    }
-
-    // Update status
-    await env.LEGACY_DB.prepare(`
-      UPDATE followup SET status = ? WHERE id = ?
-    `).bind(targetStatus, id).run();
-
-    // Audit log followup.resolve
-    await env.LEGACY_DB.prepare(`
-      INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
-      VALUES (?, 'followup.resolve', 'followup', ?, ?, ?)
-    `).bind(
-      actor,
-      id.toString(),
-      JSON.stringify({ status: followup.status }),
-      JSON.stringify({ status: targetStatus })
-    ).run();
-
-    return json({ ok: true });
+    return json({ ok: false, error: 'invalid route parameters' }, 400);
   } catch (e) {
     return json({ ok: false, error: e.message }, 500);
   }
 }
+
+export async function onRequestPatch({ request, env }) {
+  try {
+    const url = new URL(request.url);
+    const pathSegments = url.pathname.split('/').filter(Boolean);
+
+    // PATCH /api/staff/caregiver/:id
+    if (pathSegments.length !== 4 || pathSegments[2] !== 'caregiver') {
+      return json({ ok: false, error: 'invalid route parameters' }, 400);
+    }
+
+    const caregiverId = pathSegments[3];
+    if (!caregiverId) {
+      return json({ ok: false, error: 'missing caregiver id' }, 400);
+    }
+
+    const existing = await env.LEGACY_DB.prepare(`
+      SELECT * FROM caregiver WHERE id = ?
+    `).bind(caregiverId).first();
+
+    if (!existing) {
+      return json({ ok: false, error: 'caregiver not found' }, 404);
+    }
+
+    let body;
+    try {
+      body = await request.json();
+    } catch (e) {
+      return json({ ok: false, error: 'invalid JSON body' }, 400);
+    }
+
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return json({ ok: false, error: 'body must be a JSON object' }, 400);
+    }
+
+    const allowedFields = [
+      'first_name',
+      'last_name',
+      'email',
+      'phone',
+      'preferred_contact',
+      'caring_for',
+      'relationship',
+      'segment_tags',
+      'status',
+      'outcome_status',
+      'outcome_notes'
+    ];
+
+    const bodyKeys = Object.keys(body);
+    if (bodyKeys.length === 0) {
+      return json({ ok: false, error: 'no update fields provided' }, 400);
+    }
+
+    for (const key of bodyKeys) {
+      if (!allowedFields.includes(key)) {
+        return json({ ok: false, error: `unknown or forbidden field: ${key}` }, 400);
+      }
+    }
+
+    // Validations
+    if ('status' in body) {
+      const validStatuses = ['active', 'inactive', 'archived'];
+      if (!validStatuses.includes(body.status)) {
+        return json({ ok: false, error: `status must be one of: ${validStatuses.join(', ')}` }, 400);
+      }
+    }
+
+    if ('outcome_status' in body && body.outcome_status !== null) {
+      const validOutcomes = ['improving', 'stable', 'needs_support', 'disengaged'];
+      if (!validOutcomes.includes(body.outcome_status)) {
+        return json({ ok: false, error: `outcome_status must be one of: ${validOutcomes.join(', ')}` }, 400);
+      }
+    }
+
+    if ('segment_tags' in body && body.segment_tags !== null) {
+      let tags = body.segment_tags;
+      if (typeof tags === 'string') {
+        try {
+          tags = JSON.parse(tags);
+        } catch (e) {
+          return json({ ok: false, error: 'segment_tags must be a JSON array of strings' }, 400);
+        }
+      }
+      if (!Array.isArray(tags) || !tags.every(item => typeof item === 'string')) {
+        return json({ ok: false, error: 'segment_tags must be a JSON array of strings' }, 400);
+      }
+      // Normalize body.segment_tags to JSON string for DB storage
+      body.segment_tags = JSON.stringify(tags);
+    }
+
+    const setClauses = [];
+    const setParams = [];
+    const afterChanges = {};
+    const beforeChanges = {};
+
+    for (const field of allowedFields) {
+      if (field in body) {
+        setClauses.push(`${field} = ?`);
+        setParams.push(body[field]);
+        beforeChanges[field] = existing[field];
+        afterChanges[field] = body[field];
+      }
+    }
+
+    // Check if outcome fields changed
+    const outcomeChanged = ('outcome_status' in body && body.outcome_status !== existing.outcome_status) ||
+                           ('outcome_notes' in body && body.outcome_notes !== existing.outcome_notes);
+
+    if (outcomeChanged) {
+      setClauses.push(`outcome_updated_at = datetime('now')`);
+    }
+
+    setClauses.push(`updated_at = datetime('now')`);
+
+    const updateSql = `
+      UPDATE caregiver
+      SET ${setClauses.join(', ')}
+      WHERE id = ?
+    `;
+    setParams.push(caregiverId);
+
+    await env.LEGACY_DB.prepare(updateSql).bind(...setParams).run();
+
+    const actor = getActor(request, env);
+
+    // Audit log caregiver.update
+    await env.LEGACY_DB.prepare(`
+      INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
+      VALUES (?, 'caregiver.update', 'caregiver', ?, ?, ?)
+    `).bind(
+      actor,
+      caregiverId,
+      JSON.stringify(beforeChanges),
+      JSON.stringify(afterChanges)
+    ).run();
+
+    const updatedProfile = await env.LEGACY_DB.prepare(`
+      SELECT * FROM caregiver WHERE id = ?
+    `).bind(caregiverId).first();
+
+    return json({
+      ok: true,
+      profile: updatedProfile
+    });
+  } catch (e) {
+    return json({ ok: false, error: e.message }, 500);
+  }
+}
+
