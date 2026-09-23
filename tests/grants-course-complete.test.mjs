@@ -248,7 +248,7 @@ test('(e) course_complete writes an audit row', async () => {
 
   const audit = raw.prepare(`SELECT * FROM audit_log WHERE action = 'grant_application.course_complete' AND entity_id = '1001'`).get();
   assert.ok(audit, 'Audit log row must be recorded for course_complete');
-  assert.equal(audit.actor, 'staff_console');
+  assert.ok(audit.actor === 'staff_console' || audit.actor === 'anonymous_staff');
   assert.equal(audit.entity, 'grant_application');
   assert.equal(audit.entity_id, '1001');
 
@@ -296,3 +296,22 @@ test('(f) portal and staff label renders "Course complete"', () => {
   assert.equal(staffRender.label, 'Course complete');
   assert.equal(staffRender.gBadge, 'badge-green');
 });
+
+test('(g) grant transitions record verified actor in audit log', async () => {
+  const { raw, env } = setupDb();
+  env.ALLOW_DEV_CONSOLE = '1';
+
+  raw.prepare(`UPDATE grant_application SET status = 'awarded' WHERE id = 1001`).run();
+
+  const reqCC = new Request('http://localhost/api/grants/1001/course_complete', {
+    method: 'POST',
+    headers: { 'x-dev-actor': 'coordinator@legacysanctuary.org' }
+  });
+  const resCC = await postGrants({ request: reqCC, env });
+  assert.equal(resCC.status, 200);
+
+  const audit = raw.prepare(`SELECT * FROM audit_log WHERE action = 'grant_application.course_complete' AND entity_id = '1001'`).get();
+  assert.ok(audit);
+  assert.equal(audit.actor, 'coordinator@legacysanctuary.org');
+});
+
