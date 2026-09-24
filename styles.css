@@ -828,3 +828,28 @@ footer a:hover { color: #fff; }
 .diff-box { background: #fbf8f5; border: 1px solid #ebdcd0; border-radius: 6px; padding: 6px 10px; }
 .diff-header { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--ink-soft); margin-bottom: 4px; }
 .diff-content { font-family: monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all; margin: 0; color: var(--ink); }
+
+/* Break-glass Site Content & Recent Changes (D10) */
+.flex-between-center { display: flex; justify-content: space-between; align-items: center; }
+.content-type-group { margin-bottom: 18px; }
+.content-type-title { font-size: 13px; font-weight: 700; text-transform: uppercase; color: var(--plum-dark); margin-bottom: 6px; letter-spacing: 0.04em; }
+.content-item-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: #fff; border: 1px solid #ebdcd0; border-radius: 6px; margin-bottom: 6px; gap: 8px; }
+.content-item-row:hover { border-color: var(--coral); }
+.content-item-info { flex: 1; min-width: 0; }
+.content-item-label { font-weight: 600; font-size: 14px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.content-item-id { font-size: 11.5px; color: var(--ink-soft); font-family: monospace; }
+.editor-box { background: #faf6f1; border: 1.5px solid #dfcfc2; border-radius: 8px; padding: 16px; margin-top: 12px; }
+.editor-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #eee2d7; }
+.editor-field { margin-bottom: 12px; }
+.editor-label { font-size: 12.5px; font-weight: 600; display: block; margin-bottom: 4px; color: var(--plum-dark); }
+.editor-input { width: 100%; padding: 6px 10px; border: 1.5px solid #ddd0c2; border-radius: 6px; font-size: 13.5px; font-family: inherit; box-sizing: border-box; background: #fff; }
+.editor-textarea { width: 100%; min-height: 80px; padding: 6px 10px; border: 1.5px solid #ddd0c2; border-radius: 6px; font-size: 13.5px; font-family: inherit; box-sizing: border-box; background: #fff; resize: vertical; }
+.editor-textarea-json { font-family: monospace; min-height: 120px; font-size: 12px; }
+.editor-checkbox-row { display: flex; align-items: center; gap: 8px; font-size: 13.5px; }
+.editor-actions { display: flex; gap: 8px; margin-top: 16px; }
+.recent-change-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; border-bottom: 1px solid #eee5da; gap: 8px; }
+.recent-change-row:last-child { border-bottom: none; }
+.recent-change-meta { flex: 1; min-width: 0; }
+.recent-change-action { font-weight: 600; font-size: 13px; color: var(--ink); }
+.recent-change-detail { font-size: 11.5px; color: var(--ink-soft); }
+.recent-change-time { font-size: 11px; color: #88746d; }

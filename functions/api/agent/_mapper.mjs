@@ -145,6 +145,14 @@ export function validateJsonSchema(data, schema) {
       if (propSchema.type === 'boolean' && typeof val !== 'boolean') {
         return `property ${key} must be a boolean`;
       }
+      if (propSchema.type === 'array' && !Array.isArray(val)) {
+        return `property ${key} must be an array`;
+      }
+      if (propSchema.type === 'array' && Array.isArray(val) && propSchema.items?.type === 'string') {
+        if (!val.every(item => typeof item === 'string')) {
+          return `property ${key} items must be strings`;
+        }
+      }
 
       if (propSchema.enum && !propSchema.enum.includes(val)) {
         return `property ${key} must be one of ${propSchema.enum.join(', ')}`;
