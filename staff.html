@@ -123,6 +123,25 @@
           <h4>👤 Caregiver record</h4>
           <p class="muted small text-center my-20">Select a caregiver from the follow-up queue or attendance list to view their full record.</p>
         </div>
+
+        <div class="panel" id="siteContentPanel">
+          <h4>Site content</h4>
+          <p class="small muted mb-12">Direct break-glass editor for published site content.</p>
+          <div id="siteContentList">
+            <p class="muted small text-center my-20">Loading site content...</p>
+          </div>
+          <div id="siteContentEditor" class="d-none"></div>
+        </div>
+
+        <div class="panel" id="recentChangesPanel">
+          <div class="flex-between-center mb-12">
+            <h4 class="m-0">Recent changes</h4>
+            <button class="btn btn-sm btn-outline" id="refreshRecentChangesBtn">Refresh</button>
+          </div>
+          <div id="recentChangesList">
+            <p class="muted small text-center my-20">Loading recent changes...</p>
+          </div>
+        </div>
       </div>
 
       <div>

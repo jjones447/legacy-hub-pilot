@@ -1,6 +1,7 @@
 // GET/POST /api/staff/[[path]] — staff endpoints for queue and caregiver management (slice 08).
 import { getActor } from '../../_lib/actor.js';
 import * as caregiversDomain from '../../_lib/domain/caregivers.js';
+import { _resetContentCache } from '../../_content.mjs';
 
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), {
@@ -168,6 +169,89 @@ export async function onRequestGet({ request, env }) {
         total,
         limit,
         offset
+      });
+    }
+
+    if (subRoute === 'content') {
+      // GET /api/staff/content -- published content items & content type schemas
+      const { results: items } = await env.LEGACY_DB.prepare(`
+        SELECT id, type_id, data, status, updated_by, updated_at
+        FROM content_item
+        WHERE status = 'published'
+        ORDER BY type_id ASC, id ASC
+      `).all();
+
+      const { results: types } = await env.LEGACY_DB.prepare(`
+        SELECT id, json_schema
+        FROM content_type
+        ORDER BY id ASC
+      `).all();
+
+      return json({
+        ok: true,
+        items: items || [],
+        content_items: items || [],
+        types: types || [],
+        content_types: types || []
+      });
+    }
+
+    if (subRoute === 'recent-changes') {
+      // GET /api/staff/recent-changes -- last 50 audit_log rows for content_item.* and caregiver.* actions
+      const { results: changes } = await env.LEGACY_DB.prepare(`
+        SELECT id, actor, action, entity, entity_id, before_json, after_json, at
+        FROM audit_log
+        WHERE action LIKE 'content_item.%'
+           OR action LIKE 'caregiver.%'
+           OR (entity IN ('content_item', 'caregiver') AND action = 'undo')
+           OR action LIKE '%.undo'
+        ORDER BY id DESC
+        LIMIT 50
+      `).all();
+
+      // Find all already undone audit IDs
+      const undoneIds = new Set();
+      const { results: undoLogs } = await env.LEGACY_DB.prepare(
+        "SELECT before_json, after_json FROM audit_log WHERE action = 'undo' OR action LIKE '%.undo'"
+      ).all();
+
+      for (const u of (undoLogs || [])) {
+        for (const str of [u.before_json, u.after_json]) {
+          if (!str) continue;
+          try {
+            const parsed = JSON.parse(str);
+            const uId = parsed.original_audit_id ?? parsed.undone_audit_id ?? parsed.audit_id;
+            if (uId) undoneIds.add(Number(uId));
+          } catch {}
+        }
+      }
+
+      const nonRestorableActions = [
+        'caregiver.contact_added',
+        'caregiver.note_added',
+        'undo'
+      ];
+
+      const enriched = (changes || []).map(row => {
+        const isNonRestorable = nonRestorableActions.includes(row.action) ||
+                                row.action.startsWith('grant.') ||
+                                row.action.startsWith('agent_change.') ||
+                                row.action.endsWith('.undo') ||
+                                !row.before_json;
+        const isUndone = undoneIds.has(Number(row.id));
+        const restorable = !isNonRestorable && !isUndone;
+        return {
+          ...row,
+          restorable,
+          can_undo: restorable,
+          is_undone: isUndone
+        };
+      });
+
+      return json({
+        ok: true,
+        changes: enriched,
+        recent_changes: enriched
       });
     }
 
@@ -444,6 +528,187 @@ export async function onRequestPost({ request, env }) {
       ).run();
 
       return json({ ok: true });
+    }
+
+    // 5. POST /api/staff/undo/:audit_id
+    if (pathSegments.length === 4 && pathSegments[2] === 'undo') {
+      const auditId = parseInt(pathSegments[3], 10);
+      if (isNaN(auditId)) {
+        return json({ ok: false, error: 'invalid audit id' }, 400);
+      }
+
+      const original = await env.LEGACY_DB.prepare(`
+        SELECT * FROM audit_log WHERE id = ?
+      `).bind(auditId).first();
+
+      if (!original) {
+        return json({ ok: false, error: 'audit log entry not found' }, 404);
+      }
+
+      // Refusal 1: missing before_json
+      if (!original.before_json) {
+        return json({ ok: false, error: 'cannot undo change: no before_json recorded' }, 409);
+      }
+
+      // Refusal 2: non-restorable actions (grant transitions, contact appends, note additions, undo)
+      const nonRestorableActions = [
+        'caregiver.contact_added',
+        'caregiver.note_added',
+        'undo'
+      ];
+      if (
+        nonRestorableActions.includes(original.action) ||
+        original.action.startsWith('grant.') ||
+        original.action.startsWith('agent_change.') ||
+        original.action.endsWith('.undo')
+      ) {
+        return json({ ok: false, error: `action ${original.action} is not restorable` }, 409);
+      }
+
+      // Refusal 3: already undone
+      const { results: existingUndos } = await env.LEGACY_DB.prepare(
+        "SELECT before_json, after_json FROM audit_log WHERE action = 'undo' OR action LIKE '%.undo'"
+      ).all();
+
+      let alreadyUndone = false;
+      for (const u of (existingUndos || [])) {
+        for (const str of [u.before_json, u.after_json]) {
+          if (!str) continue;
+          try {
+            const parsed = JSON.parse(str);
+            const uId = parsed.original_audit_id ?? parsed.undone_audit_id ?? parsed.audit_id;
+            if (Number(uId) === auditId) {
+              alreadyUndone = true;
+              break;
+            }
+          } catch {}
+        }
+        if (alreadyUndone) break;
+      }
+
+      if (alreadyUndone) {
+        return json({ ok: false, error: `audit entry ${auditId} has already been undone` }, 409);
+      }
+
+      const actor = getActor(request, env);
+      let beforeObj;
+      try {
+        beforeObj = JSON.parse(original.before_json);
+      } catch (e) {
+        return json({ ok: false, error: 'malformed before_json in audit log' }, 409);
+      }
+
+      if (original.action === 'caregiver.note_archived') {
+        const noteId = beforeObj.note_id;
+        const noteStatus = beforeObj.status || 'active';
+        if (!noteId) {
+          return json({ ok: false, error: 'missing note_id in before_json' }, 409);
+        }
+        await env.LEGACY_DB.prepare(
+          "UPDATE note SET status = ? WHERE id = ?"
+        ).bind(noteStatus, noteId).run();
+      } else if (original.entity === 'caregiver' || original.action.startsWith('caregiver.')) {
+        const ALLOWED_CAREGIVER_FIELDS = [
+          'first_name',
+          'last_name',
+          'email',
+          'phone',
+          'preferred_contact',
+          'relationship_to_patient',
+          'patient_diagnosis_stage',
+          'care_setting',
+          'notes',
+          'caring_for',
+          'relationship',
+          'status',
+          'segment_tags',
+          'sanctuary_member',
+          'outcome_status',
+          'outcome_notes'
+        ];
+
+        const setClauses = [];
+        const params = [];
+        for (const [key, val] of Object.entries(beforeObj)) {
+          if (ALLOWED_CAREGIVER_FIELDS.includes(key)) {
+            setClauses.push(`${key} = ?`);
+            params.push(val);
+          }
+        }
+
+        if (setClauses.length > 0) {
+          setClauses.push("updated_at = datetime('now')");
+          if ('outcome_status' in beforeObj || 'outcome_notes' in beforeObj) {
+            setClauses.push("outcome_updated_at = datetime('now')");
+          }
+          params.push(original.entity_id);
+          await env.LEGACY_DB.prepare(
+            `UPDATE caregiver SET ${setClauses.join(', ')} WHERE id = ?`
+          ).bind(...params).run();
+        }
+      } else if (original.entity === 'content_item' || original.action.startsWith('content_item.')) {
+        let targetData = null;
+        let targetStatus = null;
+
+        if (beforeObj && typeof beforeObj === 'object' && 'data' in beforeObj && 'status' in beforeObj) {
+          targetData = typeof beforeObj.data === 'string' ? beforeObj.data : JSON.stringify(beforeObj.data);
+          targetStatus = beforeObj.status;
+        } else if (beforeObj && typeof beforeObj === 'object' && 'data' in beforeObj) {
+          targetData = typeof beforeObj.data === 'string' ? beforeObj.data : JSON.stringify(beforeObj.data);
+          if ('status' in beforeObj) targetStatus = beforeObj.status;
+        } else {
+          targetData = JSON.stringify(beforeObj);
+        }
+
+        if (targetStatus && targetData) {
+          await env.LEGACY_DB.prepare(`
+            UPDATE content_item
+            SET data = ?, status = ?, updated_by = ?, updated_at = datetime('now')
+            WHERE id = ?
+          `).bind(targetData, targetStatus, 'staff_' + actor, original.entity_id).run();
+        } else if (targetData) {
+          await env.LEGACY_DB.prepare(`
+            UPDATE content_item
+            SET data = ?, updated_by = ?, updated_at = datetime('now')
+            WHERE id = ?
+          `).bind(targetData, 'staff_' + actor, original.entity_id).run();
+        } else if (targetStatus) {
+          await env.LEGACY_DB.prepare(`
+            UPDATE content_item
+            SET status = ?, updated_by = ?, updated_at = datetime('now')
+            WHERE id = ?
+          `).bind(targetStatus, 'staff_' + actor, original.entity_id).run();
+        }
+
+        try {
+          _resetContentCache();
+        } catch {}
+      } else {
+        return json({ ok: false, error: `entity ${original.entity} does not support undo` }, 409);
+      }
+
+      // Write undo audit row referencing original audit ID
+      const undoMeta = {
+        original_audit_id: original.id,
+        undone_audit_id: original.id,
+        audit_id: original.id,
+        original_action: original.action,
+        entity: original.entity,
+        entity_id: original.entity_id
+      };
+
+      await env.LEGACY_DB.prepare(`
+        INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
+        VALUES (?, 'undo', ?, ?, ?, ?)
+      `).bind(
+        actor,
+        original.entity,
+        original.entity_id,
+        original.after_json,
+        JSON.stringify(undoMeta)
+      ).run();
+
+      return json({ ok: true, undone_audit_id: original.id });
     }
 
     return json({ ok: false, error: 'invalid route parameters' }, 400);

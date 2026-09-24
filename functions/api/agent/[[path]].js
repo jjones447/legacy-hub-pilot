@@ -4,6 +4,7 @@ import { mapRequestToChange, mapRequestToWorkflowChange, validateJsonSchema } fr
 import * as grantsDomain from '../../_lib/domain/grants.js';
 import * as caregiversDomain from '../../_lib/domain/caregivers.js';
 import { getActor } from '../../_lib/actor.js';
+import { _resetContentCache } from '../../_content.mjs';
 
 export async function onRequestGet({ request, env }) {
   try {
@@ -61,7 +62,7 @@ export async function onRequestPost({ request, env }) {
     // Governed workflow data changes: /api/agent/change/:subaction
     if (pathSegments.length === 4 && pathSegments[2] === 'change') {
       const subaction = pathSegments[3];
-      if (!['draft', 'confirm', 'discard'].includes(subaction)) {
+      if (!['draft', 'confirm', 'discard', 'direct'].includes(subaction)) {
         return json({ ok: false, error: 'invalid action' }, 404);
       }
 
@@ -329,6 +330,86 @@ export async function onRequestPost({ request, env }) {
           .run();
 
         return json({ ok: true });
+      }
+
+      if (subaction === 'direct') {
+        const targetId = body.target_id || body.id;
+        if (!targetId || body.data === undefined || body.data === null) {
+          return json({ ok: false, error: 'target_id and data are required' }, 400);
+        }
+
+        let parsedData = body.data;
+        if (typeof parsedData === 'string') {
+          try {
+            parsedData = JSON.parse(parsedData);
+          } catch (e) {
+            return json({ ok: false, error: 'data must be a valid JSON object or string' }, 400);
+          }
+        }
+        if (typeof parsedData !== 'object' || Array.isArray(parsedData) || parsedData === null) {
+          return json({ ok: false, error: 'data must be a JSON object' }, 400);
+        }
+
+        const item = await env.LEGACY_DB
+          .prepare('SELECT id, type_id, data, status FROM content_item WHERE id = ?')
+          .bind(targetId)
+          .first();
+
+        if (!item) {
+          return json({ ok: false, error: 'content item not found' }, 404);
+        }
+
+        if (item.status !== 'published') {
+          return json({ ok: false, error: `cannot directly edit non-published item (status is ${item.status})` }, 409);
+        }
+
+        const contentType = await env.LEGACY_DB
+          .prepare('SELECT id, json_schema FROM content_type WHERE id = ?')
+          .bind(item.type_id)
+          .first();
+
+        if (!contentType) {
+          return json({ ok: false, error: `content type ${item.type_id} not found` }, 404);
+        }
+
+        const jsonSchema = typeof contentType.json_schema === 'string'
+          ? JSON.parse(contentType.json_schema)
+          : contentType.json_schema;
+
+        const validationErr = validateJsonSchema(parsedData, jsonSchema);
+        if (validationErr) {
+          return json({ ok: false, error: `validation failed: ${validationErr}`, refusal: `validation failed: ${validationErr}` }, 400);
+        }
+
+        // SEC-2: actor comes from the verified identity, never the request body.
+        const actor = getActor(request, env);
+        const updatedBy = 'staff_' + actor;
+
+        const beforeJson = typeof item.data === 'string' ? item.data : JSON.stringify(item.data);
+        const afterJson = JSON.stringify(parsedData);
+
+        await env.LEGACY_DB
+          .prepare(`
+            UPDATE content_item
+            SET data = ?, updated_by = ?, updated_at = datetime('now')
+            WHERE id = ?
+          `)
+          .bind(afterJson, updatedBy, item.id)
+          .run();
+
+        await env.LEGACY_DB
+          .prepare(`
+            INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
+            VALUES (?, 'content_item.direct_edit', 'content_item', ?, ?, ?)
+          `)
+          .bind(actor, item.id, beforeJson, afterJson)
+          .run();
+
+        try {
+          _resetContentCache();
+        } catch {}
+
+        return json({ ok: true, id: item.id, updated_by: updatedBy });
       }
     }
 

@@ -107,7 +107,14 @@ async function searchCaregivers(offset = 0) {
 }
 
 async function loadStaffConsole() {
-  await Promise.all([loadFollowups(), loadEvents(), loadGrants(), searchCaregivers(0)]);
+  await Promise.all([
+    loadFollowups(),
+    loadEvents(),
+    loadGrants(),
+    searchCaregivers(0),
+    loadSiteContent(),
+    loadRecentChanges()
+  ]);
   if (currentEventId) {
     await loadRegistrations(currentEventId, currentEventTitle);
   }
@@ -1010,6 +1017,12 @@ document.addEventListener('DOMContentLoaded', function () {
       loadGrants();
     });
   }
+  const refreshChangesBtn = document.getElementById('refreshRecentChangesBtn');
+  if (refreshChangesBtn) {
+    refreshChangesBtn.addEventListener('click', function () {
+      loadRecentChanges();
+    });
+  }
 });
 
 document.addEventListener('submit', function (e) {
@@ -1025,6 +1038,9 @@ document.addEventListener('submit', function (e) {
   } else if (formAction === 'submit-add-note') {
     e.preventDefault();
     submitAddNote(form);
+  } else if (formAction === 'submit-direct-content') {
+    e.preventDefault();
+    submitDirectContent(form);
   }
 });
 
@@ -1084,6 +1100,17 @@ document.addEventListener('click', function (e) {
   } else if (action === 'agent-change-discard') {
     e.stopPropagation();
     discardAgentChange(target);
+  } else if (action === 'edit-content-item') {
+    e.stopPropagation();
+    const id = target.getAttribute('data-content-id');
+    openContentEditor(id);
+  } else if (action === 'close-content-editor') {
+    e.stopPropagation();
+    closeContentEditor();
+  } else if (action === 'undo-change') {
+    e.stopPropagation();
+    const id = Number(target.getAttribute('data-audit-id'));
+    handleUndoChange(id, target);
   }
 });
 
@@ -1276,4 +1303,312 @@ window.agentSend = async function () {
   }
 };
 
+let siteContentItems = [];
+let siteContentTypes = {};
 
+async function loadSiteContent() {
+  try {
+    const res = await fetch('/api/staff/content');
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to load site content');
+
+    siteContentItems = data.items || data.content_items || [];
+    siteContentTypes = {};
+    for (const t of (data.types || data.content_types || [])) {
+      let schema = t.json_schema;
+      if (typeof schema === 'string') {
+        try { schema = JSON.parse(schema); } catch {}
+      }
+      siteContentTypes[t.id] = schema;
+    }
+
+    renderSiteContent();
+  } catch (e) {
+    const list = document.getElementById('siteContentList');
+    if (list) list.innerHTML = `<p class="muted small text-center my-20">Error loading content: ${escapeHtml(e.message)}</p>`;
+  }
+}
+
+function renderSiteContent() {
+  const container = document.getElementById('siteContentList');
+  if (!container) return;
+
+  if (siteContentItems.length === 0) {
+    container.innerHTML = '<p class="muted small text-center my-20">No published content items found.</p>';
+    return;
+  }
+
+  const groups = {};
+  for (const item of siteContentItems) {
+    if (!groups[item.type_id]) groups[item.type_id] = [];
+    groups[item.type_id].push(item);
+  }
+
+  let html = '';
+  for (const [typeId, items] of Object.entries(groups)) {
+    html += `<div class="content-type-group">`;
+    html += `<div class="content-type-title">${escapeHtml(typeId)}</div>`;
+    for (const item of items) {
+      let parsed = item.data;
+      if (typeof parsed === 'string') {
+        try { parsed = JSON.parse(parsed); } catch {}
+      }
+      const label = (parsed && (parsed.title || parsed.heading || parsed.section_key || parsed.label || parsed.name)) || item.id;
+      html += `
+        <div class="content-item-row">
+          <div class="content-item-info">
+            <div class="content-item-label">${escapeHtml(label)}</div>
+            <div class="content-item-id">${escapeHtml(item.id)}</div>
+          </div>
+          <button class="btn btn-sm btn-outline btn-compact" data-action="edit-content-item" data-content-id="${escapeHtml(item.id)}">Edit</button>
+        </div>
+      `;
+    }
+    html += `</div>`;
+  }
+
+  container.innerHTML = html;
+}
+
+function openContentEditor(contentId) {
+  const item = siteContentItems.find(i => i.id === contentId);
+  if (!item) return;
+
+  const schema = siteContentTypes[item.type_id];
+  if (!schema) {
+    alert(`Schema for content type ${item.type_id} not found.`);
+    return;
+  }
+
+  let parsedData = item.data;
+  if (typeof parsedData === 'string') {
+    try { parsedData = JSON.parse(parsedData); } catch {}
+  }
+
+  const editorContainer = document.getElementById('siteContentEditor');
+  if (!editorContainer) return;
+
+  editorContainer.innerHTML = generateSchemaFormHtml(schema, parsedData, item.type_id, item.id);
+  editorContainer.classList.remove('d-none');
+}
+
+function closeContentEditor() {
+  const editorContainer = document.getElementById('siteContentEditor');
+  if (!editorContainer) return;
+  editorContainer.innerHTML = '';
+  editorContainer.classList.add('d-none');
+}
+
+function generateSchemaFormHtml(schema, initialData, typeId, contentId) {
+  const props = schema.properties || {};
+  const required = schema.required || [];
+  const data = initialData || {};
+
+  let fieldsHtml = '';
+  for (const [key, prop] of Object.entries(props)) {
+    const isReq = required.includes(key);
+    const reqMark = isReq ? ' *' : '';
+    const val = data[key];
+
+    fieldsHtml += `<div class="editor-field">`;
+    fieldsHtml += `<label class="editor-label">${escapeHtml(key)}${reqMark}</label>`;
+
+    if (prop.enum && Array.isArray(prop.enum)) {
+      fieldsHtml += `<select name="${escapeHtml(key)}" class="editor-input" data-schema-type="enum"${isReq ? ' required' : ''}>`;
+      for (const opt of prop.enum) {
+        const selected = val === opt ? ' selected' : '';
+        fieldsHtml += `<option value="${escapeHtml(opt)}"${selected}>${escapeHtml(opt)}</option>`;
+      }
+      fieldsHtml += `</select>`;
+    } else if (prop.type === 'string') {
+      const isLong = (prop.maxLength && prop.maxLength > 100) || ['body', 'description', 'notes', 'summary'].includes(key);
+      if (isLong) {
+        fieldsHtml += `<textarea name="${escapeHtml(key)}" class="editor-textarea" data-schema-type="string"${isReq ? ' required' : ''}>${escapeHtml(val || '')}</textarea>`;
+      } else {
+        fieldsHtml += `<input type="text" name="${escapeHtml(key)}" class="editor-input" data-schema-type="string" value="${escapeHtml(val || '')}"${isReq ? ' required' : ''}>`;
+      }
+    } else if (prop.type === 'boolean') {
+      const checked = Boolean(val) ? ' checked' : '';
+      fieldsHtml += `<label class="editor-checkbox-row"><input type="checkbox" name="${escapeHtml(key)}" data-schema-type="boolean"${checked}> Enabled</label>`;
+    } else if (prop.type === 'number' || prop.type === 'integer') {
+      const numVal = val !== undefined && val !== null ? val : '';
+      fieldsHtml += `<input type="number" name="${escapeHtml(key)}" class="editor-input" data-schema-type="${escapeHtml(prop.type)}" value="${escapeHtml(String(numVal))}"${isReq ? ' required' : ''}>`;
+    } else if (prop.type === 'array' && prop.items?.type === 'string') {
+      const lines = Array.isArray(val) ? val.join('\n') : '';
+      fieldsHtml += `<textarea name="${escapeHtml(key)}" class="editor-textarea" data-schema-type="array-string" placeholder="One item per line"${isReq ? ' required' : ''}>${escapeHtml(lines)}</textarea>`;
+    } else {
+      const jsonStr = val !== undefined ? JSON.stringify(val, null, 2) : '';
+      fieldsHtml += `<textarea name="${escapeHtml(key)}" class="editor-textarea editor-textarea-json" data-schema-type="json"${isReq ? ' required' : ''}>${escapeHtml(jsonStr)}</textarea>`;
+    }
+
+    fieldsHtml += `</div>`;
+  }
+
+  return `
+    <div class="editor-box">
+      <div class="editor-header">
+        <strong>Direct Edit: ${escapeHtml(contentId)} (${escapeHtml(typeId)})</strong>
+        <button type="button" class="btn btn-sm btn-outline btn-compact" data-action="close-content-editor">Cancel</button>
+      </div>
+      <div id="contentEditorError" class="form-error-banner d-none"></div>
+      <form data-action="submit-direct-content" data-content-id="${escapeHtml(contentId)}">
+        ${fieldsHtml}
+        <div class="editor-actions">
+          <button type="submit" class="btn btn-sm btn-plum">Save published changes</button>
+          <button type="button" class="btn btn-sm btn-outline" data-action="close-content-editor">Cancel</button>
+        </div>
+      </form>
+    </div>
+  `;
+}
+
+async function submitDirectContent(form) {
+  const contentId = form.getAttribute('data-content-id');
+  const item = siteContentItems.find(i => i.id === contentId);
+  if (!item) return;
+  const schema = siteContentTypes[item.type_id];
+  const props = schema?.properties || {};
+
+  const errorDiv = document.getElementById('contentEditorError');
+  if (errorDiv) {
+    errorDiv.textContent = '';
+    errorDiv.classList.add('d-none');
+  }
+
+  const payload = {};
+  for (const [key, prop] of Object.entries(props)) {
+    const el = form.elements[key];
+    if (!el) continue;
+
+    const schemaType = el.getAttribute('data-schema-type');
+    if (schemaType === 'boolean') {
+      payload[key] = el.checked;
+    } else if (schemaType === 'number') {
+      payload[key] = el.value === '' ? null : Number(el.value);
+    } else if (schemaType === 'integer') {
+      payload[key] = el.value === '' ? null : parseInt(el.value, 10);
+    } else if (schemaType === 'array-string') {
+      payload[key] = el.value.split('\n').map(s => s.trim()).filter(Boolean);
+    } else if (schemaType === 'json') {
+      try {
+        payload[key] = el.value.trim() ? JSON.parse(el.value) : null;
+      } catch (err) {
+        if (errorDiv) {
+          errorDiv.textContent = `Field ${key} contains invalid JSON: ${err.message}`;
+          errorDiv.classList.remove('d-none');
+        }
+        return;
+      }
+    } else {
+      payload[key] = el.value;
+    }
+  }
+
+  const submitBtn = form.querySelector('button[type="submit"]');
+  if (submitBtn) submitBtn.disabled = true;
+
+  try {
+    const res = await fetch('/api/agent/change/direct', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target_id: contentId, data: payload })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) {
+      throw new Error(data.error || data.refusal || 'Failed to save content');
+    }
+
+    closeContentEditor();
+    await Promise.all([loadSiteContent(), loadRecentChanges()]);
+  } catch (e) {
+    if (errorDiv) {
+      errorDiv.textContent = e.message;
+      errorDiv.classList.remove('d-none');
+    } else {
+      alert(`Error saving content: ${e.message}`);
+    }
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
+  }
+}
+
+let recentChanges = [];
+
+async function loadRecentChanges() {
+  try {
+    const res = await fetch('/api/staff/recent-changes');
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to load recent changes');
+
+    recentChanges = data.changes || data.recent_changes || [];
+    renderRecentChanges();
+  } catch (e) {
+    const list = document.getElementById('recentChangesList');
+    if (list) list.innerHTML = `<p class="muted small text-center my-20">Error loading recent changes: ${escapeHtml(e.message)}</p>`;
+  }
+}
+
+function renderRecentChanges() {
+  const container = document.getElementById('recentChangesList');
+  if (!container) return;
+
+  if (recentChanges.length === 0) {
+    container.innerHTML = '<p class="muted small text-center my-20">No recent changes recorded.</p>';
+    return;
+  }
+
+  let html = '';
+  for (const c of recentChanges) {
+    const isUndone = c.is_undone;
+    const canUndo = c.restorable || c.can_undo;
+    const timeStr = c.at || '';
+
+    html += `
+      <div class="recent-change-row">
+        <div class="recent-change-meta">
+          <div class="recent-change-action">${escapeHtml(c.action)} <span class="small muted">(${escapeHtml(c.entity)}:${escapeHtml(c.entity_id || '')})</span></div>
+          <div class="recent-change-detail">Actor: <strong>${escapeHtml(c.actor)}</strong> - <span class="recent-change-time">${escapeHtml(timeStr)}</span></div>
+        </div>
+        <div>
+          ${canUndo ? `<button class="btn btn-sm btn-outline btn-compact" data-action="undo-change" data-audit-id="${escapeHtml(String(c.id))}">Undo</button>` : ''}
+          ${isUndone ? `<span class="badge badge-outline">Undone</span>` : ''}
+        </div>
+      </div>
+    `;
+  }
+
+  container.innerHTML = html;
+}
+
+async function handleUndoChange(auditId, button) {
+  if (!window.confirm(`Undo change #${auditId}? This will restore the previous state.`)) {
+    return;
+  }
+
+  if (button) button.disabled = true;
+
+  try {
+    const res = await fetch(`/api/staff/undo/${auditId}`, {
+      method: 'POST'
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) {
+      throw new Error(data.error || 'Failed to undo change');
+    }
+
+    await Promise.all([
+      loadRecentChanges(),
+      loadSiteContent(),
+      loadFollowups(),
+      (async () => {
+        const panel = document.getElementById('caregiverRecordPanel');
+        if (panel && panel.dataset.caregiverId) {
+          await viewCaregiver(panel.dataset.caregiverId);
+        }
+      })()
+    ]);
+  } catch (e) {
+    alert(`Undo failed: ${e.message}`);
+    if (button) button.disabled = false;
+  }
+}
