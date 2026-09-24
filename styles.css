@@ -819,3 +819,12 @@ footer a:hover { color: #fff; }
 .note-row:last-child { border-bottom: none; margin-bottom: 0; }
 .note-content { flex: 1; word-break: break-word; }
 .note-list { margin-top: 4px; }
+
+/* Governed agent data changes (D7-S1) */
+.chat-area-bar { display: flex; align-items: center; gap: 8px; padding: 8px 14px; background: #fbf5ef; border-bottom: 1px solid #eee2d7; }
+.chat-area-label { font-size: 12px; font-weight: 600; color: var(--plum-dark); }
+.chat-area-select { padding: 4px 8px; border: 1px solid #ddd0c2; border-radius: 6px; font-size: 13px; background: #fff; color: var(--ink); }
+.diff-container { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.diff-box { background: #fbf8f5; border: 1px solid #ebdcd0; border-radius: 6px; padding: 6px 10px; }
+.diff-header { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--ink-soft); margin-bottom: 4px; }
+.diff-content { font-family: monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all; margin: 0; color: var(--ink); }
