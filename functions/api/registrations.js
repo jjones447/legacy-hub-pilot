@@ -1,3 +1,5 @@
+import { internalError } from '../_lib/errors.js';
+
 // GET/POST /api/registrations — manages event registrations and attendance (slice 05).
 export async function onRequestGet({ request, env }) {
   try {
@@ -27,10 +29,7 @@ export async function onRequestGet({ request, env }) {
       headers: { 'content-type': 'application/json' },
     });
   } catch (e) {
-    return new Response(JSON.stringify({ ok: false, error: e.message }), {
-      status: 500,
-      headers: { 'content-type': 'application/json' },
-    });
+    return internalError('/api/registrations GET', e);
   }
 }
 
@@ -85,9 +84,6 @@ export async function onRequestPost({ request, env }) {
       headers: { 'content-type': 'application/json' },
     });
   } catch (e) {
-    return new Response(JSON.stringify({ ok: false, error: e.message }), {
-      status: 500,
-      headers: { 'content-type': 'application/json' },
-    });
+    return internalError('/api/registrations POST', e);
   }
 }

@@ -1,3 +1,5 @@
+import { internalError } from '../_lib/errors.js';
+
 // GET/POST /api/followups — manages the follow-up queue (slice 05).
 export async function onRequestGet({ env }) {
   try {
@@ -16,10 +18,7 @@ export async function onRequestGet({ env }) {
       headers: { 'content-type': 'application/json' },
     });
   } catch (e) {
-    return new Response(JSON.stringify({ ok: false, error: e.message }), {
-      status: 500,
-      headers: { 'content-type': 'application/json' },
-    });
+    return internalError('/api/followups GET', e);
   }
 }
 
@@ -74,9 +73,6 @@ export async function onRequestPost({ request, env }) {
       headers: { 'content-type': 'application/json' },
     });
   } catch (e) {
-    return new Response(JSON.stringify({ ok: false, error: e.message }), {
-      status: 500,
-      headers: { 'content-type': 'application/json' },
-    });
+    return internalError('/api/followups POST', e);
   }
 }

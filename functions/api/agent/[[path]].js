@@ -4,6 +4,7 @@ import { mapRequestToChange, mapRequestToWorkflowChange, validateJsonSchema } fr
 import * as grantsDomain from '../../_lib/domain/grants.js';
 import * as caregiversDomain from '../../_lib/domain/caregivers.js';
 import { getActor } from '../../_lib/actor.js';
+import { internalError } from '../../_lib/errors.js';
 import { _resetContentCache } from '../../_content.mjs';
 
 export async function onRequestGet({ request, env }) {
@@ -50,7 +51,7 @@ export async function onRequestGet({ request, env }) {
 
     return json({ ok: false, error: 'invalid route' }, 404);
   } catch (e) {
-    return json({ ok: false, error: e.message }, 500);
+    return internalError('/api/agent GET', e);
   }
 }
 
@@ -585,7 +586,7 @@ export async function onRequestPost({ request, env }) {
 
     return json({ ok: false, error: 'unsupported action' }, 400);
   } catch (e) {
-    return json({ ok: false, error: e.message }, 500);
+    return internalError('/api/agent POST', e);
   }
 }
 

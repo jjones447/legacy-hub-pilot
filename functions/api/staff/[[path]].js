@@ -1,5 +1,6 @@
 // GET/POST /api/staff/[[path]] — staff endpoints for queue and caregiver management (slice 08).
 import { getActor } from '../../_lib/actor.js';
+import { internalError } from '../../_lib/errors.js';
 import * as caregiversDomain from '../../_lib/domain/caregivers.js';
 import { _resetContentCache } from '../../_content.mjs';
 
@@ -257,7 +258,7 @@ export async function onRequestGet({ request, env }) {
 
     return json({ ok: false, error: 'unsupported route' }, 404);
   } catch (e) {
-    return json({ ok: false, error: e.message }, 500);
+    return internalError('/api/staff GET', e);
   }
 }
 
@@ -713,7 +714,7 @@ export async function onRequestPost({ request, env }) {
 
     return json({ ok: false, error: 'invalid route parameters' }, 400);
   } catch (e) {
-    return json({ ok: false, error: e.message }, 500);
+    return internalError('/api/staff POST', e);
   }
 }
 
@@ -750,7 +751,7 @@ export async function onRequestPatch({ request, env }) {
       profile: result.profile
     });
   } catch (e) {
-    return json({ ok: false, error: e.message }, 500);
+    return internalError('/api/staff PATCH', e);
   }
 }
 
