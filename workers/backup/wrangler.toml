@@ -1,0 +1,15 @@
+name = "legacy-hub-backup"
+main = "src/index.mjs"
+compatibility_date = "2026-07-01"
+
+[triggers]
+crons = ["0 3 * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "legacy-hub-db"
+database_id = "dab02f78-f131-4d17-abaa-db9e6b45fb1b"
+
+[[r2_buckets]]
+binding = "BACKUPS"
+bucket_name = "legacy-hub-backups"
