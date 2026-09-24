@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { onRequest } from '../functions/_middleware.js';
 
-const EXPECTED_CSP_REPORT_ONLY =
+const EXPECTED_CSP =
   "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
 
 test('security headers on public page response', async () => {
@@ -12,10 +12,10 @@ test('security headers on public page response', async () => {
 
   assert.equal(resp.status, 200);
   assert.equal(
-    resp.headers.get('Content-Security-Policy-Report-Only'),
-    EXPECTED_CSP_REPORT_ONLY,
+    resp.headers.get('Content-Security-Policy'),
+    EXPECTED_CSP,
   );
-  assert.equal(resp.headers.get('Content-Security-Policy'), null);
+  assert.equal(resp.headers.get('Content-Security-Policy-Report-Only'), null);
   assert.equal(
     resp.headers.get('Strict-Transport-Security'),
     'max-age=31536000; includeSubDomains',
@@ -36,10 +36,10 @@ test('security headers on console response via non-prod escape', async () => {
 
   assert.equal(resp.status, 200);
   assert.equal(
-    resp.headers.get('Content-Security-Policy-Report-Only'),
-    EXPECTED_CSP_REPORT_ONLY,
+    resp.headers.get('Content-Security-Policy'),
+    EXPECTED_CSP,
   );
-  assert.equal(resp.headers.get('Content-Security-Policy'), null);
+  assert.equal(resp.headers.get('Content-Security-Policy-Report-Only'), null);
   assert.equal(
     resp.headers.get('Strict-Transport-Security'),
     'max-age=31536000; includeSubDomains',
@@ -56,10 +56,10 @@ test('security headers on fail-closed 403 response', async () => {
 
   assert.equal(resp.status, 403);
   assert.equal(
-    resp.headers.get('Content-Security-Policy-Report-Only'),
-    EXPECTED_CSP_REPORT_ONLY,
+    resp.headers.get('Content-Security-Policy'),
+    EXPECTED_CSP,
   );
-  assert.equal(resp.headers.get('Content-Security-Policy'), null);
+  assert.equal(resp.headers.get('Content-Security-Policy-Report-Only'), null);
   assert.equal(
     resp.headers.get('Strict-Transport-Security'),
     'max-age=31536000; includeSubDomains',

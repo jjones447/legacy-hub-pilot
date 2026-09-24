@@ -864,3 +864,23 @@ footer a:hover { color: #fff; }
 .badge-published { background: var(--green-soft); color: var(--green); }
 .badge-archived { background: #fbeae5; color: #a84a32; }
 
+/* Staff console styles & utilities (CSP enforcement) */
+.staff-search-controls { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.staff-search-input { flex: 1; min-width: 160px; padding: 6px 10px; border: 1.5px solid #ddd0c2; border-radius: 8px; font-size: 13.5px; }
+.staff-search-select { padding: 6px 10px; border: 1.5px solid #ddd0c2; border-radius: 8px; font-size: 13.5px; }
+.staff-paging-bar { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
+.staff-btn-group { display: flex; gap: 6px; }
+.staff-panel-header-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.mb-0 { margin-bottom: 0; }
+.mt-6 { margin-top: 6px; }
+.mt-14 { margin-top: 14px; }
+.staff-filter-select-sm { padding: 4px 8px; border: 1.5px solid #ddd0c2; border-radius: 8px; font-size: 13px; }
+.grant-row { padding: 10px; border: 1px solid #efdfd3; border-radius: 8px; margin-bottom: 8px; background: #fff; }
+.grant-actions { margin-top: 6px; }
+.grant-error-banner { display: none; color: #a84a32; background: #f9efdc; margin-top: 6px; padding: 6px; border-radius: 4px; font-size: 12.5px; }
+.staff-section-title { font-weight: 700; color: var(--plum-dark); }
+.form-row-compact { display: flex; gap: 8px; margin-bottom: 8px; }
+.form-col-flex { flex: 1; margin-bottom: 0; }
+.form-input-compact { padding: 6px 10px; border-radius: 6px; font-size: 13px; }
+.form-textarea-compact { padding: 6px 10px; border-radius: 6px; font-size: 13px; width: 100%; box-sizing: border-box; }
+

@@ -136,11 +136,9 @@ function withSecurityHeaders(resp) {
   h.set('X-Content-Type-Options', 'nosniff');
   h.set('Referrer-Policy', 'no-referrer');
   h.set(
-    'Content-Security-Policy-Report-Only',
+    'Content-Security-Policy',
     "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
   );
-  // Content-Security-Policy is set to Report-Only now; enforcement is pending
-  // refactoring inline handlers/styles and staging page checks to avoid breaking pages.
   return new Response(resp.body, { status: resp.status, statusText: resp.statusText, headers: h });
 }
 
