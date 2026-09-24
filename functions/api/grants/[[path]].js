@@ -1,5 +1,6 @@
 // GET/POST /api/grants — staff endpoints for managing grant applications (slice 06).
 import { getActor } from '../../_lib/actor.js';
+import { internalError } from '../../_lib/errors.js';
 import * as grantsDomain from '../../_lib/domain/grants.js';
 
 export async function onRequestGet({ request, env }) {
@@ -29,7 +30,7 @@ export async function onRequestGet({ request, env }) {
 
     return json({ ok: true, grants: results });
   } catch (e) {
-    return json({ ok: false, error: e.message }, 500);
+    return internalError('/api/grants GET', e);
   }
 }
 
@@ -63,7 +64,7 @@ export async function onRequestPost({ request, env }) {
 
     return json({ ok: true });
   } catch (e) {
-    return json({ ok: false, error: e.message }, 500);
+    return internalError('/api/grants POST', e);
   }
 }
 

@@ -1,4 +1,5 @@
 // POST /api/webhooks/square -- Square payments webhook ingestion (D3).
+import { internalError } from '../../_lib/errors.js';
 
 async function getHmacSha256Base64(message, secret) {
   const enc = new TextEncoder();
@@ -291,6 +292,6 @@ export async function onRequestPost({ request, env }) {
 
     return json({ ok: true, caregiver_id: caregiverId, entity, entity_id: entityId });
   } catch (e) {
-    return json({ ok: false, error: e.message }, 500);
+    return internalError('/api/webhooks/square', e);
   }
 }

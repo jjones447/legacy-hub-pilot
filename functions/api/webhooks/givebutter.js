@@ -1,4 +1,5 @@
 // POST /api/webhooks/givebutter — GiveButter donations/registrations webhook ingestion (slice 08).
+import { internalError } from '../../_lib/errors.js';
 
 async function getHmacSha256(message, secret) {
   const enc = new TextEncoder();
@@ -178,6 +179,6 @@ export async function onRequestPost({ request, env }) {
 
     return json({ ok: true, caregiver_id: caregiverId, entity, entity_id: entityId });
   } catch (e) {
-    return json({ ok: false, error: e.message }, 500);
+    return internalError('/api/webhooks/givebutter', e);
   }
 }
