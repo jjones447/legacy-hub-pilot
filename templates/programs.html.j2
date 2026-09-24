@@ -16,10 +16,10 @@
 
 <section class="hero py-56-64">
   <div class="container">
-    <h1 class="hero-title-clamp">{{ sections["programs.hero"].title }}</h1>
-    <p class="lede">{{ sections["programs.hero"].lede }}</p>
+    <h1 class="hero-title-clamp" data-cs="programs.hero.title">{{ sections["programs.hero"].title }}</h1>
+    <p class="lede" data-cs="programs.hero.lede">{{ sections["programs.hero"].lede }}</p>
     <div class="btn-row">
-      <a href="#" class="btn btn-coral" data-action="open-membership">{{ sections["programs.hero"].cta_label }}</a>
+      <a href="#" class="btn btn-coral" data-action="open-membership" data-cs="programs.hero.cta_label">{{ sections["programs.hero"].cta_label }}</a>
     </div>
   </div>
 </section>
@@ -28,14 +28,16 @@
   <div class="container">
     <div class="split">
       <div>
-        <span class="eyebrow">{{ sections["programs.membership"].eyebrow }}</span>
-        <h2 class="mb-14">{{ sections["programs.membership"].heading }}</h2>
+        <span class="eyebrow" data-cs="programs.membership.eyebrow">{{ sections["programs.membership"].eyebrow }}</span>
+        <h2 class="mb-14" data-cs="programs.membership.heading">{{ sections["programs.membership"].heading }}</h2>
+        <div data-cs-list="programs.membership.paragraphs">
 {%- for p in sections["programs.membership"].paragraphs %}
         <p class="muted mb-16">{{ p }}</p>
 {%- endfor %}
+        </div>
       </div>
       <div class="visual">
-        <h3 class="fs-18-mb-14">{{ sections["programs.membership"].panel_heading }}</h3>
+        <h3 class="fs-18-mb-14" data-cs="programs.membership.panel_heading">{{ sections["programs.membership"].panel_heading }}</h3>
 {%- for r in sections["programs.membership"].rows %}
         <div class="kv-row"><span class="k">{{ r.k }}</span><span class="v">{{ r.v }}</span></div>
 {%- endfor %}
@@ -48,18 +50,20 @@
   <div class="container">
     <div class="split">
       <div class="visual bg-white">
-        <h3 class="fs-18-mb-14">{{ sections["programs.support_group"].panel_heading }}</h3>
+        <h3 class="fs-18-mb-14" data-cs="programs.support_group.panel_heading">{{ sections["programs.support_group"].panel_heading }}</h3>
 {%- for r in sections["programs.support_group"].rows %}
         <div class="kv-row"><span class="k">{{ r.k }}</span><span class="v">{{ r.v }}</span></div>
 {%- endfor %}
-        <a href="events.html" class="btn btn-plum btn-sm mt-16 d-inline-block">{{ sections["programs.support_group"].panel_cta_label }}</a>
+        <a href="events.html" class="btn btn-plum btn-sm mt-16 d-inline-block" data-cs="programs.support_group.panel_cta_label">{{ sections["programs.support_group"].panel_cta_label }}</a>
       </div>
       <div>
-        <span class="eyebrow">{{ sections["programs.support_group"].eyebrow }}</span>
-        <h2 class="mb-14">{{ sections["programs.support_group"].heading }}</h2>
+        <span class="eyebrow" data-cs="programs.support_group.eyebrow">{{ sections["programs.support_group"].eyebrow }}</span>
+        <h2 class="mb-14" data-cs="programs.support_group.heading">{{ sections["programs.support_group"].heading }}</h2>
+        <div data-cs-list="programs.support_group.paragraphs">
 {%- for p in sections["programs.support_group"].paragraphs %}
         <p class="muted mb-16">{{ p }}</p>
 {%- endfor %}
+        </div>
       </div>
     </div>
   </div>
@@ -93,19 +97,21 @@
   <div class="container">
     <div class="split">
       <div class="visual bg-white">
-        <h3 class="fs-18-mb-14">{{ sections["programs.socials"].panel_heading }}</h3>
+        <h3 class="fs-18-mb-14" data-cs="programs.socials.panel_heading">{{ sections["programs.socials"].panel_heading }}</h3>
 {%- for r in sections["programs.socials"].rows %}
         <div class="kv-row"><span class="k">{{ r.k }}</span><span class="v">{{ r.v }}</span></div>
 {%- endfor %}
-        <p class="small muted mt-16">{{ sections["programs.socials"].panel_note }}</p>
+        <p class="small muted mt-16" data-cs="programs.socials.panel_note">{{ sections["programs.socials"].panel_note }}</p>
       </div>
       <div>
-        <span class="eyebrow">{{ sections["programs.socials"].eyebrow }}</span>
-        <h2 class="mb-14">{{ sections["programs.socials"].heading }}</h2>
+        <span class="eyebrow" data-cs="programs.socials.eyebrow">{{ sections["programs.socials"].eyebrow }}</span>
+        <h2 class="mb-14" data-cs="programs.socials.heading">{{ sections["programs.socials"].heading }}</h2>
+        <div data-cs-list="programs.socials.paragraphs">
 {%- for p in sections["programs.socials"].paragraphs %}
         <p class="muted mb-16">{{ p }}</p>
 {%- endfor %}
-        <a href="events.html" class="btn btn-plum btn-sm">{{ sections["programs.socials"].cta_label }}</a>
+        </div>
+        <a href="events.html" class="btn btn-plum btn-sm" data-cs="programs.socials.cta_label">{{ sections["programs.socials"].cta_label }}</a>
       </div>
     </div>
   </div>
@@ -116,11 +122,11 @@
     <div class="card flex-wrap-center-gap-24">
       <div class="icon m-0-flex-shrink-0">💬</div>
       <div class="flex-1-min-260">
-        <span class="badge badge-blue">{{ sections["programs.coaching"].badge }}</span>
-        <h3 class="fs-20-m-8-0-6">{{ sections["programs.coaching"].heading }}</h3>
-        <p class="muted small m-0">{{ sections["programs.coaching"].body }}</p>
+        <span class="badge badge-blue" data-cs="programs.coaching.badge">{{ sections["programs.coaching"].badge }}</span>
+        <h3 class="fs-20-m-8-0-6" data-cs="programs.coaching.heading">{{ sections["programs.coaching"].heading }}</h3>
+        <p class="muted small m-0" data-cs="programs.coaching.body">{{ sections["programs.coaching"].body }}</p>
       </div>
-      <a href="#" class="btn btn-outline btn-sm" data-action="open-coaching-interest">{{ sections["programs.coaching"].cta_label }}</a>
+      <a href="#" class="btn btn-outline btn-sm" data-action="open-coaching-interest" data-cs="programs.coaching.cta_label">{{ sections["programs.coaching"].cta_label }}</a>
     </div>
   </div>
 </section>

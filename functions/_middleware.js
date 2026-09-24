@@ -1,4 +1,5 @@
 import { maybeRewriteMedia } from './_media.mjs';
+import { maybeRewriteContent } from './_content.mjs';
 
 // Root middleware: (1) baseline security headers on every response, and
 // (2) fail-closed auth on the staff/agent console surfaces via real Cloudflare
@@ -171,5 +172,5 @@ export async function onRequest(context) {
     // Verified. Endpoints may now safely decode the (verified) JWT for the actor email.
   }
 
-  return withSecurityHeaders(await maybeRewriteMedia(context, await next()));
+  return withSecurityHeaders(await maybeRewriteContent(context, await maybeRewriteMedia(context, await next())));
 }

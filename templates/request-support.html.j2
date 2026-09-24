@@ -16,8 +16,8 @@
 
 <section class="hero py-56-64">
   <div class="container">
-    <h1 class="hero-title-clamp">{{ sections["request_support.hero"].title }}</h1>
-    <p class="lede">{{ sections["request_support.hero"].lede }}</p>
+    <h1 class="hero-title-clamp" data-cs="request_support.hero.title">{{ sections["request_support.hero"].title }}</h1>
+    <p class="lede" data-cs="request_support.hero.lede">{{ sections["request_support.hero"].lede }}</p>
   </div>
 </section>
 
@@ -25,8 +25,8 @@
   <div class="container">
     <div class="split align-start">
       <div class="login-card measure-none">
-        <h2 class="fs-24">{{ sections["request_support.form"].heading }}</h2>
-        <p class="sub">{{ sections["request_support.form"].sub }}</p>
+        <h2 class="fs-24" data-cs="request_support.form.heading">{{ sections["request_support.form"].heading }}</h2>
+        <p class="sub" data-cs="request_support.form.sub">{{ sections["request_support.form"].sub }}</p>
         <form id="supportForm" data-action="submit-support">
           <div class="field">
             <label for="supName">Your name</label>
@@ -66,8 +66,8 @@
         </form>
       </div>
       <div>
-        <span class="eyebrow">{{ sections["request_support.next"].eyebrow }}</span>
-        <h2 class="fs-26-mb-18">{{ sections["request_support.next"].heading }}</h2>
+        <span class="eyebrow" data-cs="request_support.next.eyebrow">{{ sections["request_support.next"].eyebrow }}</span>
+        <h2 class="fs-26-mb-18" data-cs="request_support.next.heading">{{ sections["request_support.next"].heading }}</h2>
 {%- for it in sections["request_support.next"].steps %}
         <div class="timeline-item"><div class="timeline-dot{% if it.dot == 'var(--green)' %} bg-green{% elif it.dot == 'var(--amber)' %} bg-amber{% elif it.dot %} section-sand{% endif %}"></div><div><strong>{{ it.title }}</strong><div class="when">{{ it.when }}</div></div></div>
 {%- endfor %}
