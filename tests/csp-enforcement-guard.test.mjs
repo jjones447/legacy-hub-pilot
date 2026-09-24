@@ -94,7 +94,7 @@ test('zero inline on*= event handlers across all served HTML, templates, staff.j
   );
 });
 
-test('zero inline script blocks with body across all served HTML and templates', () => {
+test('zero inline script blocks across all served HTML and templates', () => {
   const htmlFiles = fs.readdirSync(rootDir)
     .filter(f => f.endsWith('.html'))
     .map(f => path.join(rootDir, f));
@@ -107,18 +107,20 @@ test('zero inline script blocks with body across all served HTML and templates',
     : [];
 
   const allFiles = [...htmlFiles, ...templateFiles];
-  const scriptTagRegex = /<script(?:\s+[^>]*)?>([\s\S]*?)<\/script>/gi;
+  // Match any script element that has inline content or lacks a src attribute
+  const scriptTagRegex = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi;
   const violations = [];
 
   for (const file of allFiles) {
     const content = fs.readFileSync(file, 'utf8');
     let match;
     while ((match = scriptTagRegex.exec(content)) !== null) {
-      const scriptBody = match[1].trim();
-      if (scriptBody.length > 0) {
+      const attrs = match[1];
+      const scriptBody = match[2].trim();
+      if (!/\bsrc\s*=/i.test(attrs) || scriptBody.length > 0) {
         violations.push({
           file: path.relative(rootDir, file),
-          sample: scriptBody.slice(0, 80),
+          sample: match[0].slice(0, 80),
         });
       }
     }
@@ -127,7 +129,42 @@ test('zero inline script blocks with body across all served HTML and templates',
   assert.equal(
     violations.length,
     0,
-    `Found inline script blocks with body in ${violations.length} file(s):\n` +
+    `Found inline script blocks in ${violations.length} file(s):\n` +
+      violations.map(v => `  ${v.file}: ${v.sample}`).join('\n'),
+  );
+});
+
+test('zero <style> elements across all served HTML and templates', () => {
+  const htmlFiles = fs.readdirSync(rootDir)
+    .filter(f => f.endsWith('.html'))
+    .map(f => path.join(rootDir, f));
+
+  const templatesDir = path.join(rootDir, 'templates');
+  const templateFiles = fs.existsSync(templatesDir)
+    ? fs.readdirSync(templatesDir)
+        .filter(f => f.endsWith('.j2'))
+        .map(f => path.join(templatesDir, f))
+    : [];
+
+  const allFiles = [...htmlFiles, ...templateFiles];
+  const styleTagRegex = /<style(?:\s+[^>]*)?>([\s\S]*?)<\/style>/gi;
+  const violations = [];
+
+  for (const file of allFiles) {
+    const content = fs.readFileSync(file, 'utf8');
+    let match;
+    while ((match = styleTagRegex.exec(content)) !== null) {
+      violations.push({
+        file: path.relative(rootDir, file),
+        sample: match[0].slice(0, 80),
+      });
+    }
+  }
+
+  assert.equal(
+    violations.length,
+    0,
+    `Found <style> elements in ${violations.length} file(s):\n` +
       violations.map(v => `  ${v.file}: ${v.sample}`).join('\n'),
   );
 });
@@ -140,3 +177,4 @@ test('middleware enforces Content-Security-Policy header and removes Report-Only
   assert.equal(resp.headers.get('Content-Security-Policy'), EXPECTED_CSP);
   assert.equal(resp.headers.get('Content-Security-Policy-Report-Only'), null);
 });
+

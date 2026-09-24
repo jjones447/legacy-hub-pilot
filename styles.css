@@ -884,3 +884,12 @@ footer a:hover { color: #fff; }
 .form-input-compact { padding: 6px 10px; border-radius: 6px; font-size: 13px; }
 .form-textarea-compact { padding: 6px 10px; border-radius: 6px; font-size: 13px; width: 100%; box-sizing: border-box; }
 
+/* Standalone holding page (coming-soon) */
+.cs-wrap { min-height: 100vh; display: flex; flex-direction: column; }
+.cs-main { flex: 1; display: flex; align-items: center; }
+.cs-card { max-width: 640px; }
+.cs-logo { height: 84px; width: auto; margin-bottom: 28px; filter: brightness(0) invert(1); opacity: .95; }
+.cs-foot { padding: 22px 0 30px; font-size: 14px; color: #eeddd2; }
+.cs-foot a { color: #fff; }
+@media (max-width: 600px) { .cs-logo { height: 62px; } }
+
