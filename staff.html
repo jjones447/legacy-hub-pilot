@@ -82,14 +82,19 @@
           </table>
         </div>
 
-        <div class="panel">
-          <h4>📅 Upcoming events</h4>
+        <div class="panel" id="eventsPanel">
+          <div class="flex-between-center mb-12">
+            <h4 class="m-0">📅 Upcoming events</h4>
+            <button class="btn btn-sm btn-plum" id="newEventToggleBtn">+ New Event</button>
+          </div>
+          <div id="newEventContainer" class="d-none mb-16"></div>
           <table class="data">
-            <thead><tr><th>Event</th><th>Date</th><th>Registered</th></tr></thead>
+            <thead><tr><th>Event</th><th>Date</th><th>Status</th><th>Registered</th><th>Actions</th></tr></thead>
             <tbody id="upcomingEventsBody">
-              <tr><td colspan="3" class="text-center muted small">Loading events...</td></tr>
+              <tr><td colspan="5" class="text-center muted small">Loading events...</td></tr>
             </tbody>
           </table>
+          <div id="editEventContainer" class="d-none mt-16"></div>
         </div>
 
         <div class="panel d-none-mt-24" id="attendancePanel">
@@ -153,6 +158,7 @@
               <option value="content">Content</option>
               <option value="grant">Grant</option>
               <option value="caregiver">Caregiver</option>
+              <option value="event">Event</option>
             </select>
           </div>
           <div class="chat-body" id="chatBody">

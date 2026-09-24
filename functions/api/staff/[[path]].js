@@ -2,6 +2,7 @@
 import { getActor } from '../../_lib/actor.js';
 import { internalError } from '../../_lib/errors.js';
 import * as caregiversDomain from '../../_lib/domain/caregivers.js';
+import * as eventsDomain from '../../_lib/domain/events.js';
 import { _resetContentCache } from '../../_content.mjs';
 
 function json(obj, status = 200) {
@@ -254,6 +255,21 @@ export async function onRequestGet({ request, env }) {
         changes: enriched,
         recent_changes: enriched
       });
+    }
+
+    if (subRoute === 'events') {
+      // GET /api/staff/events -- all events with registration counts and status
+      const { results } = await env.LEGACY_DB.prepare(`
+        SELECT e.id, e.title, e.type, e.starts_at, e.ends_at, e.location, e.capacity,
+               e.recurring, e.publish_state, e.created_at, e.updated_at,
+               COUNT(r.id) AS registered_count
+        FROM event e
+        LEFT JOIN registration r ON e.id = r.event_id AND r.status IN ('registered', 'attended')
+        GROUP BY e.id
+        ORDER BY e.starts_at ASC
+      `).all();
+
+      return json({ ok: true, events: results });
     }
 
     return json({ ok: false, error: 'unsupported route' }, 404);
@@ -712,6 +728,50 @@ export async function onRequestPost({ request, env }) {
       return json({ ok: true, undone_audit_id: original.id });
     }
 
+    // 6. POST /api/staff/event (create)
+    if (pathSegments.length === 3 && pathSegments[2] === 'event') {
+      let body;
+      try {
+        body = await request.json();
+      } catch (e) {
+        return json({ ok: false, error: 'invalid JSON body' }, 400);
+      }
+      const actor = getActor(request, env);
+      const result = await eventsDomain.apply(env.LEGACY_DB, { operation: 'create', payload: body }, actor);
+      if (!result.ok) {
+        return json({ ok: false, error: result.error }, result.status || 400);
+      }
+      return json({ ok: true, event: result.event }, 201);
+    }
+
+    // 7. POST /api/staff/event/:id/publish
+    if (pathSegments.length === 5 && pathSegments[2] === 'event' && pathSegments[4] === 'publish') {
+      const eventId = pathSegments[3];
+      const body = await request.json().catch(() => ({}));
+      const actor = getActor(request, env);
+      const result = await eventsDomain.apply(env.LEGACY_DB, { id: eventId, operation: 'publish', payload: body }, actor);
+      if (!result.ok) {
+        return json({ ok: false, error: result.error }, result.status || 400);
+      }
+      return json({ ok: true, event: result.event });
+    }
+
+    // 8. POST /api/staff/event/:id/archive
+    if (pathSegments.length === 5 && pathSegments[2] === 'event' && pathSegments[4] === 'archive') {
+      const eventId = pathSegments[3];
+      const body = await request.json().catch(() => ({}));
+      const actor = getActor(request, env);
+      const result = await eventsDomain.apply(env.LEGACY_DB, { id: eventId, operation: 'archive', payload: body }, actor);
+      if (!result.ok) {
+        return json({
+          ok: false,
+          error: result.error,
+          ...(result.registration_count != null ? { registration_count: result.registration_count } : {})
+        }, result.status || 400);
+      }
+      return json({ ok: true, event: result.event });
+    }
+
     return json({ ok: false, error: 'invalid route parameters' }, 400);
   } catch (e) {
     return internalError('/api/staff POST', e);
@@ -724,32 +784,58 @@ export async function onRequestPatch({ request, env }) {
     const pathSegments = url.pathname.split('/').filter(Boolean);
 
     // PATCH /api/staff/caregiver/:id
-    if (pathSegments.length !== 4 || pathSegments[2] !== 'caregiver') {
-      return json({ ok: false, error: 'invalid route parameters' }, 400);
+    if (pathSegments.length === 4 && pathSegments[2] === 'caregiver') {
+      const caregiverId = pathSegments[3];
+      if (!caregiverId) {
+        return json({ ok: false, error: 'missing caregiver id' }, 400);
+      }
+
+      let body;
+      try {
+        body = await request.json();
+      } catch (e) {
+        return json({ ok: false, error: 'invalid JSON body' }, 400);
+      }
+
+      const actor = getActor(request, env);
+      const result = await caregiversDomain.apply(env.LEGACY_DB, { id: caregiverId, operation: 'update', payload: body }, actor);
+      if (!result.ok) {
+        return json({ ok: false, error: result.error }, result.status);
+      }
+
+      return json({
+        ok: true,
+        profile: result.profile
+      });
     }
 
-    const caregiverId = pathSegments[3];
-    if (!caregiverId) {
-      return json({ ok: false, error: 'missing caregiver id' }, 400);
+    // PATCH /api/staff/event/:id
+    if (pathSegments.length === 4 && pathSegments[2] === 'event') {
+      const eventId = pathSegments[3];
+      if (!eventId) {
+        return json({ ok: false, error: 'missing event id' }, 400);
+      }
+
+      let body;
+      try {
+        body = await request.json();
+      } catch (e) {
+        return json({ ok: false, error: 'invalid JSON body' }, 400);
+      }
+
+      const actor = getActor(request, env);
+      const result = await eventsDomain.apply(env.LEGACY_DB, { id: eventId, operation: 'update', payload: body }, actor);
+      if (!result.ok) {
+        return json({ ok: false, error: result.error }, result.status || 400);
+      }
+
+      return json({
+        ok: true,
+        event: result.event
+      });
     }
 
-    let body;
-    try {
-      body = await request.json();
-    } catch (e) {
-      return json({ ok: false, error: 'invalid JSON body' }, 400);
-    }
-
-    const actor = getActor(request, env);
-    const result = await caregiversDomain.apply(env.LEGACY_DB, { id: caregiverId, operation: 'update', payload: body }, actor);
-    if (!result.ok) {
-      return json({ ok: false, error: result.error }, result.status);
-    }
-
-    return json({
-      ok: true,
-      profile: result.profile
-    });
+    return json({ ok: false, error: 'invalid route parameters' }, 400);
   } catch (e) {
     return internalError('/api/staff PATCH', e);
   }

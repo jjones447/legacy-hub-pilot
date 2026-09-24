@@ -853,3 +853,14 @@ footer a:hover { color: #fff; }
 .recent-change-action { font-weight: 600; font-size: 13px; color: var(--ink); }
 .recent-change-detail { font-size: 11.5px; color: var(--ink-soft); }
 .recent-change-time { font-size: 11px; color: #88746d; }
+
+/* Event Management (D7-S2A) */
+.field-row { display: flex; gap: 12px; }
+.field-col { flex: 1; min-width: 0; }
+.mb-16 { margin-bottom: 16px; }
+.mt-16 { margin-top: 16px; }
+.event-actions { display: flex; gap: 4px; align-items: center; }
+.badge-draft { background: #eee5da; color: var(--ink-soft); }
+.badge-published { background: var(--green-soft); color: var(--green); }
+.badge-archived { background: #fbeae5; color: #a84a32; }
+

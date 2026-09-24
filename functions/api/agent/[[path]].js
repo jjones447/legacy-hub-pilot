@@ -3,6 +3,7 @@
 import { mapRequestToChange, mapRequestToWorkflowChange, validateJsonSchema } from './_mapper.mjs';
 import * as grantsDomain from '../../_lib/domain/grants.js';
 import * as caregiversDomain from '../../_lib/domain/caregivers.js';
+import * as eventsDomain from '../../_lib/domain/events.js';
 import { getActor } from '../../_lib/actor.js';
 import { internalError } from '../../_lib/errors.js';
 import { _resetContentCache } from '../../_content.mjs';
@@ -79,7 +80,7 @@ export async function onRequestPost({ request, env }) {
           return json({ ok: false, error: `area must be one of: ${validAreas.join(', ')}` }, 400);
         }
 
-        if (body.area !== 'grant' && body.area !== 'caregiver') {
+        if (body.area !== 'grant' && body.area !== 'caregiver' && body.area !== 'event') {
           return json({ ok: false, refusal: `area ${body.area} is not supported in this slice` });
         }
 
@@ -105,6 +106,13 @@ export async function onRequestPost({ request, env }) {
 
           if (!currentRecord) {
             return json({ ok: false, error: 'caregiver not found' }, 404);
+          }
+        } else if (body.area === 'event') {
+          if (body.target_id && body.target_id !== 'new') {
+            currentRecord = await env.LEGACY_DB
+              .prepare('SELECT * FROM event WHERE id = ?')
+              .bind(body.target_id)
+              .first();
           }
         }
 
@@ -143,6 +151,12 @@ export async function onRequestPost({ request, env }) {
             operation,
             payload
           });
+        } else if (body.area === 'event') {
+          val = await eventsDomain.validate(env.LEGACY_DB, {
+            id: body.target_id,
+            operation,
+            payload
+          });
         }
 
         if (!val.ok) {
@@ -151,6 +165,7 @@ export async function onRequestPost({ request, env }) {
 
         const change_id = 'ac_' + crypto.randomUUID();
         const actor = getActor(request, env);
+        const resolvedTargetId = (val.projected && val.projected.id) ? val.projected.id : body.target_id.toString();
 
         await env.LEGACY_DB
           .prepare(`
@@ -161,10 +176,10 @@ export async function onRequestPost({ request, env }) {
             change_id,
             body.area,
             operation,
-            body.target_id.toString(),
+            resolvedTargetId,
             JSON.stringify(payload),
-            JSON.stringify(val.before || val.current),
-            JSON.stringify(val.after || val.projected),
+            JSON.stringify(val.before || val.current || {}),
+            JSON.stringify(val.after || val.projected || {}),
             actor
           )
           .run();
@@ -225,6 +240,12 @@ export async function onRequestPost({ request, env }) {
             operation: change.operation,
             payload
           });
+        } else if (change.area === 'event') {
+          reval = await eventsDomain.validate(env.LEGACY_DB, {
+            id: change.target_id,
+            operation: change.operation,
+            payload
+          });
         }
 
         if (!reval || !reval.ok) {
@@ -232,7 +253,7 @@ export async function onRequestPost({ request, env }) {
         }
 
         // Verify record has not changed underneath since draft was created
-        if (change.before_json) {
+        if (change.before_json && reval.current) {
           try {
             const expectedBefore = JSON.parse(change.before_json);
             for (const [k, v] of Object.entries(expectedBefore)) {
@@ -255,6 +276,12 @@ export async function onRequestPost({ request, env }) {
           }, actor);
         } else if (change.area === 'caregiver') {
           applyRes = await caregiversDomain.apply(env.LEGACY_DB, {
+            id: change.target_id,
+            operation: change.operation,
+            payload
+          }, actor);
+        } else if (change.area === 'event') {
+          applyRes = await eventsDomain.apply(env.LEGACY_DB, {
             id: change.target_id,
             operation: change.operation,
             payload
