@@ -1,5 +1,6 @@
 // GET/POST /api/staff/[[path]] — staff endpoints for queue and caregiver management (slice 08).
 import { getActor } from '../../_lib/actor.js';
+import * as caregiversDomain from '../../_lib/domain/caregivers.js';
 
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), {
@@ -466,14 +467,6 @@ export async function onRequestPatch({ request, env }) {
       return json({ ok: false, error: 'missing caregiver id' }, 400);
     }
 
-    const existing = await env.LEGACY_DB.prepare(`
-      SELECT * FROM caregiver WHERE id = ?
-    `).bind(caregiverId).first();
-
-    if (!existing) {
-      return json({ ok: false, error: 'caregiver not found' }, 404);
-    }
-
     let body;
     try {
       body = await request.json();
@@ -481,119 +474,15 @@ export async function onRequestPatch({ request, env }) {
       return json({ ok: false, error: 'invalid JSON body' }, 400);
     }
 
-    if (!body || typeof body !== 'object' || Array.isArray(body)) {
-      return json({ ok: false, error: 'body must be a JSON object' }, 400);
-    }
-
-    const allowedFields = [
-      'first_name',
-      'last_name',
-      'email',
-      'phone',
-      'preferred_contact',
-      'caring_for',
-      'relationship',
-      'segment_tags',
-      'status',
-      'outcome_status',
-      'outcome_notes'
-    ];
-
-    const bodyKeys = Object.keys(body);
-    if (bodyKeys.length === 0) {
-      return json({ ok: false, error: 'no update fields provided' }, 400);
-    }
-
-    for (const key of bodyKeys) {
-      if (!allowedFields.includes(key)) {
-        return json({ ok: false, error: `unknown or forbidden field: ${key}` }, 400);
-      }
-    }
-
-    // Validations
-    if ('status' in body) {
-      const validStatuses = ['active', 'inactive', 'archived'];
-      if (!validStatuses.includes(body.status)) {
-        return json({ ok: false, error: `status must be one of: ${validStatuses.join(', ')}` }, 400);
-      }
-    }
-
-    if ('outcome_status' in body && body.outcome_status !== null) {
-      const validOutcomes = ['improving', 'stable', 'needs_support', 'disengaged'];
-      if (!validOutcomes.includes(body.outcome_status)) {
-        return json({ ok: false, error: `outcome_status must be one of: ${validOutcomes.join(', ')}` }, 400);
-      }
-    }
-
-    if ('segment_tags' in body && body.segment_tags !== null) {
-      let tags = body.segment_tags;
-      if (typeof tags === 'string') {
-        try {
-          tags = JSON.parse(tags);
-        } catch (e) {
-          return json({ ok: false, error: 'segment_tags must be a JSON array of strings' }, 400);
-        }
-      }
-      if (!Array.isArray(tags) || !tags.every(item => typeof item === 'string')) {
-        return json({ ok: false, error: 'segment_tags must be a JSON array of strings' }, 400);
-      }
-      // Normalize body.segment_tags to JSON string for DB storage
-      body.segment_tags = JSON.stringify(tags);
-    }
-
-    const setClauses = [];
-    const setParams = [];
-    const afterChanges = {};
-    const beforeChanges = {};
-
-    for (const field of allowedFields) {
-      if (field in body) {
-        setClauses.push(`${field} = ?`);
-        setParams.push(body[field]);
-        beforeChanges[field] = existing[field];
-        afterChanges[field] = body[field];
-      }
-    }
-
-    // Check if outcome fields changed
-    const outcomeChanged = ('outcome_status' in body && body.outcome_status !== existing.outcome_status) ||
-                           ('outcome_notes' in body && body.outcome_notes !== existing.outcome_notes);
-
-    if (outcomeChanged) {
-      setClauses.push(`outcome_updated_at = datetime('now')`);
-    }
-
-    setClauses.push(`updated_at = datetime('now')`);
-
-    const updateSql = `
-      UPDATE caregiver
-      SET ${setClauses.join(', ')}
-      WHERE id = ?
-    `;
-    setParams.push(caregiverId);
-
-    await env.LEGACY_DB.prepare(updateSql).bind(...setParams).run();
-
     const actor = getActor(request, env);
-
-    // Audit log caregiver.update
-    await env.LEGACY_DB.prepare(`
-      INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
-      VALUES (?, 'caregiver.update', 'caregiver', ?, ?, ?)
-    `).bind(
-      actor,
-      caregiverId,
-      JSON.stringify(beforeChanges),
-      JSON.stringify(afterChanges)
-    ).run();
-
-    const updatedProfile = await env.LEGACY_DB.prepare(`
-      SELECT * FROM caregiver WHERE id = ?
-    `).bind(caregiverId).first();
+    const result = await caregiversDomain.apply(env.LEGACY_DB, { id: caregiverId, operation: 'update', payload: body }, actor);
+    if (!result.ok) {
+      return json({ ok: false, error: result.error }, result.status);
+    }
 
     return json({
       ok: true,
-      profile: updatedProfile
+      profile: result.profile
     });
   } catch (e) {
     return json({ ok: false, error: e.message }, 500);

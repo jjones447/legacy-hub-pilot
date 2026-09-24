@@ -10,6 +10,8 @@ function escapeHtml(str) {
 
 let currentEventId = null;
 let currentEventTitle = '';
+let currentCaregiverId = null;
+let currentGrantId = null;
 let currentSearchOffset = 0;
 const searchLimit = 10;
 let totalSearchResults = 0;
@@ -562,6 +564,12 @@ async function viewCaregiver(id) {
     if (!panel) return;
 
     panel.dataset.caregiverId = id;
+    currentCaregiverId = id;
+    if (data.grants && data.grants.length > 0) {
+      currentGrantId = data.grants[0].id;
+    } else {
+      currentGrantId = null;
+    }
 
     const p = data.profile;
     const first = (p.first_name || '').trim();
@@ -1070,6 +1078,202 @@ document.addEventListener('click', function (e) {
     e.stopPropagation();
     const id = target.getAttribute('data-note-id');
     archiveNote(id, target);
+  } else if (action === 'agent-change-confirm') {
+    e.stopPropagation();
+    confirmAgentChange(target);
+  } else if (action === 'agent-change-discard') {
+    e.stopPropagation();
+    discardAgentChange(target);
   }
 });
+
+async function confirmAgentChange(target) {
+  const changeId = target.getAttribute('data-change-id');
+  if (!changeId) return;
+  try {
+    const res = await fetch('/api/agent/change/confirm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ change_id: changeId })
+    });
+    const data = await res.json();
+    const row = target.closest('.confirm-row');
+    if (!res.ok || !data.ok) {
+      if (row) {
+        row.innerHTML = `<span class="chat-confirm-discarded">Failed: ${escapeHtml(data.error || 'Could not confirm')}</span>`;
+      }
+      return;
+    }
+    if (row) {
+      row.innerHTML = '<span class="chat-confirm-published">✓ Published — logged to the audit trail.</span>';
+    }
+    await loadStaffConsole();
+    const panel = document.getElementById('caregiverRecordPanel');
+    if (panel && panel.dataset.caregiverId) {
+      await viewCaregiver(panel.dataset.caregiverId);
+    }
+  } catch (e) {
+    const row = target.closest('.confirm-row');
+    if (row) {
+      row.innerHTML = `<span class="chat-confirm-discarded">Error: ${escapeHtml(e.message)}</span>`;
+    }
+  }
+}
+
+async function discardAgentChange(target) {
+  const changeId = target.getAttribute('data-change-id');
+  if (!changeId) return;
+  try {
+    const res = await fetch('/api/agent/change/discard', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ change_id: changeId })
+    });
+    const row = target.closest('.confirm-row');
+    if (row) {
+      row.innerHTML = '<span class="chat-confirm-discarded">Draft discarded — nothing changed.</span>';
+    }
+  } catch (e) {
+    const row = target.closest('.confirm-row');
+    if (row) {
+      row.innerHTML = `<span class="chat-confirm-discarded">Error: ${escapeHtml(e.message)}</span>`;
+    }
+  }
+}
+
+window.agentSend = async function () {
+  const input = document.getElementById('chatInput');
+  const body = document.getElementById('chatBody');
+  const text = (input?.value || '').trim();
+  if (!text || !body) return;
+  input.value = '';
+
+  const userDiv = document.createElement('div');
+  userDiv.className = 'msg user';
+  userDiv.textContent = text;
+  body.appendChild(userDiv);
+
+  const areaSelect = document.getElementById('chatAreaSelect');
+  const selectedArea = areaSelect ? areaSelect.value : 'content';
+
+  if (selectedArea === 'content') {
+    const t = text.toLowerCase();
+    let previewTitle, previewBody;
+    if (t.includes('caregiver') && (t.includes('add') || t.includes('new'))) {
+      previewTitle = '👤 New Sanctuary member record';
+      previewBody = 'Name parsed from your message · programs: as specified<br>Fields: profile, contact, program flags, notes<br>Nothing saved until you confirm.';
+    } else if (t.includes('resource') || t.includes('hub')) {
+      previewTitle = '📚 Resource hub update';
+      previewBody = 'New resource drafted into the category you named.<br>Will appear on the Resource Hub after confirmation.';
+    } else if (t.includes('event')) {
+      previewTitle = '📅 New event draft';
+      previewBody = 'Date, time, and location parsed from your message.<br>Will list on the Events page + portal after confirmation.';
+    } else {
+      previewTitle = '✏️ Drafted change';
+      previewBody = 'Mapped your request to a structured content change.<br>Preview it here — nothing goes live until you confirm.';
+    }
+
+    const botDiv = document.createElement('div');
+    botDiv.className = 'msg bot';
+    botDiv.innerHTML =
+      'Here\'s a draft — nothing is live yet:' +
+      '<div class="preview"><div class="p-title">' + previewTitle + '</div>' + previewBody + '</div>' +
+      '<div class="confirm-row">' +
+      '<button class="chip-btn chip-confirm" data-action="agent-confirm">Confirm &amp; publish</button>' +
+      '<button class="chip-btn chip-cancel" data-action="agent-cancel">Discard</button>' +
+      '</div>';
+
+    setTimeout(function () {
+      body.appendChild(botDiv);
+      body.scrollTop = body.scrollHeight;
+    }, 300);
+    body.scrollTop = body.scrollHeight;
+    return;
+  }
+
+  let targetId = null;
+  if (selectedArea === 'caregiver') {
+    const panel = document.getElementById('caregiverRecordPanel');
+    targetId = panel?.dataset?.caregiverId || currentCaregiverId;
+    if (!targetId) {
+      const botDiv = document.createElement('div');
+      botDiv.className = 'msg bot';
+      botDiv.innerHTML = 'Please select a caregiver from the queue or search results first to draft a caregiver change.';
+      body.appendChild(botDiv);
+      body.scrollTop = body.scrollHeight;
+      return;
+    }
+  } else if (selectedArea === 'grant') {
+    targetId = currentGrantId;
+    if (!targetId) {
+      const grantRow = document.querySelector('#caregiverRecordPanel .grant-row');
+      targetId = grantRow?.dataset?.grantId || currentGrantId;
+    }
+    if (!targetId) {
+      const botDiv = document.createElement('div');
+      botDiv.className = 'msg bot';
+      botDiv.innerHTML = 'Please select a caregiver with an active grant or a grant application first to draft a grant transition.';
+      body.appendChild(botDiv);
+      body.scrollTop = body.scrollHeight;
+      return;
+    }
+  }
+
+  try {
+    const res = await fetch('/api/agent/change/draft', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        area: selectedArea,
+        target_id: targetId,
+        request: text
+      })
+    });
+
+    const data = await res.json();
+    const botDiv = document.createElement('div');
+    botDiv.className = 'msg bot';
+
+    if (!res.ok || !data.ok) {
+      botDiv.innerHTML = `⚠️ Refusal: ${escapeHtml(data.refusal || data.error || 'Request refused')}`;
+      body.appendChild(botDiv);
+      body.scrollTop = body.scrollHeight;
+      return;
+    }
+
+    const beforeJson = escapeHtml(JSON.stringify(data.preview?.before || {}, null, 2));
+    const afterJson = escapeHtml(JSON.stringify(data.preview?.after || {}, null, 2));
+    const areaLabel = selectedArea === 'grant' ? '🎁 Grant Transition' : '👤 Caregiver Update';
+
+    botDiv.innerHTML = `
+      Here's a draft — nothing is live yet:
+      <div class="preview">
+        <div class="p-title">${areaLabel} (${escapeHtml(data.change?.operation || 'change')})</div>
+        <div class="diff-container">
+          <div class="diff-box">
+            <div class="diff-header">Before</div>
+            <pre class="diff-content">${beforeJson}</pre>
+          </div>
+          <div class="diff-box">
+            <div class="diff-header">After</div>
+            <pre class="diff-content">${afterJson}</pre>
+          </div>
+        </div>
+      </div>
+      <div class="confirm-row">
+        <button class="chip-btn chip-confirm" data-action="agent-change-confirm" data-change-id="${escapeHtml(data.change_id)}">Confirm &amp; publish</button>
+        <button class="chip-btn chip-cancel" data-action="agent-change-discard" data-change-id="${escapeHtml(data.change_id)}">Discard</button>
+      </div>
+    `;
+    body.appendChild(botDiv);
+    body.scrollTop = body.scrollHeight;
+  } catch (e) {
+    const botDiv = document.createElement('div');
+    botDiv.className = 'msg bot';
+    botDiv.innerHTML = `Error drafting change: ${escapeHtml(e.message)}`;
+    body.appendChild(botDiv);
+    body.scrollTop = body.scrollHeight;
+  }
+};
+
 

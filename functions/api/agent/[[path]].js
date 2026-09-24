@@ -1,42 +1,53 @@
-// GET/POST /api/agent/[[path]] — site-builder agent editing loop endpoints (slice 07).
-import { mapRequestToChange, validateJsonSchema } from './_mapper.mjs';
-
-// Actor identity from the CF Access JWT (already signature-verified by _middleware.js
-// before this handler runs). x-dev-actor is honored ONLY in the non-prod dev-console
-// mode. Never trust a client-supplied staff_id in the body (SEC-2).
-function getActor(request, env) {
-  if (env && env.ALLOW_DEV_CONSOLE === '1') {
-    const dev = request.headers.get('x-dev-actor');
-    if (dev) return dev;
-  }
-  const jwt = request.headers.get('Cf-Access-Jwt-Assertion');
-  if (jwt) {
-    try {
-      const p = jwt.split('.');
-      if (p.length === 3) {
-        const payload = JSON.parse(atob(p[1].replace(/-/g, '+').replace(/_/g, '/')));
-        return payload.email || payload.sub || 'staff';
-      }
-    } catch { /* fall through */ }
-  }
-  return 'staff';
-}
+// GET/POST /api/agent/[[path]] — site-builder agent editing loop endpoints (slice 07)
+// and governed workflow data changes (slice D7-S1).
+import { mapRequestToChange, mapRequestToWorkflowChange, validateJsonSchema } from './_mapper.mjs';
+import * as grantsDomain from '../../_lib/domain/grants.js';
+import * as caregiversDomain from '../../_lib/domain/caregivers.js';
+import { getActor } from '../../_lib/actor.js';
 
 export async function onRequestGet({ request, env }) {
   try {
     const url = new URL(request.url);
-    const pathSegments = url.pathname.split('/').filter(Boolean); // ['api', 'agent', 'drafts']
+    const pathSegments = url.pathname.split('/').filter(Boolean); // ['api', 'agent', 'drafts' | 'changes']
 
     const action = pathSegments[2];
-    if (action !== 'drafts') {
-      return json({ ok: false, error: 'invalid route' }, 404);
+    if (action === 'drafts') {
+      const { results } = await env.LEGACY_DB
+        .prepare(`SELECT id, type_id, data, status, updated_by, updated_at FROM content_item WHERE status = 'draft' ORDER BY updated_at DESC`)
+        .all();
+
+      return json({ ok: true, drafts: results });
     }
 
-    const { results } = await env.LEGACY_DB
-      .prepare(`SELECT id, type_id, data, status, updated_by, updated_at FROM content_item WHERE status = 'draft' ORDER BY updated_at DESC`)
-      .all();
+    if (action === 'changes') {
+      const status = url.searchParams.get('status');
+      const area = url.searchParams.get('area');
+      let query = 'SELECT * FROM agent_change';
+      const conditions = [];
+      const params = [];
 
-    return json({ ok: true, drafts: results });
+      if (status) {
+        conditions.push('status = ?');
+        params.push(status);
+      }
+      if (area) {
+        conditions.push('area = ?');
+        params.push(area);
+      }
+      if (conditions.length > 0) {
+        query += ' WHERE ' + conditions.join(' AND ');
+      }
+      query += ' ORDER BY created_at DESC';
+
+      const stmt = params.length > 0
+        ? env.LEGACY_DB.prepare(query).bind(...params)
+        : env.LEGACY_DB.prepare(query);
+
+      const { results } = await stmt.all();
+      return json({ ok: true, changes: results });
+    }
+
+    return json({ ok: false, error: 'invalid route' }, 404);
   } catch (e) {
     return json({ ok: false, error: e.message }, 500);
   }
@@ -45,8 +56,283 @@ export async function onRequestGet({ request, env }) {
 export async function onRequestPost({ request, env }) {
   try {
     const url = new URL(request.url);
-    const pathSegments = url.pathname.split('/').filter(Boolean); // ['api', 'agent', ':action']
+    const pathSegments = url.pathname.split('/').filter(Boolean); // ['api', 'agent', ...]
 
+    // Governed workflow data changes: /api/agent/change/:subaction
+    if (pathSegments.length === 4 && pathSegments[2] === 'change') {
+      const subaction = pathSegments[3];
+      if (!['draft', 'confirm', 'discard'].includes(subaction)) {
+        return json({ ok: false, error: 'invalid action' }, 404);
+      }
+
+      const body = await request.json().catch(() => ({}));
+
+      if (subaction === 'draft') {
+        if (!body.area || !body.target_id || !body.request) {
+          return json({ ok: false, error: 'area, target_id, and request are required' }, 400);
+        }
+
+        const validAreas = ['grant', 'caregiver', 'event', 'form'];
+        if (!validAreas.includes(body.area)) {
+          return json({ ok: false, error: `area must be one of: ${validAreas.join(', ')}` }, 400);
+        }
+
+        if (body.area !== 'grant' && body.area !== 'caregiver') {
+          return json({ ok: false, refusal: `area ${body.area} is not supported in this slice` });
+        }
+
+        let currentRecord = null;
+        if (body.area === 'grant') {
+          const grantId = parseInt(body.target_id, 10);
+          if (isNaN(grantId)) {
+            return json({ ok: false, error: 'invalid grant application id' }, 400);
+          }
+          currentRecord = await env.LEGACY_DB
+            .prepare('SELECT id, caregiver_id, requested_for, status, review_notes FROM grant_application WHERE id = ?')
+            .bind(grantId)
+            .first();
+
+          if (!currentRecord) {
+            return json({ ok: false, error: 'grant application not found' }, 404);
+          }
+        } else if (body.area === 'caregiver') {
+          currentRecord = await env.LEGACY_DB
+            .prepare('SELECT * FROM caregiver WHERE id = ?')
+            .bind(body.target_id)
+            .first();
+
+          if (!currentRecord) {
+            return json({ ok: false, error: 'caregiver not found' }, 404);
+          }
+        }
+
+        const backend = env.AGENT_MAPPER_BACKEND || null;
+        const gatewayUrl = env.EMP_LLM_GATEWAY_URL || null;
+        const gatewayKey = env.EMP_LLM_GATEWAY_KEY || null;
+
+        const mapRes = await mapRequestToWorkflowChange({
+          area: body.area,
+          target_id: body.target_id,
+          request: body.request,
+          current: currentRecord,
+          backend,
+          gatewayUrl,
+          gatewayKey,
+          role: body.role || 'bulk',
+          sensitivity: body.sensitivity || 'low'
+        });
+
+        if (!mapRes.ok) {
+          return json({ ok: false, refusal: mapRes.refusal });
+        }
+
+        const { operation, payload } = mapRes;
+
+        let val;
+        if (body.area === 'grant') {
+          val = await grantsDomain.validate(env.LEGACY_DB, {
+            id: body.target_id,
+            operation,
+            payload
+          });
+        } else if (body.area === 'caregiver') {
+          val = await caregiversDomain.validate(env.LEGACY_DB, {
+            id: body.target_id,
+            operation,
+            payload
+          });
+        }
+
+        if (!val.ok) {
+          return json({ ok: false, refusal: `Proposed change cannot be applied: ${val.error}` });
+        }
+
+        const change_id = 'ac_' + crypto.randomUUID();
+        const actor = getActor(request, env);
+
+        await env.LEGACY_DB
+          .prepare(`
+            INSERT INTO agent_change (id, area, operation, target_id, payload_json, before_json, after_json, status, requested_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', ?)
+          `)
+          .bind(
+            change_id,
+            body.area,
+            operation,
+            body.target_id.toString(),
+            JSON.stringify(payload),
+            JSON.stringify(val.before || val.current),
+            JSON.stringify(val.after || val.projected),
+            actor
+          )
+          .run();
+
+        return json({
+          ok: true,
+          change_id,
+          change: {
+            id: change_id,
+            area: body.area,
+            operation,
+            target_id: body.target_id,
+            payload,
+            before: val.before || val.current,
+            after: val.after || val.projected,
+            status: 'draft'
+          },
+          preview: {
+            before: val.before || val.current,
+            after: val.after || val.projected
+          }
+        });
+      }
+
+      if (subaction === 'confirm') {
+        if (!body.change_id) {
+          return json({ ok: false, error: 'change_id is required' }, 400);
+        }
+
+        const actor = getActor(request, env);
+
+        const change = await env.LEGACY_DB
+          .prepare('SELECT * FROM agent_change WHERE id = ?')
+          .bind(body.change_id)
+          .first();
+
+        if (!change) {
+          return json({ ok: false, error: 'change not found' }, 404);
+        }
+
+        if (change.status !== 'draft') {
+          return json({ ok: false, error: `cannot confirm change in status ${change.status}` }, 409);
+        }
+
+        const payload = JSON.parse(change.payload_json);
+
+        // Re-validate against current record in DB
+        let reval;
+        if (change.area === 'grant') {
+          reval = await grantsDomain.validate(env.LEGACY_DB, {
+            id: change.target_id,
+            operation: change.operation,
+            payload
+          });
+        } else if (change.area === 'caregiver') {
+          reval = await caregiversDomain.validate(env.LEGACY_DB, {
+            id: change.target_id,
+            operation: change.operation,
+            payload
+          });
+        }
+
+        if (!reval || !reval.ok) {
+          return json({ ok: false, error: `re-validation failed: ${reval?.error || 'state changed'}` }, 409);
+        }
+
+        // Verify record has not changed underneath since draft was created
+        if (change.before_json) {
+          try {
+            const expectedBefore = JSON.parse(change.before_json);
+            for (const [k, v] of Object.entries(expectedBefore)) {
+              if (k in reval.current && JSON.stringify(reval.current[k]) !== JSON.stringify(v)) {
+                return json({ ok: false, error: `record changed underneath: ${k} was modified since draft` }, 409);
+              }
+            }
+          } catch (e) {
+            // fall through
+          }
+        }
+
+        // Apply via domain module (writes domain audit row with confirming actor)
+        let applyRes;
+        if (change.area === 'grant') {
+          applyRes = await grantsDomain.apply(env.LEGACY_DB, {
+            id: change.target_id,
+            operation: change.operation,
+            payload
+          }, actor);
+        } else if (change.area === 'caregiver') {
+          applyRes = await caregiversDomain.apply(env.LEGACY_DB, {
+            id: change.target_id,
+            operation: change.operation,
+            payload
+          }, actor);
+        }
+
+        if (!applyRes || !applyRes.ok) {
+          await env.LEGACY_DB
+            .prepare("UPDATE agent_change SET status = 'failed', error = ?, updated_at = datetime('now') WHERE id = ?")
+            .bind(applyRes?.error || 'apply failed', change.id)
+            .run();
+          return json({ ok: false, error: applyRes?.error || 'apply failed' }, applyRes?.status || 500);
+        }
+
+        // Mark published with confirmed_by
+        await env.LEGACY_DB
+          .prepare("UPDATE agent_change SET status = 'published', confirmed_by = ?, updated_at = datetime('now') WHERE id = ?")
+          .bind(actor, change.id)
+          .run();
+
+        // Audit log agent_change.confirm
+        await env.LEGACY_DB
+          .prepare(`
+            INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
+            VALUES (?, 'agent_change.confirm', 'agent_change', ?, ?, ?)
+          `)
+          .bind(
+            actor,
+            change.id,
+            JSON.stringify({ status: 'draft' }),
+            JSON.stringify({ status: 'published', confirmed_by: actor })
+          )
+          .run();
+
+        return json({ ok: true });
+      }
+
+      if (subaction === 'discard') {
+        if (!body.change_id) {
+          return json({ ok: false, error: 'change_id is required' }, 400);
+        }
+
+        const actor = getActor(request, env);
+
+        const change = await env.LEGACY_DB
+          .prepare('SELECT * FROM agent_change WHERE id = ?')
+          .bind(body.change_id)
+          .first();
+
+        if (!change) {
+          return json({ ok: false, error: 'change not found' }, 404);
+        }
+
+        if (change.status !== 'draft') {
+          return json({ ok: false, error: `cannot discard change in status ${change.status}` }, 409);
+        }
+
+        await env.LEGACY_DB
+          .prepare("UPDATE agent_change SET status = 'discarded', updated_at = datetime('now') WHERE id = ?")
+          .bind(change.id)
+          .run();
+
+        await env.LEGACY_DB
+          .prepare(`
+            INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
+            VALUES (?, 'agent_change.discard', 'agent_change', ?, ?, ?)
+          `)
+          .bind(
+            actor,
+            change.id,
+            JSON.stringify({ status: 'draft' }),
+            JSON.stringify({ status: 'discarded' })
+          )
+          .run();
+
+        return json({ ok: true });
+      }
+    }
+
+    // Existing content editing routes: /api/agent/:action
     const action = pathSegments[2];
     if (!['draft', 'confirm', 'discard'].includes(action)) {
       return json({ ok: false, error: 'invalid action' }, 404);
