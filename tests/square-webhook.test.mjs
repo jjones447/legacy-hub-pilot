@@ -74,7 +74,7 @@ const WEBHOOK_URL = 'https://example.org/api/webhooks/square';
 
 beforeEach(() => {
   raw = new DatabaseSync(':memory:');
-  raw.exec('PRAGMA foreign_keys = OFF;');
+  raw.exec('PRAGMA foreign_keys = ON;');
   raw.exec(SCHEMA_1);
   raw.exec(SCHEMA_2);
   env = {
@@ -452,15 +452,15 @@ test('Square webhook is idempotent on event replay', async () => {
   assert.equal(count.n, 1);
 });
 
-test('Square webhook unmatched payment creates staff followup without caregiver row', async () => {
-  const payload = {
+test('Square webhook unmatched payment creates staff followup under placeholder caregiver and reuses placeholder on second unmatched payment', async () => {
+  const payload1 = {
     event_id: 'evt_sq_unmatched_1',
     type: 'payment.completed',
     data: {
-      id: 'pay_sq_unmatched_id',
+      id: 'pay_sq_unmatched_1',
       object: {
         payment: {
-          id: 'pay_sq_unmatched_id',
+          id: 'pay_sq_unmatched_1',
           status: 'COMPLETED',
           amount_money: { amount: 2500, currency: 'USD' }
           // No buyer_email_address or phone
@@ -468,32 +468,75 @@ test('Square webhook unmatched payment creates staff followup without caregiver 
       }
     }
   };
-  const payloadStr = JSON.stringify(payload);
-  const sig = computeSquareSignature(payloadStr, WEBHOOK_URL, WEBHOOK_SIGNATURE_KEY);
-  const req = mockRequest(WEBHOOK_URL, 'POST', payload, { 'x-square-hmacsha256-signature': sig });
-  const res = await postSquare({ request: req, env });
-  assert.equal(res.status, 200);
-  const data = await res.json();
-  assert.equal(data.ok, true);
-  assert.equal(data.unmatched, true);
+  const payloadStr1 = JSON.stringify(payload1);
+  const sig1 = computeSquareSignature(payloadStr1, WEBHOOK_URL, WEBHOOK_SIGNATURE_KEY);
+  const req1 = mockRequest(WEBHOOK_URL, 'POST', payload1, { 'x-square-hmacsha256-signature': sig1 });
+  const res1 = await postSquare({ request: req1, env });
+  assert.equal(res1.status, 200);
+  const data1 = await res1.json();
+  assert.equal(data1.ok, true);
+  assert.equal(data1.unmatched, true);
 
-  // Followup exists with kind payment_unmatched
-  const fu = raw.prepare('SELECT * FROM followup WHERE kind = \'payment_unmatched\'').get();
-  assert.ok(fu);
-  assert.equal(fu.source, 'square');
-  assert.equal(fu.external_ref, 'evt_sq_unmatched_1');
-  assert.ok(fu.detail.includes('pay_sq_unmatched_id'));
-  assert.ok(fu.detail.includes('evt_sq_unmatched_1'));
+  // Followup exists with kind payment_unmatched and caregiver_id cg_unmatched_square
+  const fu1 = raw.prepare('SELECT * FROM followup WHERE external_ref = \'evt_sq_unmatched_1\'').get();
+  assert.ok(fu1);
+  assert.equal(fu1.caregiver_id, 'cg_unmatched_square');
+  assert.equal(fu1.kind, 'payment_unmatched');
+  assert.equal(fu1.source, 'square');
+  assert.ok(fu1.detail.includes('pay_sq_unmatched_1'));
+  assert.ok(fu1.detail.includes('evt_sq_unmatched_1'));
 
-  // No caregiver created
-  const cgCount = raw.prepare('SELECT COUNT(*) AS n FROM caregiver').get();
-  assert.equal(cgCount.n, 0);
+  // Placeholder caregiver exists
+  const cg = raw.prepare('SELECT * FROM caregiver WHERE id = \'cg_unmatched_square\'').get();
+  assert.ok(cg);
+  assert.equal(cg.first_name, 'Unmatched');
+  assert.equal(cg.last_name, 'Square payment');
+  assert.equal(cg.status, 'inactive');
+
+  const cgCount1 = raw.prepare('SELECT COUNT(*) AS n FROM caregiver').get();
+  assert.equal(cgCount1.n, 1);
 
   // Audit log exists
-  const audit = raw.prepare('SELECT * FROM audit_log WHERE entity_id = ?').get(fu.id.toString());
+  const audit = raw.prepare('SELECT * FROM audit_log WHERE entity_id = ?').get(fu1.id.toString());
   assert.ok(audit);
   assert.equal(audit.actor, 'square_webhook');
   assert.equal(audit.action, 'webhook.payment.completed');
+
+  // Second unmatched payment: verifies placeholder row is reused (no duplicate caregiver)
+  const payload2 = {
+    event_id: 'evt_sq_unmatched_2',
+    type: 'payment.completed',
+    data: {
+      id: 'pay_sq_unmatched_2',
+      object: {
+        payment: {
+          id: 'pay_sq_unmatched_2',
+          status: 'COMPLETED',
+          amount_money: { amount: 3500, currency: 'USD' }
+        }
+      }
+    }
+  };
+  const payloadStr2 = JSON.stringify(payload2);
+  const sig2 = computeSquareSignature(payloadStr2, WEBHOOK_URL, WEBHOOK_SIGNATURE_KEY);
+  const req2 = mockRequest(WEBHOOK_URL, 'POST', payload2, { 'x-square-hmacsha256-signature': sig2 });
+  const res2 = await postSquare({ request: req2, env });
+  assert.equal(res2.status, 200);
+  const data2 = await res2.json();
+  assert.equal(data2.ok, true);
+  assert.equal(data2.unmatched, true);
+
+  const fu2 = raw.prepare('SELECT * FROM followup WHERE external_ref = \'evt_sq_unmatched_2\'').get();
+  assert.ok(fu2);
+  assert.equal(fu2.caregiver_id, 'cg_unmatched_square');
+
+  // Exactly 1 caregiver row still (reused placeholder)
+  const cgCount2 = raw.prepare('SELECT COUNT(*) AS n FROM caregiver').get();
+  assert.equal(cgCount2.n, 1);
+
+  // Exactly 2 followups under cg_unmatched_square
+  const fuCount = raw.prepare('SELECT COUNT(*) AS n FROM followup WHERE caregiver_id = \'cg_unmatched_square\'').get();
+  assert.equal(fuCount.n, 2);
 });
 
 test('Square webhook updates existing caregiver on matching email', async () => {

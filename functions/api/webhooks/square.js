@@ -129,7 +129,14 @@ export async function onRequestPost({ request, env }) {
         detail += `, amount=$${amt}`;
       }
 
-      const caregiverId = 'cg_unmatched';
+      const caregiverId = 'cg_unmatched_square';
+      await env.LEGACY_DB
+        .prepare(`
+          INSERT OR IGNORE INTO caregiver (id, first_name, last_name, source, status)
+          VALUES ('cg_unmatched_square', 'Unmatched', 'Square payment', 'square', 'inactive')
+        `)
+        .run();
+
       await env.LEGACY_DB
         .prepare(`
           INSERT INTO followup (caregiver_id, kind, detail, source, external_ref)
