@@ -7,8 +7,8 @@ import { resolve } from 'node:path';
 
 const DEFAULT_MODELS = [
   '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
-  '@cf/deepseek-ai/deepseek-v4-flash',
-  '@cf/deepseek-ai/deepseek-v4-pro',
+  '@cf/deepseek-ai/deepseek-v4-flash-0731',
+  '@cf/deepseek-ai/deepseek-v4-pro-0813',
   '@cf/openai/gpt-oss-120b'
 ];
 
