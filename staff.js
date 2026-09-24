@@ -10,6 +10,7 @@ function escapeHtml(str) {
 
 let currentEventId = null;
 let currentEventTitle = '';
+let staffEvents = [];
 let currentCaregiverId = null;
 let currentGrantId = null;
 let currentSearchOffset = 0;
@@ -866,32 +867,354 @@ async function viewCaregiver(id) {
 
 async function loadEvents() {
   try {
-    const res = await fetch('/api/events');
-    const data = await res.json();
-    if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to fetch events');
-    
+    let res = await fetch('/api/staff/events');
+    let data;
+    if (res.ok) {
+      data = await res.json();
+    } else {
+      res = await fetch('/api/events');
+      data = await res.json();
+    }
+    if (!data || !data.ok) throw new Error(data?.error || 'Failed to fetch events');
+
+    staffEvents = data.events || [];
     const body = document.getElementById('upcomingEventsBody');
     if (!body) return;
-    if (data.events.length === 0) {
-      body.innerHTML = '<tr><td colspan="3" class="text-center muted small">No events found.</td></tr>';
+    if (staffEvents.length === 0) {
+      body.innerHTML = '<tr><td colspan="5" class="text-center muted small">No events found.</td></tr>';
       return;
     }
-    
-    body.innerHTML = data.events.map(ev => {
-      const regText = ev.capacity ? `${escapeHtml(ev.registered_count)} / ${escapeHtml(ev.capacity)} capacity` : `${escapeHtml(ev.registered_count)}`;
+
+    body.innerHTML = staffEvents.map(ev => {
+      const regCount = ev.registered_count != null ? ev.registered_count : 0;
+      const regText = ev.capacity ? `${escapeHtml(regCount)} / ${escapeHtml(ev.capacity)}` : `${escapeHtml(regCount)}`;
       const isSelected = ev.id === currentEventId ? ' row-selected' : '';
-      const dateText = ev.starts_at ? escapeHtml(ev.starts_at.split(' ')[0]) : '';
-      
+      const dateText = ev.starts_at ? escapeHtml(ev.starts_at.replace('T', ' ').split(' ')[0]) : '';
+      const state = ev.publish_state || 'published';
+      const stateBadge = `<span class="badge badge-${escapeHtml(state)}">${escapeHtml(state)}</span>`;
+
+      const actions = [];
+      if (state === 'draft') {
+        actions.push(`<button type="button" class="btn btn-sm btn-plum btn-compact" data-action="publish-event" data-event-id="${escapeHtml(ev.id)}">Publish</button>`);
+      }
+      if (state !== 'archived') {
+        actions.push(`<button type="button" class="btn btn-sm btn-outline btn-compact" data-action="archive-event" data-event-id="${escapeHtml(ev.id)}">Archive</button>`);
+      }
+      actions.push(`<button type="button" class="btn btn-sm btn-outline btn-compact" data-action="edit-event" data-event-id="${escapeHtml(ev.id)}">Edit</button>`);
+
       return `
         <tr class="cursor-pointer${isSelected}" data-action="select-event" data-event-id="${escapeHtml(ev.id)}" data-event-title="${escapeHtml(ev.title)}">
           <td><strong>${escapeHtml(ev.title)}</strong></td>
           <td>${dateText}</td>
+          <td>${stateBadge}</td>
           <td>${regText}</td>
+          <td>
+            <div class="event-actions">
+              ${actions.join('')}
+            </div>
+          </td>
         </tr>
       `;
     }).join('');
   } catch (e) {
     console.error(e);
+  }
+}
+
+function renderNewEventForm() {
+  const container = document.getElementById('newEventContainer');
+  if (!container) return;
+  container.innerHTML = `
+    <form id="newEventForm" data-action="submit-create-event" class="record-form-panel">
+      <div class="field mb-8">
+        <label class="form-label-small" for="newEventTitle">Title *</label>
+        <input type="text" id="newEventTitle" name="title" class="editor-input" required placeholder="Event title">
+      </div>
+      <div class="field-row mb-8">
+        <div class="field-col">
+          <label class="form-label-small" for="newEventType">Type *</label>
+          <select id="newEventType" name="type" class="editor-input" required>
+            <option value="support_group">Support Group</option>
+            <option value="memory_social">Memory Social</option>
+            <option value="caregiver_event">Caregiver Event</option>
+            <option value="wellness">Wellness</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div class="field-col">
+          <label class="form-label-small" for="newEventCapacity">Capacity</label>
+          <input type="number" id="newEventCapacity" name="capacity" class="editor-input" min="1" placeholder="e.g. 20">
+        </div>
+      </div>
+      <div class="field-row mb-8">
+        <div class="field-col">
+          <label class="form-label-small" for="newEventStartsAt">Starts at *</label>
+          <input type="datetime-local" id="newEventStartsAt" name="starts_at" class="editor-input" required>
+        </div>
+        <div class="field-col">
+          <label class="form-label-small" for="newEventEndsAt">Ends at</label>
+          <input type="datetime-local" id="newEventEndsAt" name="ends_at" class="editor-input">
+        </div>
+      </div>
+      <div class="field mb-8">
+        <label class="form-label-small" for="newEventLocation">Location</label>
+        <input type="text" id="newEventLocation" name="location" class="editor-input" placeholder="e.g. Community Room">
+      </div>
+      <div class="editor-checkbox-row mb-12">
+        <input type="checkbox" id="newEventRecurring" name="recurring">
+        <label for="newEventRecurring">Recurring event</label>
+      </div>
+      <div id="newEventError" class="form-error-banner d-none"></div>
+      <div class="editor-actions">
+        <button type="submit" class="btn btn-sm btn-plum">Create Draft Event</button>
+        <button type="button" class="btn btn-sm btn-outline" data-action="cancel-new-event">Cancel</button>
+      </div>
+    </form>
+  `;
+}
+
+function toggleNewEventForm() {
+  const container = document.getElementById('newEventContainer');
+  if (!container) return;
+  if (!document.getElementById('newEventForm')) {
+    renderNewEventForm();
+  }
+  const errBox = document.getElementById('newEventError');
+  if (container.classList.contains('d-none')) {
+    container.classList.remove('d-none');
+    if (errBox) {
+      errBox.classList.add('d-none');
+      errBox.textContent = '';
+    }
+  } else {
+    container.classList.add('d-none');
+  }
+}
+
+function cancelNewEventForm() {
+  const container = document.getElementById('newEventContainer');
+  const form = document.getElementById('newEventForm');
+  const errBox = document.getElementById('newEventError');
+  if (container) container.classList.add('d-none');
+  if (form) form.reset();
+  if (errBox) {
+    errBox.classList.add('d-none');
+    errBox.textContent = '';
+  }
+}
+
+async function submitCreateEvent(form) {
+  const errBox = document.getElementById('newEventError');
+  if (errBox) {
+    errBox.classList.add('d-none');
+    errBox.textContent = '';
+  }
+
+  const payload = {
+    title: form.title.value.trim(),
+    type: form.type.value,
+    starts_at: form.starts_at.value ? form.starts_at.value.replace('T', ' ') : '',
+    ends_at: form.ends_at.value ? form.ends_at.value.replace('T', ' ') : null,
+    location: form.location.value.trim() || null,
+    capacity: form.capacity.value ? parseInt(form.capacity.value, 10) : null,
+    recurring: form.recurring ? form.recurring.checked : false
+  };
+
+  try {
+    const res = await fetch('/api/staff/event', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      if (errBox) {
+        errBox.textContent = data.error || 'Failed to create event';
+        errBox.classList.remove('d-none');
+      }
+      return;
+    }
+
+    form.reset();
+    const container = document.getElementById('newEventContainer');
+    if (container) container.classList.add('d-none');
+    await loadEvents();
+    await loadRecentChanges();
+  } catch (e) {
+    if (errBox) {
+      errBox.textContent = e.message || 'Error creating event';
+      errBox.classList.remove('d-none');
+    }
+  }
+}
+
+function openEditEvent(eventId) {
+  const ev = staffEvents.find(e => e.id === eventId);
+  const container = document.getElementById('editEventContainer');
+  if (!ev || !container) return;
+
+  const startsVal = ev.starts_at ? ev.starts_at.replace(' ', 'T').slice(0, 16) : '';
+  const endsVal = ev.ends_at ? ev.ends_at.replace(' ', 'T').slice(0, 16) : '';
+
+  const types = [
+    { value: 'support_group', label: 'Support Group' },
+    { value: 'memory_social', label: 'Memory Social' },
+    { value: 'caregiver_event', label: 'Caregiver Event' },
+    { value: 'wellness', label: 'Wellness' },
+    { value: 'other', label: 'Other' }
+  ];
+
+  const typeOptions = types.map(t =>
+    `<option value="${t.value}"${ev.type === t.value ? ' selected' : ''}>${escapeHtml(t.label)}</option>`
+  ).join('');
+
+  container.innerHTML = `
+    <div class="editor-box">
+      <div class="editor-header">
+        <strong>Edit Event: ${escapeHtml(ev.title)} (${escapeHtml(ev.id)})</strong>
+        <button type="button" class="btn btn-sm btn-outline btn-compact" data-action="cancel-edit-event">Cancel</button>
+      </div>
+      <div id="editEventError" class="form-error-banner d-none"></div>
+      <form data-action="submit-edit-event" data-event-id="${escapeHtml(ev.id)}">
+        <div class="editor-field">
+          <label class="editor-label" for="editEventTitle">Title *</label>
+          <input type="text" id="editEventTitle" name="title" class="editor-input" value="${escapeHtml(ev.title || '')}" required>
+        </div>
+        <div class="field-row mb-8">
+          <div class="field-col">
+            <label class="editor-label" for="editEventType">Type *</label>
+            <select id="editEventType" name="type" class="editor-input" required>
+              ${typeOptions}
+            </select>
+          </div>
+          <div class="field-col">
+            <label class="editor-label" for="editEventCapacity">Capacity</label>
+            <input type="number" id="editEventCapacity" name="capacity" class="editor-input" min="1" value="${ev.capacity != null ? escapeHtml(String(ev.capacity)) : ''}">
+          </div>
+        </div>
+        <div class="field-row mb-8">
+          <div class="field-col">
+            <label class="editor-label" for="editEventStartsAt">Starts at *</label>
+            <input type="datetime-local" id="editEventStartsAt" name="starts_at" class="editor-input" value="${escapeHtml(startsVal)}" required>
+          </div>
+          <div class="field-col">
+            <label class="editor-label" for="editEventEndsAt">Ends at</label>
+            <input type="datetime-local" id="editEventEndsAt" name="ends_at" class="editor-input" value="${escapeHtml(endsVal)}">
+          </div>
+        </div>
+        <div class="editor-field">
+          <label class="editor-label" for="editEventLocation">Location</label>
+          <input type="text" id="editEventLocation" name="location" class="editor-input" value="${escapeHtml(ev.location || '')}">
+        </div>
+        <div class="editor-checkbox-row mb-12">
+          <input type="checkbox" id="editEventRecurring" name="recurring"${ev.recurring ? ' checked' : ''}>
+          <label for="editEventRecurring">Recurring event</label>
+        </div>
+        <div class="editor-actions">
+          <button type="submit" class="btn btn-sm btn-plum">Save changes</button>
+          <button type="button" class="btn btn-sm btn-outline" data-action="cancel-edit-event">Cancel</button>
+        </div>
+      </form>
+    </div>
+  `;
+  container.classList.remove('d-none');
+}
+
+function cancelEditEvent() {
+  const container = document.getElementById('editEventContainer');
+  if (container) {
+    container.classList.add('d-none');
+    container.innerHTML = '';
+  }
+}
+
+async function submitEditEvent(form) {
+  const eventId = form.getAttribute('data-event-id');
+  const errBox = document.getElementById('editEventError');
+  if (errBox) {
+    errBox.classList.add('d-none');
+    errBox.textContent = '';
+  }
+
+  const payload = {
+    title: form.title.value.trim(),
+    type: form.type.value,
+    starts_at: form.starts_at.value ? form.starts_at.value.replace('T', ' ') : '',
+    ends_at: form.ends_at.value ? form.ends_at.value.replace('T', ' ') : null,
+    location: form.location.value.trim() || null,
+    capacity: form.capacity.value ? parseInt(form.capacity.value, 10) : null,
+    recurring: form.recurring ? form.recurring.checked : false
+  };
+
+  try {
+    const res = await fetch(`/api/staff/event/${encodeURIComponent(eventId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      if (errBox) {
+        errBox.textContent = data.error || 'Failed to update event';
+        errBox.classList.remove('d-none');
+      }
+      return;
+    }
+
+    cancelEditEvent();
+    await loadEvents();
+    await loadRecentChanges();
+  } catch (e) {
+    if (errBox) {
+      errBox.textContent = e.message || 'Error updating event';
+      errBox.classList.remove('d-none');
+    }
+  }
+}
+
+async function publishEvent(eventId) {
+  try {
+    const res = await fetch(`/api/staff/event/${encodeURIComponent(eventId)}/publish`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      alert(`Publish failed: ${data.error || 'Unknown error'}`);
+      return;
+    }
+    await loadEvents();
+    await loadRecentChanges();
+  } catch (e) {
+    alert(`Publish error: ${e.message}`);
+  }
+}
+
+async function archiveEvent(eventId, confirmWithRegistrations = false) {
+  try {
+    const body = confirmWithRegistrations ? { confirm_with_registrations: true } : {};
+    const res = await fetch(`/api/staff/event/${encodeURIComponent(eventId)}/archive`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      if (res.status === 409 && data.registration_count != null) {
+        const confirmed = confirm(`This event has ${data.registration_count} active registration(s). Are you sure you want to archive it anyway?`);
+        if (confirmed) {
+          return archiveEvent(eventId, true);
+        }
+        return;
+      }
+      alert(`Archive failed: ${data.error || 'Unknown error'}`);
+      return;
+    }
+    await loadEvents();
+    await loadRecentChanges();
+  } catch (e) {
+    alert(`Archive error: ${e.message}`);
   }
 }
 
@@ -1023,6 +1346,12 @@ document.addEventListener('DOMContentLoaded', function () {
       loadRecentChanges();
     });
   }
+  const newEventBtn = document.getElementById('newEventToggleBtn');
+  if (newEventBtn) {
+    newEventBtn.addEventListener('click', function () {
+      toggleNewEventForm();
+    });
+  }
 });
 
 document.addEventListener('submit', function (e) {
@@ -1041,6 +1370,12 @@ document.addEventListener('submit', function (e) {
   } else if (formAction === 'submit-direct-content') {
     e.preventDefault();
     submitDirectContent(form);
+  } else if (formAction === 'submit-create-event') {
+    e.preventDefault();
+    submitCreateEvent(form);
+  } else if (formAction === 'submit-edit-event') {
+    e.preventDefault();
+    submitEditEvent(form);
   }
 });
 
@@ -1111,6 +1446,27 @@ document.addEventListener('click', function (e) {
     e.stopPropagation();
     const id = Number(target.getAttribute('data-audit-id'));
     handleUndoChange(id, target);
+  } else if (action === 'toggle-new-event') {
+    e.stopPropagation();
+    toggleNewEventForm();
+  } else if (action === 'cancel-new-event') {
+    e.stopPropagation();
+    cancelNewEventForm();
+  } else if (action === 'edit-event') {
+    e.stopPropagation();
+    const id = target.getAttribute('data-event-id');
+    openEditEvent(id);
+  } else if (action === 'cancel-edit-event') {
+    e.stopPropagation();
+    cancelEditEvent();
+  } else if (action === 'publish-event') {
+    e.stopPropagation();
+    const id = target.getAttribute('data-event-id');
+    publishEvent(id);
+  } else if (action === 'archive-event') {
+    e.stopPropagation();
+    const id = target.getAttribute('data-event-id');
+    archiveEvent(id);
   }
 });
 
