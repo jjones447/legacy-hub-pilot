@@ -10,6 +10,9 @@ name = "legacy-hub"
 compatibility_date = "2026-07-01"
 pages_build_output_dir = "."
 
+[ai]
+binding = "AI"
+
 [[d1_databases]]
 binding = "LEGACY_DB"
 database_name = "legacy-hub-db"

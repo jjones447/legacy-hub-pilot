@@ -128,6 +128,8 @@ export async function onRequestPost({ request, env }) {
         const backend = env.AGENT_MAPPER_BACKEND || null;
         const gatewayUrl = env.EMP_LLM_GATEWAY_URL || null;
         const gatewayKey = env.EMP_LLM_GATEWAY_KEY || null;
+        const ai = env.AI || null;
+        const model = env.AGENT_MODEL || undefined;
 
         const mapRes = await mapRequestToWorkflowChange({
           area: body.area,
@@ -137,6 +139,8 @@ export async function onRequestPost({ request, env }) {
           backend,
           gatewayUrl,
           gatewayKey,
+          ai,
+          model,
           role: body.role || 'bulk',
           sensitivity: body.sensitivity || 'low'
         });
@@ -493,6 +497,8 @@ export async function onRequestPost({ request, env }) {
       const backend = env.AGENT_MAPPER_BACKEND || null;
       const gatewayUrl = env.EMP_LLM_GATEWAY_URL || null;
       const gatewayKey = env.EMP_LLM_GATEWAY_KEY || null;
+      const ai = env.AI || null;
+      const model = env.AGENT_MODEL || undefined;
 
       const res = await mapRequestToChange({
         request: body.request,
@@ -501,6 +507,8 @@ export async function onRequestPost({ request, env }) {
         backend,
         gatewayUrl,
         gatewayKey,
+        ai,
+        model,
         role: body.role || 'bulk',
         sensitivity: body.sensitivity || 'low'
       });
