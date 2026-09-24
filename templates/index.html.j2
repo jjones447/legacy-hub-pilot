@@ -23,8 +23,8 @@
   </video>
   <div class="hero-scrim" aria-hidden="true"></div>
   <div class="container hero-content">
-    <h1>{{ sections["home.hero"].title }}</h1>
-    <p class="lede">{{ sections["home.hero"].lede }}</p>
+    <h1 data-cs="home.hero.title">{{ sections["home.hero"].title }}</h1>
+    <p class="lede" data-cs="home.hero.lede">{{ sections["home.hero"].lede }}</p>
     <div class="btn-row">
       <a href="request-support.html" class="btn btn-coral">Find Support</a>
       <a href="donate.html" class="btn btn-outline-light">Donate</a>
@@ -35,8 +35,8 @@
 <section>
   <div class="container">
     <div class="section-head">
-      <h2>{{ sections["home.journey"].heading }}</h2>
-      <p>{{ sections["home.journey"].paragraph }}</p>
+      <h2 data-cs="home.journey.heading">{{ sections["home.journey"].heading }}</h2>
+      <p data-cs="home.journey.paragraph">{{ sections["home.journey"].paragraph }}</p>
     </div>
   </div>
 </section>
@@ -44,7 +44,7 @@
 <section class="section-sand">
   <div class="container">
     <div class="section-head">
-      <h2>{{ sections["home.support"].heading }}</h2>
+      <h2 data-cs="home.support.heading">{{ sections["home.support"].heading }}</h2>
     </div>
     <div class="card-grid">
 {%- for tile in sections["home.support"].tiles %}
@@ -53,7 +53,7 @@
       </div>
 {%- endfor %}
     </div>
-    <p class="mt-32">{{ sections["home.support"].secondary }}</p>
+    <p class="mt-32" data-cs="home.support.secondary">{{ sections["home.support"].secondary }}</p>
   </div>
 </section>
 
@@ -66,10 +66,10 @@
 
 <section class="band-teal">
   <div class="container">
-    <span class="eyebrow">{{ sections["home.community_wellness_partners"].eyebrow }}</span>
-    <h2 class="mb-14">{{ sections["home.community_wellness_partners"].heading }}</h2>
-    <p class="mb-28">{{ sections["home.community_wellness_partners"].paragraph }}</p>
-    <a href="{{ sections["home.community_wellness_partners"].cta_href }}" class="btn btn-coral">{{ sections["home.community_wellness_partners"].cta_label }}</a>
+    <span class="eyebrow" data-cs="home.community_wellness_partners.eyebrow">{{ sections["home.community_wellness_partners"].eyebrow }}</span>
+    <h2 class="mb-14" data-cs="home.community_wellness_partners.heading">{{ sections["home.community_wellness_partners"].heading }}</h2>
+    <p class="mb-28" data-cs="home.community_wellness_partners.paragraph">{{ sections["home.community_wellness_partners"].paragraph }}</p>
+    <a href="{{ sections["home.community_wellness_partners"].cta_href }}" class="btn btn-coral" data-cs="home.community_wellness_partners.cta_label">{{ sections["home.community_wellness_partners"].cta_label }}</a>
   </div>
 </section>
 

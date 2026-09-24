@@ -18,8 +18,8 @@
   <img class="hero-media" src="media/headers/about.jpg" alt="" aria-hidden="true" decoding="async">
   <div class="hero-scrim" aria-hidden="true"></div>
   <div class="container hero-content">
-    <h1 class="hero-title-clamp">{{ sections["about.hero"].title }}</h1>
-    <p class="lede">{{ sections["about.hero"].lede }}</p>
+    <h1 class="hero-title-clamp" data-cs="about.hero.title">{{ sections["about.hero"].title }}</h1>
+    <p class="lede" data-cs="about.hero.lede">{{ sections["about.hero"].lede }}</p>
   </div>
 </section>
 
@@ -45,15 +45,17 @@
   <div class="container">
     <div class="split">
       <div>
-        <span class="eyebrow">{{ sections["about.story"].eyebrow }}</span>
-        <h2 class="mb-14">{{ sections["about.story"].heading }}</h2>
+        <span class="eyebrow" data-cs="about.story.eyebrow">{{ sections["about.story"].eyebrow }}</span>
+        <h2 class="mb-14" data-cs="about.story.heading">{{ sections["about.story"].heading }}</h2>
+        <div data-cs-list="about.story.paragraphs">
 {%- for p in sections["about.story"].paragraphs %}
         <p class="muted mb-16">{{ p }}</p>
 {%- endfor %}
-        <p class="small muted"><em>{{ sections["about.story"].note }}</em></p>
+        </div>
+        <p class="small muted"><em data-cs="about.story.note">{{ sections["about.story"].note }}</em></p>
       </div>
       <div class="visual" id="mission">
-        <h3 class="fs-18-mb-14">{{ sections["about.values"].heading }}</h3>
+        <h3 class="fs-18-mb-14" data-cs="about.values.heading">{{ sections["about.values"].heading }}</h3>
 {%- for it in sections["about.values"]["items"] %}
         <div class="timeline-item"><div class="timeline-dot bg-coral"></div><div><strong>{{ it.title }}</strong><div class="when">{{ it.when }}</div></div></div>
 {%- endfor %}
@@ -120,10 +122,10 @@
 
 <section class="section-sand">
   <div class="container text-center">
-    <span class="eyebrow">{{ sections["about.join"].eyebrow }}</span>
-    <h2 class="mb-14">{{ sections["about.join"].heading }}</h2>
-    <p class="muted measure-540-center-mb-28">{{ sections["about.join"].body }}</p>
-    <a href="programs.html" class="btn btn-coral">{{ sections["about.join"].cta_label }}</a>
+    <span class="eyebrow" data-cs="about.join.eyebrow">{{ sections["about.join"].eyebrow }}</span>
+    <h2 class="mb-14" data-cs="about.join.heading">{{ sections["about.join"].heading }}</h2>
+    <p class="muted measure-540-center-mb-28" data-cs="about.join.body">{{ sections["about.join"].body }}</p>
+    <a href="programs.html" class="btn btn-coral" data-cs="about.join.cta_label">{{ sections["about.join"].cta_label }}</a>
   </div>
 </section>
 
