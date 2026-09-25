@@ -24,6 +24,10 @@ binding = "LEGACY_DB"
 database_name = "legacy-hub-db-staging"
 database_id = "2816cb1a-dc45-4550-9817-fda621faecad"
 
+# Non-inheritable: preview must restate the Workers AI binding or the staging assistant has no model.
+[env.preview.ai]
+binding = "AI"
+
 
 # MEDIA (R2) binding, ADR 0007: enable once the bucket legacy-hub-media exists in the account.
 # Declaring it before the bucket exists makes every Pages deploy fail at the Functions step (2026-09-16).
