@@ -106,6 +106,18 @@ test('1. isAllowedHref correctly accepts safe URLs and rejects unsafe schemes', 
   assert.equal(isAllowedHref('data:text/html,<script>alert(1)</script>'), false);
   assert.equal(isAllowedHref('vbscript:msgbox(1)'), false);
 
+  // Disallowed: character-reference-encoded and control-character bypasses
+  assert.equal(isAllowedHref('javascript&colon;alert(1)'), false);
+  assert.equal(isAllowedHref('javascript&#58;alert(1)'), false);
+  assert.equal(isAllowedHref('javascript&#x3a;alert(1)'), false);
+  assert.equal(isAllowedHref('java&#x09;script:alert(1)'), false);
+  assert.equal(isAllowedHref('java&#9;script:alert(1)'), false);
+  assert.equal(isAllowedHref('java&#x0a;script:alert(1)'), false);
+  assert.equal(isAllowedHref('&#x6a;&#x61;&#x76;&#x61;&#x73;&#x63;&#x72;&#x69;&#x70;&#x74;&#x3a;alert(1)'), false);
+  assert.equal(isAllowedHref('jav&#x0061;script:alert(1)'), false);
+  assert.equal(isAllowedHref('javascript&tab;:alert(1)'), false);
+  assert.equal(isAllowedHref('javascript&newline;:alert(1)'), false);
+
   // Disallowed: invalid characters or whitespace
   assert.equal(isAllowedHref('https://example.com/ "><script>'), false);
   assert.equal(isAllowedHref('   '), false);
@@ -137,6 +149,9 @@ test('2. isAllowedTag enforces inline allowlist and attribute restrictions', () 
   assert.equal(isAllowedTag('<a href="resources.html" target="_blank">'), false);
   assert.equal(isAllowedTag('<a href="javascript:alert(1)">'), false);
   assert.equal(isAllowedTag('<a href="http://legacy-hub.org">'), false);
+  assert.equal(isAllowedTag('<a href="javascript&colon;alert(1)">'), false);
+  assert.equal(isAllowedTag('<a href="javascript&#58;alert(1)">'), false);
+  assert.equal(isAllowedTag('<a href="java&#x09;script:alert(1)">'), false);
 
   // Disallowed tags entirely
   assert.equal(isAllowedTag('<script>'), false);
@@ -179,33 +194,54 @@ test('3. sanitizeInlineHtml renders allowed tags and neutralizes hostile payload
     sanitizeInlineHtml('<a href="javascript:alert(1)">click</a>'),
     '&lt;a href=&quot;javascript:alert(1)&quot;&gt;click</a>'
   );
+
+  // Encoded scheme payloads rendered inert at edge
+  assert.equal(
+    sanitizeInlineHtml('<a href="javascript&colon;alert(1)">click</a>'),
+    '&lt;a href=&quot;javascript&colon;alert(1)&quot;&gt;click</a>'
+  );
+  assert.equal(
+    sanitizeInlineHtml('<a href="javascript&#58;alert(1)">click</a>'),
+    '&lt;a href=&quot;javascript&#58;alert(1)&quot;&gt;click</a>'
+  );
+  assert.equal(
+    sanitizeInlineHtml('<a href="java&#x09;script:alert(1)">click</a>'),
+    '&lt;a href=&quot;java&#x09;script:alert(1)&quot;&gt;click</a>'
+  );
 });
 
 test('4. POST /api/agent/change/direct rejects disallowed HTML with 400', async () => {
-  const hostileData = {
-    section_key: 'home.hero',
-    title: 'Safe Title <script>alert(1)</script>',
-    lede: 'Safe lede copy'
-  };
+  const hostilePayloads = [
+    { section_key: 'home.hero', title: 'Title <script>alert(1)</script>', lede: 'Lede' },
+    { section_key: 'home.hero', title: 'Title <img src=x onerror=alert(1)>', lede: 'Lede' },
+    { section_key: 'home.hero', title: 'Title <a href="javascript&colon;alert(1)">click</a>', lede: 'Lede' },
+    { section_key: 'home.hero', title: 'Title <a href="javascript&#58;alert(1)">click</a>', lede: 'Lede' },
+    { section_key: 'home.hero', title: 'Title <a href="java&#x09;script:alert(1)">click</a>', lede: 'Lede' },
+    { section_key: 'home.hero', title: 'Title <a href="http://insecure.org">click</a>', lede: 'Lede' },
+    { section_key: 'home.hero', title: 'Title <span style="color:red">styled</span>', lede: 'Lede' },
+    { section_key: 'home.hero', title: 'Title <strong>unbalanced without closing', lede: 'Lede' }
+  ];
 
-  const req = new Request('https://example.com/api/agent/change/direct', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-dev-actor': 'coordinator@legacy-hub.org'
-    },
-    body: JSON.stringify({
-      target_id: 'ps_home.hero',
-      data: hostileData
-    })
-  });
+  for (const hostileData of hostilePayloads) {
+    const req = new Request('https://example.com/api/agent/change/direct', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-dev-actor': 'coordinator@legacy-hub.org'
+      },
+      body: JSON.stringify({
+        target_id: 'ps_home.hero',
+        data: hostileData
+      })
+    });
 
-  const res = await postAgent({ request: req, env });
-  const data = await res.json();
+    const res = await postAgent({ request: req, env });
+    const data = await res.json();
 
-  assert.equal(res.status, 400);
-  assert.equal(data.ok, false);
-  assert.ok(data.error.includes('disallowed HTML'), 'must return disallowed HTML error');
+    assert.equal(res.status, 400, `Expected 400 for payload ${JSON.stringify(hostileData)}`);
+    assert.equal(data.ok, false);
+    assert.ok(data.error.includes('disallowed HTML'), 'must return disallowed HTML error');
+  }
 });
 
 test('5. POST /api/agent/change/direct allows safe inline HTML with 200', async () => {
@@ -235,35 +271,40 @@ test('5. POST /api/agent/change/direct allows safe inline HTML with 200', async 
   assert.equal(data.id, 'ps_home.hero');
 });
 
-test('6. POST /api/agent/draft refuses proposed changes with disallowed HTML', async () => {
-  // Configure mock backend returning hostile change
-  const hostileBackend = () => ({
-    ok: true,
-    change: {
-      section_key: 'home.hero',
-      title: 'Title with <a href="javascript:alert(1)">evil</a>',
-      lede: 'Lede text'
-    }
-  });
+test('6. POST /api/agent/draft refuses proposed changes with disallowed or encoded HTML', async () => {
+  const hostileChanges = [
+    { section_key: 'home.hero', title: 'Title with <a href="javascript:alert(1)">evil</a>', lede: 'Lede' },
+    { section_key: 'home.hero', title: 'Title with <a href="javascript&colon;alert(1)">evil</a>', lede: 'Lede' },
+    { section_key: 'home.hero', title: 'Title with <a href="javascript&#58;alert(1)">evil</a>', lede: 'Lede' },
+    { section_key: 'home.hero', title: 'Title with <a href="java&#x09;script:alert(1)">evil</a>', lede: 'Lede' },
+    { section_key: 'home.hero', title: 'Title with <em>unclosed tag', lede: 'Lede' }
+  ];
 
-  const customEnv = {
-    ...env,
-    AGENT_MAPPER_BACKEND: hostileBackend
-  };
+  for (const hostileChange of hostileChanges) {
+    const hostileBackend = () => ({
+      ok: true,
+      change: hostileChange
+    });
 
-  const req = new Request('https://example.com/api/agent/draft', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      type_id: 'page_section',
-      target_id: 'ps_home.hero',
-      request: 'Add link'
-    })
-  });
+    const customEnv = {
+      ...env,
+      AGENT_MAPPER_BACKEND: hostileBackend
+    };
 
-  const res = await postAgent({ request: req, env: customEnv });
-  const data = await res.json();
+    const req = new Request('https://example.com/api/agent/draft', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        type_id: 'page_section',
+        target_id: 'ps_home.hero',
+        request: 'Add link'
+      })
+    });
 
-  assert.equal(data.ok, false);
-  assert.ok(data.refusal.includes('disallowed HTML'), 'must return refusal for disallowed HTML');
+    const res = await postAgent({ request: req, env: customEnv });
+    const data = await res.json();
+
+    assert.equal(data.ok, false);
+    assert.ok(data.refusal.includes('disallowed HTML'), 'must return refusal for disallowed HTML');
+  }
 });

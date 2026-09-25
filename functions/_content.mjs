@@ -15,23 +15,63 @@ export function escapeHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
+export function decodeHtmlReferences(str) {
+  if (typeof str !== 'string') return '';
+  return str
+    .replace(/&#x([0-9a-fA-F]+);?/gi, (_, hex) => {
+      try {
+        const cp = parseInt(hex, 16);
+        return cp < 0x110000 ? String.fromCodePoint(cp) : '';
+      } catch { return ''; }
+    })
+    .replace(/&#([0-9]+);?/g, (_, dec) => {
+      try {
+        const cp = parseInt(dec, 10);
+        return cp < 0x110000 ? String.fromCodePoint(cp) : '';
+      } catch { return ''; }
+    })
+    .replace(/&colon;?/gi, ':')
+    .replace(/&tab;?/gi, '\t')
+    .replace(/&newline;?/gi, '\n')
+    .replace(/&sol;?/gi, '/')
+    .replace(/&bsol;?/gi, '\\')
+    .replace(/&quot;?/gi, '"')
+    .replace(/&apos;?/gi, "'")
+    .replace(/&amp;?/gi, '&');
+}
+
 export function isAllowedHref(href) {
   if (typeof href !== 'string') return false;
   const h = href.trim();
   if (!h) return false;
-  // Disallow control characters, whitespace, quotes, angle brackets, backslashes
+
+  // Disallow raw whitespace, quotes, angle brackets, backslashes
   if (/[\s"'<>\\]/.test(h)) return false;
+
+  // Reject any '&' before '?' in the raw href (character references in path/scheme are disallowed)
+  const rawBeforeQuery = h.split('?')[0];
+  if (rawBeforeQuery.includes('&')) return false;
+
+  // Decode any HTML character references
+  const decoded = decodeHtmlReferences(h);
+
+  // Strip ASCII control characters and whitespace (0x00-0x20, 0x7F)
+  const normalized = decoded.replace(/[\x00-\x20\x7F]/g, '');
+
   // Disallow protocol-relative URLs (e.g. //evil.com)
-  if (h.startsWith('//')) return false;
+  if (normalized.startsWith('//')) return false;
 
   // Allowed absolute schemes: https:, mailto:, tel:
-  if (/^https:\/\/[^\s"'<>\\]+$/i.test(h)) return true;
-  if (/^mailto:[^\s"'<>\\]+$/i.test(h)) return true;
-  if (/^tel:[^\s"'<>\\]+$/i.test(h)) return true;
+  if (/^https:\/\/[^\s"'<>\\]+$/i.test(normalized)) return true;
+  if (/^mailto:[^\s"'<>\\]+$/i.test(normalized)) return true;
+  if (/^tel:[^\s"'<>\\]+$/i.test(normalized)) return true;
 
-  // Relative URLs: must not contain a scheme (colon before ? or #)
-  const beforeQuery = h.split(/[?#]/)[0];
+  // Relative URLs: must not contain a scheme (colon before ? or # in normalized string)
+  const beforeQuery = normalized.split(/[?#]/)[0];
   if (beforeQuery.includes(':')) return false;
+
+  // Must not contain forbidden characters after decoding
+  if (/[\s"'<>\\]/.test(decoded)) return false;
 
   return true;
 }
@@ -128,10 +168,26 @@ export function findDisallowedHtml(val) {
   if (typeof val === 'string') {
     const tags = val.match(/<[^>]*>/g);
     if (tags) {
+      const counts = { strong: 0, em: 0, span: 0, a: 0 };
       for (const tag of tags) {
         if (!isAllowedTag(tag)) {
           return `Disallowed HTML tag: ${tag}`;
         }
+        if (/^<\s*strong\s*>/i.test(tag)) counts.strong++;
+        else if (/^<\/\s*strong\s*>/i.test(tag)) counts.strong--;
+        else if (/^<\s*em\s*>/i.test(tag)) counts.em++;
+        else if (/^<\/\s*em\s*>/i.test(tag)) counts.em--;
+        else if (/^<\s*span\b/i.test(tag)) counts.span++;
+        else if (/^<\/\s*span\s*>/i.test(tag)) counts.span--;
+        else if (/^<\s*a\b/i.test(tag)) counts.a++;
+        else if (/^<\/\s*a\s*>/i.test(tag)) counts.a--;
+
+        if (counts.strong < 0 || counts.em < 0 || counts.span < 0 || counts.a < 0) {
+          return `Unbalanced or misplaced closing HTML tag in string: ${val}`;
+        }
+      }
+      if (counts.strong !== 0 || counts.em !== 0 || counts.span !== 0 || counts.a !== 0) {
+        return `Unbalanced unclosed HTML tag in string: ${val}`;
       }
     }
     const withoutAllowed = val.replace(/<[^>]*>/g, '');
