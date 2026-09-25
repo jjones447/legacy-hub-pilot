@@ -51,20 +51,13 @@ function htmlErrorPage(message) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Portal Access Error</title>
-  <style>
-    body { font-family: system-ui, -apple-system, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f9fafb; color: #111827; }
-    .card { padding: 2rem; background: white; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); text-align: center; max-width: 400px; width: 100%; border: 1px solid #e5e7eb; }
-    h1 { font-size: 1.5rem; margin-bottom: 1rem; color: #dc2626; }
-    p { color: #4b5563; line-height: 1.5; margin-bottom: 1.5rem; }
-    a { display: inline-block; padding: 0.5rem 1rem; background: #2563eb; color: white; text-decoration: none; border-radius: 4px; font-weight: 500; }
-    a:hover { background: #1d4ed8; }
-  </style>
+  <link rel="stylesheet" href="/styles.css">
 </head>
-<body>
-  <div class="card">
-    <h1>Access Link Error</h1>
-    <p>${message}</p>
-    <a href="/portal.html">Go to Login Page</a>
+<body class="portal-error-body">
+  <div class="portal-error-card">
+    <h1 class="portal-error-title">Access Link Error</h1>
+    <p class="portal-error-text">${message}</p>
+    <a class="portal-error-link" href="/portal.html">Go to Login Page</a>
   </div>
 </body>
 </html>`, {

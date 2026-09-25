@@ -12,7 +12,22 @@ const rootDir = path.resolve(__dirname, '..');
 const EXPECTED_CSP =
   "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
 
-test('zero inline style attributes across all served HTML, templates, staff.js, and app.js markup', () => {
+function getFunctionFiles(dir = path.join(rootDir, 'functions')) {
+  let results = [];
+  if (!fs.existsSync(dir)) return results;
+  const list = fs.readdirSync(dir, { withFileTypes: true });
+  for (const entry of list) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      results = results.concat(getFunctionFiles(fullPath));
+    } else if (entry.isFile() && (entry.name.endsWith('.js') || entry.name.endsWith('.mjs'))) {
+      results.push(fullPath);
+    }
+  }
+  return results;
+}
+
+test('zero inline style attributes across all served HTML, templates, staff.js, app.js, and functions markup', () => {
   const htmlFiles = fs.readdirSync(rootDir)
     .filter(f => f.endsWith('.html'))
     .map(f => path.join(rootDir, f));
@@ -28,7 +43,9 @@ test('zero inline style attributes across all served HTML, templates, staff.js, 
     .map(f => path.join(rootDir, f))
     .filter(f => fs.existsSync(f));
 
-  const allFiles = [...htmlFiles, ...templateFiles, ...scriptFiles];
+  const functionFiles = getFunctionFiles();
+
+  const allFiles = [...htmlFiles, ...templateFiles, ...scriptFiles, ...functionFiles];
   // Match style="..." in markup (ignoring element.style.x script assignments)
   const inlineStyleRegex = /style\s*=\s*["'][^"']*["']/gi;
   const violations = [];
@@ -53,7 +70,7 @@ test('zero inline style attributes across all served HTML, templates, staff.js, 
   );
 });
 
-test('zero inline on*= event handlers across all served HTML, templates, staff.js, and app.js', () => {
+test('zero inline on*= event handlers across all served HTML, templates, staff.js, app.js, and functions', () => {
   const htmlFiles = fs.readdirSync(rootDir)
     .filter(f => f.endsWith('.html'))
     .map(f => path.join(rootDir, f));
@@ -69,7 +86,9 @@ test('zero inline on*= event handlers across all served HTML, templates, staff.j
     .map(f => path.join(rootDir, f))
     .filter(f => fs.existsSync(f));
 
-  const allFiles = [...htmlFiles, ...templateFiles, ...scriptFiles];
+  const functionFiles = getFunctionFiles();
+
+  const allFiles = [...htmlFiles, ...templateFiles, ...scriptFiles, ...functionFiles];
   // Look for markup inline handlers on<event>=
   const inlineHandlerRegex = /\son[a-z]+\s*=\s*["'][^"']*["']/gi;
   const violations = [];
@@ -94,7 +113,7 @@ test('zero inline on*= event handlers across all served HTML, templates, staff.j
   );
 });
 
-test('zero inline script blocks across all served HTML and templates', () => {
+test('zero inline script blocks across all served HTML, templates, and functions', () => {
   const htmlFiles = fs.readdirSync(rootDir)
     .filter(f => f.endsWith('.html'))
     .map(f => path.join(rootDir, f));
@@ -106,7 +125,9 @@ test('zero inline script blocks across all served HTML and templates', () => {
         .map(f => path.join(templatesDir, f))
     : [];
 
-  const allFiles = [...htmlFiles, ...templateFiles];
+  const functionFiles = getFunctionFiles();
+
+  const allFiles = [...htmlFiles, ...templateFiles, ...functionFiles];
   // Match any script element that has inline content or lacks a src attribute
   const scriptTagRegex = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi;
   const violations = [];
@@ -134,7 +155,7 @@ test('zero inline script blocks across all served HTML and templates', () => {
   );
 });
 
-test('zero <style> elements across all served HTML and templates', () => {
+test('zero <style> elements across all served HTML, templates, and functions', () => {
   const htmlFiles = fs.readdirSync(rootDir)
     .filter(f => f.endsWith('.html'))
     .map(f => path.join(rootDir, f));
@@ -146,7 +167,9 @@ test('zero <style> elements across all served HTML and templates', () => {
         .map(f => path.join(templatesDir, f))
     : [];
 
-  const allFiles = [...htmlFiles, ...templateFiles];
+  const functionFiles = getFunctionFiles();
+
+  const allFiles = [...htmlFiles, ...templateFiles, ...functionFiles];
   const styleTagRegex = /<style(?:\s+[^>]*)?>([\s\S]*?)<\/style>/gi;
   const violations = [];
 
