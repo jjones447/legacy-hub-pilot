@@ -14,6 +14,8 @@ Cloudflare Pages project.
 python build.py --verify
 npx wrangler pages deploy . --project-name=legacy-hub --branch=staging
 ```
+To seed or refresh page sections on staging: `node scripts/seed-page-sections.mjs --staging --remote`.
+
 
 ## Promote the same build to production
 

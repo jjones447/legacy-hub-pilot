@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Staging-only model comparison harness for the governed agent mapper.
-// It makes no requests unless --base-url and --models are supplied explicitly.
+// Defaults to https://staging.legacy-hub.pages.dev. Running against production needs an explicit --production flag.
+
 
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
@@ -120,13 +121,23 @@ function printReport(rows) {
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
   const args = parseArgs(process.argv);
-  if (!args['base-url']) {
-    console.error('Refusing live calls: provide --base-url <staging URL or URL containing {model}>.');
-    process.exitCode = 2;
-  } else {
-    const models = args.models ? String(args.models).split(',').map((model) => model.trim()).filter(Boolean) : DEFAULT_MODELS;
-    runComparison({ baseUrl: String(args['base-url']), models, timeoutMs: Number(args['timeout-ms'] || 30000) })
-      .then(printReport)
-      .catch((error) => { console.error(error.message); process.exitCode = 1; });
+  let baseUrl = args['base-url'];
+  const isProduction = Boolean(args['production']);
+
+  if (!baseUrl) {
+    if (isProduction) {
+      console.warn('WARNING: Running model comparison against PRODUCTION (https://legacy-hub.pages.dev)');
+      baseUrl = 'https://legacy-hub.pages.dev';
+    } else {
+      baseUrl = 'https://staging.legacy-hub.pages.dev';
+    }
+  } else if (isProduction || (typeof baseUrl === 'string' && baseUrl.includes('legacy-hub.pages.dev') && !baseUrl.includes('staging.'))) {
+    console.warn(`WARNING: Running model comparison against PRODUCTION (${baseUrl})`);
   }
+
+  const models = args.models ? String(args.models).split(',').map((model) => model.trim()).filter(Boolean) : DEFAULT_MODELS;
+  runComparison({ baseUrl: String(baseUrl), models, timeoutMs: Number(args['timeout-ms'] || 30000) })
+    .then(printReport)
+    .catch((error) => { console.error(error.message); process.exitCode = 1; });
 }
+

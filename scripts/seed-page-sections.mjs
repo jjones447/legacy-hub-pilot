@@ -146,7 +146,10 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(__filename)) {
       isLocal = true;
     } else if (args[i] === '--database' || args[i] === '--db') {
       databaseName = args[++i];
+    } else if (args[i] === '--staging') {
+      databaseName = 'legacy-hub-db-staging';
     }
+
   }
 
   seedPageSections({ isLocal, databaseName })
