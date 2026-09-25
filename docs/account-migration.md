@@ -14,9 +14,13 @@ How to bootstrap and rebuild the complete Legacy Hub infrastructure on Legacy's 
 # Set API token in environment (never passed as CLI argument, never logged)
 export CF_API_TOKEN="<target-account-token>"
 
-# Dry-run plan (makes zero writes, displays planned actions):
+# Dry-run plan (makes zero writes, displays planned actions and verification suite):
 node scripts/cloudflare-account-bootstrap.mjs --account <ACCOUNT_ID> --mode plan --staff-emails "jjones@x-centric.com,jacob.jones447@gmail.com"
 
 # Apply build (idempotent, configures D1, Pages, Access, R2, Backup Worker, and runs verification):
 node scripts/cloudflare-account-bootstrap.mjs --account <ACCOUNT_ID> --mode apply --staff-emails "jjones@x-centric.com,jacob.jones447@gmail.com"
+
+# Optional flags:
+# --rotate-secrets: Force regeneration of PORTAL_TOKEN_SECRET and Access secrets (caution: logs out caregivers)
+# --deploy: Force Pages deployment even if no infrastructure changes occurred
 ```

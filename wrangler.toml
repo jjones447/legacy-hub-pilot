@@ -17,12 +17,14 @@ binding = "AI"
 binding = "LEGACY_DB"
 database_name = "legacy-hub-db"
 database_id = "dab02f78-f131-4d17-abaa-db9e6b45fb1b"
+migrations_dir = "schema"
 
 # Production uses legacy-hub-db (dab02f78-f131-4d17-abaa-db9e6b45fb1b); preview deployments use legacy-hub-db-staging (2816cb1a-dc45-4550-9817-fda621faecad).
 [[env.preview.d1_databases]]
 binding = "LEGACY_DB"
 database_name = "legacy-hub-db-staging"
 database_id = "2816cb1a-dc45-4550-9817-fda621faecad"
+migrations_dir = "schema"
 
 # Non-inheritable: preview must restate the Workers AI binding or the staging assistant has no model.
 [env.preview.ai]

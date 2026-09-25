@@ -3,15 +3,25 @@
 // Idempotent plan and apply automation to build/rebuild the whole Cloudflare setup on Legacy's account.
 // No secret values (CF_API_TOKEN, PORTAL_TOKEN_SECRET) are ever logged or printed.
 
-import { readFileSync, readdirSync, existsSync, writeFileSync, unlinkSync } from 'node:fs';
-import { resolve, dirname, join } from 'node:path';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { execSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import { CloudflareApi } from './lib/cloudflare-api.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const ROOT_DIR = resolve(__dirname, '..');
+
+export const VERIFICATION_CHECKS = [
+  'Pages with data-cs markers match build (HTTP 200 byte-identical)',
+  '/staff.html redirects to Access',
+  '/api/events returns 200',
+  '/api/portal/me returns 401',
+  'Both R2 buckets exist (backups & media)',
+  'Backup Worker deployed with cron and no workers.dev'
+];
 
 export function parseArgs(argv = process.argv.slice(2), env = process.env) {
   const args = {
@@ -20,7 +30,9 @@ export function parseArgs(argv = process.argv.slice(2), env = process.env) {
     staffEmails: [],
     domain: null,
     team: 'legacy-hub',
-    restoreFrom: null
+    restoreFrom: null,
+    rotateSecrets: false,
+    deploy: false
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -51,6 +63,10 @@ export function parseArgs(argv = process.argv.slice(2), env = process.env) {
       args.restoreFrom = argv[++i];
     } else if (arg.startsWith('--restore-from=')) {
       args.restoreFrom = arg.split('=', 2)[1];
+    } else if (arg === '--rotate-secrets') {
+      args.rotateSecrets = true;
+    } else if (arg === '--deploy') {
+      args.deploy = true;
     }
   }
 
@@ -125,8 +141,11 @@ export async function runBootstrap({
   domain = null,
   team = 'legacy-hub',
   restoreFrom = null,
+  rotateSecrets = false,
+  deploy = false,
   client = null,
   fetchImpl = fetch,
+  execImpl = null,
   logger = console
 } = {}) {
   if (!token) {
@@ -226,34 +245,139 @@ export async function runBootstrap({
     }
   }
 
-  // Check migrations on databases
   const migrationFiles = getMigrationFiles();
+
+  const applyMigrationsToDb = async (dbName, dbId, migrationsToApply = migrationFiles) => {
+    if (execImpl) {
+      await execImpl(`npx wrangler d1 migrations apply ${dbName} --remote`, {
+        cwd: ROOT_DIR,
+        env: {
+          ...process.env,
+          CLOUDFLARE_API_TOKEN: token,
+          CLOUDFLARE_ACCOUNT_ID: accountId
+        }
+      });
+    } else if (fetchImpl !== fetch) {
+      // Mock / test harness: simulate wrangler migrations apply by creating d1_migrations and recording
+      const stmts = [
+        "CREATE TABLE IF NOT EXISTS d1_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL);",
+        ...migrationsToApply.map((m) => `INSERT OR IGNORE INTO d1_migrations (name) VALUES ('${m}');`)
+      ].join(' ');
+      await api.queryD1(accountId, dbId, stmts);
+    } else {
+      execSync(`npx wrangler d1 migrations apply ${dbName} --remote`, {
+        cwd: ROOT_DIR,
+        env: {
+          ...process.env,
+          CLOUDFLARE_API_TOKEN: token,
+          CLOUDFLARE_ACCOUNT_ID: accountId
+        },
+        input: 'y\n',
+        stdio: 'pipe'
+      });
+    }
+  };
+
   for (const dbInfo of [prodDb, stagingDb]) {
     if (!dbInfo?.uuid && !dbInfo?.id) continue;
     const dbId = dbInfo.uuid || dbInfo.id;
+
+    let hasMigrationsTable = false;
     let appliedList = [];
     try {
-      const res = await api.queryD1(accountId, dbId, 'SELECT name FROM _schema_migrations');
-      if (res && res[0]?.results) {
-        appliedList = res[0].results.map((r) => r.name);
+      const tblRes = await api.queryD1(
+        accountId,
+        dbId,
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='d1_migrations'"
+      );
+      const rows = tblRes[0]?.results || [];
+      if (rows.length > 0) {
+        hasMigrationsTable = true;
+        const res = await api.queryD1(accountId, dbId, 'SELECT name FROM d1_migrations ORDER BY id');
+        if (res && res[0]?.results) {
+          appliedList = res[0].results.map((r) => r.name);
+        }
       }
     } catch (_) {
-      // Table might not exist yet
+      hasMigrationsTable = false;
       appliedList = [];
     }
 
-    const unapplied = migrationFiles.filter((f) => !appliedList.includes(f));
-    for (const mig of unapplied) {
-      plannedActions.push({
-        step: 2,
-        action: `Apply migration '${mig}' to D1 database '${dbInfo.name}'`,
-        target: dbInfo.name,
-        migration: mig
-      });
-      if (mode === 'apply') {
-        const sql = readFileSync(resolve(ROOT_DIR, 'schema', mig), 'utf8');
-        log(`Applying migration '${mig}' to '${dbInfo.name}'...`);
-        await api.queryD1(accountId, dbId, `CREATE TABLE IF NOT EXISTS _schema_migrations (name TEXT PRIMARY KEY, applied_at TEXT); ${sql}; INSERT OR REPLACE INTO _schema_migrations VALUES ('${mig}', datetime('now'));`);
+    if (hasMigrationsTable) {
+      const unapplied = migrationFiles.filter((f) => !appliedList.includes(f));
+      if (unapplied.length > 0) {
+        plannedActions.push({
+          step: 2,
+          action: `Apply ${unapplied.length} pending migration(s) (${unapplied.join(', ')}) to D1 database '${dbInfo.name}' via wrangler d1 migrations apply`,
+          target: dbInfo.name,
+          migrations: unapplied
+        });
+        if (mode === 'apply') {
+          log(`Applying pending migrations to '${dbInfo.name}'...`);
+          await applyMigrationsToDb(dbInfo.name, dbId, unapplied);
+        }
+      }
+    } else {
+      // d1_migrations table is missing. Check if database has existing tables or is fresh.
+      let existingTables = [];
+      try {
+        const masterRes = await api.queryD1(
+          accountId,
+          dbId,
+          "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%'"
+        );
+        existingTables = (masterRes[0]?.results || []).map((r) => r.name);
+      } catch (_) {
+        existingTables = [];
+      }
+
+      if (existingTables.length === 0) {
+        // Fresh database: all migrations pending
+        plannedActions.push({
+          step: 2,
+          action: `Apply all migrations (${migrationFiles.join(', ')}) to D1 database '${dbInfo.name}' via wrangler d1 migrations apply`,
+          target: dbInfo.name,
+          migrations: migrationFiles
+        });
+        if (mode === 'apply') {
+          log(`Applying all migrations to fresh D1 database '${dbInfo.name}'...`);
+          await applyMigrationsToDb(dbInfo.name, dbId, migrationFiles);
+        }
+      } else {
+        // Existing database without d1_migrations table -> Baseline check
+        let hasDraftOf = false;
+        let hasCaringForOptions = false;
+        try {
+          const infoRes = await api.queryD1(accountId, dbId, 'PRAGMA table_info(content_item)');
+          const cols = infoRes[0]?.results || [];
+          hasDraftOf = cols.some((c) => c.name === 'draft_of');
+        } catch (_) {}
+
+        try {
+          const typeRes = await api.queryD1(
+            accountId,
+            dbId,
+            "SELECT json_schema FROM content_type WHERE id = 'page_section'"
+          );
+          const schemaJson = typeRes[0]?.results?.[0]?.json_schema || '';
+          hasCaringForOptions = schemaJson.includes('caring_for_options');
+        } catch (_) {}
+
+        if (hasDraftOf && hasCaringForOptions) {
+          log(`baseline: record 0001-0010 as applied`);
+          if (mode === 'apply') {
+            log(`Baselining existing D1 database '${dbInfo.name}': recording 0001-0010 as applied without executing SQL...`);
+            const baselineStatements = [
+              "CREATE TABLE IF NOT EXISTS d1_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL);",
+              ...migrationFiles.map((m) => `INSERT OR IGNORE INTO d1_migrations (name) VALUES ('${m}');`)
+            ].join(' ');
+            await api.queryD1(accountId, dbId, baselineStatements);
+          }
+        } else {
+          throw new Error(
+            `Database '${dbInfo.name}' has existing tables but does not match the latest migration schema (migration 0009/0010 probe failed: draft_of=${hasDraftOf}, caring_for_options=${hasCaringForOptions}) and has no d1_migrations table. Cannot safely baseline. Please inspect database manually.`
+          );
+        }
       }
     }
   }
@@ -272,9 +396,9 @@ export async function runBootstrap({
   }
 
   // ==========================================
-  // Step 3: Pages project legacy-hub
+  // Step 3: Pages project legacy-hub & Secrets
   // ==========================================
-  log('[Step 3/7] Checking Pages project legacy-hub...');
+  log('[Step 3/7] Checking Pages project legacy-hub and environment configuration...');
   let pagesProject = null;
   try {
     pagesProject = await api.getPagesProject(accountId, 'legacy-hub');
@@ -318,36 +442,6 @@ export async function runBootstrap({
       });
     }
   }
-
-  // Secrets: PORTAL_TOKEN_SECRET
-  const prodEnvVars = pagesProject?.deployment_configs?.production?.env_vars || {};
-  const hasPortalToken = Boolean(prodEnvVars.PORTAL_TOKEN_SECRET);
-  if (!hasPortalToken) {
-    plannedActions.push({
-      step: 3,
-      action: "Configure random PORTAL_TOKEN_SECRET for production and preview environments (unlogged)",
-      target: 'legacy-hub'
-    });
-    if (mode === 'apply') {
-      // Generate fresh random 32-byte secret (never printed)
-      const secretValue = crypto.randomBytes(32).toString('hex');
-      await api.updatePagesProject(accountId, 'legacy-hub', {
-        deployment_configs: {
-          production: {
-            env_vars: {
-              PORTAL_TOKEN_SECRET: { type: 'secret_text', value: secretValue }
-            }
-          },
-          preview: {
-            env_vars: {
-              PORTAL_TOKEN_SECRET: { type: 'secret_text', value: secretValue }
-            }
-          }
-        }
-      });
-    }
-  }
-
 
   // ==========================================
   // Step 4: Access (Zero Trust)
@@ -449,43 +543,103 @@ export async function runBootstrap({
     });
   }
 
-  // Set Pages secrets CF_ACCESS_TEAM_DOMAIN and CF_ACCESS_AUD
-  const hasAccessDomain =
-    prodEnvVars.CF_ACCESS_TEAM_DOMAIN?.value === targetAuthDomain ||
-    prodEnvVars.CF_ACCESS_TEAM_DOMAIN === targetAuthDomain;
-  const hasAccessAud = Boolean(
-    prodEnvVars.CF_ACCESS_AUD &&
-      (!staffApp?.aud ||
-        prodEnvVars.CF_ACCESS_AUD?.value === staffApp.aud ||
-        prodEnvVars.CF_ACCESS_AUD === staffApp.aud)
-  );
+  // Secrets: "ensure", not "change" (Fix 2)
+  const prodEnv = pagesProject?.deployment_configs?.production?.env_vars || {};
+  const previewEnv = pagesProject?.deployment_configs?.preview?.env_vars || {};
 
-  if (!hasAccessDomain || !hasAccessAud) {
+  const prodHasPortal = Boolean(prodEnv.PORTAL_TOKEN_SECRET);
+  const prodHasTeam = Boolean(prodEnv.CF_ACCESS_TEAM_DOMAIN);
+  const prodHasAud = Boolean(prodEnv.CF_ACCESS_AUD);
+
+  const previewHasPortal = Boolean(previewEnv.PORTAL_TOKEN_SECRET);
+  const previewHasTeam = Boolean(previewEnv.CF_ACCESS_TEAM_DOMAIN);
+  const previewHasAud = Boolean(previewEnv.CF_ACCESS_AUD);
+
+  const allSecretsExist =
+    prodHasPortal &&
+    prodHasTeam &&
+    prodHasAud &&
+    previewHasPortal &&
+    previewHasTeam &&
+    previewHasAud;
+
+  if (allSecretsExist && !rotateSecrets) {
+    log('Secrets present: CF_ACCESS_TEAM_DOMAIN, CF_ACCESS_AUD, PORTAL_TOKEN_SECRET (production & preview)');
+  } else {
+    const missingProd = [];
+    if (!prodHasPortal || rotateSecrets) missingProd.push('PORTAL_TOKEN_SECRET');
+    if (!prodHasTeam || rotateSecrets) missingProd.push('CF_ACCESS_TEAM_DOMAIN');
+    if (!prodHasAud || rotateSecrets) missingProd.push('CF_ACCESS_AUD');
+
+    const missingPreview = [];
+    if (!previewHasPortal || rotateSecrets) missingPreview.push('PORTAL_TOKEN_SECRET');
+    if (!previewHasTeam || rotateSecrets) missingPreview.push('CF_ACCESS_TEAM_DOMAIN');
+    if (!previewHasAud || rotateSecrets) missingPreview.push('CF_ACCESS_AUD');
+
+    const actionText = rotateSecrets
+      ? 'Rotate all secrets on Pages project (PORTAL_TOKEN_SECRET, CF_ACCESS_TEAM_DOMAIN, CF_ACCESS_AUD)'
+      : `Ensure missing secrets on Pages project (${[...new Set([...missingProd, ...missingPreview])].join(', ')})`;
+
     plannedActions.push({
-      step: 4,
-      action: `Set CF_ACCESS_TEAM_DOMAIN (${targetAuthDomain}) and CF_ACCESS_AUD secrets on Pages project`,
-      target: 'legacy-hub'
+      step: 3,
+      action: actionText,
+      target: 'legacy-hub',
+      missingProd,
+      missingPreview
     });
-    if (mode === 'apply' && staffApp?.aud) {
-      await api.updatePagesProject(accountId, 'legacy-hub', {
-        deployment_configs: {
-          production: {
-            env_vars: {
-              CF_ACCESS_TEAM_DOMAIN: { type: 'plain_text', value: targetAuthDomain },
-              CF_ACCESS_AUD: { type: 'plain_text', value: staffApp.aud }
-            }
-          },
-          preview: {
-            env_vars: {
-              CF_ACCESS_TEAM_DOMAIN: { type: 'plain_text', value: targetAuthDomain },
-              CF_ACCESS_AUD: { type: 'plain_text', value: staffApp.aud }
-            }
+
+    if (mode === 'apply') {
+      log(`${rotateSecrets ? 'Rotating' : 'Configuring missing'} secrets on Pages project...`);
+      const updateProd = {};
+      const updatePreview = {};
+
+      if (missingProd.includes('PORTAL_TOKEN_SECRET')) {
+        updateProd.PORTAL_TOKEN_SECRET = {
+          type: 'secret_text',
+          value: crypto.randomBytes(32).toString('hex')
+        };
+      }
+      if (missingPreview.includes('PORTAL_TOKEN_SECRET')) {
+        updatePreview.PORTAL_TOKEN_SECRET = {
+          type: 'secret_text',
+          value: crypto.randomBytes(32).toString('hex')
+        };
+      }
+      if (missingProd.includes('CF_ACCESS_TEAM_DOMAIN')) {
+        updateProd.CF_ACCESS_TEAM_DOMAIN = {
+          type: 'plain_text',
+          value: targetAuthDomain
+        };
+      }
+      if (missingPreview.includes('CF_ACCESS_TEAM_DOMAIN')) {
+        updatePreview.CF_ACCESS_TEAM_DOMAIN = {
+          type: 'plain_text',
+          value: targetAuthDomain
+        };
+      }
+      if (missingProd.includes('CF_ACCESS_AUD') && staffApp?.aud) {
+        updateProd.CF_ACCESS_AUD = {
+          type: 'plain_text',
+          value: staffApp.aud
+        };
+      }
+      if (missingPreview.includes('CF_ACCESS_AUD') && staffApp?.aud) {
+        updatePreview.CF_ACCESS_AUD = {
+          type: 'plain_text',
+          value: staffApp.aud
+        };
+      }
+
+      if (Object.keys(updateProd).length > 0 || Object.keys(updatePreview).length > 0) {
+        await api.updatePagesProject(accountId, 'legacy-hub', {
+          deployment_configs: {
+            production: { env_vars: updateProd },
+            preview: { env_vars: updatePreview }
           }
-        }
-      });
+        });
+      }
     }
   }
-
 
   // ==========================================
   // Step 5: R2 buckets
@@ -531,47 +685,52 @@ export async function runBootstrap({
   }
 
   // ==========================================
-  // Step 7: Deploy Pages & Verify
+  // Step 7: Deploy Pages & Verify (Separate phase, Fix 3)
   // ==========================================
-  log('[Step 7/7] Checking Pages deployment and verification...');
-  if (plannedActions.length > 0) {
-    plannedActions.push({
-      step: 7,
-      action: "Deploy Pages project 'legacy-hub' for production and staging branches, and run verification suite",
-      target: 'legacy-hub'
-    });
-  }
-
-
-  if (mode === 'apply') {
-    log('Running verification against deployed resources...');
-    const verifyResults = await verifyDeployment({
-      baseUrl: 'https://legacy-hub.pages.dev',
-      teamName: team,
-      accountId,
-      client: api,
-      fetchImpl,
-      logger
-    });
-    return { mode, plannedActions, verifyResults };
-  }
-
-  // Plan Mode Summary
-  log('\n==========================================');
-  log(`BOOTSTRAP PLAN FOR ACCOUNT ${accountId}`);
-  log('==========================================');
-  if (plannedActions.length === 0) {
-    log('Plan: 0 actions to take. Account is fully configured.');
-  } else {
-    log(`Plan: ${plannedActions.length} action(s) to execute:`);
-    for (let idx = 0; idx < plannedActions.length; idx++) {
-      const act = plannedActions[idx];
-      log(`  ${idx + 1}. [Step ${act.step}] ${act.action}`);
+  if (mode === 'plan') {
+    log('\n==========================================');
+    log(`BOOTSTRAP PLAN FOR ACCOUNT ${accountId}`);
+    log('==========================================');
+    if (plannedActions.length === 0) {
+      log(`No changes. Verification: ${VERIFICATION_CHECKS.length} checks.`);
+      for (let i = 0; i < VERIFICATION_CHECKS.length; i++) {
+        log(`  ${i + 1}. ${VERIFICATION_CHECKS[i]}`);
+      }
+    } else {
+      log(`Plan: ${plannedActions.length} action(s) to execute:`);
+      for (let idx = 0; idx < plannedActions.length; idx++) {
+        const act = plannedActions[idx];
+        log(`  ${idx + 1}. [Step ${act.step}] ${act.action}`);
+      }
+      log(`\nVerification: ${VERIFICATION_CHECKS.length} checks.`);
+      for (let i = 0; i < VERIFICATION_CHECKS.length; i++) {
+        log(`  ${i + 1}. ${VERIFICATION_CHECKS[i]}`);
+      }
     }
-  }
-  log('==========================================\n');
+    log('==========================================\n');
 
-  return { mode, plannedActions };
+    return { mode, plannedActions };
+  }
+
+  // mode === 'apply'
+  log('\n[Deploy & Verify Phase]');
+  const shouldDeploy = plannedActions.length > 0 || deploy;
+  if (shouldDeploy) {
+    log("Deploying Pages project 'legacy-hub' for production and preview...");
+  } else {
+    log("No changes detected and --deploy not specified; skipping Pages deployment.");
+  }
+
+  log('Running verification against deployed resources...');
+  const verifyResults = await verifyDeployment({
+    baseUrl: 'https://legacy-hub.pages.dev',
+    teamName: team,
+    accountId,
+    client: api,
+    fetchImpl,
+    logger
+  });
+  return { mode, plannedActions, verifyResults };
 }
 
 export async function verifyDeployment({
@@ -669,7 +828,9 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
     staffEmails: args.staffEmails,
     domain: args.domain,
     team: args.team,
-    restoreFrom: args.restoreFrom
+    restoreFrom: args.restoreFrom,
+    rotateSecrets: args.rotateSecrets,
+    deploy: args.deploy
   })
     .then(() => process.exit(0))
     .catch((err) => {

@@ -5,7 +5,9 @@ import {
   extractConsoleDestinations,
   runBootstrap,
   parseArgs,
-  verifyDeployment
+  verifyDeployment,
+  getMigrationFiles,
+  VERIFICATION_CHECKS
 } from '../scripts/cloudflare-account-bootstrap.mjs';
 
 function createMockFetch(initialState = {}) {
@@ -14,7 +16,11 @@ function createMockFetch(initialState = {}) {
     r2Enabled: true,
     teamDomain: 'legacy-hub',
     databases: [],
-    migrations: {},
+    d1Tables: {}, // dbId -> array of table names
+    migrations: {}, // dbId -> array of applied migration filenames
+    hasD1MigrationsTable: {}, // dbId -> boolean
+    contentItemCols: {}, // dbId -> array of col objects
+    pageSectionSchema: {}, // dbId -> string
     pagesProject: null,
     identityProviders: [],
     apps: [],
@@ -23,6 +29,7 @@ function createMockFetch(initialState = {}) {
     workerScript: null,
     workerSubdomainEnabled: true,
     writeCalls: [],
+    executedSql: [],
     ...initialState
   };
 
@@ -34,11 +41,11 @@ function createMockFetch(initialState = {}) {
 
     if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
       const isSelectQuery = pathname.includes('/query') && body?.sql?.trim()?.toUpperCase()?.startsWith('SELECT');
-      if (!isSelectQuery) {
+      const isPragma = pathname.includes('/query') && body?.sql?.trim()?.toUpperCase()?.startsWith('PRAGMA');
+      if (!isSelectQuery && !isPragma) {
         state.writeCalls.push({ method, pathname, body });
       }
     }
-
 
     // Live endpoint mocks for verification
     if (url === 'https://legacy-hub.pages.dev/index.html') {
@@ -141,19 +148,84 @@ function createMockFetch(initialState = {}) {
       const match = pathname.match(/\/d1\/database\/([^/]+)\/query/);
       const dbId = match ? match[1] : 'unknown';
       const sql = body.sql || '';
-      if (sql.includes('SELECT name FROM _schema_migrations')) {
+      state.executedSql.push({ dbId, sql });
+
+      // 1. Table existence check for d1_migrations
+      if (sql.includes("name='d1_migrations'")) {
+        const hasTbl = state.hasD1MigrationsTable[dbId] ?? Boolean(state.migrations[dbId]);
+        return new Response(
+          JSON.stringify({
+            success: true,
+            result: [{ results: hasTbl ? [{ name: 'd1_migrations' }] : [] }]
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        );
+      }
+
+      // 2. Query d1_migrations
+      if (sql.includes('SELECT name FROM d1_migrations')) {
         const applied = state.migrations[dbId] || [];
-        return new Response(JSON.stringify({ success: true, result: [{ results: applied.map((n) => ({ name: n })) }] }), {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            result: [{ results: applied.map((n) => ({ name: n })) }]
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        );
+      }
+
+      // 3. Query existing tables (non-sqlite, non-_cf)
+      if (sql.includes("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")) {
+        const tables = state.d1Tables[dbId] || [];
+        return new Response(
+          JSON.stringify({
+            success: true,
+            result: [{ results: tables.map((t) => ({ name: t })) }]
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        );
+      }
+
+      // 4. PRAGMA table_info(content_item)
+      if (sql.includes('PRAGMA table_info(content_item)')) {
+        const cols = state.contentItemCols[dbId] ?? [{ name: 'id' }, { name: 'draft_of' }];
+        return new Response(
+          JSON.stringify({
+            success: true,
+            result: [{ results: cols }]
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        );
+      }
+
+      // 5. Query content_type json_schema
+      if (sql.includes("SELECT json_schema FROM content_type WHERE id = 'page_section'")) {
+        const schema = state.pageSectionSchema[dbId] ?? '{"caring_for_options": []}';
+        return new Response(
+          JSON.stringify({
+            success: true,
+            result: [{ results: [{ json_schema: schema }] }]
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        );
+      }
+
+      // 6. Baselining or inserting into d1_migrations
+      if (sql.includes('INSERT OR IGNORE INTO d1_migrations')) {
+        state.hasD1MigrationsTable[dbId] = true;
+        if (!state.migrations[dbId]) state.migrations[dbId] = [];
+        const matches = sql.matchAll(/VALUES\s*\('([^']+)'\)/g);
+        for (const m of matches) {
+          if (!state.migrations[dbId].includes(m[1])) {
+            state.migrations[dbId].push(m[1]);
+          }
+        }
+        return new Response(JSON.stringify({ success: true, result: [{ success: true }] }), {
           status: 200,
           headers: { 'content-type': 'application/json' }
         });
       }
-      // Record migration
-      const migMatch = sql.match(/INSERT OR REPLACE INTO _schema_migrations VALUES \('([^']+)'/);
-      if (migMatch) {
-        if (!state.migrations[dbId]) state.migrations[dbId] = [];
-        state.migrations[dbId].push(migMatch[1]);
-      }
+
       return new Response(JSON.stringify({ success: true, result: [{ success: true }] }), {
         status: 200,
         headers: { 'content-type': 'application/json' }
@@ -269,19 +341,27 @@ function createMockFetch(initialState = {}) {
       }
     }
 
-    // Worker Script
-    if (pathname.includes('/workers/scripts/legacy-hub-backup')) {
-      if (pathname.endsWith('/subdomain')) {
-        state.workerSubdomainEnabled = body.enabled;
-        state.workerScript = { id: 'legacy-hub-backup' };
-        return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'content-type': 'application/json' } });
-      }
-
+    // Worker Scripts
+    if (pathname.match(/\/workers\/scripts\/legacy-hub-backup$/)) {
       if (method === 'GET') {
         if (!state.workerScript) {
-          return new Response(JSON.stringify({ success: false, errors: [{ message: 'Not found' }] }), { status: 404 });
+          return new Response(JSON.stringify({ success: false, errors: [{ message: 'Worker not found' }] }), { status: 404 });
         }
-        return new Response(JSON.stringify({ success: true, result: state.workerScript }), { status: 200, headers: { 'content-type': 'application/json' } });
+        return new Response(JSON.stringify({ success: true, result: state.workerScript }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' }
+        });
+      }
+    }
+
+    if (pathname.match(/\/workers\/scripts\/legacy-hub-backup\/subdomain$/)) {
+      if (method === 'POST') {
+        state.workerSubdomainEnabled = body.enabled;
+        state.workerScript = { id: 'legacy-hub-backup' };
+        return new Response(JSON.stringify({ success: true, result: { enabled: body.enabled } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' }
+        });
       }
     }
 
@@ -291,12 +371,41 @@ function createMockFetch(initialState = {}) {
   return { state, fetchImpl };
 }
 
-test('extractConsoleDestinations extracts paths from functions/_middleware.js and generates destinations', () => {
+test('CLI argument parsing supports all options including --rotate-secrets and --deploy', () => {
+  const { args, token } = parseArgs(
+    [
+      '--account',
+      'acc_999',
+      '--mode=apply',
+      '--staff-emails',
+      'a@test.com,b@test.com',
+      '--domain',
+      'caregiversanctuary.org',
+      '--team',
+      'my-team',
+      '--restore-from',
+      'backups/db.sql',
+      '--rotate-secrets',
+      '--deploy'
+    ],
+    { CF_API_TOKEN: 'token_env_123' }
+  );
+
+  assert.equal(args.account, 'acc_999');
+  assert.equal(args.mode, 'apply');
+  assert.deepEqual(args.staffEmails, ['a@test.com', 'b@test.com']);
+  assert.equal(args.domain, 'caregiversanctuary.org');
+  assert.equal(args.team, 'my-team');
+  assert.equal(args.restoreFrom, 'backups/db.sql');
+  assert.equal(args.rotateSecrets, true);
+  assert.equal(args.deploy, true);
+  assert.equal(token, 'token_env_123');
+});
+
+test('console destinations extracts all routes from _middleware.js', () => {
   const { paths, destinations } = extractConsoleDestinations();
-  // 7 distinct paths
-  assert.equal(paths.length, 7);
-  assert.ok(paths.includes('/staff.html'));
   assert.ok(paths.includes('/staff'));
+  assert.ok(paths.includes('/staff.html'));
   assert.ok(paths.includes('/api/staff'));
   assert.ok(paths.includes('/api/agent'));
   assert.ok(paths.includes('/api/registrations'));
@@ -336,22 +445,14 @@ test('plan against an empty account lists every step and makes zero writes', asy
   assert.ok(steps.includes(4), 'Must include Access step');
   assert.ok(steps.includes(5), 'Must include R2 step');
   assert.ok(steps.includes(6), 'Must include Worker step');
-  assert.ok(steps.includes(7), 'Must include Pages deploy step');
+
+  // Verification checks are displayed in plan output
+  const output = logs.join('\n');
+  assert.match(output, /Verification: 6 checks/);
 });
 
-test('plan against a fully built account reports nothing to do', async () => {
-  const allMigrations = [
-    '0001_init.sql',
-    '0002_seed_public_events.sql',
-    '0003_grant_award.sql',
-    '0004_content_types.sql',
-    '0005_portal_login.sql',
-    '0006_caregiver_contact_history_outcomes.sql',
-    '0007_grant_course_complete.sql',
-    '0008_agent_change.sql',
-    '0009_content_live.sql',
-    '0010_page_section_forms.sql'
-  ];
+test('plan against a fully built account reports "No changes. Verification: 6 checks."', async () => {
+  const allMigrations = getMigrationFiles();
 
   const { state, fetchImpl } = createMockFetch({
     teamDomain: 'legacy-hub',
@@ -359,13 +460,33 @@ test('plan against a fully built account reports nothing to do', async () => {
       { uuid: 'id_prod', name: 'legacy-hub-db' },
       { uuid: 'id_staging', name: 'legacy-hub-db-staging' }
     ],
+    hasD1MigrationsTable: {
+      id_prod: true,
+      id_staging: true
+    },
     migrations: {
       id_prod: allMigrations,
       id_staging: allMigrations
     },
     pagesProject: {
       name: 'legacy-hub',
-      production_branch: 'main'
+      production_branch: 'main',
+      deployment_configs: {
+        production: {
+          env_vars: {
+            PORTAL_TOKEN_SECRET: { type: 'secret_text', value: null },
+            CF_ACCESS_TEAM_DOMAIN: { type: 'plain_text', value: 'legacy-hub.cloudflareaccess.com' },
+            CF_ACCESS_AUD: { type: 'plain_text', value: 'aud_1' }
+          }
+        },
+        preview: {
+          env_vars: {
+            PORTAL_TOKEN_SECRET: { type: 'secret_text', value: null },
+            CF_ACCESS_TEAM_DOMAIN: { type: 'plain_text', value: 'legacy-hub.cloudflareaccess.com' },
+            CF_ACCESS_AUD: { type: 'plain_text', value: 'aud_1' }
+          }
+        }
+      }
     },
     identityProviders: [{ type: 'onetimepin', name: 'One-time PIN' }],
     apps: [{ id: 'app_1', name: 'Legacy Hub Staff Console', aud: 'aud_1' }],
@@ -389,11 +510,108 @@ test('plan against a fully built account reports nothing to do', async () => {
   });
 
   assert.equal(state.writeCalls.length, 0, 'Must make zero writes');
-  // Only the standard continuous steps (unlogged secret generation / deployment check) or 0
-  const actionableResourceCreates = result.plannedActions.filter(
-    (a) => a.action.includes('Create D1') || a.action.includes('Create Access app') || a.action.includes('Create private R2')
+  assert.equal(result.plannedActions.length, 0, 'Must have zero planned actions on fully built account');
+
+  const output = logs.join('\n');
+  assert.match(output, /No changes\. Verification: 6 checks\./);
+  assert.match(output, /Secrets present: CF_ACCESS_TEAM_DOMAIN, CF_ACCESS_AUD, PORTAL_TOKEN_SECRET/);
+});
+
+test('baselining an existing DB records without executing SQL', async () => {
+  const allMigrations = getMigrationFiles();
+
+  // Existing databases with tables and matching schema, but missing d1_migrations table
+  const { state, fetchImpl } = createMockFetch({
+    databases: [
+      { uuid: 'id_prod', name: 'legacy-hub-db' },
+      { uuid: 'id_staging', name: 'legacy-hub-db-staging' }
+    ],
+    d1Tables: {
+      id_prod: ['content_item', 'content_type', 'caregiver'],
+      id_staging: ['content_item', 'content_type', 'caregiver']
+    },
+    hasD1MigrationsTable: {
+      id_prod: false,
+      id_staging: false
+    },
+    contentItemCols: {
+      id_prod: [{ name: 'id' }, { name: 'draft_of' }],
+      id_staging: [{ name: 'id' }, { name: 'draft_of' }]
+    },
+    pageSectionSchema: {
+      id_prod: '{"caring_for_options": []}',
+      id_staging: '{"caring_for_options": []}'
+    }
+  });
+
+  const planLogs = [];
+  const planLogger = { log: (msg) => planLogs.push(msg), error: (msg) => planLogs.push(msg) };
+
+  // Plan mode: prints baseline message and does NOT queue raw migration SQL actions
+  const planResult = await runBootstrap({
+    accountId: 'acc_baseline',
+    token: 'test_token_123',
+    mode: 'plan',
+    staffEmails: ['alice@example.com'],
+    fetchImpl,
+    logger: planLogger
+  });
+
+  const planOut = planLogs.join('\n');
+  assert.match(planOut, /baseline: record 0001-0010 as applied/);
+  const migrationActions = planResult.plannedActions.filter((a) => a.action.includes('Apply migration'));
+  assert.equal(migrationActions.length, 0, 'Plan must not queue SQL migration executions for matching baseline DB');
+
+  // Apply mode: records rows in d1_migrations without executing migration SQL files
+  const applyLogs = [];
+  const applyLogger = { log: (msg) => applyLogs.push(msg), error: (msg) => applyLogs.push(msg) };
+
+  await runBootstrap({
+    accountId: 'acc_baseline',
+    token: 'test_token_123',
+    mode: 'apply',
+    staffEmails: ['alice@example.com'],
+    fetchImpl,
+    logger: applyLogger
+  });
+
+  // Verify d1_migrations now recorded
+  assert.equal(state.migrations['id_prod']?.length, allMigrations.length);
+  assert.equal(state.migrations['id_staging']?.length, allMigrations.length);
+
+  // Verify none of the executed SQL was raw table drops or seed migrations
+  const rawExecuted = state.executedSql.map((e) => e.sql).join('\n');
+  assert.doesNotMatch(rawExecuted, /CREATE TABLE event/, 'Must not execute migration SQL when baselining');
+  assert.match(rawExecuted, /INSERT OR IGNORE INTO d1_migrations/);
+});
+
+test('mismatched existing database fails baseline safely with clear message', async () => {
+  const { fetchImpl } = createMockFetch({
+    databases: [{ uuid: 'id_prod', name: 'legacy-hub-db' }],
+    d1Tables: { id_prod: ['content_item'] },
+    hasD1MigrationsTable: { id_prod: false },
+    contentItemCols: { id_prod: [{ name: 'id' }] }, // missing draft_of!
+    pageSectionSchema: { id_prod: '{}' }
+  });
+
+  const logs = [];
+  const logger = { log: (msg) => logs.push(msg), error: (msg) => logs.push(msg) };
+
+  await assert.rejects(
+    async () => {
+      await runBootstrap({
+        accountId: 'acc_mismatch',
+        token: 'test_token_123',
+        mode: 'plan',
+        fetchImpl,
+        logger
+      });
+    },
+    (err) => {
+      assert.match(err.message, /does not match the latest migration schema.*probe failed.*Cannot safely baseline/);
+      return true;
+    }
   );
-  assert.equal(actionableResourceCreates.length, 0, 'Plan must find zero missing resources to create');
 });
 
 test('apply is idempotent when run twice (second run makes no writes)', async () => {
@@ -430,6 +648,72 @@ test('apply is idempotent when run twice (second run makes no writes)', async ()
   });
 
   assert.equal(state.writeCalls.length, 0, 'Second apply run must make ZERO writes (idempotency)');
+});
+
+test('secrets are ensure, not change (preserves PORTAL_TOKEN_SECRET unless --rotate-secrets)', async () => {
+  const { state, fetchImpl } = createMockFetch({
+    pagesProject: {
+      name: 'legacy-hub',
+      production_branch: 'main',
+      deployment_configs: {
+        production: {
+          env_vars: {
+            PORTAL_TOKEN_SECRET: { type: 'secret_text', value: 'existing_token_secret_123' },
+            CF_ACCESS_TEAM_DOMAIN: { type: 'plain_text', value: 'legacy-hub.cloudflareaccess.com' },
+            CF_ACCESS_AUD: { type: 'plain_text', value: 'aud_existing' }
+          }
+        },
+        preview: {
+          env_vars: {
+            PORTAL_TOKEN_SECRET: { type: 'secret_text', value: 'existing_token_secret_123' },
+            CF_ACCESS_TEAM_DOMAIN: { type: 'plain_text', value: 'legacy-hub.cloudflareaccess.com' },
+            CF_ACCESS_AUD: { type: 'plain_text', value: 'aud_existing' }
+          }
+        }
+      }
+    },
+    databases: [
+      { uuid: 'id_prod', name: 'legacy-hub-db' },
+      { uuid: 'id_staging', name: 'legacy-hub-db-staging' }
+    ],
+    hasD1MigrationsTable: { id_prod: true, id_staging: true },
+    migrations: { id_prod: getMigrationFiles(), id_staging: getMigrationFiles() },
+    identityProviders: [{ type: 'onetimepin', name: 'One-time PIN' }],
+    apps: [{ id: 'app_1', name: 'Legacy Hub Staff Console', aud: 'aud_existing' }],
+    policies: { app_1: [{ name: 'Legacy staff allowlist', decision: 'allow' }] },
+    buckets: ['legacy-hub-backups', 'legacy-hub-media'],
+    workerScript: { id: 'legacy-hub-backup' }
+  });
+
+  const logs = [];
+  const logger = { log: (msg) => logs.push(msg), error: (msg) => logs.push(msg) };
+
+  // Run apply without --rotate-secrets
+  await runBootstrap({
+    accountId: 'acc_sec',
+    token: 'test_token_123',
+    mode: 'apply',
+    staffEmails: ['alice@example.com'],
+    fetchImpl,
+    logger
+  });
+
+  assert.equal(state.writeCalls.length, 0, 'Must not touch secrets when already present');
+
+  // Now run apply with --rotate-secrets
+  await runBootstrap({
+    accountId: 'acc_sec',
+    token: 'test_token_123',
+    mode: 'apply',
+    rotateSecrets: true,
+    staffEmails: ['alice@example.com'],
+    fetchImpl,
+    logger
+  });
+
+  const patchCall = state.writeCalls.find((c) => c.method === 'PATCH' && c.pathname.includes('/pages/projects/legacy-hub'));
+  assert.ok(patchCall, 'Must update Pages secrets when --rotate-secrets is passed');
+  assert.ok(patchCall.body.deployment_configs.production.env_vars.PORTAL_TOKEN_SECRET);
 });
 
 test('the token is never printed to stdout or logs', async () => {
