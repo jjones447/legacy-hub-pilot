@@ -295,6 +295,7 @@ test('gateway client POSTs OpenAI-shaped request to EMP_LLM_GATEWAY_URL and pars
 
     const gatewayEnv = {
       LEGACY_DB: d1(raw),
+      AGENT_MAPPER_BACKEND: 'gateway',
       EMP_LLM_GATEWAY_URL: 'https://gateway.internal/v1/chat/completions',
       EMP_LLM_GATEWAY_KEY: 'test-key-123'
     };
@@ -358,6 +359,7 @@ test('gateway client handles refuse_request tool call from gateway', async () =>
 
     const gatewayEnv = {
       LEGACY_DB: d1(raw),
+      AGENT_MAPPER_BACKEND: 'gateway',
       EMP_LLM_GATEWAY_URL: 'https://gateway.internal/v1/chat/completions'
     };
 
