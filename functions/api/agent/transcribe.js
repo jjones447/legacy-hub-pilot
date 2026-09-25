@@ -11,6 +11,16 @@ function json(obj, status = 200) {
   });
 }
 
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  const CHUNK_SIZE = 0x8000; // 32 KB chunks to avoid call stack overflow
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK_SIZE));
+  }
+  return btoa(binary);
+}
+
 export async function onRequestPost({ request, env }) {
   try {
     // Check Content-Length header fast path if present
@@ -44,8 +54,10 @@ export async function onRequestPost({ request, env }) {
       return internalError('/api/agent/transcribe', new Error('Missing Workers AI binding'));
     }
 
+    const base64Audio = arrayBufferToBase64(buffer);
+
     const aiRes = await env.AI.run(WHISPER_MODEL, {
-      audio: new Uint8Array(buffer),
+      audio: base64Audio,
     });
 
     const text = (aiRes && typeof aiRes === 'object')

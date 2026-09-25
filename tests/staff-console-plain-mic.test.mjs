@@ -149,16 +149,19 @@ test('segment tags: rendered as buttons, keyboard-focusable, visible focus ring,
 // ---------------------------------------------------------------------------
 test('POST /api/agent/transcribe: text returned from Workers AI Whisper', async () => {
   let aiCalledWith = null;
+  const audioPayload = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
   const mockEnv = {
     AI: {
       async run(model, options) {
         aiCalledWith = { model, options };
+        assert.equal(typeof options.audio, 'string', 'Whisper audio input must be a base64 string');
+        const decoded = Uint8Array.from(atob(options.audio), (c) => c.charCodeAt(0));
+        assert.deepEqual(Array.from(decoded), Array.from(audioPayload), 'base64 audio must round-trip to original bytes');
         return { text: 'Add a support group on October 15 at 6 PM on Google Meet.' };
       }
     }
   };
 
-  const audioPayload = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
   const req = new Request('https://legacy-hub.pages.dev/api/agent/transcribe', {
     method: 'POST',
     headers: { 'Content-Type': 'audio/webm' },
@@ -175,8 +178,9 @@ test('POST /api/agent/transcribe: text returned from Workers AI Whisper', async 
 
   assert.ok(aiCalledWith);
   assert.equal(aiCalledWith.model, '@cf/openai/whisper-large-v3-turbo');
-  assert.ok(aiCalledWith.options.audio instanceof Uint8Array);
-  assert.equal(aiCalledWith.options.audio.length, 8);
+  assert.equal(typeof aiCalledWith.options.audio, 'string', 'Whisper audio option must be string');
+  const decodedResult = Uint8Array.from(atob(aiCalledWith.options.audio), (c) => c.charCodeAt(0));
+  assert.deepEqual(Array.from(decodedResult), Array.from(audioPayload));
 });
 
 test('POST /api/agent/transcribe: empty audio is refused with 400', async () => {
