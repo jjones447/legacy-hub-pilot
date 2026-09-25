@@ -370,21 +370,7 @@ class NodeHTMLRewriter {
                 if (options.html === false) {
                   innerContent = escapeHtml(content);
                 } else {
-                  let optIndent = '          ';
-                  let closeIndent = '        ';
-                  const mOpt = inner.match(/\n([ \t]*)<option/i);
-                  if (mOpt) {
-                    optIndent = mOpt[1];
-                  }
-                  const mClose = inner.match(/\n([ \t]*)$/);
-                  if (mClose) {
-                    closeIndent = mClose[1];
-                  }
-                  const lines = content.trim().split('\n');
-                  const formatted = lines
-                    .map((line) => `${optIndent}${line.trim()}`)
-                    .join('\n');
-                  innerContent = '\n' + formatted + '\n' + closeIndent;
+                  innerContent = content;
                 }
               },
               replace: () => {},
@@ -481,12 +467,11 @@ export async function rewriteContent(response, sections) {
         if (typeof item !== 'string') return;
       }
 
-      const optionsHtml = val
-        .map((item) => {
-          const escaped = escapeOptionValue(item);
-          return `<option value="${escaped}">${escaped}</option>`;
-        })
-        .join('\n');
+      const optIndent = sectionKey === 'form.request_support' ? '              ' : '          ';
+      const closeIndent = sectionKey === 'form.request_support' ? '            ' : '        ';
+      const optionsHtml = '\n' + val
+        .map((item) => `${optIndent}<option value="${escapeOptionValue(item)}">${escapeOptionValue(item)}</option>`)
+        .join('\n') + '\n' + closeIndent;
       el.setInnerContent(optionsHtml, { html: true });
     },
   });

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// Generator for page_section JSON Schema (Slice D7-S0a, Deliverable 1 & 2)
+// Generator for page_section JSON Schema (Slice D7-S0a, Deliverable 1 & 2 / Slice D7-S2B)
 // Reads content/page-sections.json and emits schema/page_section.schema.json
-// and schema/0009_content_live.sql.
+// and schema/0010_page_section_forms.sql.
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
@@ -98,11 +98,12 @@ export function generatePageSectionSchema(
   return schema;
 }
 
-export function generateMigrationSql(schema) {
+export function generateMigrationSql(schema, migrationFile = '0010_page_section_forms.sql') {
   const schemaJson = JSON.stringify(schema);
   const escaped = schemaJson.replaceAll("'", "''");
 
-  return `-- Migration 0009: Live content schema and draft targets (slice D7-S0a)
+  if (migrationFile.includes('0009')) {
+    return `-- Migration 0009: Live content schema and draft targets (slice D7-S0a)
 -- Updates page_section schema to match the 17 real page sections from content/page-sections.json.
 -- Adds draft_of column to content_item to keep published targets untouched during drafting.
 
@@ -113,6 +114,15 @@ WHERE id = 'page_section';
 ALTER TABLE content_item ADD COLUMN draft_of TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_content_item_draft_of ON content_item(draft_of);
+`;
+  }
+
+  return `-- Migration 0010: Form wording and option lists schema (slice D7-S2B)
+-- Updates page_section schema to include form.membership, form.grant_apply, form.coaching_interest, form.request_support.
+
+UPDATE content_type
+SET json_schema = '${escaped}'
+WHERE id = 'page_section';
 `;
 }
 
@@ -127,8 +137,14 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(__filename)) {
     writeFileSync(schemaOutPath, jsonStr, 'utf8');
     console.log(`[schema-gen] Emitted ${schemaOutPath}`);
 
-    const sql = generateMigrationSql(schema);
-    const sqlOutPath = resolve(ROOT_DIR, 'schema', '0009_content_live.sql');
+    let migrationFile = '0010_page_section_forms.sql';
+    const migIdx = process.argv.indexOf('--migration');
+    if (migIdx !== -1 && process.argv[migIdx + 1]) {
+      migrationFile = process.argv[migIdx + 1];
+    }
+
+    const sql = generateMigrationSql(schema, migrationFile);
+    const sqlOutPath = resolve(ROOT_DIR, 'schema', migrationFile);
     writeFileSync(sqlOutPath, sql, 'utf8');
     console.log(`[schema-gen] Emitted ${sqlOutPath}`);
   }

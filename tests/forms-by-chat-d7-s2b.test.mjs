@@ -20,6 +20,7 @@ const SCHEMA_1 = readFileSync(resolve(rootDir, 'schema/0001_init.sql'), 'utf8');
 const SCHEMA_3 = readFileSync(resolve(rootDir, 'schema/0003_grant_award.sql'), 'utf8');
 const SCHEMA_4 = readFileSync(resolve(rootDir, 'schema/0004_content_types.sql'), 'utf8');
 const SCHEMA_9 = readFileSync(resolve(rootDir, 'schema/0009_content_live.sql'), 'utf8');
+const SCHEMA_10 = readFileSync(resolve(rootDir, 'schema/0010_page_section_forms.sql'), 'utf8');
 
 function loadHtml(relPath) {
   return readFileSync(resolve(rootDir, relPath), 'utf-8');
@@ -270,10 +271,7 @@ test('5. assistant draft to form.membership goes through draft, preview, confirm
   raw.exec(SCHEMA_3);
   raw.exec(SCHEMA_4);
   raw.exec(SCHEMA_9);
-
-  // Update content_type with the regenerated page_section schema
-  const pageSectionSchema = readFileSync(resolve(rootDir, 'schema/page_section.schema.json'), 'utf8');
-  raw.prepare(`UPDATE content_type SET json_schema = ? WHERE id = 'page_section'`).run(pageSectionSchema);
+  raw.exec(SCHEMA_10);
 
   // Seed sections from content/page-sections.json
   await seedPageSections({ db: raw });
