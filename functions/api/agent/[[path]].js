@@ -15,9 +15,18 @@ export async function onRequestGet({ request, env }) {
 
     const action = pathSegments[2];
     if (action === 'drafts') {
-      const { results } = await env.LEGACY_DB
-        .prepare(`SELECT id, type_id, data, status, updated_by, updated_at FROM content_item WHERE status = 'draft' ORDER BY updated_at DESC`)
-        .all();
+      let results;
+      try {
+        const res = await env.LEGACY_DB
+          .prepare(`SELECT id, type_id, data, status, draft_of, updated_by, updated_at FROM content_item WHERE status = 'draft' ORDER BY updated_at DESC`)
+          .all();
+        results = res.results;
+      } catch (err) {
+        const res = await env.LEGACY_DB
+          .prepare(`SELECT id, type_id, data, status, updated_by, updated_at FROM content_item WHERE status = 'draft' ORDER BY updated_at DESC`)
+          .all();
+        results = res.results;
+      }
 
       return json({ ok: true, drafts: results });
     }
@@ -498,26 +507,46 @@ export async function onRequestPost({ request, env }) {
       const jsonSchema = typeof contentType.json_schema === 'string'
         ? JSON.parse(contentType.json_schema)
         : contentType.json_schema;
-      const validationErr = validateJsonSchema(res.change, jsonSchema);
+      const validationErr = validateProposal(res.change, jsonSchema);
       if (validationErr) {
         return json({ ok: false, refusal: `Proposed change fails schema validation: ${validationErr}` });
       }
 
-      const draft_id = body.target_id || ('ci_' + crypto.randomUUID());
-      const dataStr = JSON.stringify(res.change);
+      let draftData = { ...res.change };
+      if (body.type_id === 'page_section') {
+        const { section_key, ...changes } = res.change;
+        draftData = currentData ? { ...currentData, ...changes } : changes;
+      } else if (currentData) {
+        draftData = { ...currentData, ...res.change };
+      }
 
-      await env.LEGACY_DB
-        .prepare(`
-          INSERT INTO content_item (id, type_id, data, status, updated_by, updated_at)
-          VALUES (?, ?, ?, 'draft', 'agent', datetime('now'))
-          ON CONFLICT(id) DO UPDATE SET
-            data = excluded.data,
-            status = 'draft',
-            updated_by = excluded.updated_by,
-            updated_at = excluded.updated_at
-        `)
-        .bind(draft_id, body.type_id, dataStr)
-        .run();
+      const isTargeted = Boolean(body.target_id);
+      const draft_id = isTargeted ? ('cid_' + crypto.randomUUID()) : (body.target_id || ('ci_' + crypto.randomUUID()));
+      const draft_of = isTargeted ? body.target_id : null;
+      const dataStr = JSON.stringify(draftData);
+
+      try {
+        await env.LEGACY_DB
+          .prepare(`
+            INSERT INTO content_item (id, type_id, data, status, draft_of, updated_by, updated_at)
+            VALUES (?, ?, ?, 'draft', ?, 'agent', datetime('now'))
+          `)
+          .bind(draft_id, body.type_id, dataStr, draft_of)
+          .run();
+      } catch (err) {
+        await env.LEGACY_DB
+          .prepare(`
+            INSERT INTO content_item (id, type_id, data, status, updated_by, updated_at)
+            VALUES (?, ?, ?, 'draft', 'agent', datetime('now'))
+            ON CONFLICT(id) DO UPDATE SET
+              data = excluded.data,
+              status = 'draft',
+              updated_by = excluded.updated_by,
+              updated_at = excluded.updated_at
+          `)
+          .bind(draft_id, body.type_id, dataStr)
+          .run();
+      }
 
       return json({
         ok: true,
@@ -525,8 +554,9 @@ export async function onRequestPost({ request, env }) {
         draft: {
           id: draft_id,
           type_id: body.type_id,
-          data: res.change,
-          status: 'draft'
+          data: draftData,
+          status: 'draft',
+          draft_of
         },
         preview: res.change
       });
@@ -539,10 +569,18 @@ export async function onRequestPost({ request, env }) {
       // SEC-2: actor comes from the verified identity, never the request body.
       const actor = getActor(request, env);
 
-      const item = await env.LEGACY_DB
-        .prepare(`SELECT status, data FROM content_item WHERE id = ?`)
-        .bind(body.draft_id)
-        .first();
+      let item;
+      try {
+        item = await env.LEGACY_DB
+          .prepare(`SELECT id, type_id, status, data, draft_of FROM content_item WHERE id = ?`)
+          .bind(body.draft_id)
+          .first();
+      } catch (err) {
+        item = await env.LEGACY_DB
+          .prepare(`SELECT id, type_id, status, data FROM content_item WHERE id = ?`)
+          .bind(body.draft_id)
+          .first();
+      }
 
       if (!item) {
         return json({ ok: false, error: 'draft not found' }, 404);
@@ -552,25 +590,61 @@ export async function onRequestPost({ request, env }) {
         return json({ ok: false, error: `cannot confirm from status ${item.status}` }, 409);
       }
 
-      await env.LEGACY_DB
-        .prepare(`UPDATE content_item SET status = 'published', updated_by = ?, updated_at = datetime('now') WHERE id = ?`)
-        .bind('staff_' + actor, body.draft_id)
-        .run();
+      if (item.draft_of) {
+        const target = await env.LEGACY_DB
+          .prepare(`SELECT id, type_id, status, data, updated_by FROM content_item WHERE id = ?`)
+          .bind(item.draft_of)
+          .first();
 
-      await env.LEGACY_DB
-        .prepare(`
-          INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
-          VALUES (?, 'content_item.publish', 'content_item', ?, ?, ?)
-        `)
-        .bind(
-          actor,
-          body.draft_id,
-          JSON.stringify({ status: 'draft', data: JSON.parse(item.data) }),
-          JSON.stringify({ status: 'published', data: JSON.parse(item.data) })
-        )
-        .run();
+        if (!target) {
+          return json({ ok: false, error: 'target item not found' }, 404);
+        }
 
-      return json({ ok: true });
+        await env.LEGACY_DB
+          .prepare(`UPDATE content_item SET data = ?, status = 'published', updated_by = ?, updated_at = datetime('now') WHERE id = ?`)
+          .bind(item.data, 'staff_' + actor, item.draft_of)
+          .run();
+
+        await env.LEGACY_DB
+          .prepare(`UPDATE content_item SET status = 'archived', updated_at = datetime('now') WHERE id = ?`)
+          .bind(body.draft_id)
+          .run();
+
+        await env.LEGACY_DB
+          .prepare(`
+            INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
+            VALUES (?, 'content_item.publish', 'content_item', ?, ?, ?)
+          `)
+          .bind(
+            actor,
+            item.draft_of,
+            JSON.stringify({ status: target.status, data: JSON.parse(target.data) }),
+            JSON.stringify({ status: 'published', data: JSON.parse(item.data) })
+          )
+          .run();
+
+        return json({ ok: true });
+      } else {
+        await env.LEGACY_DB
+          .prepare(`UPDATE content_item SET status = 'published', updated_by = ?, updated_at = datetime('now') WHERE id = ?`)
+          .bind('staff_' + actor, body.draft_id)
+          .run();
+
+        await env.LEGACY_DB
+          .prepare(`
+            INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
+            VALUES (?, 'content_item.publish', 'content_item', ?, ?, ?)
+          `)
+          .bind(
+            actor,
+            body.draft_id,
+            JSON.stringify({ status: 'draft', data: JSON.parse(item.data) }),
+            JSON.stringify({ status: 'published', data: JSON.parse(item.data) })
+          )
+          .run();
+
+        return json({ ok: true });
+      }
     }
 
     if (action === 'discard') {
@@ -578,10 +652,18 @@ export async function onRequestPost({ request, env }) {
         return json({ ok: false, error: 'draft_id is required' }, 400);
       }
 
-      const item = await env.LEGACY_DB
-        .prepare(`SELECT status, data FROM content_item WHERE id = ?`)
-        .bind(body.draft_id)
-        .first();
+      let item;
+      try {
+        item = await env.LEGACY_DB
+          .prepare(`SELECT status, data, draft_of FROM content_item WHERE id = ?`)
+          .bind(body.draft_id)
+          .first();
+      } catch (err) {
+        item = await env.LEGACY_DB
+          .prepare(`SELECT status, data FROM content_item WHERE id = ?`)
+          .bind(body.draft_id)
+          .first();
+      }
 
       if (!item) {
         return json({ ok: false, error: 'draft not found' }, 404);
@@ -615,6 +697,76 @@ export async function onRequestPost({ request, env }) {
   } catch (e) {
     return internalError('/api/agent POST', e);
   }
+}
+
+function validateProposal(change, schema) {
+  if (!change || typeof change !== 'object') return 'data must be an object';
+
+  if (Array.isArray(schema.oneOf)) {
+    if (!change.section_key) {
+      return 'missing required property: section_key';
+    }
+    const branch = schema.oneOf.find(
+      (b) =>
+        b.properties?.section_key?.const === change.section_key ||
+        b.properties?.section_key?.enum?.includes(change.section_key)
+    );
+    if (!branch) {
+      return `section_key '${change.section_key}' does not match any valid section schema`;
+    }
+
+    if (branch.required) {
+      for (const req of branch.required) {
+        if (!(req in change) || change[req] === undefined || change[req] === null) {
+          return `missing required property: ${req}`;
+        }
+      }
+    }
+
+    for (const [key, val] of Object.entries(change)) {
+      const propSchema = branch.properties?.[key];
+      if (!propSchema) {
+        if (branch.additionalProperties === false) {
+          return `unsupported additional property: ${key}`;
+        }
+        continue;
+      }
+
+      if (propSchema.readOnly) {
+        return `cannot modify read-only property: ${key}`;
+      }
+
+      if (propSchema.type === 'string') {
+        if (typeof val !== 'string') {
+          return `property ${key} must be a string`;
+        }
+        if (propSchema.maxLength && val.length > propSchema.maxLength) {
+          return `property ${key} exceeds maximum length of ${propSchema.maxLength}`;
+        }
+      } else if (propSchema.type === 'array') {
+        if (!Array.isArray(val)) {
+          return `property ${key} must be an array`;
+        }
+        if (propSchema.maxItems && val.length > propSchema.maxItems) {
+          return `property ${key} exceeds maximum items of ${propSchema.maxItems}`;
+        }
+        if (propSchema.items) {
+          for (const it of val) {
+            if (propSchema.items.type === 'string' && typeof it !== 'string') {
+              return `items of ${key} must be strings`;
+            }
+            if (propSchema.items.maxLength && typeof it === 'string' && it.length > propSchema.items.maxLength) {
+              return `item of ${key} exceeds maximum length of ${propSchema.items.maxLength}`;
+            }
+          }
+        }
+      }
+    }
+
+    return null;
+  }
+
+  return validateJsonSchema(change, schema);
 }
 
 function json(obj, status = 200) {
