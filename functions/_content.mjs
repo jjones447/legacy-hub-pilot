@@ -15,6 +15,15 @@ export function escapeHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
+export function escapeOptionValue(str) {
+  if (str == null) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 export function decodeHtmlReferences(str) {
   if (typeof str !== 'string') return '';
   return str
@@ -344,6 +353,32 @@ class NodeHTMLRewriter {
             return `<${tag}${beforeAttr}data-cs-list="${csListVal}"${afterAttr}>${innerContent}</${tag}>`;
           }
         );
+      } else if (selector === '[data-cs-options]') {
+        html = html.replace(
+          /<([a-zA-Z0-9]+)\b([^>]*)data-cs-options=["']([^"']+)["']([^>]*)>([\s\S]*?)<\/\1>/gi,
+          (match, tag, beforeAttr, csOptionsVal, afterAttr, inner) => {
+            let innerContent = inner;
+            const fullAttrs = `${beforeAttr} data-cs-options="${csOptionsVal}" ${afterAttr}`;
+            const element = {
+              tagName: tag.toLowerCase(),
+              getAttribute: (attr) => {
+                const m = fullAttrs.match(new RegExp(`\\b${attr}=(?:"([^"]*)"|'([^']*)')`, 'i'));
+                return m ? (m[1] ?? m[2] ?? '') : null;
+              },
+              setAttribute: () => {},
+              setInnerContent: (content, options = {}) => {
+                if (options.html === false) {
+                  innerContent = escapeHtml(content);
+                } else {
+                  innerContent = content;
+                }
+              },
+              replace: () => {},
+            };
+            if (handlers.element) handlers.element(element);
+            return `<${tag}${beforeAttr}data-cs-options="${csOptionsVal}"${afterAttr}>${innerContent}</${tag}>`;
+          }
+        );
       }
     }
 
@@ -411,6 +446,33 @@ export async function rewriteContent(response, sections) {
       const indent = '        ';
       const listHtml = '\n' + val.map((item) => `${indent}${openTag}${sanitizeInlineHtml(item)}${closeTag}`).join('\n') + '\n' + indent;
       el.setInnerContent(listHtml, { html: true });
+    },
+  });
+
+  rewriter.on('[data-cs-options]', {
+    element(el) {
+      const attr = el.getAttribute('data-cs-options');
+      if (!attr) return;
+      const dotIdx = attr.lastIndexOf('.');
+      if (dotIdx === -1) return;
+      const sectionKey = attr.slice(0, dotIdx);
+      const fieldKey = attr.slice(dotIdx + 1);
+
+      const section = sections[sectionKey];
+      if (!section || typeof section !== 'object') return;
+
+      const val = section[fieldKey];
+      if (!Array.isArray(val) || val.length === 0) return;
+      for (const item of val) {
+        if (typeof item !== 'string') return;
+      }
+
+      const optIndent = sectionKey === 'form.request_support' ? '              ' : '          ';
+      const closeIndent = sectionKey === 'form.request_support' ? '            ' : '        ';
+      const optionsHtml = '\n' + val
+        .map((item) => `${optIndent}<option value="${escapeOptionValue(item)}">${escapeOptionValue(item)}</option>`)
+        .join('\n') + '\n' + closeIndent;
+      el.setInnerContent(optionsHtml, { html: true });
     },
   });
 

@@ -136,9 +136,74 @@
       "title": "Request Support",
       "lede": "For yourself, or for a caregiver you know. One short form — we take it from there."
     },
-    "request_support.form": {
+    "form.membership": {
+      "heading": "Join The Caregiver Sanctuary",
+      "sub": "One short form starts your free membership and creates your caregiver record.",
+      "name_label": "Your name",
+      "name_placeholder": "e.g., Maria Gonzalez",
+      "email_label": "Email",
+      "email_placeholder": "you@example.com",
+      "caring_for_label": "I am caring for",
+      "caring_for_options": [
+        "A parent or older adult",
+        "A spouse or partner",
+        "A family member or friend",
+        "I am exploring support options"
+      ],
+      "note_label": "Anything you want us to know (optional)",
+      "note_placeholder": "Questions, timing, or programs you want to hear about",
+      "privacy_line": "By joining, you consent to Legacy using these details to create or update your caregiver record and follow up about Sanctuary programs. Please do not include medical record numbers or emergency details.",
+      "submit_label": "Join free"
+    },
+    "form.grant_apply": {
+      "heading": "Apply for a Wellness Grant",
+      "sub": "A short form creates or updates your caregiver record and submits a grant application for staff review.",
+      "name_label": "Your name",
+      "name_placeholder": "e.g., Maria Gonzalez",
+      "email_label": "Email",
+      "email_placeholder": "you@example.com",
+      "requested_for_label": "What would this grant support? (optional)",
+      "requested_for_placeholder": "e.g., counseling, a gym membership, a massage",
+      "privacy_line": "By applying, you consent to Legacy using these details to create or update your caregiver record and review this wellness-grant application. Please do not include medical record numbers or emergency details.",
+      "submit_label": "Submit application"
+    },
+    "form.coaching_interest": {
+      "heading": "Join the coaching interest list",
+      "sub": "Leave your name and email. We will create or update your caregiver record and let you know when 1:1 sessions open.",
+      "name_label": "Your name",
+      "name_placeholder": "e.g., Maria Gonzalez",
+      "email_label": "Email",
+      "email_placeholder": "you@example.com",
+      "note_label": "Anything you want us to know (optional)",
+      "note_placeholder": "Timing, questions, or what you hope coaching covers",
+      "privacy_line": "By joining, you consent to Legacy using these details to create or update your caregiver record and follow up when wellness coaching opens. Please do not include medical record numbers or emergency details.",
+      "submit_label": "Join the list"
+    },
+    "form.request_support": {
       "heading": "Tell us what you need",
-      "sub": "Every request goes straight to our team — no phone tag required."
+      "sub": "Every request goes straight to our team — no phone tag required.",
+      "name_label": "Your name",
+      "name_placeholder": "e.g., Maria Gonzalez",
+      "email_label": "Email or phone",
+      "email_placeholder": "how we reach you",
+      "who_label": "I am…",
+      "who_options": [
+        "A family caregiver (for myself)",
+        "Referring a caregiver I know",
+        "A professional / organization referring a client"
+      ],
+      "what_label": "Support needed",
+      "what_options": [
+        "Respite — Memory Socials",
+        "Wellness Grant information",
+        "Virtual Support Group",
+        "Sanctuary membership",
+        "Something else / not sure"
+      ],
+      "msg_label": "Anything you'd like us to know (optional)",
+      "msg_placeholder": "Your situation, timing, questions…",
+      "privacy_line": "By sending this form, you consent to Legacy using these details to create or update your caregiver record and follow up about support. Please do not include medical record numbers or emergency details.",
+      "submit_label": "Send request"
     },
     "request_support.next": {
       "eyebrow": "What happens next",

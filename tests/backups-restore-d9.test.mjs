@@ -32,7 +32,8 @@ const SCHEMA_FILES = [
   '0006_caregiver_contact_history_outcomes.sql',
   '0007_grant_course_complete.sql',
   '0008_agent_change.sql',
-  '0009_content_live.sql'
+  '0009_content_live.sql',
+  '0010_page_section_forms.sql'
 ];
 
 function createSeededDatabase() {
@@ -269,7 +270,7 @@ test('4. On-demand export (scripts/export-all.mjs) writes dump files and manifes
     assert.ok(existsSync(join(tempExportDir, 'audit_log.json')));
 
     const manifest = JSON.parse(readFileSync(join(tempExportDir, 'manifest.json'), 'utf8'));
-    assert.equal(manifest.latest_migration, '0009_content_live.sql');
+    assert.equal(manifest.latest_migration, '0010_page_section_forms.sql');
     assert.equal(manifest.tables.caregiver, 2);
     assert.equal(manifest.tables.grant_application, 2);
     assert.equal(manifest.tables.award, 1);

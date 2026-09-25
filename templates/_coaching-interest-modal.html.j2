@@ -2,23 +2,23 @@
 <div class="modal-overlay" id="coachingInterestModal">
   <div class="modal">
     <button class="modal-close" data-action="close-coaching-interest" aria-label="Close coaching interest form">✕</button>
-    <h3>Join the coaching interest list</h3>
-    <p class="sub">Leave your name and email. We will create or update your caregiver record and let you know when 1:1 sessions open.</p>
+    <h3 data-cs="form.coaching_interest.heading">{{ sections["form.coaching_interest"].heading }}</h3>
+    <p class="sub" data-cs="form.coaching_interest.sub">{{ sections["form.coaching_interest"].sub }}</p>
     <form id="coachingInterestForm" data-action="submit-coaching-interest">
       <div class="field">
-        <label for="coachName">Your name</label>
-        <input id="coachName" type="text" placeholder="e.g., Maria Gonzalez" required>
+        <label for="coachName" data-cs="form.coaching_interest.name_label">{{ sections["form.coaching_interest"].name_label }}</label>
+        <input id="coachName" type="text" placeholder="{{ sections['form.coaching_interest'].name_placeholder }}" required>
       </div>
       <div class="field">
-        <label for="coachEmail">Email</label>
-        <input id="coachEmail" type="email" placeholder="you@example.com" required>
+        <label for="coachEmail" data-cs="form.coaching_interest.email_label">{{ sections["form.coaching_interest"].email_label }}</label>
+        <input id="coachEmail" type="email" placeholder="{{ sections['form.coaching_interest'].email_placeholder }}" required>
       </div>
       <div class="field">
-        <label for="coachNote">Anything you want us to know (optional)</label>
-        <textarea id="coachNote" rows="3" placeholder="Timing, questions, or what you hope coaching covers"></textarea>
+        <label for="coachNote" data-cs="form.coaching_interest.note_label">{{ sections["form.coaching_interest"].note_label }}</label>
+        <textarea id="coachNote" rows="3" placeholder="{{ sections['form.coaching_interest'].note_placeholder }}"></textarea>
       </div>
-      <p class="privacy-line">By joining, you consent to Legacy using these details to create or update your caregiver record and follow up when wellness coaching opens. Please do not include medical record numbers or emergency details.</p>
-      <button type="submit" class="btn btn-coral w-100">Join the list</button>
+      <p class="privacy-line" data-cs="form.coaching_interest.privacy_line">{{ sections["form.coaching_interest"].privacy_line }}</p>
+      <button type="submit" class="btn btn-coral w-100" data-cs="form.coaching_interest.submit_label">{{ sections["form.coaching_interest"].submit_label }}</button>
       <div class="success-note" data-intake-success role="status" aria-live="polite">✓ You're on the interest list — we will follow up on your caregiver record.</div>
       <div class="error-note" data-intake-error role="alert" aria-live="assertive"></div>
       <div class="routing-note" data-intake-routing>Behind the scenes: your caregiver record was created or updated and a coaching-interest follow-up is queued.</div>
