@@ -23,7 +23,10 @@ export async function mapRequestToChange({
     return backend({ request, contentType, current });
   }
 
-  if (backend === 'gateway') {
+  // Preserve the legacy handler contract: a configured gateway URL is the
+  // default backend unless the caller explicitly supplies a different one.
+  // Workers AI is the fallback only when no gateway is configured.
+  if (backend === 'gateway' || (!backend && gatewayUrl)) {
     if (!gatewayUrl) {
       return { ok: false, refusal: "inference unavailable — gateway not configured" };
     }
@@ -215,7 +218,10 @@ export async function mapRequestToWorkflowChange({
     return backend({ area, target_id, request, current });
   }
 
-  if (backend === 'gateway') {
+  // Preserve the legacy handler contract: a configured gateway URL is the
+  // default backend unless the caller explicitly supplies a different one.
+  // Workers AI is the fallback only when no gateway is configured.
+  if (backend === 'gateway' || (!backend && gatewayUrl)) {
     if (!gatewayUrl) {
       return { ok: false, refusal: 'inference unavailable — gateway not configured' };
     }
