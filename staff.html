@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Staff Console — Legacy Hub</title>
+<title>Legacy Hub · Staff console</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
@@ -15,7 +15,7 @@
   <div class="header-inner">
     <a class="brand" href="index.html">
       <div class="brand-mark">L</div>
-      <div class="brand-name">Legacy Hub<small>Staff Console — Demo</small></div>
+      <div class="brand-name">Legacy Hub<small>Staff console</small></div>
     </a>
     <nav class="main-nav d-flex">
       <a href="index.html">← Public site</a>
@@ -26,16 +26,16 @@
 
 <section class="py-44">
   <div class="container">
-    <div class="section-head mb-28">
-      <span class="eyebrow">One caregiver record · every workflow</span>
-      <h2>Today at Legacy</h2>
-      <p>Every registration, grant application, respite visit, and follow-up — one system, no spreadsheets. Staff work it by chat.</p>
+    <div class="staff-header-status mb-28">
+      <h2>Legacy Hub · Staff console</h2>
+      <p id="staffStatusLine" class="staff-status-line">Loading status…</p>
     </div>
 
     <div class="split split-align-start-12-1">
       <div>
         <div class="panel" id="caregiverSearchPanel">
           <h4>🔍 Caregiver search</h4>
+          <p class="small muted mb-12">Search and filter caregiver records by name, contact, status, or segment.</p>
           <div class="staff-search-controls">
             <input type="text" id="caregiverSearchQuery" placeholder="Search by name, email, phone..." class="staff-search-input">
             <select id="caregiverSearchSegment" class="staff-search-select">
@@ -74,6 +74,7 @@
 
         <div class="panel">
           <h4>📥 Needs attention</h4>
+          <p class="small muted mb-12">Open follow-ups and action items requiring staff review.</p>
           <table class="data">
             <thead><tr><th>Caregiver</th><th>Item</th><th>Status</th></tr></thead>
             <tbody id="needsAttentionBody">
@@ -87,6 +88,7 @@
             <h4 class="m-0">📅 Upcoming events</h4>
             <button class="btn btn-sm btn-plum" id="newEventToggleBtn">+ New Event</button>
           </div>
+          <p class="small muted mb-12">Schedule, manage, and take attendance for community events and respite sessions.</p>
           <div id="newEventContainer" class="d-none mb-16"></div>
           <table class="data">
             <thead><tr><th>Event</th><th>Date</th><th>Status</th><th>Registered</th><th>Actions</th></tr></thead>
@@ -116,6 +118,7 @@
               <option value="declined">Declined</option>
             </select>
           </div>
+          <p class="small muted mb-12">Track grant applications from review through award, course completion, and closeout.</p>
           <table class="data">
             <thead><tr><th>Caregiver</th><th>Requested For</th><th>Status</th><th>Award</th></tr></thead>
             <tbody id="grantsTableBody">
@@ -126,12 +129,13 @@
 
         <div class="panel" id="caregiverRecordPanel">
           <h4>👤 Caregiver record</h4>
+          <p class="small muted mb-12">View and manage caregiver contact details, program attendance, grants, and staff notes.</p>
           <p class="muted small text-center my-20">Select a caregiver from the follow-up queue or attendance list to view their full record.</p>
         </div>
 
         <div class="panel" id="siteContentPanel">
           <h4>Site content</h4>
-          <p class="small muted mb-12">Direct break-glass editor for published site content.</p>
+          <p class="small muted mb-12">Direct editor for published site content and pages.</p>
           <div id="siteContentList">
             <p class="muted small text-center my-20">Loading site content...</p>
           </div>
@@ -151,7 +155,7 @@
 
       <div>
         <div class="chat-shell">
-          <div class="chat-head"><span class="bot-dot"></span> Legacy Assistant — staff chat <span class="chat-hint-right">draft → preview → confirm</span></div>
+          <div class="chat-head"><span class="bot-dot"></span> Legacy Assistant — staff chat</div>
           <div class="chat-area-bar">
             <label for="chatAreaSelect" class="chat-area-label">Area:</label>
             <select id="chatAreaSelect" class="chat-area-select">
@@ -162,25 +166,14 @@
             </select>
           </div>
           <div class="chat-body" id="chatBody">
-            <div class="msg user">add a Memory Social next Saturday 10 to 1 in the community room, registration open, capacity 12</div>
-            <div class="msg bot">
-              Here's a draft — nothing is live yet:
-              <div class="preview">
-                <div class="p-title">📅 Memory Social — Drop-In Respite</div>
-                Sat Jul 25 · 10:00 AM–1:00 PM · Community Room<br>
-                Registration: open · Capacity: 12 · Category: Memory Social<br>
-                Listed on: Events page + portal
-              </div>
-              <div class="confirm-row">
-                <button class="chip-btn chip-confirm" data-action="agent-confirm">Confirm &amp; publish</button>
-                <button class="chip-btn chip-cancel" data-action="agent-cancel">Discard</button>
-              </div>
-            </div>
+            <div class="chat-empty-state" id="chatEmptyState">Tell me what to change, for example: Add a support group on October 15 at 6 PM on Google Meet.</div>
           </div>
           <div class="chat-input-row">
             <input id="chatInput" type="text" placeholder='Try: "add Maria as a caregiver…" or "update the resource hub…"'>
-            <button data-action="agent-send">Send</button>
+            <button type="button" class="btn-mic" id="micBtn" data-action="agent-mic" aria-label="Record voice note" title="Speak message">🎤</button>
+            <button type="button" data-action="agent-send">Send</button>
           </div>
+          <div id="micStatus" class="mic-status-msg small muted d-none"></div>
         </div>
         <div class="card mt-16 card-sand-dashed">
           <p class="small m-0"><strong>The governed assistant:</strong> staff make changes by asking. The assistant edits <em>content and data only</em> — never code, design, or security — and every change is previewed, confirmed, and logged. A bad request becomes a draft someone declines; it can't break the site.</p>

@@ -160,6 +160,7 @@ test('exact call wiring: every action branch calls its expected function and exc
     'agent-confirm': 'agentConfirm(target)',
     'agent-cancel': 'agentCancel(target)',
     'agent-send': 'agentSend()',
+    'agent-mic': 'toggleRecording()',
     'resolve-followup': 'resolveFollowup(id, e)',
     'update-attendance': 'updateAttendance(id, status, e)',
     'view-caregiver': 'viewCaregiver(id)',

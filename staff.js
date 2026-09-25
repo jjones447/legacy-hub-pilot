@@ -8,6 +8,75 @@ function escapeHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
+function formatStatusLine({ needsAttentionCount = 0, eventsThisWeekCount = 0, grantsInReviewCount = 0 }) {
+  const attentionText = needsAttentionCount === 0
+    ? 'Nothing needs attention'
+    : (needsAttentionCount === 1 ? '1 needs attention' : `${needsAttentionCount} need attention`);
+
+  const eventsText = eventsThisWeekCount === 0
+    ? 'no events this week'
+    : (eventsThisWeekCount === 1 ? '1 event this week' : `${eventsThisWeekCount} events this week`);
+
+  const grantsText = grantsInReviewCount === 0
+    ? 'no grants in review'
+    : (grantsInReviewCount === 1 ? '1 grant in review' : `${grantsInReviewCount} grants in review`);
+
+  return `${attentionText} · ${eventsText} · ${grantsText}`;
+}
+
+async function updateStatusLine() {
+  const statusEl = document.getElementById('staffStatusLine');
+  if (!statusEl) return;
+
+  try {
+    const [qRes, evRes, gRes] = await Promise.allSettled([
+      fetch('/api/staff/queue'),
+      fetch('/api/events'),
+      fetch('/api/grants?status=in_review')
+    ]);
+
+    let needsAttentionCount = 0;
+    if (qRes.status === 'fulfilled' && qRes.value && qRes.value.ok) {
+      const qData = await qRes.value.json().catch(() => ({}));
+      if (qData.ok && Array.isArray(qData.queue)) {
+        needsAttentionCount = qData.queue.filter(fu => fu.status === 'open').length;
+      }
+    }
+
+    let eventsThisWeekCount = 0;
+    if (evRes.status === 'fulfilled' && evRes.value && evRes.value.ok) {
+      const evData = await evRes.value.json().catch(() => ({}));
+      if (evData.ok && Array.isArray(evData.events)) {
+        const now = new Date();
+        const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const endOfWeek = new Date(startOfWeek.getTime() + 7 * 24 * 60 * 60 * 1000);
+        eventsThisWeekCount = evData.events.filter(ev => {
+          if (!ev.starts_at) return false;
+          const d = new Date(ev.starts_at.replace(' ', 'T'));
+          return !isNaN(d.getTime()) && d >= startOfWeek && d < endOfWeek;
+        }).length;
+      }
+    }
+
+    let grantsInReviewCount = 0;
+    if (gRes.status === 'fulfilled' && gRes.value && gRes.value.ok) {
+      const gData = await gRes.value.json().catch(() => ({}));
+      if (gData.ok && Array.isArray(gData.grants)) {
+        grantsInReviewCount = gData.grants.filter(g => g.status === 'in_review').length;
+      }
+    }
+
+    statusEl.textContent = formatStatusLine({
+      needsAttentionCount,
+      eventsThisWeekCount,
+      grantsInReviewCount
+    });
+  } catch (e) {
+    console.error('Failed to update status line:', e);
+  }
+}
+
+
 let currentEventId = null;
 let currentEventTitle = '';
 let staffEvents = [];
@@ -73,8 +142,11 @@ async function searchCaregivers(offset = 0) {
         if (cg.segment_tags) {
           try {
             const parsed = JSON.parse(cg.segment_tags);
-            if (Array.isArray(parsed)) {
-              segmentsStr = parsed.map(s => escapeHtml(s)).join(', ');
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              segmentsStr = parsed.map(s => {
+                const segEsc = escapeHtml(s);
+                return `<button type="button" class="segment-tag-btn" data-action="filter-segment" data-segment="${segEsc}" title="Filter by ${segEsc}">${segEsc}</button>`;
+              }).join(' ');
             }
           } catch (e) {
             segmentsStr = escapeHtml(cg.segment_tags);
@@ -107,6 +179,28 @@ async function searchCaregivers(offset = 0) {
   }
 }
 
+function filterBySegment(segment) {
+  if (!segment) return;
+  const select = document.getElementById('caregiverSearchSegment');
+  if (select) {
+    let optionExists = false;
+    for (let i = 0; i < select.options.length; i++) {
+      if (select.options[i].value === segment) {
+        optionExists = true;
+        break;
+      }
+    }
+    if (!optionExists) {
+      const opt = document.createElement('option');
+      opt.value = segment;
+      opt.textContent = segment;
+      select.appendChild(opt);
+    }
+    select.value = segment;
+  }
+  searchCaregivers(0);
+}
+
 async function loadStaffConsole() {
   await Promise.all([
     loadFollowups(),
@@ -119,6 +213,7 @@ async function loadStaffConsole() {
   if (currentEventId) {
     await loadRegistrations(currentEventId, currentEventTitle);
   }
+  updateStatusLine();
 }
 
 async function loadGrants() {
@@ -1379,6 +1474,154 @@ document.addEventListener('submit', function (e) {
   }
 });
 
+let isRecording = false;
+let mediaRecorder = null;
+let audioChunks = [];
+let recordTimer = null;
+
+function setMicStatus(message, isError = false) {
+  const statusEl = document.getElementById('micStatus');
+  if (!statusEl) return;
+  if (!message) {
+    statusEl.textContent = '';
+    statusEl.classList.add('d-none');
+    return;
+  }
+  statusEl.textContent = message;
+  statusEl.classList.remove('d-none');
+}
+
+function updateMicUi(recording) {
+  const btn = document.getElementById('micBtn');
+  if (!btn) return;
+  if (recording) {
+    btn.classList.add('recording');
+    btn.setAttribute('aria-label', 'Stop recording');
+    btn.title = 'Stop recording';
+    btn.textContent = '⏹';
+  } else {
+    btn.classList.remove('recording');
+    btn.setAttribute('aria-label', 'Record voice note');
+    btn.title = 'Speak message';
+    btn.textContent = '🎤';
+  }
+}
+
+async function startRecording() {
+  if (isRecording) return;
+  setMicStatus('');
+
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    setMicStatus('Microphone is not supported in this browser.', true);
+    return;
+  }
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    audioChunks = [];
+    mediaRecorder = new MediaRecorder(stream);
+
+    mediaRecorder.ondataavailable = function (e) {
+      if (e.data && e.data.size > 0) {
+        audioChunks.push(e.data);
+      }
+    };
+
+    mediaRecorder.onstop = async function () {
+      // Release microphone tracks
+      stream.getTracks().forEach(track => track.stop());
+
+      if (audioChunks.length === 0) {
+        setMicStatus('No audio was recorded.', true);
+        return;
+      }
+
+      const mimeType = mediaRecorder.mimeType || 'audio/webm';
+      const audioBlob = new Blob(audioChunks, { type: mimeType });
+
+      if (audioBlob.size === 0) {
+        setMicStatus('No audio was recorded.', true);
+        return;
+      }
+
+      if (audioBlob.size > 25 * 1024 * 1024) {
+        setMicStatus('Audio exceeds the 25 MB limit.', true);
+        return;
+      }
+
+      setMicStatus('Transcribing voice note…');
+
+      try {
+        const res = await fetch('/api/agent/transcribe', {
+          method: 'POST',
+          headers: { 'Content-Type': mimeType },
+          body: audioBlob,
+        });
+
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok) {
+          const errMsg = data.error || 'Server error during transcription';
+          setMicStatus(`Transcription failed: ${errMsg}`, true);
+          return;
+        }
+
+        const text = (data.text || '').trim();
+        if (text) {
+          const input = document.getElementById('chatInput');
+          if (input) {
+            input.value = input.value.trim() ? `${input.value.trim()} ${text}` : text;
+            input.focus();
+          }
+          setMicStatus('');
+        } else {
+          setMicStatus('No speech recognized.', true);
+        }
+      } catch (err) {
+        setMicStatus(`Transcription failed: ${err.message}`, true);
+      }
+    };
+
+    mediaRecorder.start();
+    isRecording = true;
+    updateMicUi(true);
+    setMicStatus('Recording voice note… (press stop or mic when done)');
+
+    // 2-minute max duration cap
+    recordTimer = setTimeout(function () {
+      if (isRecording) {
+        stopRecording();
+      }
+    }, 2 * 60 * 1000);
+  } catch (err) {
+    console.error('Microphone error:', err);
+    setMicStatus('Microphone access was denied or is unavailable.', true);
+    isRecording = false;
+    updateMicUi(false);
+  }
+}
+
+function stopRecording() {
+  if (recordTimer) {
+    clearTimeout(recordTimer);
+    recordTimer = null;
+  }
+  if (!isRecording) return;
+  isRecording = false;
+  updateMicUi(false);
+
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop();
+  }
+}
+
+function toggleRecording() {
+  if (isRecording) {
+    stopRecording();
+  } else {
+    startRecording();
+  }
+}
+
 document.addEventListener('click', function (e) {
   const target = e.target.closest('[data-action]');
   if (!target) return;
@@ -1405,6 +1648,13 @@ document.addEventListener('click', function (e) {
     searchPrev();
   } else if (action === 'search-next') {
     searchNext();
+  } else if (action === 'filter-segment') {
+    e.stopPropagation();
+    const seg = target.getAttribute('data-segment');
+    filterBySegment(seg);
+  } else if (action === 'agent-mic') {
+    e.stopPropagation();
+    toggleRecording();
   } else if (action === 'grant-review') {
     e.stopPropagation();
     const id = target.getAttribute('data-grant-id');
@@ -1530,6 +1780,8 @@ window.agentSend = async function () {
   const text = (input?.value || '').trim();
   if (!text || !body) return;
   input.value = '';
+  const empty = document.getElementById('chatEmptyState');
+  if (empty) empty.remove();
 
   const userDiv = document.createElement('div');
   userDiv.className = 'msg user';
@@ -1553,13 +1805,13 @@ window.agentSend = async function () {
       previewBody = 'Date, time, and location parsed from your message.<br>Will list on the Events page + portal after confirmation.';
     } else {
       previewTitle = '✏️ Drafted change';
-      previewBody = 'Mapped your request to a structured content change.<br>Preview it here — nothing goes live until you confirm.';
+      previewBody = 'Review the details below — nothing goes live until you confirm.';
     }
 
     const botDiv = document.createElement('div');
     botDiv.className = 'msg bot';
     botDiv.innerHTML =
-      'Here\'s a draft — nothing is live yet:' +
+      'Here\'s what will change:' +
       '<div class="preview"><div class="p-title">' + previewTitle + '</div>' + previewBody + '</div>' +
       '<div class="confirm-row">' +
       '<button class="chip-btn chip-confirm" data-action="agent-confirm">Confirm &amp; publish</button>' +
@@ -1629,7 +1881,7 @@ window.agentSend = async function () {
     const areaLabel = selectedArea === 'grant' ? '🎁 Grant Transition' : '👤 Caregiver Update';
 
     botDiv.innerHTML = `
-      Here's a draft — nothing is live yet:
+      Here's what will change:
       <div class="preview">
         <div class="p-title">${areaLabel} (${escapeHtml(data.change?.operation || 'change')})</div>
         <div class="diff-container">
@@ -1967,4 +2219,17 @@ async function handleUndoChange(auditId, button) {
     alert(`Undo failed: ${e.message}`);
     if (button) button.disabled = false;
   }
+}
+
+if (typeof window !== 'undefined') {
+  window.formatStatusLine = formatStatusLine;
+  window.updateStatusLine = updateStatusLine;
+  window.filterBySegment = filterBySegment;
+  window.toggleRecording = toggleRecording;
+}
+if (typeof globalThis !== 'undefined') {
+  globalThis.formatStatusLine = formatStatusLine;
+  globalThis.updateStatusLine = updateStatusLine;
+  globalThis.filterBySegment = filterBySegment;
+  globalThis.toggleRecording = toggleRecording;
 }
