@@ -68,6 +68,7 @@ beforeEach(() => {
   raw.exec(SCHEMA_1);
   raw.exec(SCHEMA_3);
   raw.exec(SCHEMA_4);
+  raw.exec('ALTER TABLE content_item ADD COLUMN draft_of TEXT;');
   env = {
     LEGACY_DB: d1(raw),
     AGENT_MAPPER_BACKEND: mockBackend

@@ -169,13 +169,13 @@ test('list field renders escaped <p> elements for each array item', async () => 
   const html = await resp.text();
   assert.ok(html.includes('Our Rewritten Story'));
   assert.ok(html.includes('From Heartbreak to Healing'));
-  assert.ok(html.includes('<p>First paragraph of our new story.</p>'));
+  assert.ok(html.includes('<p class="muted mb-16">First paragraph of our new story.</p>'));
   assert.ok(
     html.includes(
-      '<p>Second paragraph with &lt;img src=x onerror=alert(1)&gt; hostile payload.</p>'
+      '<p class="muted mb-16">Second paragraph with &lt;img src=x onerror=alert(1)&gt; hostile payload.</p>'
     )
   );
-  assert.ok(html.includes('<p>Third paragraph concluding the journey.</p>'));
+  assert.ok(html.includes('<p class="muted mb-16">Third paragraph concluding the journey.</p>'));
   assert.ok(!html.includes('Legacy began as a home health agency.'));
   assert.ok(!html.includes('<img src=x onerror=alert(1)>'));
 });

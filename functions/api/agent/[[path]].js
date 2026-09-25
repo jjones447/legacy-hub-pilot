@@ -6,7 +6,7 @@ import * as caregiversDomain from '../../_lib/domain/caregivers.js';
 import * as eventsDomain from '../../_lib/domain/events.js';
 import { getActor } from '../../_lib/actor.js';
 import { internalError } from '../../_lib/errors.js';
-import { _resetContentCache } from '../../_content.mjs';
+import { _resetContentCache, findDisallowedHtml } from '../../_content.mjs';
 
 export async function onRequestGet({ request, env }) {
   try {
@@ -418,6 +418,11 @@ export async function onRequestPost({ request, env }) {
           return json({ ok: false, error: `validation failed: ${validationErr}`, refusal: `validation failed: ${validationErr}` }, 400);
         }
 
+        const disallowedHtml = findDisallowedHtml(parsedData);
+        if (disallowedHtml) {
+          return json({ ok: false, error: `disallowed HTML: ${disallowedHtml}`, refusal: `disallowed HTML: ${disallowedHtml}` }, 400);
+        }
+
         // SEC-2: actor comes from the verified identity, never the request body.
         const actor = getActor(request, env);
         const updatedBy = 'staff_' + actor;
@@ -512,6 +517,11 @@ export async function onRequestPost({ request, env }) {
         return json({ ok: false, refusal: `Proposed change fails schema validation: ${validationErr}` });
       }
 
+      const disallowedHtml = findDisallowedHtml(res.change);
+      if (disallowedHtml) {
+        return json({ ok: false, refusal: `Proposed change contains disallowed HTML: ${disallowedHtml}`, error: `disallowed HTML: ${disallowedHtml}` });
+      }
+
       let draftData = { ...res.change };
       if (body.type_id === 'page_section') {
         const { section_key, ...changes } = res.change;
@@ -525,28 +535,13 @@ export async function onRequestPost({ request, env }) {
       const draft_of = isTargeted ? body.target_id : null;
       const dataStr = JSON.stringify(draftData);
 
-      try {
-        await env.LEGACY_DB
-          .prepare(`
-            INSERT INTO content_item (id, type_id, data, status, draft_of, updated_by, updated_at)
-            VALUES (?, ?, ?, 'draft', ?, 'agent', datetime('now'))
-          `)
-          .bind(draft_id, body.type_id, dataStr, draft_of)
-          .run();
-      } catch (err) {
-        await env.LEGACY_DB
-          .prepare(`
-            INSERT INTO content_item (id, type_id, data, status, updated_by, updated_at)
-            VALUES (?, ?, ?, 'draft', 'agent', datetime('now'))
-            ON CONFLICT(id) DO UPDATE SET
-              data = excluded.data,
-              status = 'draft',
-              updated_by = excluded.updated_by,
-              updated_at = excluded.updated_at
-          `)
-          .bind(draft_id, body.type_id, dataStr)
-          .run();
-      }
+      await env.LEGACY_DB
+        .prepare(`
+          INSERT INTO content_item (id, type_id, data, status, draft_of, updated_by, updated_at)
+          VALUES (?, ?, ?, 'draft', ?, 'agent', datetime('now'))
+        `)
+        .bind(draft_id, body.type_id, dataStr, draft_of)
+        .run();
 
       return json({
         ok: true,
