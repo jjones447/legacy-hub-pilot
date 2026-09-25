@@ -901,3 +901,82 @@ footer a:hover { color: #fff; }
 .portal-error-link { display: inline-block; padding: 0.5rem 1rem; background: #2563eb; color: #fff; text-decoration: none; border-radius: 4px; font-weight: 500; }
 .portal-error-link:hover { background: #1d4ed8; }
 
+/* Staff console status header, segments, mic, and plain states */
+.staff-header-status { margin-bottom: 24px; }
+.staff-header-status h2 { margin: 0 0 6px 0; font-family: var(--font-display); font-size: 28px; color: var(--plum-dark); }
+.staff-status-line { font-size: 15px; color: var(--ink-soft); font-weight: 500; margin: 0; line-height: 1.4; }
+
+.segment-tag-btn {
+  display: inline-block;
+  font-family: inherit;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #f3ede2;
+  color: var(--ink);
+  border: 1px solid #d9d0c1;
+  cursor: pointer;
+  margin: 2px 4px 2px 0;
+  line-height: 1.3;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+.segment-tag-btn:hover {
+  background: #e8dfcf;
+  border-color: var(--plum);
+}
+.segment-tag-btn:focus,
+.segment-tag-btn:focus-visible {
+  outline: 2px solid var(--plum);
+  outline-offset: 1px;
+}
+
+.chat-empty-state {
+  padding: 16px;
+  color: var(--ink-soft);
+  font-size: 13.5px;
+  line-height: 1.5;
+  background: #fbf7f2;
+  border: 1px dashed #e5d9cb;
+  border-radius: 8px;
+  margin: 8px 0;
+}
+
+.chat-input-row .btn-mic {
+  background: #f7f1e9;
+  color: var(--plum);
+  border: none;
+  border-left: 1px solid #efdfd3;
+  padding: 0 16px;
+  font-size: 16px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: background-color 0.2s, color 0.2s;
+}
+.chat-input-row .btn-mic:hover {
+  background: #ede3d7;
+}
+.chat-input-row .btn-mic:focus,
+.chat-input-row .btn-mic:focus-visible {
+  outline: 2px solid var(--plum);
+  outline-offset: -2px;
+}
+.chat-input-row .btn-mic.recording {
+  background: #dc2626;
+  color: #fff;
+  animation: pulse-mic 1.5s infinite;
+}
+.mic-status-msg {
+  padding: 6px 14px;
+  background: #fdf6f0;
+  border-top: 1px solid #f0e2d8;
+  font-size: 12.5px;
+}
+@keyframes pulse-mic {
+  0% { opacity: 1; }
+  50% { opacity: 0.7; }
+  100% { opacity: 1; }
+}
+

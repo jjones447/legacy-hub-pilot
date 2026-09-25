@@ -7,6 +7,7 @@ import * as eventsDomain from '../../_lib/domain/events.js';
 import { getActor } from '../../_lib/actor.js';
 import { internalError } from '../../_lib/errors.js';
 import { _resetContentCache, findDisallowedHtml } from '../../_content.mjs';
+import { onRequestPost as postTranscribe } from './transcribe.js';
 
 export async function onRequestGet({ request, env }) {
   try {
@@ -69,6 +70,10 @@ export async function onRequestPost({ request, env }) {
   try {
     const url = new URL(request.url);
     const pathSegments = url.pathname.split('/').filter(Boolean); // ['api', 'agent', ...]
+
+    if (pathSegments[2] === 'transcribe') {
+      return postTranscribe({ request, env });
+    }
 
     // Governed workflow data changes: /api/agent/change/:subaction
     if (pathSegments.length === 4 && pathSegments[2] === 'change') {
