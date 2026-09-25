@@ -15,6 +15,156 @@ export function escapeHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
+export function isAllowedHref(href) {
+  if (typeof href !== 'string') return false;
+  const h = href.trim();
+  if (!h) return false;
+  // Disallow control characters, whitespace, quotes, angle brackets, backslashes
+  if (/[\s"'<>\\]/.test(h)) return false;
+  // Disallow protocol-relative URLs (e.g. //evil.com)
+  if (h.startsWith('//')) return false;
+
+  // Allowed absolute schemes: https:, mailto:, tel:
+  if (/^https:\/\/[^\s"'<>\\]+$/i.test(h)) return true;
+  if (/^mailto:[^\s"'<>\\]+$/i.test(h)) return true;
+  if (/^tel:[^\s"'<>\\]+$/i.test(h)) return true;
+
+  // Relative URLs: must not contain a scheme (colon before ? or #)
+  const beforeQuery = h.split(/[?#]/)[0];
+  if (beforeQuery.includes(':')) return false;
+
+  return true;
+}
+
+export function isAllowedTag(tagStr) {
+  if (typeof tagStr !== 'string') return false;
+  const t = tagStr.trim();
+
+  // Closing tags: </strong>, </em>, </span>, </a>
+  if (/^<\/\s*(strong|em|span|a)\s*>$/i.test(t)) {
+    return true;
+  }
+
+  // <br> or <br/> or <br />
+  if (/^<\s*br\s*\/?>$/i.test(t)) {
+    return true;
+  }
+
+  // <strong>
+  if (/^<\s*strong\s*>$/i.test(t)) {
+    return true;
+  }
+
+  // <em>
+  if (/^<\s*em\s*>$/i.test(t)) {
+    return true;
+  }
+
+  // <span class="..."> (only class attribute allowed)
+  const spanMatch = t.match(/^<\s*span(?:\s+class=(?:"([^"]*)"|'([^']*)'))?\s*\/?>$/i);
+  if (spanMatch) {
+    const classVal = spanMatch[1] ?? spanMatch[2];
+    if (classVal === undefined) return true;
+    return /^[a-zA-Z0-9_\-\s]*$/.test(classVal);
+  }
+
+  // <a href="..."> (only href attribute allowed)
+  const aMatch = t.match(/^<\s*a\s+href=(?:"([^"]*)"|'([^']*)')\s*\/?>$/i);
+  if (aMatch) {
+    const href = aMatch[1] ?? aMatch[2];
+    return isAllowedHref(href);
+  }
+
+  return false;
+}
+
+export function sanitizeInlineHtml(input) {
+  if (input == null) return '';
+  const str = String(input);
+
+  // We find all HTML tags <...>
+  // If a tag is an allowed tag, we preserve it.
+  // Any text between allowed tags (including disallowed tags and stray angle brackets)
+  // has <, >, and " escaped.
+  // Note: single quotes (') and entities like &amp; are preserved per D7-S0B.
+  const tagRegex = /<[^>]*>/g;
+  let out = '';
+  let lastIndex = 0;
+  let match;
+
+  while ((match = tagRegex.exec(str)) !== null) {
+    const textBefore = str.slice(lastIndex, match.index);
+    if (textBefore) {
+      out += textBefore
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+    const tag = match[0];
+    if (isAllowedTag(tag)) {
+      out += tag;
+    } else {
+      out += tag
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+    lastIndex = match.index + tag.length;
+  }
+
+  const remainingText = str.slice(lastIndex);
+  if (remainingText) {
+    out += remainingText
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  return out;
+}
+
+export function findDisallowedHtml(val) {
+  if (val == null) return null;
+  if (typeof val === 'string') {
+    const tags = val.match(/<[^>]*>/g);
+    if (tags) {
+      for (const tag of tags) {
+        if (!isAllowedTag(tag)) {
+          return `Disallowed HTML tag: ${tag}`;
+        }
+      }
+    }
+    const withoutAllowed = val.replace(/<[^>]*>/g, '');
+    if (/<[a-zA-Z\/!]/.test(withoutAllowed)) {
+      return `Malformed or disallowed HTML tag in string: ${val}`;
+    }
+    return null;
+  }
+  if (Array.isArray(val)) {
+    for (let i = 0; i < val.length; i++) {
+      const err = findDisallowedHtml(val[i]);
+      if (err) return `[${i}]: ${err}`;
+    }
+    return null;
+  }
+  if (typeof val === 'object') {
+    for (const [k, v] of Object.entries(val)) {
+      const err = findDisallowedHtml(v);
+      if (err) return `${k}: ${err}`;
+    }
+    return null;
+  }
+  return null;
+}
+
+export function validateInlineHtmlPayload(val) {
+  const err = findDisallowedHtml(val);
+  if (err) {
+    throw new Error(err);
+  }
+  return true;
+}
+
 export function isRewritableRoute(pathname) {
   if (!pathname || typeof pathname !== 'string') return false;
   if (pathname === '/staff.html' || pathname === '/staff' || pathname.startsWith('/staff/')) {
@@ -91,9 +241,13 @@ class NodeHTMLRewriter {
           /<([a-zA-Z0-9]+)\b([^>]*)data-cs=["']([^"']+)["']([^>]*)>([\s\S]*?)<\/\1>/gi,
           (match, tag, beforeAttr, csVal, afterAttr, inner) => {
             let innerContent = inner;
+            const fullAttrs = `${beforeAttr} data-cs="${csVal}" ${afterAttr}`;
             const element = {
               tagName: tag.toLowerCase(),
-              getAttribute: (attr) => (attr === 'data-cs' ? csVal : null),
+              getAttribute: (attr) => {
+                const m = fullAttrs.match(new RegExp(`\\b${attr}=(?:"([^"]*)"|'([^']*)')`, 'i'));
+                return m ? (m[1] ?? m[2] ?? '') : null;
+              },
               setAttribute: () => {},
               setInnerContent: (content, options = {}) => {
                 if (options.html === false) {
@@ -113,12 +267,20 @@ class NodeHTMLRewriter {
           /<([a-zA-Z0-9]+)\b([^>]*)data-cs-list=["']([^"']+)["']([^>]*)>([\s\S]*?)<\/\1>/gi,
           (match, tag, beforeAttr, csListVal, afterAttr, inner) => {
             let innerContent = inner;
+            const fullAttrs = `${beforeAttr} data-cs-list="${csListVal}" ${afterAttr}`;
             const element = {
               tagName: tag.toLowerCase(),
-              getAttribute: (attr) => (attr === 'data-cs-list' ? csListVal : null),
+              getAttribute: (attr) => {
+                const m = fullAttrs.match(new RegExp(`\\b${attr}=(?:"([^"]*)"|'([^']*)')`, 'i'));
+                return m ? (m[1] ?? m[2] ?? '') : null;
+              },
               setAttribute: () => {},
-              setInnerContent: (content) => {
-                innerContent = '\n' + content + '\n        ';
+              setInnerContent: (content, options = {}) => {
+                if (options.html === false) {
+                  innerContent = escapeHtml(content);
+                } else {
+                  innerContent = content;
+                }
               },
               replace: () => {},
             };
@@ -161,7 +323,7 @@ export async function rewriteContent(response, sections) {
       const val = section[fieldKey];
       if (typeof val !== 'string') return;
 
-      el.setInnerContent(val, { html: false });
+      el.setInnerContent(sanitizeInlineHtml(val), { html: true });
     },
   });
 
@@ -183,7 +345,15 @@ export async function rewriteContent(response, sections) {
         if (typeof item !== 'string') return;
       }
 
-      const listHtml = val.map((item) => `<p>${escapeHtml(item)}</p>`).join('\n');
+      const itemAttr = el.getAttribute('data-cs-item') || 'p';
+      const parts = itemAttr.trim().split('.');
+      const tag = parts[0] || 'p';
+      const classes = parts.slice(1).filter(Boolean).join(' ');
+      const openTag = classes ? `<${tag} class="${classes}">` : `<${tag}>`;
+      const closeTag = `</${tag}>`;
+
+      const indent = '        ';
+      const listHtml = '\n' + val.map((item) => `${indent}${openTag}${sanitizeInlineHtml(item)}${closeTag}`).join('\n') + '\n' + indent;
       el.setInnerContent(listHtml, { html: true });
     },
   });
