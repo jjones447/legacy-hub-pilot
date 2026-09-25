@@ -641,14 +641,14 @@ async function viewCaregiver(id) {
         }
 
         return `
-          <div class="grant-row" data-grant-id="${escapeHtml(g.id)}" style="padding: 10px; border: 1px solid #efdfd3; border-radius: 8px; margin-bottom: 8px; background: #fff;">
+          <div class="grant-row" data-grant-id="${escapeHtml(g.id)}">
             <div>
               <strong>${escapeHtml(g.requested_for || 'Wellness grant')}</strong>
               <span class="badge ${gBadge}">${escapeHtml(label)}</span>${awardInfo}
             </div>
             ${g.review_notes ? `<div class="small muted mt-4">Review notes: ${escapeHtml(g.review_notes)}</div>` : ''}
-            ${actionButtons ? `<div class="grant-actions" style="margin-top: 6px;">${actionButtons}</div>` : ''}
-            <div class="grant-error-banner alert-inline-banner" style="display:none; color: #a84a32; background: #f9efdc; margin-top: 6px; padding: 6px; border-radius: 4px; font-size: 12.5px;"></div>
+            ${actionButtons ? `<div class="grant-actions">${actionButtons}</div>` : ''}
+            <div class="grant-error-banner alert-inline-banner"></div>
           </div>
         `;
       }).join('');
@@ -684,7 +684,7 @@ async function viewCaregiver(id) {
     let contactHistoryHtml = '<p class="small muted">No contact history recorded.</p>';
     if (data.contact_history && data.contact_history.length > 0) {
       contactHistoryHtml = `
-        <table class="data" style="margin-top: 8px;">
+        <table class="data mt-8">
           <thead>
             <tr>
               <th>When</th>
@@ -727,27 +727,27 @@ async function viewCaregiver(id) {
       <div class="kv-row"><span class="k">Last attended</span><span class="v">${lastAttended}</span></div>
       <div class="kv-row"><span class="k">Total attended</span><span class="v">${socialsCount} event(s)</span></div>
       <div class="kv-row"><span class="k">Staff Notes</span><span class="v"><div class="note-error-msg alert-inline-banner form-error-banner d-none"></div>${notesHtml}</span></div>
-      <div style="margin-top: 14px;">
-        <span class="k" style="font-weight: 700; color: var(--plum-dark);">Grants &amp; Workflow:</span>
-        <div style="margin-top: 8px;">${grantsHtml}</div>
+      <div class="mt-14">
+        <span class="k staff-section-title">Grants &amp; Workflow:</span>
+        <div class="mt-8">${grantsHtml}</div>
       </div>
 
-      <details style="margin-top: 16px;" open>
-        <summary class="cursor-pointer" style="font-weight: 600; color: var(--plum-dark);"><strong>📜 Contact History</strong> (${data.contact_history ? data.contact_history.length : 0})</summary>
+      <details class="mt-16" open>
+        <summary class="cursor-pointer note-section-summary"><strong>📜 Contact History</strong> (${data.contact_history ? data.contact_history.length : 0})</summary>
         ${contactHistoryHtml}
       </details>
 
-      <details style="margin-top: 16px;">
-        <summary class="cursor-pointer" style="font-weight: 600; color: var(--plum-dark);"><strong>📞 Add Contact Entry</strong></summary>
-        <form data-action="submit-add-contact" style="margin-top: 12px; padding: 12px; border: 1px solid #efdfd3; border-radius: 8px; background: #faf6f1;">
-          <div class="field" style="margin-bottom: 8px;">
-            <label style="font-size: 12px; font-weight: 600;">When (occurred at):</label>
-            <input type="datetime-local" name="occurred_at" value="${nowLocal}" style="padding: 6px 10px; border-radius: 6px; font-size: 13px;" required>
+      <details class="mt-16">
+        <summary class="cursor-pointer note-section-summary"><strong>📞 Add Contact Entry</strong></summary>
+        <form data-action="submit-add-contact" class="record-form-panel">
+          <div class="field mb-8">
+            <label class="form-label-small">When (occurred at):</label>
+            <input type="datetime-local" name="occurred_at" value="${nowLocal}" class="form-input-compact" required>
           </div>
-          <div style="display: flex; gap: 8px; margin-bottom: 8px;">
-            <div class="field" style="flex: 1; margin-bottom: 0;">
-              <label style="font-size: 12px; font-weight: 600;">Channel:</label>
-              <select name="channel" style="padding: 6px 10px; border-radius: 6px; font-size: 13px;">
+          <div class="form-row-compact">
+            <div class="field form-col-flex">
+              <label class="form-label-small">Channel:</label>
+              <select name="channel" class="form-input-compact">
                 <option value="phone">phone</option>
                 <option value="email">email</option>
                 <option value="in_person">in_person</option>
@@ -755,19 +755,19 @@ async function viewCaregiver(id) {
                 <option value="other">other</option>
               </select>
             </div>
-            <div class="field" style="flex: 1; margin-bottom: 0;">
-              <label style="font-size: 12px; font-weight: 600;">Direction:</label>
-              <select name="direction" style="padding: 6px 10px; border-radius: 6px; font-size: 13px;">
+            <div class="field form-col-flex">
+              <label class="form-label-small">Direction:</label>
+              <select name="direction" class="form-input-compact">
                 <option value="outbound">outbound</option>
                 <option value="inbound">inbound</option>
               </select>
             </div>
           </div>
-          <div class="field" style="margin-bottom: 8px;">
-            <label style="font-size: 12px; font-weight: 600;">Summary:</label>
-            <textarea name="summary" rows="2" style="padding: 6px 10px; border-radius: 6px; font-size: 13px; width: 100%; box-sizing: border-box;" placeholder="Call notes, follow-up conversation, etc." required></textarea>
+          <div class="field mb-8">
+            <label class="form-label-small">Summary:</label>
+            <textarea name="summary" rows="2" class="form-textarea-compact" placeholder="Call notes, follow-up conversation, etc." required></textarea>
           </div>
-          <div class="form-error-msg alert-inline-banner" style="display:none; color: #a84a32; background: #f9efdc; margin-bottom: 8px; padding: 6px; border-radius: 4px; font-size: 12.5px;"></div>
+          <div class="form-error-msg alert-inline-banner form-error-banner d-none"></div>
           <button type="submit" class="btn btn-sm btn-plum">Save Contact</button>
         </form>
       </details>
@@ -784,65 +784,65 @@ async function viewCaregiver(id) {
         </form>
       </details>
 
-      <details style="margin-top: 16px;">
-        <summary class="cursor-pointer" style="font-weight: 600; color: var(--plum-dark);"><strong>✏️ Edit Caregiver Details</strong></summary>
-        <form data-action="submit-edit-caregiver" style="margin-top: 12px; padding: 12px; border: 1px solid #efdfd3; border-radius: 8px; background: #faf6f1;">
-          <div style="display: flex; gap: 8px; margin-bottom: 8px;">
-            <div class="field" style="flex: 1; margin-bottom: 0;">
-              <label style="font-size: 12px; font-weight: 600;">First name:</label>
-              <input type="text" name="first_name" value="${escapeHtml(p.first_name || '')}" style="padding: 6px 10px; border-radius: 6px; font-size: 13px;">
+      <details class="mt-16">
+        <summary class="cursor-pointer note-section-summary"><strong>✏️ Edit Caregiver Details</strong></summary>
+        <form data-action="submit-edit-caregiver" class="record-form-panel">
+          <div class="form-row-compact">
+            <div class="field form-col-flex">
+              <label class="form-label-small">First name:</label>
+              <input type="text" name="first_name" value="${escapeHtml(p.first_name || '')}" class="form-input-compact">
             </div>
-            <div class="field" style="flex: 1; margin-bottom: 0;">
-              <label style="font-size: 12px; font-weight: 600;">Last name:</label>
-              <input type="text" name="last_name" value="${escapeHtml(p.last_name || '')}" style="padding: 6px 10px; border-radius: 6px; font-size: 13px;">
-            </div>
-          </div>
-          <div style="display: flex; gap: 8px; margin-bottom: 8px;">
-            <div class="field" style="flex: 1; margin-bottom: 0;">
-              <label style="font-size: 12px; font-weight: 600;">Email:</label>
-              <input type="email" name="email" value="${escapeHtml(p.email || '')}" style="padding: 6px 10px; border-radius: 6px; font-size: 13px;">
-            </div>
-            <div class="field" style="flex: 1; margin-bottom: 0;">
-              <label style="font-size: 12px; font-weight: 600;">Phone:</label>
-              <input type="text" name="phone" value="${escapeHtml(p.phone || '')}" style="padding: 6px 10px; border-radius: 6px; font-size: 13px;">
+            <div class="field form-col-flex">
+              <label class="form-label-small">Last name:</label>
+              <input type="text" name="last_name" value="${escapeHtml(p.last_name || '')}" class="form-input-compact">
             </div>
           </div>
-          <div style="display: flex; gap: 8px; margin-bottom: 8px;">
-            <div class="field" style="flex: 1; margin-bottom: 0;">
-              <label style="font-size: 12px; font-weight: 600;">Preferred contact:</label>
-              <select name="preferred_contact" style="padding: 6px 10px; border-radius: 6px; font-size: 13px;">
+          <div class="form-row-compact">
+            <div class="field form-col-flex">
+              <label class="form-label-small">Email:</label>
+              <input type="email" name="email" value="${escapeHtml(p.email || '')}" class="form-input-compact">
+            </div>
+            <div class="field form-col-flex">
+              <label class="form-label-small">Phone:</label>
+              <input type="text" name="phone" value="${escapeHtml(p.phone || '')}" class="form-input-compact">
+            </div>
+          </div>
+          <div class="form-row-compact">
+            <div class="field form-col-flex">
+              <label class="form-label-small">Preferred contact:</label>
+              <select name="preferred_contact" class="form-input-compact">
                 <option value="email" ${p.preferred_contact === 'email' ? 'selected' : ''}>email</option>
                 <option value="phone" ${p.preferred_contact === 'phone' ? 'selected' : ''}>phone</option>
                 <option value="text" ${p.preferred_contact === 'text' ? 'selected' : ''}>text</option>
               </select>
             </div>
-            <div class="field" style="flex: 1; margin-bottom: 0;">
-              <label style="font-size: 12px; font-weight: 600;">Status:</label>
-              <select name="status" style="padding: 6px 10px; border-radius: 6px; font-size: 13px;">
+            <div class="field form-col-flex">
+              <label class="form-label-small">Status:</label>
+              <select name="status" class="form-input-compact">
                 <option value="active" ${p.status === 'active' ? 'selected' : ''}>active</option>
                 <option value="inactive" ${p.status === 'inactive' ? 'selected' : ''}>inactive</option>
                 <option value="archived" ${p.status === 'archived' ? 'selected' : ''}>archived</option>
               </select>
             </div>
           </div>
-          <div style="display: flex; gap: 8px; margin-bottom: 8px;">
-            <div class="field" style="flex: 1; margin-bottom: 0;">
-              <label style="font-size: 12px; font-weight: 600;">Caring for:</label>
-              <input type="text" name="caring_for" value="${escapeHtml(p.caring_for || '')}" style="padding: 6px 10px; border-radius: 6px; font-size: 13px;">
+          <div class="form-row-compact">
+            <div class="field form-col-flex">
+              <label class="form-label-small">Caring for:</label>
+              <input type="text" name="caring_for" value="${escapeHtml(p.caring_for || '')}" class="form-input-compact">
             </div>
-            <div class="field" style="flex: 1; margin-bottom: 0;">
-              <label style="font-size: 12px; font-weight: 600;">Relationship:</label>
-              <input type="text" name="relationship" value="${escapeHtml(p.relationship || '')}" style="padding: 6px 10px; border-radius: 6px; font-size: 13px;">
+            <div class="field form-col-flex">
+              <label class="form-label-small">Relationship:</label>
+              <input type="text" name="relationship" value="${escapeHtml(p.relationship || '')}" class="form-input-compact">
             </div>
           </div>
-          <div class="field" style="margin-bottom: 8px;">
-            <label style="font-size: 12px; font-weight: 600;">Segments (comma-separated):</label>
-            <input type="text" name="segment_tags" value="${escapeHtml(segmentTagsFormVal)}" style="padding: 6px 10px; border-radius: 6px; font-size: 13px;" placeholder="e.g. dementia, elder_care">
+          <div class="field mb-8">
+            <label class="form-label-small">Segments (comma-separated):</label>
+            <input type="text" name="segment_tags" value="${escapeHtml(segmentTagsFormVal)}" class="form-input-compact" placeholder="e.g. dementia, elder_care">
           </div>
-          <div style="display: flex; gap: 8px; margin-bottom: 8px;">
-            <div class="field" style="flex: 1; margin-bottom: 0;">
-              <label style="font-size: 12px; font-weight: 600;">Outcome status:</label>
-              <select name="outcome_status" style="padding: 6px 10px; border-radius: 6px; font-size: 13px;">
+          <div class="form-row-compact">
+            <div class="field form-col-flex">
+              <label class="form-label-small">Outcome status:</label>
+              <select name="outcome_status" class="form-input-compact">
                 <option value="" ${!p.outcome_status ? 'selected' : ''}>None</option>
                 <option value="improving" ${p.outcome_status === 'improving' ? 'selected' : ''}>improving</option>
                 <option value="stable" ${p.outcome_status === 'stable' ? 'selected' : ''}>stable</option>
@@ -851,11 +851,11 @@ async function viewCaregiver(id) {
               </select>
             </div>
           </div>
-          <div class="field" style="margin-bottom: 8px;">
-            <label style="font-size: 12px; font-weight: 600;">Outcome notes:</label>
-            <textarea name="outcome_notes" rows="2" style="padding: 6px 10px; border-radius: 6px; font-size: 13px; width: 100%; box-sizing: border-box;">${escapeHtml(p.outcome_notes || '')}</textarea>
+          <div class="field mb-8">
+            <label class="form-label-small">Outcome notes:</label>
+            <textarea name="outcome_notes" rows="2" class="form-textarea-compact">${escapeHtml(p.outcome_notes || '')}</textarea>
           </div>
-          <div class="form-error-msg alert-inline-banner" style="display:none; color: #a84a32; background: #f9efdc; margin-bottom: 8px; padding: 6px; border-radius: 4px; font-size: 12.5px;"></div>
+          <div class="form-error-msg alert-inline-banner form-error-banner d-none"></div>
           <button type="submit" class="btn btn-sm btn-plum">Save Changes</button>
         </form>
       </details>

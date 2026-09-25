@@ -36,9 +36,9 @@
       <div>
         <div class="panel" id="caregiverSearchPanel">
           <h4>🔍 Caregiver search</h4>
-          <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px;">
-            <input type="text" id="caregiverSearchQuery" placeholder="Search by name, email, phone..." style="flex: 1; min-width: 160px; padding: 6px 10px; border: 1.5px solid #ddd0c2; border-radius: 8px; font-size: 13.5px;">
-            <select id="caregiverSearchSegment" style="padding: 6px 10px; border: 1.5px solid #ddd0c2; border-radius: 8px; font-size: 13.5px;">
+          <div class="staff-search-controls">
+            <input type="text" id="caregiverSearchQuery" placeholder="Search by name, email, phone..." class="staff-search-input">
+            <select id="caregiverSearchSegment" class="staff-search-select">
               <option value="">All segments</option>
               <option value="dementia">Dementia</option>
               <option value="als">ALS</option>
@@ -47,7 +47,7 @@
               <option value="elder_care">Elder Care</option>
               <option value="general">General</option>
             </select>
-            <select id="caregiverSearchStatus" style="padding: 6px 10px; border: 1.5px solid #ddd0c2; border-radius: 8px; font-size: 13.5px;">
+            <select id="caregiverSearchStatus" class="staff-search-select">
               <option value="">All statuses</option>
               <option value="active">Active</option>
               <option value="inactive">Inactive</option>
@@ -62,9 +62,9 @@
                 <tr><td colspan="4" class="text-center muted small">Use the search box above to find caregivers.</td></tr>
               </tbody>
             </table>
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;" id="caregiverSearchPaginationRow">
+            <div class="staff-paging-bar" id="caregiverSearchPaginationRow">
               <span id="caregiverSearchPagingInfo" class="small muted">0 caregivers</span>
-              <div style="display: flex; gap: 6px;">
+              <div class="staff-btn-group">
                 <button class="btn btn-sm btn-outline" data-action="search-prev" id="caregiverSearchPrevBtn" disabled>Previous</button>
                 <button class="btn btn-sm btn-outline" data-action="search-next" id="caregiverSearchNextBtn" disabled>Next</button>
               </div>
@@ -104,9 +104,9 @@
         </div>
 
         <div class="panel" id="grantsPanel">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-            <h4 style="margin-bottom: 0;">🎁 Wellness Grants</h4>
-            <select id="grantsStatusFilter" style="padding: 4px 8px; border: 1.5px solid #ddd0c2; border-radius: 8px; font-size: 13px;">
+          <div class="staff-panel-header-bar">
+            <h4 class="mb-0">🎁 Wellness Grants</h4>
+            <select id="grantsStatusFilter" class="staff-filter-select-sm">
               <option value="">All statuses</option>
               <option value="submitted">Submitted</option>
               <option value="in_review">In review</option>
