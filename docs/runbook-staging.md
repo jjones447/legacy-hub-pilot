@@ -47,7 +47,15 @@ curl -sL -o /dev/null -w '%{http_code} %{content_type} %{size_download}B\n' \
 4. **Every deployment keeps a permanent `<hash>.legacy-hub.pages.dev` URL** frozen at its content.
    They cannot be refreshed, only deleted. Unlinked and unguessable, but real.
 
+## Running tests
+
+```
+node --test "tests/*.test.mjs"
+```
+To run the workerd round-trip test (`tests/edge-rewrite-roundtrip-workerd.test.mjs`) locally, ensure `wrangler` is available (`npm install` or global `wrangler`). When unavailable (such as on CI without the binary), the workerd test skips gracefully with a clear message.
+
 ## When the site moves to Legacy's Cloudflare account
 
 Recreate this branch alias in the new account and re-point anything referencing it. The staging
 URL will change with the account; tell Shanelle before it does, not after.
+
