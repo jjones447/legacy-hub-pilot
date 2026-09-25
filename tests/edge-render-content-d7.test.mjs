@@ -347,7 +347,7 @@ test('multiple sections rewrite cleanly on programs and request-support pages', 
       }),
     },
     {
-      id: 'ps_request_support.form',
+      id: 'ps_form.request_support',
       status: 'published',
       data: JSON.stringify({
         heading: 'Share Your Details',

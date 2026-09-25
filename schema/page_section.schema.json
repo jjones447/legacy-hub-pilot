@@ -20,7 +20,10 @@
         "programs.socials",
         "programs.coaching",
         "request_support.hero",
-        "request_support.form",
+        "form.membership",
+        "form.grant_apply",
+        "form.coaching_interest",
+        "form.request_support",
         "request_support.next"
       ]
     }
@@ -522,9 +525,9 @@
       "properties": {
         "section_key": {
           "type": "string",
-          "const": "request_support.form",
+          "const": "form.membership",
           "enum": [
-            "request_support.form"
+            "form.membership"
           ]
         },
         "heading": {
@@ -532,6 +535,242 @@
           "maxLength": 2000
         },
         "sub": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "name_label": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "name_placeholder": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "email_label": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "email_placeholder": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "caring_for_label": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "caring_for_options": {
+          "type": "array",
+          "maxItems": 12,
+          "items": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        },
+        "note_label": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "note_placeholder": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "privacy_line": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "submit_label": {
+          "type": "string",
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "section_key"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "section_key": {
+          "type": "string",
+          "const": "form.grant_apply",
+          "enum": [
+            "form.grant_apply"
+          ]
+        },
+        "heading": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "sub": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "name_label": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "name_placeholder": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "email_label": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "email_placeholder": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "requested_for_label": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "requested_for_placeholder": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "privacy_line": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "submit_label": {
+          "type": "string",
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "section_key"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "section_key": {
+          "type": "string",
+          "const": "form.coaching_interest",
+          "enum": [
+            "form.coaching_interest"
+          ]
+        },
+        "heading": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "sub": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "name_label": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "name_placeholder": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "email_label": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "email_placeholder": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "note_label": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "note_placeholder": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "privacy_line": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "submit_label": {
+          "type": "string",
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "section_key"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "section_key": {
+          "type": "string",
+          "const": "form.request_support",
+          "enum": [
+            "form.request_support"
+          ]
+        },
+        "heading": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "sub": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "name_label": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "name_placeholder": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "email_label": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "email_placeholder": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "who_label": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "who_options": {
+          "type": "array",
+          "maxItems": 12,
+          "items": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        },
+        "what_label": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "what_options": {
+          "type": "array",
+          "maxItems": 12,
+          "items": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        },
+        "msg_label": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "msg_placeholder": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "privacy_line": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "submit_label": {
           "type": "string",
           "maxLength": 2000
         }

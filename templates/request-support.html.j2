@@ -25,41 +25,39 @@
   <div class="container">
     <div class="split align-start">
       <div class="login-card measure-none">
-        <h2 class="fs-24" data-cs="request_support.form.heading">{{ sections["request_support.form"].heading }}</h2>
-        <p class="sub" data-cs="request_support.form.sub">{{ sections["request_support.form"].sub }}</p>
+        <h2 class="fs-24" data-cs="form.request_support.heading">{{ sections["form.request_support"].heading }}</h2>
+        <p class="sub" data-cs="form.request_support.sub">{{ sections["form.request_support"].sub }}</p>
         <form id="supportForm" data-action="submit-support">
           <div class="field">
-            <label for="supName">Your name</label>
-            <input id="supName" type="text" placeholder="e.g., Maria Gonzalez" required>
+            <label for="supName" data-cs="form.request_support.name_label">{{ sections["form.request_support"].name_label }}</label>
+            <input id="supName" type="text" placeholder="{{ sections['form.request_support'].name_placeholder }}" required>
           </div>
           <div class="field">
-            <label for="supEmail">Email or phone</label>
-            <input id="supEmail" type="text" placeholder="how we reach you" required>
+            <label for="supEmail" data-cs="form.request_support.email_label">{{ sections["form.request_support"].email_label }}</label>
+            <input id="supEmail" type="text" placeholder="{{ sections['form.request_support'].email_placeholder }}" required>
           </div>
           <div class="field">
-            <label for="supWho">I am…</label>
-            <select id="supWho">
-              <option>A family caregiver (for myself)</option>
-              <option>Referring a caregiver I know</option>
-              <option>A professional / organization referring a client</option>
+            <label for="supWho" data-cs="form.request_support.who_label">{{ sections["form.request_support"].who_label }}</label>
+            <select id="supWho" data-cs-options="form.request_support.who_options">
+{%- for opt in sections["form.request_support"].who_options %}
+              <option value="{{ opt }}">{{ opt }}</option>
+{%- endfor %}
             </select>
           </div>
           <div class="field">
-            <label for="supWhat">Support needed</label>
-            <select id="supWhat">
-              <option>Respite — Memory Socials</option>
-              <option>Wellness Grant information</option>
-              <option>Virtual Support Group</option>
-              <option>Sanctuary membership</option>
-              <option>Something else / not sure</option>
+            <label for="supWhat" data-cs="form.request_support.what_label">{{ sections["form.request_support"].what_label }}</label>
+            <select id="supWhat" data-cs-options="form.request_support.what_options">
+{%- for opt in sections["form.request_support"].what_options %}
+              <option value="{{ opt }}">{{ opt }}</option>
+{%- endfor %}
             </select>
           </div>
           <div class="field">
-            <label for="supMsg">Anything you'd like us to know (optional)</label>
-            <textarea id="supMsg" rows="4" placeholder="Your situation, timing, questions…"></textarea>
+            <label for="supMsg" data-cs="form.request_support.msg_label">{{ sections["form.request_support"].msg_label }}</label>
+            <textarea id="supMsg" rows="4" placeholder="{{ sections['form.request_support'].msg_placeholder }}"></textarea>
           </div>
-          <p class="privacy-line">By sending this form, you consent to Legacy using these details to create or update your caregiver record and follow up about support. Please do not include medical record numbers or emergency details.</p>
-          <button type="submit" class="btn btn-coral w-100">Send request</button>
+          <p class="privacy-line" data-cs="form.request_support.privacy_line">{{ sections["form.request_support"].privacy_line }}</p>
+          <button type="submit" class="btn btn-coral w-100" data-cs="form.request_support.submit_label">{{ sections["form.request_support"].submit_label }}</button>
           <div class="success-note" id="supSuccess" data-intake-success role="status" aria-live="polite">✓ Request received — our team will reach out within two business days.</div>
           <div class="error-note" data-intake-error role="alert" aria-live="assertive"></div>
           <div class="routing-note" id="supRouting" data-intake-routing>Behind the scenes: this request created or updated a caregiver record and queued a follow-up for staff — nothing gets lost in an inbox.</div>

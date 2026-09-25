@@ -105,41 +105,41 @@
   <div class="container">
     <div class="split align-start">
       <div class="login-card measure-none">
-        <h2 class="fs-24" data-cs="request_support.form.heading">Tell us what you need</h2>
-        <p class="sub" data-cs="request_support.form.sub">Every request goes straight to our team — no phone tag required.</p>
+        <h2 class="fs-24" data-cs="form.request_support.heading">Tell us what you need</h2>
+        <p class="sub" data-cs="form.request_support.sub">Every request goes straight to our team — no phone tag required.</p>
         <form id="supportForm" data-action="submit-support">
           <div class="field">
-            <label for="supName">Your name</label>
+            <label for="supName" data-cs="form.request_support.name_label">Your name</label>
             <input id="supName" type="text" placeholder="e.g., Maria Gonzalez" required>
           </div>
           <div class="field">
-            <label for="supEmail">Email or phone</label>
+            <label for="supEmail" data-cs="form.request_support.email_label">Email or phone</label>
             <input id="supEmail" type="text" placeholder="how we reach you" required>
           </div>
           <div class="field">
-            <label for="supWho">I am…</label>
-            <select id="supWho">
-              <option>A family caregiver (for myself)</option>
-              <option>Referring a caregiver I know</option>
-              <option>A professional / organization referring a client</option>
+            <label for="supWho" data-cs="form.request_support.who_label">I am…</label>
+            <select id="supWho" data-cs-options="form.request_support.who_options">
+              <option value="A family caregiver (for myself)">A family caregiver (for myself)</option>
+              <option value="Referring a caregiver I know">Referring a caregiver I know</option>
+              <option value="A professional / organization referring a client">A professional / organization referring a client</option>
             </select>
           </div>
           <div class="field">
-            <label for="supWhat">Support needed</label>
-            <select id="supWhat">
-              <option>Respite — Memory Socials</option>
-              <option>Wellness Grant information</option>
-              <option>Virtual Support Group</option>
-              <option>Sanctuary membership</option>
-              <option>Something else / not sure</option>
+            <label for="supWhat" data-cs="form.request_support.what_label">Support needed</label>
+            <select id="supWhat" data-cs-options="form.request_support.what_options">
+              <option value="Respite — Memory Socials">Respite — Memory Socials</option>
+              <option value="Wellness Grant information">Wellness Grant information</option>
+              <option value="Virtual Support Group">Virtual Support Group</option>
+              <option value="Sanctuary membership">Sanctuary membership</option>
+              <option value="Something else / not sure">Something else / not sure</option>
             </select>
           </div>
           <div class="field">
-            <label for="supMsg">Anything you'd like us to know (optional)</label>
+            <label for="supMsg" data-cs="form.request_support.msg_label">Anything you'd like us to know (optional)</label>
             <textarea id="supMsg" rows="4" placeholder="Your situation, timing, questions…"></textarea>
           </div>
-          <p class="privacy-line">By sending this form, you consent to Legacy using these details to create or update your caregiver record and follow up about support. Please do not include medical record numbers or emergency details.</p>
-          <button type="submit" class="btn btn-coral w-100">Send request</button>
+          <p class="privacy-line" data-cs="form.request_support.privacy_line">By sending this form, you consent to Legacy using these details to create or update your caregiver record and follow up about support. Please do not include medical record numbers or emergency details.</p>
+          <button type="submit" class="btn btn-coral w-100" data-cs="form.request_support.submit_label">Send request</button>
           <div class="success-note" id="supSuccess" data-intake-success role="status" aria-live="polite">✓ Request received — our team will reach out within two business days.</div>
           <div class="error-note" data-intake-error role="alert" aria-live="assertive"></div>
           <div class="routing-note" id="supRouting" data-intake-routing>Behind the scenes: this request created or updated a caregiver record and queued a follow-up for staff — nothing gets lost in an inbox.</div>

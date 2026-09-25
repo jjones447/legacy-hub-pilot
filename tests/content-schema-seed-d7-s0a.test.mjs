@@ -85,16 +85,16 @@ test('schema drift guard: generating schema matches committed schema/page_sectio
 
 // 2. Seed idempotent and skips staff-edited rows
 test('seed idempotent and skips staff-edited rows', async () => {
-  // First run: inserts 17 sections
+  // First run: inserts 20 sections
   const res1 = await seedPageSections({ db: raw });
-  assert.equal(res1.inserted, 17);
+  assert.equal(res1.inserted, 20);
   assert.equal(res1.unchanged, 0);
   assert.equal(res1.skipped, 0);
 
-  // Second run: idempotent, all 17 unchanged
+  // Second run: idempotent, all 20 unchanged
   const res2 = await seedPageSections({ db: raw });
   assert.equal(res2.inserted, 0);
-  assert.equal(res2.unchanged, 17);
+  assert.equal(res2.unchanged, 20);
   assert.equal(res2.skipped, 0);
 
   // Mark one row staff-edited
@@ -103,7 +103,7 @@ test('seed idempotent and skips staff-edited rows', async () => {
   // Third run: skips the staff-edited row
   const res3 = await seedPageSections({ db: raw });
   assert.equal(res3.inserted, 0);
-  assert.equal(res3.unchanged, 16);
+  assert.equal(res3.unchanged, 19);
   assert.equal(res3.skipped, 1);
 
   // Verify staff-edited row was not overwritten
