@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-// Database restore script (Slice 10a, Requirement 2)
+// Database restore script (Slice 10a, Requirement 2; updated LEGACY-RESTORE-REMOTE-FIX-R1)
 // Refuses to run if target is 'legacy-hub-db' (live DB guard).
-// Recreates schema from schema/*.sql in order, loads table data,
-// verifies row counts against manifest.json, and spot-checks relationships.
+// Recreates schema from schema/*.sql in order (statement by statement),
+// loads table data in configurable batches, verifies row counts against manifest.json,
+// and spot-checks relationships.
 
 import { readdirSync, readFileSync, writeFileSync, unlinkSync, existsSync } from 'node:fs';
 import { resolve, join, dirname } from 'node:path';
@@ -24,11 +25,148 @@ export function checkTargetDatabase(targetName) {
   }
 }
 
-function createTempWranglerConfig(dbName) {
+export function resolveDatabaseId(targetName, { execFn = execSync, cwd = ROOT_DIR } = {}) {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (uuidRegex.test(targetName)) {
+    return targetName;
+  }
+
+  try {
+    const stdout = execFn('npx wrangler d1 list --json', {
+      cwd,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+    const list = JSON.parse(stdout);
+    if (Array.isArray(list)) {
+      const match = list.find((db) => db.name === targetName || db.uuid === targetName);
+      if (match && match.uuid) {
+        return match.uuid;
+      }
+    }
+  } catch (err) {
+    throw new Error(`Failed to resolve database ID for '${targetName}': ${err.message}`);
+  }
+
+  throw new Error(`Database '${targetName}' not found in wrangler d1 list`);
+}
+
+export function createTempWranglerConfig(dbName, dbId) {
+  if (!dbId || typeof dbId !== 'string' || dbId.endsWith('-id') || dbId.includes('<name>')) {
+    throw new Error(`Invalid database ID '${dbId}': placeholder IDs ending in -id are strictly prohibited.`);
+  }
   const tmpPath = join(ROOT_DIR, `.wrangler-restore-${Date.now()}-${Math.random().toString(36).slice(2)}.toml`);
-  const content = `name = "legacy-hub"\ncompatibility_date = "2026-07-01"\n[[d1_databases]]\nbinding = "DB"\ndatabase_name = "${dbName}"\ndatabase_id = "${dbName}-id"\n`;
+  const content = `name = "legacy-hub"\ncompatibility_date = "2026-07-01"\n[[d1_databases]]\nbinding = "DB"\ndatabase_name = "${dbName}"\ndatabase_id = "${dbId}"\n`;
   writeFileSync(tmpPath, content, 'utf8');
   return tmpPath;
+}
+
+export function splitSqlStatements(sqlText) {
+  if (!sqlText || typeof sqlText !== 'string') return [];
+  const statements = [];
+  let current = '';
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  let inLineComment = false;
+  let inBlockComment = false;
+  let beginDepth = 0;
+
+  for (let i = 0; i < sqlText.length; i++) {
+    const char = sqlText[i];
+    const nextChar = sqlText[i + 1];
+
+    if (inLineComment) {
+      if (char === '\n') {
+        inLineComment = false;
+      }
+      continue;
+    }
+
+    if (inBlockComment) {
+      if (char === '*' && nextChar === '/') {
+        inBlockComment = false;
+        i++;
+      }
+      continue;
+    }
+
+    if (!inSingleQuote && !inDoubleQuote) {
+      if (char === '-' && nextChar === '-') {
+        inLineComment = true;
+        i++;
+        continue;
+      }
+      if (char === '/' && nextChar === '*') {
+        inBlockComment = true;
+        i++;
+        continue;
+      }
+    }
+
+    if (char === "'" && !inDoubleQuote) {
+      if (inSingleQuote && nextChar === "'") {
+        current += "''";
+        i++;
+        continue;
+      }
+      inSingleQuote = !inSingleQuote;
+      current += char;
+      continue;
+    }
+
+    if (char === '"' && !inSingleQuote) {
+      if (inDoubleQuote && nextChar === '"') {
+        current += '""';
+        i++;
+        continue;
+      }
+      inDoubleQuote = !inDoubleQuote;
+      current += char;
+      continue;
+    }
+
+    if (!inSingleQuote && !inDoubleQuote) {
+      const remainingSlice = sqlText.slice(i);
+      const beginMatch = remainingSlice.match(/^begin\b/i);
+      if (beginMatch) {
+        beginDepth++;
+      } else {
+        const endMatch = remainingSlice.match(/^end\b/i);
+        if (endMatch) {
+          if (beginDepth > 0) beginDepth--;
+        }
+      }
+    }
+
+    if (char === ';' && !inSingleQuote && !inDoubleQuote) {
+      if (beginDepth === 0) {
+        const trimmed = current.trim();
+        if (trimmed.length > 0) {
+          statements.push(trimmed);
+        }
+        current = '';
+        continue;
+      }
+    }
+
+    current += char;
+  }
+
+  const remaining = current.trim();
+  if (remaining.length > 0) {
+    statements.push(remaining);
+  }
+
+  return statements;
+}
+
+export function chunkArray(arr, size) {
+  if (!Array.isArray(arr) || size <= 0) return [];
+  const chunks = [];
+  for (let i = 0; i < arr.length; i += size) {
+    chunks.push(arr.slice(i, i + size));
+  }
+  return chunks;
 }
 
 export function escapeSqlValue(val) {
@@ -146,10 +284,13 @@ export async function spotCheckRelationships(queryFn) {
 export async function restoreDatabase({
   dumpDir,
   targetDatabase,
+  databaseId = null,
   db = null,
   isLocal = true,
   configPath = null,
-  schemaDir = null
+  schemaDir = null,
+  batchSize = 25,
+  execFn = execSync
 } = {}) {
   // 1. Live DB refusal guard
   checkTargetDatabase(targetDatabase);
@@ -194,13 +335,16 @@ export async function restoreDatabase({
       }
     } catch (_) {}
 
-    // a) Apply schema in order
+    // a) Apply schema in order statement-by-statement
     for (const sf of schemaFiles) {
       const sqlContent = readFileSync(join(schemasPath, sf), 'utf8');
-      if (typeof db.exec === 'function') {
-        db.exec(sqlContent);
-      } else {
-        await db.prepare(sqlContent).run();
+      const statements = splitSqlStatements(sqlContent);
+      for (const stmt of statements) {
+        if (typeof db.exec === 'function') {
+          db.exec(stmt);
+        } else {
+          await db.prepare(stmt).run();
+        }
       }
     }
 
@@ -225,19 +369,22 @@ export async function restoreDatabase({
       }
     }
 
-    // Insert in dependency order (parents first)
+    // Insert in dependency order (parents first) in batches
     const insertOrder = sortTablesForInsert(tableNames);
     for (const tableName of insertOrder) {
       const tableFile = join(dumpPath, `${tableName}.json`);
       if (!existsSync(tableFile)) continue;
       const rows = JSON.parse(readFileSync(tableFile, 'utf8'));
       if (rows.length > 0) {
-        const insertSql = buildInsertSql(tableName, rows);
-        if (insertSql) {
-          if (typeof db.exec === 'function') {
-            db.exec(insertSql);
-          } else {
-            await db.prepare(insertSql).run();
+        const chunks = chunkArray(rows, batchSize);
+        for (const chunk of chunks) {
+          const insertSql = buildInsertSql(tableName, chunk);
+          if (insertSql) {
+            if (typeof db.exec === 'function') {
+              db.exec(insertSql);
+            } else {
+              await db.prepare(insertSql).run();
+            }
           }
         }
       }
@@ -303,28 +450,46 @@ export async function restoreDatabase({
 
   // CLI / Wrangler mode
   let tempConfig = null;
-  const tempSqlFiles = [];
 
   try {
+    if (!process.env.CLOUDFLARE_API_TOKEN && process.env.CF_API_TOKEN) {
+      process.env.CLOUDFLARE_API_TOKEN = process.env.CF_API_TOKEN;
+    }
+
     let effectiveConfig = configPath;
     if (!effectiveConfig) {
-      tempConfig = createTempWranglerConfig(targetDatabase);
+      const resolvedId = databaseId || resolveDatabaseId(targetDatabase, { execFn, cwd: ROOT_DIR });
+      tempConfig = createTempWranglerConfig(targetDatabase, resolvedId);
       effectiveConfig = tempConfig;
     }
 
     const persistDir = join(ROOT_DIR, '.wrangler', 'state', 'v3');
     const localFlag = isLocal ? `--local --persist-to "${persistDir}"` : '--remote';
 
-    const execSqlFile = (filePath) => {
-      const cmd = `npx wrangler d1 execute "${targetDatabase}" ${localFlag} -c "${effectiveConfig}" --file "${filePath}"`;
-      execSync(cmd, { cwd: ROOT_DIR, stdio: ['ignore', 'pipe', 'pipe'] });
+    const executeCmd = (sql) => {
+      const cleanSql = sql.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim();
+      if (!cleanSql) return;
+      if (cleanSql.length < 4000) {
+        const escapedSql = cleanSql.replace(/"/g, '\\"');
+        const cmd = `npx wrangler d1 execute "${targetDatabase}" ${localFlag} -c "${effectiveConfig}" --command "${escapedSql}"`;
+        execFn(cmd, { cwd: ROOT_DIR, stdio: ['ignore', 'pipe', 'pipe'] });
+      } else {
+        const tmpFile = join(ROOT_DIR, `.wrangler-chunk-${Date.now()}-${Math.random().toString(36).slice(2)}.sql`);
+        try {
+          writeFileSync(tmpFile, cleanSql, 'utf8');
+          const cmd = `npx wrangler d1 execute "${targetDatabase}" ${localFlag} -c "${effectiveConfig}" --file "${tmpFile}"`;
+          execFn(cmd, { cwd: ROOT_DIR, stdio: ['ignore', 'pipe', 'pipe'] });
+        } finally {
+          if (existsSync(tmpFile)) unlinkSync(tmpFile);
+        }
+      }
     };
 
     const queryCmd = (sql) => {
-      const cleanSql = sql.replace(/\s+/g, ' ').trim();
+      const cleanSql = sql.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim();
       const escapedSql = cleanSql.replace(/"/g, '\\"');
       const cmd = `npx wrangler d1 execute "${targetDatabase}" ${localFlag} -c "${effectiveConfig}" --json --command "${escapedSql}"`;
-      const out = execSync(cmd, { cwd: ROOT_DIR, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+      const out = execFn(cmd, { cwd: ROOT_DIR, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
       const parsed = JSON.parse(out);
       if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].results) {
         return parsed[0].results;
@@ -339,64 +504,64 @@ export async function restoreDatabase({
       );
       if (existingTables && existingTables.length > 0) {
         const dropOrder = sortTablesForDelete(existingTables.map((r) => r.name));
-        const dropSql = ['PRAGMA foreign_keys = OFF;'];
+        executeCmd('PRAGMA foreign_keys = OFF;');
         for (const t of dropOrder) {
-          dropSql.push(`DROP TABLE IF EXISTS "${t}";`);
+          executeCmd(`DROP TABLE IF EXISTS "${t}";`);
         }
-        dropSql.push('PRAGMA foreign_keys = ON;');
-        const dropSqlPath = join(ROOT_DIR, `.wrangler-drop-${Date.now()}.sql`);
-        writeFileSync(dropSqlPath, dropSql.join('\n'), 'utf8');
-        tempSqlFiles.push(dropSqlPath);
-        execSqlFile(dropSqlPath);
+        executeCmd('PRAGMA foreign_keys = ON;');
       }
     } catch (_) {}
 
-    // 1. Recreate schema from schema/*.sql in order
-    console.log(`[restore] Recreating schema on '${targetDatabase}' (${schemaFiles.length} files)...`);
-    const allSchemaSql = schemaFiles.map((sf) => readFileSync(join(schemasPath, sf), 'utf8')).join('\n;\n');
-    const schemaSqlPath = join(ROOT_DIR, `.wrangler-schema-${Date.now()}.sql`);
-    writeFileSync(schemaSqlPath, allSchemaSql, 'utf8');
-    tempSqlFiles.push(schemaSqlPath);
-    execSqlFile(schemaSqlPath);
+    // 1. Recreate schema from schema/*.sql in order, statement by statement
+    console.log(`[restore] Recreating schema on '${targetDatabase}' (${schemaFiles.length} files) statement-by-statement...`);
+    executeCmd('PRAGMA foreign_keys = OFF;');
+    for (const sf of schemaFiles) {
+      const fileSql = readFileSync(join(schemasPath, sf), 'utf8');
+      const statements = splitSqlStatements(fileSql);
+      for (const stmt of statements) {
+        executeCmd(stmt);
+      }
+    }
+    executeCmd('PRAGMA foreign_keys = ON;');
     console.log(`[restore] Schema recreated successfully.`);
 
-    // 2. Build and execute unified restore data script
-    console.log(`[restore] Loading table data from ${dumpPath}...`);
-    const dataSqlParts = ['PRAGMA foreign_keys = OFF;'];
+    // 2. Load table data in batches over --command
+    console.log(`[restore] Loading table data from ${dumpPath} (batch size: ${batchSize})...`);
+    executeCmd('PRAGMA foreign_keys = OFF;');
     const tableNames = Object.keys(manifest.tables);
 
     // Delete in reverse dependency order (children first)
     const deleteOrder = sortTablesForDelete(tableNames);
     for (const tableName of deleteOrder) {
       if (tableName !== 'audit_log') {
-        dataSqlParts.push(`DELETE FROM "${tableName}";`);
+        executeCmd(`DELETE FROM "${tableName}";`);
       }
     }
 
-    // Insert in dependency order (parents first)
+    // Insert in dependency order (parents first) in batches
     const insertOrder = sortTablesForInsert(tableNames);
     for (const tableName of insertOrder) {
       const tableFile = join(dumpPath, `${tableName}.json`);
       if (!existsSync(tableFile)) continue;
       const rows = JSON.parse(readFileSync(tableFile, 'utf8'));
       if (rows.length > 0) {
-        dataSqlParts.push(buildInsertSql(tableName, rows));
+        const chunks = chunkArray(rows, batchSize);
+        for (const chunk of chunks) {
+          const insertSql = buildInsertSql(tableName, chunk);
+          if (insertSql) {
+            executeCmd(insertSql);
+          }
+        }
       }
     }
-    dataSqlParts.push('PRAGMA foreign_keys = ON;');
-
-    const restoreSqlPath = join(os.tmpdir(), `d1-restore-data-${Date.now()}.sql`);
-    writeFileSync(restoreSqlPath, dataSqlParts.join('\n'), 'utf8');
-    tempSqlFiles.push(restoreSqlPath);
-
-    execSqlFile(restoreSqlPath);
+    executeCmd('PRAGMA foreign_keys = ON;');
     console.log(`[restore] Table data loaded.`);
 
     // 3. Verify row counts against manifest
     console.log(`[restore] Verifying row counts against manifest.json...`);
     const verifiedCounts = {};
     for (const tableName of tableNames) {
-      const res = queryCmd(`SELECT COUNT(*) as count FROM ${tableName}`);
+      const res = queryCmd(`SELECT COUNT(*) as count FROM "${tableName}"`);
       const count = res[0]?.count ?? 0;
       verifiedCounts[tableName] = count;
       const expected = manifest.tables[tableName];
@@ -434,9 +599,6 @@ export async function restoreDatabase({
     if (tempConfig && existsSync(tempConfig)) {
       unlinkSync(tempConfig);
     }
-    for (const f of tempSqlFiles) {
-      if (existsSync(f)) unlinkSync(f);
-    }
   }
 }
 
@@ -445,14 +607,20 @@ if (process.argv[1] && resolve(process.argv[1]) === __filename) {
   const args = process.argv.slice(2);
   let dumpDir = null;
   let targetDatabase = null;
+  let databaseId = null;
   let isLocal = true;
   let configPath = null;
+  let batchSize = 25;
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--dump' || args[i] === '-d') {
       dumpDir = args[++i];
     } else if (args[i] === '--target' || args[i] === '-t') {
       targetDatabase = args[++i];
+    } else if (args[i] === '--database-id' || args[i] === '--databaseId') {
+      databaseId = args[++i];
+    } else if (args[i] === '--batch-size' || args[i] === '--batchSize') {
+      batchSize = parseInt(args[++i], 10);
     } else if (args[i] === '--remote') {
       isLocal = false;
     } else if (args[i] === '--local') {
@@ -466,11 +634,11 @@ if (process.argv[1] && resolve(process.argv[1]) === __filename) {
   }
 
   if (!dumpDir || !targetDatabase) {
-    console.error('Usage: node scripts/restore-from-backup.mjs <dump-dir> <target-d1-name> [--local|--remote]');
+    console.error('Usage: node scripts/restore-from-backup.mjs <dump-dir> <target-d1-name> [--local|--remote] [--database-id <uuid>] [--batch-size <n>]');
     process.exit(1);
   }
 
-  restoreDatabase({ dumpDir, targetDatabase, isLocal, configPath })
+  restoreDatabase({ dumpDir, targetDatabase, databaseId, isLocal, configPath, batchSize })
     .then(() => {
       process.exit(0);
     })

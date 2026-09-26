@@ -15,6 +15,7 @@ python build.py --verify
 npx wrangler pages deploy . --project-name=legacy-hub --branch=staging
 ```
 To seed or refresh page sections on staging: `node scripts/seed-page-sections.mjs --staging --remote`.
+To restore a backup into a scratch drill database: `node scripts/restore-from-backup.mjs <dump-dir> <scratch-db-name> --remote`.
 
 
 ## Promote the same build to production
