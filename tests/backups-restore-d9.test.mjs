@@ -9,14 +9,22 @@
 
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, rmSync, existsSync } from 'node:fs';
+import { readdirSync, readFileSync, rmSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 
-import backupWorker, { runBackup, pruneOldBackups } from '../workers/backup/src/index.mjs';
+import backupWorker, { runBackup, pruneOldBackups, BAKED_IN_LATEST_MIGRATION } from '../workers/backup/src/index.mjs';
 import { exportDatabase } from '../scripts/export-all.mjs';
-import { restoreDatabase, checkTargetDatabase, spotCheckRelationships } from '../scripts/restore-from-backup.mjs';
+import {
+  restoreDatabase,
+  checkTargetDatabase,
+  spotCheckRelationships,
+  resolveDatabaseId,
+  createTempWranglerConfig,
+  splitSqlStatements,
+  chunkArray
+} from '../scripts/restore-from-backup.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -208,7 +216,7 @@ test('2. Scheduled backup Worker discovers all tables from sqlite_master and upl
   const manifestObj = await bucket.get('legacy-hub/2026-09-24/manifest.json');
   assert.ok(manifestObj, 'manifest.json must exist in R2 bucket');
   const manifest = await manifestObj.json();
-  assert.equal(manifest.latest_migration, '0008_agent_change.sql');
+  assert.equal(manifest.latest_migration, '0010_page_section_forms.sql');
   assert.equal(manifest.total_rows, res.totalRows);
   assert.equal(manifest.tables.caregiver, 2);
   assert.equal(manifest.tables.agent_change, 1);
@@ -342,3 +350,135 @@ test('6. Backup Worker has no public HTTP route (returns 404)', async () => {
   const res = await backupWorker.fetch(req, {}, {});
   assert.equal(res.status, 404);
 });
+
+test('7. Restore resolves database id from wrangler d1 list and never emits -id placeholders', async () => {
+  const mockDbs = [
+    { name: 'legacy-hub-db-restore-drill', uuid: '17be929b-64e8-43e0-9e0e-702775f7073a' },
+    { name: 'other-database', uuid: '22222222-3333-4444-5555-666666666666' }
+  ];
+
+  const mockExec = (cmd) => {
+    if (cmd.includes('wrangler d1 list --json')) {
+      return JSON.stringify(mockDbs);
+    }
+    throw new Error(`Unexpected command: ${cmd}`);
+  };
+
+  // 1. Resolve by database name
+  const resolvedId = resolveDatabaseId('legacy-hub-db-restore-drill', { execFn: mockExec });
+  assert.equal(resolvedId, '17be929b-64e8-43e0-9e0e-702775f7073a');
+
+  // 2. Direct UUID does not invoke wrangler
+  let calledWrangler = false;
+  const directId = resolveDatabaseId('17be929b-64e8-43e0-9e0e-702775f7073a', {
+    execFn: () => { calledWrangler = true; }
+  });
+  assert.equal(directId, '17be929b-64e8-43e0-9e0e-702775f7073a');
+  assert.equal(calledWrangler, false, 'UUID should be accepted directly without invoking wrangler');
+
+  // 3. createTempWranglerConfig creates valid TOML with real UUID
+  const configPath = createTempWranglerConfig('legacy-hub-db-restore-drill', resolvedId);
+  try {
+    assert.ok(existsSync(configPath), 'Temp config file must be created');
+    const tomlContent = readFileSync(configPath, 'utf8');
+    assert.ok(tomlContent.includes('database_id = "17be929b-64e8-43e0-9e0e-702775f7073a"'));
+    assert.ok(!tomlContent.includes('-id"'), 'Must never emit -id placeholder');
+  } finally {
+    if (existsSync(configPath)) rmSync(configPath);
+  }
+
+  // 4. createTempWranglerConfig strictly throws on placeholder IDs
+  assert.throws(
+    () => createTempWranglerConfig('legacy-hub-db-restore-drill', 'legacy-hub-db-restore-drill-id'),
+    /placeholder IDs ending in -id/
+  );
+  assert.throws(
+    () => createTempWranglerConfig('legacy-hub-db-restore-drill', null),
+    /Invalid database ID/
+  );
+
+  // 5. Unknown database throws clear error
+  assert.throws(
+    () => resolveDatabaseId('unknown-db', { execFn: mockExec }),
+    /Database 'unknown-db' not found in wrangler d1 list/
+  );
+});
+
+test('8. Batch size is respected during data restore', async () => {
+  // Test chunkArray helper
+  const items = Array.from({ length: 11 }, (_, i) => ({ id: i + 1, name: `item_${i + 1}` }));
+  const chunks = chunkArray(items, 3);
+  assert.equal(chunks.length, 4);
+  assert.deepEqual(chunks.map((c) => c.length), [3, 3, 3, 2]);
+
+  // Test restore with batchSize
+  const testDb = new DatabaseSync(':memory:');
+  const tempDumpDir = join(ROOT_DIR, 'tests', 'fixtures', 'temp-batch-dump');
+  try {
+    // Export standard seeded database
+    const sourceDb = createSeededDatabase();
+    await exportDatabase({
+      db: sourceDb,
+      outputDir: tempDumpDir,
+      schemaDir: SCHEMAS_DIR
+    });
+
+    const res = await restoreDatabase({
+      dumpDir: tempDumpDir,
+      targetDatabase: 'legacy-hub-batch-test',
+      db: testDb,
+      schemaDir: SCHEMAS_DIR,
+      batchSize: 1 // Force batch size of 1 to ensure batching loop runs per row
+    });
+
+    assert.equal(res.success, true);
+    assert.equal(res.verifiedCounts.caregiver, 2);
+    assert.equal(res.verifiedCounts.grant_application, 2);
+    assert.equal(res.verifiedCounts.award, 1);
+  } finally {
+    if (existsSync(tempDumpDir)) {
+      rmSync(tempDumpDir, { recursive: true, force: true });
+    }
+  }
+});
+
+test('9. Manifest migration test: fails if recorded value is older than newest file in schema/', async () => {
+  const schemaFiles = readdirSync(SCHEMAS_DIR)
+    .filter((f) => /^0\d+.*\.sql$/.test(f))
+    .sort();
+  assert.ok(schemaFiles.length > 0, 'Schema files must exist');
+  const newestSchemaFile = schemaFiles[schemaFiles.length - 1];
+
+  // The backup worker's fallback constant must be >= newest schema file
+  assert.equal(
+    BAKED_IN_LATEST_MIGRATION,
+    newestSchemaFile,
+    `BAKED_IN_LATEST_MIGRATION (${BAKED_IN_LATEST_MIGRATION}) must match newest schema migration (${newestSchemaFile})`
+  );
+
+  // When runBackup runs against a DB without d1_migrations table, the manifest must record the newest migration
+  const mockDb = {
+    prepare: (sql) => ({
+      all: async () => {
+        if (sql.includes('sqlite_master')) {
+          return [{ name: 'caregiver' }];
+        }
+        return [];
+      },
+      first: async () => {
+        if (sql.includes('d1_migrations')) {
+          throw new Error('no such table: d1_migrations');
+        }
+        return null;
+      }
+    })
+  };
+  const mockBucket = new MockR2Bucket();
+  const backupRes = await runBackup({ DB: mockDb, BACKUPS: mockBucket });
+  assert.equal(backupRes.manifest.latest_migration, newestSchemaFile);
+  assert.ok(
+    backupRes.manifest.latest_migration >= newestSchemaFile,
+    `Recorded latest migration (${backupRes.manifest.latest_migration}) cannot be older than newest file in schema/ (${newestSchemaFile})`
+  );
+});
+

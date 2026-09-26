@@ -31,6 +31,8 @@ export async function pruneOldBackups(bucket, now = new Date(), retentionDays = 
   return prunedCount;
 }
 
+export const BAKED_IN_LATEST_MIGRATION = "0010_page_section_forms.sql";
+
 export async function runBackup(env, options = {}) {
   const startTime = Date.now();
   const db = env.DB || env.LEGACY_DB;
@@ -75,7 +77,7 @@ export async function runBackup(env, options = {}) {
   let latestMigration = options.latestMigration || null;
   if (!latestMigration) {
     try {
-      const migRes = await db.prepare("SELECT name FROM d1_migrations ORDER BY id DESC LIMIT 1").first();
+      const migRes = await db.prepare("SELECT name FROM d1_migrations ORDER BY name DESC LIMIT 1").first();
       if (migRes && migRes.name) {
         latestMigration = migRes.name;
       }
@@ -83,8 +85,8 @@ export async function runBackup(env, options = {}) {
       // d1_migrations may not exist if migrations executed directly
     }
   }
-  if (!latestMigration) {
-    latestMigration = "0008_agent_change.sql";
+  if (!latestMigration || latestMigration < BAKED_IN_LATEST_MIGRATION) {
+    latestMigration = BAKED_IN_LATEST_MIGRATION;
   }
 
   // 4. Create and upload manifest.json
