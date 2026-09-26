@@ -1,6 +1,9 @@
 name = "legacy-hub-backup"
 main = "src/index.mjs"
 compatibility_date = "2026-07-01"
+# No public address: the fetch handler only returns 404, and backups must never be reachable by URL.
+workers_dev = false
+preview_urls = false
 
 [triggers]
 crons = ["0 3 * * *"]
