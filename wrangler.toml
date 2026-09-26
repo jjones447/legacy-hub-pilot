@@ -31,8 +31,9 @@ migrations_dir = "schema"
 binding = "AI"
 
 
-# MEDIA (R2) binding, ADR 0007: enable once the bucket legacy-hub-media exists in the account.
-# Declaring it before the bucket exists makes every Pages deploy fail at the Functions step (2026-09-16).
-# [[r2_buckets]]
-# binding = "MEDIA"
-# bucket_name = "legacy-hub-media"
+# MEDIA (R2) binding, ADR 0007. The bucket legacy-hub-media must exist in the account
+# before this is merged: declaring the binding without the bucket makes every Pages deploy
+# fail at the Functions step (proven 2026-09-16, #81).
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "legacy-hub-media"
