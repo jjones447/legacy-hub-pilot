@@ -2,6 +2,8 @@
 // Streams objects from the MEDIA R2 bucket with Cache-Control: public, max-age=3600
 // and ETag from object.httpEtag.
 
+import { getManifest } from '../../_media.mjs';
+
 const MIME_TYPES = {
   jpg: 'image/jpeg',
   jpeg: 'image/jpeg',
@@ -17,6 +19,20 @@ const MIME_TYPES = {
 function getMimeType(key) {
   const ext = key.split('.').pop()?.toLowerCase();
   return MIME_TYPES[ext] || 'application/octet-stream';
+}
+
+function isPublishedMediaKey(manifest, key) {
+  if (!['gallery/', 'thumbs/', 'banners/'].some((prefix) => key.startsWith(prefix))) return false;
+  if (!manifest || !manifest.areas) return false;
+  for (const area of Object.values(manifest.areas)) {
+    if (area?.banner?.key === key) return true;
+    for (const group of Object.values(area?.groups || {})) {
+      for (const item of group?.items || []) {
+        if (item.key === key || item.thumb === key) return true;
+      }
+    }
+  }
+  return false;
 }
 
 export async function onRequestGet(context) {
@@ -42,6 +58,13 @@ export async function onRequestGet(context) {
   }
 
   try {
+    // The bucket also holds manifest.json (Drive IDs and sync identity) and
+    // removed media objects. Only current manifest references are public.
+    const manifest = await getManifest(env);
+    if (!isPublishedMediaKey(manifest, key)) {
+      return new Response('Not Found', { status: 404 });
+    }
+
     const object = await env.MEDIA.get(key);
     if (!object) {
       return new Response('Not Found', { status: 404 });
