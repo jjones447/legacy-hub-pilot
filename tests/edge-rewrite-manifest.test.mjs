@@ -260,17 +260,22 @@ test('(c) fallback when manifest fails to parse, is missing, or version is not 1
   }
 });
 
-test('(d) /media/r2/... streams with the cache headers', async () => {
+test('(d) /media/r2/... serves only current manifest media with cache headers', async () => {
   const media = new FakeMediaBucket({
+    'manifest.json': JSON.stringify(FIXTURE_MANIFEST),
     'banners/about.jpg': {
       body: 'fake-jpeg-binary-payload-data',
       httpEtag: '"etag-about-12345"',
       httpMetadata: { contentType: 'image/jpeg' },
     },
-    'videos/intro.mp4': {
+    'banners/programs-events.mp4': {
       body: 'fake-mp4-stream',
       httpEtag: '"etag-video-67890"',
       httpMetadata: { contentType: 'video/mp4' },
+    },
+    'gallery/archived/removed.jpg': {
+      body: 'removed-photo',
+      httpMetadata: { contentType: 'image/jpeg' },
     },
   });
 
@@ -291,6 +296,29 @@ test('(d) /media/r2/... streams with the cache headers', async () => {
     assert.equal(text, 'fake-jpeg-binary-payload-data');
   }
 
+  // The same bucket also contains private metadata and removed photos.
+  for (const key of ['manifest.json', 'gallery/archived/removed.jpg']) {
+    const request = new Request(`https://legacy-hub.pages.dev/media/r2/${key}`, { method: 'GET' });
+    const resp = await mediaR2Get({
+      request,
+      env: { MEDIA: media },
+      params: { key: key.split('/') },
+    });
+    assert.equal(resp.status, 404, `${key} must not be public`);
+  }
+
+  // A current video banner remains streamable.
+  {
+    const request = new Request('https://legacy-hub.pages.dev/media/r2/banners/programs-events.mp4');
+    const resp = await mediaR2Get({
+      request,
+      env: { MEDIA: media },
+      params: { key: ['banners', 'programs-events.mp4'] },
+    });
+    assert.equal(resp.status, 200);
+    assert.equal(resp.headers.get('content-type'), 'video/mp4');
+  }
+
   // Missing object returns 404
   {
     const request = new Request('https://legacy-hub.pages.dev/media/r2/nonexistent.jpg', { method: 'GET' });
@@ -298,6 +326,21 @@ test('(d) /media/r2/... streams with the cache headers', async () => {
       request,
       env: { MEDIA: media },
       params: { key: ['nonexistent.jpg'] },
+    });
+    assert.equal(resp.status, 404);
+  }
+
+  // Without a valid manifest, even a stored banner is not published.
+  {
+    _resetManifestCache();
+    const noManifest = new FakeMediaBucket({
+      'banners/about.jpg': { body: 'unpublished', httpMetadata: { contentType: 'image/jpeg' } },
+    });
+    const request = new Request('https://legacy-hub.pages.dev/media/r2/banners/about.jpg');
+    const resp = await mediaR2Get({
+      request,
+      env: { MEDIA: noManifest },
+      params: { key: ['banners', 'about.jpg'] },
     });
     assert.equal(resp.status, 404);
   }
