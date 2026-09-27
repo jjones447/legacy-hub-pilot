@@ -12,7 +12,8 @@ Cloudflare Pages project.
 
 ```
 python build.py --verify
-npx wrangler pages deploy . --project-name=legacy-hub --branch=staging
+npm run build:site
+npx wrangler pages deploy dist --project-name=legacy-hub --branch=staging
 ```
 To seed or refresh page sections on staging: `node scripts/seed-page-sections.mjs --staging --remote`.
 To restore a backup into a scratch drill database: `node scripts/restore-from-backup.mjs <dump-dir> <scratch-db-name> --remote`.
@@ -21,10 +22,10 @@ To restore a backup into a scratch drill database: `node scripts/restore-from-ba
 ## Promote the same build to production
 
 ```
-npx wrangler pages deploy . --project-name=legacy-hub --branch=main
+npx wrangler pages deploy dist --project-name=legacy-hub --branch=main
 ```
 
-Deploy the **same working tree** to both. Do not rebuild between the two commands — that is how
+Deploy the **same `dist/`** to both. Do not rebuild between the two commands — that is how
 staging and production drift apart while appearing to match.
 
 ## Verify, both times

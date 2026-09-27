@@ -8,7 +8,9 @@
 
 name = "legacy-hub"
 compatibility_date = "2026-07-01"
-pages_build_output_dir = "."
+# Deploys serve dist/, built by `npm run build:site` from an allowlist (scripts/build-site.mjs),
+# so docs, scripts, schema and tests in this repository are never uploaded as site files.
+pages_build_output_dir = "dist"
 
 [ai]
 binding = "AI"
