@@ -3,6 +3,7 @@ import { getActor } from '../../_lib/actor.js';
 import { internalError } from '../../_lib/errors.js';
 import * as caregiversDomain from '../../_lib/domain/caregivers.js';
 import * as eventsDomain from '../../_lib/domain/events.js';
+import { getStaffMember, listStaff, updateStaffMember } from '../../_lib/staff.js';
 import { _resetContentCache } from '../../_content.mjs';
 
 function json(obj, status = 200) {
@@ -270,6 +271,18 @@ export async function onRequestGet({ request, env }) {
       `).all();
 
       return json({ ok: true, events: results });
+    }
+
+    if (subRoute === 'me') {
+      // GET /api/staff/me -- the signed-in person's staff record (role decides admin controls)
+      const actor = getActor(request, env);
+      const member = await getStaffMember(env.LEGACY_DB, actor);
+      return json({ ok: true, me: member || { email: actor, display_name: null, role: 'staff', status: 'active' } });
+    }
+
+    if (subRoute === 'team') {
+      // GET /api/staff/team -- everyone who has a staff record
+      return json({ ok: true, team: await listStaff(env.LEGACY_DB) });
     }
 
     return json({ ok: false, error: 'unsupported route' }, 404);
@@ -833,6 +846,24 @@ export async function onRequestPatch({ request, env }) {
         ok: true,
         event: result.event
       });
+    }
+
+    // PATCH /api/staff/team -- an admin changes one staff record. The email travels in the body,
+    // not the URL, so it stays out of access logs.
+    if (pathSegments.length === 3 && pathSegments[2] === 'team') {
+      let body;
+      try {
+        body = await request.json();
+      } catch (e) {
+        return json({ ok: false, error: 'invalid JSON body' }, 400);
+      }
+      if (!body || typeof body.email !== 'string' || !body.email.trim()) {
+        return json({ ok: false, error: 'email is required' }, 400);
+      }
+      const { email, ...changes } = body;
+      const result = await updateStaffMember(env.LEGACY_DB, getActor(request, env), email, changes);
+      if (!result.ok) return json({ ok: false, error: result.error }, result.status);
+      return json({ ok: true, member: result.member });
     }
 
     return json({ ok: false, error: 'invalid route parameters' }, 400);

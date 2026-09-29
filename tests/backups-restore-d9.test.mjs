@@ -41,7 +41,8 @@ const SCHEMA_FILES = [
   '0007_grant_course_complete.sql',
   '0008_agent_change.sql',
   '0009_content_live.sql',
-  '0010_page_section_forms.sql'
+  '0010_page_section_forms.sql',
+  '0011_staff_member.sql'
 ];
 
 function createSeededDatabase() {
@@ -216,7 +217,7 @@ test('2. Scheduled backup Worker discovers all tables from sqlite_master and upl
   const manifestObj = await bucket.get('legacy-hub/2026-09-24/manifest.json');
   assert.ok(manifestObj, 'manifest.json must exist in R2 bucket');
   const manifest = await manifestObj.json();
-  assert.equal(manifest.latest_migration, '0010_page_section_forms.sql');
+  assert.equal(manifest.latest_migration, '0011_staff_member.sql');
   assert.equal(manifest.total_rows, res.totalRows);
   assert.equal(manifest.tables.caregiver, 2);
   assert.equal(manifest.tables.agent_change, 1);
@@ -278,7 +279,7 @@ test('4. On-demand export (scripts/export-all.mjs) writes dump files and manifes
     assert.ok(existsSync(join(tempExportDir, 'audit_log.json')));
 
     const manifest = JSON.parse(readFileSync(join(tempExportDir, 'manifest.json'), 'utf8'));
-    assert.equal(manifest.latest_migration, '0010_page_section_forms.sql');
+    assert.equal(manifest.latest_migration, '0011_staff_member.sql');
     assert.equal(manifest.tables.caregiver, 2);
     assert.equal(manifest.tables.grant_application, 2);
     assert.equal(manifest.tables.award, 1);

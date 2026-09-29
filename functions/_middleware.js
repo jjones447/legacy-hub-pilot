@@ -1,5 +1,6 @@
 import { maybeRewriteMedia } from './_media.mjs';
 import { maybeRewriteContent } from './_content.mjs';
+import { recordStaffSignIn } from './_lib/staff.js';
 
 // Root middleware: (1) baseline security headers on every response, and
 // (2) fail-closed auth on the staff/agent console surfaces via real Cloudflare
@@ -176,6 +177,28 @@ function forbidden() {
   });
 }
 
+function deactivated() {
+  return new Response(
+    JSON.stringify({ ok: false, error: 'deactivated', message: 'Your staff access has been turned off. Ask a Legacy admin if this is a mistake.' }),
+    { status: 403, headers: { 'content-type': 'application/json' } }
+  );
+}
+
+// Record the verified person (schema/0011) and refuse a deactivated one even while Access still
+// admits them. A missing table or database error must not lock staff out: Access has already
+// decided, so log and continue.
+export async function staffGate(env, payload, now = Date.now()) {
+  const email = payload && typeof payload.email === 'string' ? payload.email : '';
+  if (!env.LEGACY_DB || !email) return null; // service tokens carry no email
+  try {
+    const member = await recordStaffSignIn(env.LEGACY_DB, email, now);
+    if (member && member.status === 'deactivated') return deactivated();
+  } catch (e) {
+    console.error('staffGate: staff record unavailable', e && e.message);
+  }
+  return null;
+}
+
 export async function onRequest(context) {
   const { request, next, env } = context;
   const url = new URL(request.url);
@@ -196,6 +219,8 @@ export async function onRequest(context) {
     const token = request.headers.get('Cf-Access-Jwt-Assertion');
     const payload = await verifyAccessJwt(token, { teamDomain, aud });
     if (!payload) return withSecurityHeaders(forbidden(), url.hostname);
+    const refused = await staffGate(env, payload);
+    if (refused) return withSecurityHeaders(refused, url.hostname);
     // Verified. Endpoints may now safely decode the (verified) JWT for the actor email.
   }
 
