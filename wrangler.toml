@@ -8,7 +8,8 @@
 
 name = "legacy-hub"
 compatibility_date = "2026-07-01"
-account_id = "b7b09c66fe896c2b65fada924d3eadc2"
+# The account is chosen at deploy time by CLOUDFLARE_ACCOUNT_ID (b7b09c66fe896c2b65fada924d3eadc2):
+# Pages rejects an account_id key in this file ("does not support account_id").
 # Deploys serve dist/, built by `npm run build:site` from an allowlist (scripts/build-site.mjs),
 # so docs, scripts, schema and tests in this repository are never uploaded as site files.
 pages_build_output_dir = "dist"
@@ -34,16 +35,14 @@ migrations_dir = "schema"
 binding = "AI"
 
 
-# MEDIA (R2) binding, ADR 0007. COMMENTED OUT 2026-09-29: neither bucket exists in this account
-# yet, and a binding to a missing bucket makes every Pages deploy fail at the Functions step
-# (2026-09-16). Re-enable BOTH blocks together once `legacy-hub-media` and
-# `legacy-hub-media-staging` exist in this account.
-#[[r2_buckets]]
-#binding = "MEDIA"
-#bucket_name = "legacy-hub-media"
+# MEDIA (R2) binding, ADR 0007. Both buckets exist in this account (created 2026-09-29) and must
+# keep existing: a binding to a missing bucket makes every Pages deploy fail at the Functions step.
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "legacy-hub-media"
 
 # Non-inheritable: preview must restate MEDIA. Preview reads a separate staging bucket,
 # matching its separate staging D1, so staging media and manifests never touch production.
-#[[env.preview.r2_buckets]]
-#binding = "MEDIA"
-#bucket_name = "legacy-hub-media-staging"
+[[env.preview.r2_buckets]]
+binding = "MEDIA"
+bucket_name = "legacy-hub-media-staging"
