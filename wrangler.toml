@@ -8,7 +8,8 @@
 
 name = "legacy-hub"
 compatibility_date = "2026-07-01"
-account_id = "b7b09c66fe896c2b65fada924d3eadc2"
+# The account is chosen at deploy time by CLOUDFLARE_ACCOUNT_ID (b7b09c66fe896c2b65fada924d3eadc2):
+# Pages rejects an account_id key in this file ("does not support account_id").
 # Deploys serve dist/, built by `npm run build:site` from an allowlist (scripts/build-site.mjs),
 # so docs, scripts, schema and tests in this repository are never uploaded as site files.
 pages_build_output_dir = "dist"

@@ -84,3 +84,7 @@ test('MEDIA bound in production only is rejected', () => {
   ].join('\n');
   assert.throws(() => assertMediaParity(planted), /both environments/);
 });
+
+test('wrangler.toml has no account_id key (Pages rejects it at deploy)', () => {
+  assert.ok(!/^\s*account_id\s*=/m.test(TOML), 'Pages config validation fails on account_id; select the account with CLOUDFLARE_ACCOUNT_ID');
+});
