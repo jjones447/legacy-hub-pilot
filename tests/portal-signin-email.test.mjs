@@ -91,9 +91,8 @@ test('sendEmail never throws, and the HTML link is escaped', async () => {
 
 test('a key stored with surrounding whitespace or a newline still works; a blank key counts as none', async () => {
   const seen = [];
-  await sendEmail({ EMAIL_API_KEY: 're_abc
-' }, { to: 'a@b.c', subject: 's', text: 't', html: 'h' }, async (u, init) => { seen.push(init.headers.authorization); return { ok: true, status: 200 }; });
+  const key = 're_abc' + String.fromCharCode(13, 10);
+  await sendEmail({ EMAIL_API_KEY: key }, { to: 'a@b.c', subject: 's', text: 't', html: 'h' }, async (u, init) => { seen.push(init.headers.authorization); return { ok: true, status: 200 }; });
   assert.deepEqual(seen, ['Bearer re_abc']);
-  assert.equal(canSendEmail({ EMAIL_API_KEY: '  
-' }), false);
+  assert.equal(canSendEmail({ EMAIL_API_KEY: '  ' + String.fromCharCode(10) }), false);
 });
