@@ -102,6 +102,13 @@ test('member email returns dev_link and inserts hashed token into D1', async () 
   assert.ok(data.dev_link);
   assert.ok(data.dev_link.includes('/api/portal/verify?token='));
 
+  // The link token is opaque: no caregiver id, no ':' payload separators
+  const token = new URL('http://localhost' + data.dev_link).searchParams.get('token');
+  assert.ok(token);
+  assert.ok(!token.includes(':'));
+  assert.ok(!token.includes('cg_seed_fictional'));
+  assert.match(token, /^[A-Za-z0-9_-]{43}$/);
+
   // Verify DB has 1 token
   const countRow = raw.prepare('SELECT COUNT(*) AS n FROM portal_token').get();
   assert.equal(countRow.n, 1);
@@ -192,9 +199,32 @@ test('SEC-3: a magic-link token cannot be pasted directly as a session cookie', 
   const req2 = mockRequest('http://localhost/api/portal/me', 'GET', null, forgedCookie);
   const res2 = await getPortal({ request: req2, env });
 
-  // Domain separation (session: vs magiclink: HMAC prefix) must reject it.
-  // Pre-fix (shared secret + format) this returned 200 with the caregiver's data.
+  // The opaque token is not an `id:exp:session-hmac` value, so it fails
+  // session-cookie parsing. Pre-fix (shared secret + format) this returned 200
+  // with the caregiver's data.
   assert.equal(res2.status, 401);
+});
+
+test('verify rejects a random token that was never minted', async () => {
+  const req = mockRequest('http://localhost/api/portal/verify?token=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', 'GET');
+  const res = await getPortal({ request: req, env });
+  assert.equal(res.status, 400);
+  const bodyText = await res.text();
+  assert.ok(bodyText.includes('unrecognized'));
+});
+
+test('verify rejects a token whose row is expired', async () => {
+  const token = 'expired-opaque-token-value';
+  const tokenHash = await sha256Hex(token);
+  const past = new Date(Date.now() - 60 * 1000).toISOString().replace('T', ' ').slice(0, 19);
+  raw.prepare('INSERT INTO portal_token (token_hash, caregiver_id, expires_at, used) VALUES (?, ?, ?, 0)')
+    .run(tokenHash, 'cg_seed_fictional', past);
+
+  const req = mockRequest(`http://localhost/api/portal/verify?token=${token}`, 'GET');
+  const res = await getPortal({ request: req, env });
+  assert.equal(res.status, 400);
+  const bodyText = await res.text();
+  assert.ok(bodyText.includes('expired'));
 });
 
 test('logout api clears the session cookie and logs logout audit', async () => {
