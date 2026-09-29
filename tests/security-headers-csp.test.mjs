@@ -49,6 +49,31 @@ test('security headers on console response via non-prod escape', async () => {
   assert.equal(resp.headers.get('Referrer-Policy'), 'no-referrer');
 });
 
+test('staging hostname gets X-Robots-Tag noindex,nofollow', async () => {
+  // LEGACY-STAGING-NOINDEX-R1: the staging preview branch must never be indexed.
+  const request = new Request('https://staging.caregiversanctuary.org/index.html');
+  const next = async () => new Response('public ok', { status: 200 });
+  const resp = await onRequest({ request, next, env: {} });
+  assert.equal(resp.status, 200);
+  assert.equal(resp.headers.get('X-Robots-Tag'), 'noindex, nofollow');
+});
+
+test('production hostname does NOT get X-Robots-Tag', async () => {
+  const request = new Request('https://www.caregiversanctuary.org/index.html');
+  const next = async () => new Response('public ok', { status: 200 });
+  const resp = await onRequest({ request, next, env: {} });
+  assert.equal(resp.status, 200);
+  assert.equal(resp.headers.get('X-Robots-Tag'), null);
+});
+
+test('pages.dev alias gets X-Robots-Tag noindex,nofollow', async () => {
+  const request = new Request('https://legacy-hub-5qo.pages.dev/index.html');
+  const next = async () => new Response('public ok', { status: 200 });
+  const resp = await onRequest({ request, next, env: {} });
+  assert.equal(resp.status, 200);
+  assert.equal(resp.headers.get('X-Robots-Tag'), 'noindex, nofollow');
+});
+
 test('security headers on fail-closed 403 response', async () => {
   const request = new Request('https://legacy-hub.pages.dev/staff.html');
   const next = async () => new Response('unreachable', { status: 200 });
