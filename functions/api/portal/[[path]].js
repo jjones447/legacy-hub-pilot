@@ -1,5 +1,6 @@
 // GET/POST /api/portal/[[path]] — Magic-link authentication and gated caregiver portal API endpoints (slice 09).
 import { checkIpRequestLimit, IP_LIMITS } from '../_shared.mjs';
+import { canSendEmail, sendEmail, signInEmail } from '../../_lib/email.js';
 import { QUESTIONS, validateCheckin, recordCheckin, caregiverHistory, isCheckinDue, CHECKIN_EVERY_DAYS } from '../../_lib/wellness.js';
 
 async function getHmacSha256(message, secret) {
@@ -264,7 +265,7 @@ export async function onRequestPost({ request, env }) {
 
       // Check if a non-archived caregiver has that email
       const caregiver = await env.LEGACY_DB
-        .prepare(`SELECT id FROM caregiver WHERE LOWER(TRIM(email)) = ? AND status != 'archived'`)
+        .prepare(`SELECT id, email FROM caregiver WHERE LOWER(TRIM(email)) = ? AND status != 'archived'`)
         .bind(normalizedEmail)
         .first();
 
@@ -296,6 +297,18 @@ export async function onRequestPost({ request, env }) {
         if ((env.PORTAL_DEV_RETURN_LINK === '1' || env.PORTAL_DEV_RETURN_LINK === 1)
             && (env.ENVIRONMENT === 'preview' || env.ENVIRONMENT === 'development')) {
           responseObj.dev_link = `/api/portal/verify?token=${encodeURIComponent(tokenValue)}`;
+        }
+
+        // Production: email the link. The response stays the same generic { ok: true } whether or
+        // not the email went, so the page never reveals who is a Legacy client.
+        if (canSendEmail(env)) {
+          const origin = new URL(request.url).origin;
+          const link = `${origin}/api/portal/verify?token=${encodeURIComponent(tokenValue)}`;
+          const sent = await sendEmail(env, { to: caregiver.email, ...signInEmail(link) });
+          await env.LEGACY_DB
+            .prepare(`INSERT INTO audit_log (actor, action, entity, entity_id) VALUES ('system', ?, 'caregiver', ?)`)
+            .bind(sent.ok ? 'portal.link_emailed' : 'portal.link_email_failed', caregiver.id)
+            .run();
         }
       }
 
