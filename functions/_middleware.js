@@ -16,6 +16,15 @@ import { maybeRewriteContent } from './_content.mjs';
 // Until BOTH are set, console surfaces stay 403 (fail closed). A non-prod escape
 // (ALLOW_DEV_CONSOLE="1") lets a preview/dev environment exercise the console.
 
+// Hostnames allowed to be indexed by search engines. Everything else — the
+// staging preview host, any *.pages.dev alias, localhost — answers with
+// X-Robots-Tag: noindex, nofollow, so a non-production deployment can never
+// be listed as the real site (LEGACY-STAGING-NOINDEX-R1).
+const PRODUCTION_HOSTNAMES = new Set([
+  'caregiversanctuary.org',
+  'www.caregiversanctuary.org',
+]);
+
 // Surfaces that require a verified Access identity.
 //
 // These are the BACK-OFFICE endpoints: every one of them returns or mutates data
@@ -129,8 +138,11 @@ export async function verifyAccessJwt(token, { teamDomain, aud, fetchImpl = fetc
   return ok ? payload : null;
 }
 
-function withSecurityHeaders(resp) {
+function withSecurityHeaders(resp, hostname) {
   const h = new Headers(resp.headers);
+  if (!PRODUCTION_HOSTNAMES.has(hostname)) {
+    h.set('X-Robots-Tag', 'noindex, nofollow');
+  }
   h.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   h.set('X-Frame-Options', 'DENY');
   h.set('X-Content-Type-Options', 'nosniff');
@@ -151,24 +163,28 @@ function forbidden() {
 
 export async function onRequest(context) {
   const { request, next, env } = context;
-  const path = new URL(request.url).pathname;
+  const url = new URL(request.url);
+  const path = url.pathname;
   const isConsole =
     CONSOLE_API_PREFIXES.some((p) => matchesPrefix(path, p)) || CONSOLE_PAGES.includes(path);
 
   if (isConsole) {
     // Non-prod escape for preview/demo (never set in production).
     if (env.ALLOW_DEV_CONSOLE === '1') {
-      return withSecurityHeaders(await next());
+      return withSecurityHeaders(await next(), url.hostname);
     }
     // Real verification. Fail closed until Cloudflare Access is configured.
     const teamDomain = env.CF_ACCESS_TEAM_DOMAIN;
     const aud = env.CF_ACCESS_AUD;
-    if (!teamDomain || !aud) return withSecurityHeaders(forbidden());
+    if (!teamDomain || !aud) return withSecurityHeaders(forbidden(), url.hostname);
     const token = request.headers.get('Cf-Access-Jwt-Assertion');
     const payload = await verifyAccessJwt(token, { teamDomain, aud });
-    if (!payload) return withSecurityHeaders(forbidden());
+    if (!payload) return withSecurityHeaders(forbidden(), url.hostname);
     // Verified. Endpoints may now safely decode the (verified) JWT for the actor email.
   }
 
-  return withSecurityHeaders(await maybeRewriteContent(context, await maybeRewriteMedia(context, await next())));
+  return withSecurityHeaders(
+    await maybeRewriteContent(context, await maybeRewriteMedia(context, await next())),
+    url.hostname
+  );
 }
