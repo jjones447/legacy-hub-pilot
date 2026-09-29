@@ -1,0 +1,22 @@
+# Daily well-being check-in reminders (see src/index.mjs).
+# No public address: the fetch handler only returns 404.
+# Off until go-live: set REMINDERS_ENABLED = "1" when caregiversanctuary.org serves the site.
+# The Resend key is a worker secret: `wrangler secret put EMAIL_API_KEY` from the vault item
+# resend-api-key-legacy-hub (never expires).
+name = "legacy-hub-reminders"
+main = "src/index.mjs"
+compatibility_date = "2026-07-01"
+workers_dev = false
+preview_urls = false
+
+[triggers]
+crons = ["0 15 * * *"] # 15:00 UTC = 10:00 Central (daylight time)
+
+[vars]
+REMINDERS_ENABLED = "0"
+PORTAL_URL = "https://caregiversanctuary.org/portal"
+
+[[d1_databases]]
+binding = "LEGACY_DB"
+database_name = "legacy-hub-db"
+database_id = "3c06c3cb-e1a6-426c-ad85-0b8c94616ed2"
