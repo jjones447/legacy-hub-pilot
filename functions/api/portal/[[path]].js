@@ -28,6 +28,14 @@ async function sha256(text) {
     .join("");
 }
 
+function randomToken() {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
 function constantTimeEqual(a, b) {
   if (a.length !== b.length) return false;
   let result = 0;
@@ -75,8 +83,8 @@ async function parseSessionCookie(cookieHeader, secret) {
   if (parts.length !== 3) return null;
   const [caregiverId, exp, signature] = parts;
   // SEC-3: domain-separate session vs magic-link. A session cookie is signed over
-  // `session:<payload>`, so a magic-link token (signed over `magiclink:<payload>`)
-  // pasted as a cookie fails this check and cannot establish a session.
+  // `session:<payload>`; an opaque magic-link token pasted as a cookie is not an
+  // `id:exp:session-hmac` value and cannot establish a session.
   const computedSig = await getHmacSha256(`session:${caregiverId}:${exp}`, secret);
   if (!constantTimeEqual(computedSig, signature)) return null;
   const expMs = Number(exp);
@@ -101,29 +109,11 @@ export async function onRequestGet({ request, env }) {
         return htmlErrorPage('Missing verification token.');
       }
 
-      const parts = token.split(':');
-      if (parts.length !== 3) {
-        return htmlErrorPage('The access link is malformed or invalid.');
-      }
-
-      const [caregiverId, expiresAtStr, signature] = parts;
-      const expiresAt = Number(expiresAtStr);
-
-      // Verify HMAC signature
-      const computedSig = await getHmacSha256(`magiclink:${caregiverId}:${expiresAtStr}`, secret);
-      if (!constantTimeEqual(computedSig, signature)) {
-        return htmlErrorPage('The access link has an invalid signature.');
-      }
-
-      // Check expiry in payload
-      if (Date.now() > expiresAt) {
-        return htmlErrorPage('This access link has expired (15-minute limit).');
-      }
-
-      // Check database to ensure it's not used and not expired there
+      // The link carries an opaque random token — no caregiver id, expiry or
+      // signature in the URL. Resolve it by its stored hash.
       const tokenHash = await sha256(token);
       const tokenRow = await env.LEGACY_DB
-        .prepare(`SELECT used, expires_at FROM portal_token WHERE token_hash = ?`)
+        .prepare(`SELECT caregiver_id, used, expires_at FROM portal_token WHERE token_hash = ?`)
         .bind(tokenHash)
         .first();
 
@@ -134,6 +124,13 @@ export async function onRequestGet({ request, env }) {
       if (tokenRow.used === 1) {
         return htmlErrorPage('This access link has already been used.');
       }
+
+      const expiresAtMs = Date.parse(tokenRow.expires_at.replace(' ', 'T') + 'Z');
+      if (!Number.isFinite(expiresAtMs) || Date.now() > expiresAtMs) {
+        return htmlErrorPage('This access link has expired (15-minute limit).');
+      }
+
+      const caregiverId = tokenRow.caregiver_id;
 
       // Mark token as used
       await env.LEGACY_DB
@@ -263,12 +260,9 @@ export async function onRequestPost({ request, env }) {
       const responseObj = { ok: true };
 
       if (caregiver) {
-        // Mint a single-use, short-TTL (~15 min), HMAC-signed token
+        // Mint a single-use, short-TTL (~15 min) opaque token
         const expiresAt = Date.now() + 15 * 60 * 1000;
-        const expiresAtStr = String(expiresAt);
-        const payload = `${caregiver.id}:${expiresAtStr}`;
-        const signature = await getHmacSha256(`magiclink:${payload}`, secret);
-        const tokenValue = `${payload}:${signature}`;
+        const tokenValue = randomToken();
 
         const tokenHash = await sha256(tokenValue);
         const expiresAtIso = new Date(expiresAt).toISOString().replace('T', ' ').slice(0, 19);
