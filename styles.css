@@ -745,6 +745,10 @@ footer a:hover { color: #fff; }
 .measure-620 { max-width: 620px; }
 .hero-title-clamp { font-size: clamp(30px, 4vw, 44px); }
 .py-56-64 { padding: 56px 0 64px; }
+/* Half-height page banner (caregiver portal): same media and scrim as .hero.has-media, about half the height. */
+.hero.hero-half { padding: 24px 0 28px; min-height: 0; }
+.hero.hero-half .lede { margin-bottom: 0; }
+@media (max-width: 768px) { .hero.hero-half { padding: 20px 0 24px; } }
 .text-sand-light { color: #eeddd2; }
 .mb-14 { margin-bottom: 14px; }
 .w-100 { width: 100%; }
