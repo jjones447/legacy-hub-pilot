@@ -1,5 +1,6 @@
 // GET/POST /api/portal/[[path]] — Magic-link authentication and gated caregiver portal API endpoints (slice 09).
 import { checkIpRequestLimit, IP_LIMITS } from '../_shared.mjs';
+import { QUESTIONS, validateCheckin, recordCheckin, caregiverHistory, isCheckinDue, CHECKIN_EVERY_DAYS } from '../../_lib/wellness.js';
 
 async function getHmacSha256(message, secret) {
   const enc = new TextEncoder();
@@ -206,6 +207,18 @@ export async function onRequestGet({ request, env }) {
       });
     }
 
+    if (action === 'wellness') {
+      // GET /api/portal/wellness -- the signed-in caregiver's own check-ins, whether one is due,
+      // and the questions to ask.
+      const caregiverId = await parseSessionCookie(request.headers.get('Cookie'), secret);
+      if (!caregiverId) {
+        return json({ ok: false, error: 'unauthorized' }, 401);
+      }
+      const history = await caregiverHistory(env.LEGACY_DB, caregiverId);
+      const latest = history.length ? history[history.length - 1].created_at : null;
+      return json({ ok: true, history, due: isCheckinDue(latest), every_days: CHECKIN_EVERY_DAYS, questions: QUESTIONS });
+    }
+
     return json({ ok: false, error: 'not_found' }, 404);
   } catch (e) {
     console.error('portal handler error:', e instanceof Error ? e.name : typeof e);
@@ -287,6 +300,33 @@ export async function onRequestPost({ request, env }) {
       }
 
       return json(responseObj);
+    }
+
+    if (action === 'wellness') {
+      // POST /api/portal/wellness -- record a check-in for the signed-in caregiver (one a day at most).
+      const caregiverId = await parseSessionCookie(request.headers.get('Cookie'), secret);
+      if (!caregiverId) {
+        return json({ ok: false, error: 'unauthorized' }, 401);
+      }
+      let body;
+      try {
+        body = await request.json();
+      } catch (e) {
+        return json({ ok: false, error: 'invalid_body' }, 400);
+      }
+      const checked = validateCheckin(body);
+      if (!checked.ok) {
+        return json({ ok: false, error: checked.error }, 400);
+      }
+      const recent = await env.LEGACY_DB
+        .prepare(`SELECT COUNT(*) AS n FROM wellness_checkin WHERE caregiver_id = ? AND created_at > datetime('now', '-1 day')`)
+        .bind(caregiverId)
+        .first();
+      if (recent && Number(recent.n) > 0) {
+        return json({ ok: false, error: 'You already checked in today. Thank you!' }, 429);
+      }
+      const score = await recordCheckin(env.LEGACY_DB, caregiverId, checked.answers, checked.note);
+      return json({ ok: true, score });
     }
 
     if (action === 'logout') {

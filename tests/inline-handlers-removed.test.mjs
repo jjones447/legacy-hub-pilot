@@ -156,6 +156,8 @@ test('exact call wiring: every action branch calls its expected function and exc
     'submit-portal-login': 'submitPortalLogin(e)',
     'demo-portal-login': 'submitPortalLogin(e)',
     'portal-logout': 'portalLogout()',
+    'wellness-open': 'openWellnessForm()',
+    'wellness-show': 'showWellnessChart()',
     'demo-view-application': "alert('Your application status, review notes and award details, all from your caregiver record.')",
     'agent-confirm': 'agentConfirm(target)',
     'agent-cancel': 'agentCancel(target)',

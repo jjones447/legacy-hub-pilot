@@ -284,6 +284,7 @@ function checkPortalSession() {
     .then(function (data) {
       if (data.ok) {
         renderPortalData(data);
+        loadWellness();
         loginView.style.display = 'none';
         dashView.style.display = 'block';
       } else {
@@ -809,6 +810,150 @@ document.addEventListener('submit', function (e) {
   }
 });
 
+/* ---------- Portal: My Wellness check-in (schema 0012) ---------- */
+let wellnessQuestions = [];
+
+async function loadWellness() {
+  const summary = document.getElementById('portalWellnessSummary');
+  try {
+    const res = await fetch('/api/portal/wellness', { credentials: 'same-origin' });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error('unavailable');
+    wellnessQuestions = data.questions || [];
+    renderWellness(data);
+  } catch (e) {
+    if (summary) summary.textContent = 'Your wellness check-ins are not available right now.';
+  }
+}
+
+function renderWellness(data) {
+  const summary = document.getElementById('portalWellnessSummary');
+  const btn = document.getElementById('portalWellnessBtn');
+  const history = data.history || [];
+  if (summary) {
+    if (history.length === 0) {
+      summary.textContent = 'A short check-in on how you are doing. Only you and the Legacy team see your answers.';
+    } else {
+      const last = history[history.length - 1];
+      const when = String(last.created_at || '').slice(0, 10);
+      summary.textContent = 'Latest: ' + last.score + ' out of 100 (' + when + '). ' +
+        (data.due ? 'Your next check-in is ready.' : 'Next check-in in about ' + data.every_days + ' days.');
+    }
+  }
+  if (btn) btn.classList.toggle('d-none', !data.due);
+  drawWellnessTrend(document.getElementById('portalWellnessTrend'), history.map(function (h) { return h.score; }));
+}
+
+function drawWellnessTrend(container, scores) {
+  if (!container) return;
+  container.textContent = '';
+  if (!scores || scores.length < 2) return;
+  const ns = 'http://www.w3.org/2000/svg';
+  const w = 240, h = 60, pad = 4;
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
+  svg.setAttribute('role', 'img');
+  svg.setAttribute('aria-label', 'Wellness score trend: ' + scores.join(', '));
+  const step = (w - pad * 2) / (scores.length - 1);
+  const pts = scores.map(function (s, i) {
+    return (pad + i * step).toFixed(1) + ',' + (h - pad - (s / 100) * (h - pad * 2)).toFixed(1);
+  });
+  const line = document.createElementNS(ns, 'polyline');
+  line.setAttribute('points', pts.join(' '));
+  line.setAttribute('class', 'wellness-line');
+  svg.appendChild(line);
+  container.appendChild(svg);
+}
+
+function openWellnessForm() {
+  const box = document.getElementById('portalWellnessForm');
+  const btn = document.getElementById('portalWellnessBtn');
+  if (!box) return;
+  box.textContent = '';
+  wellnessQuestions.forEach(function (q) {
+    const fs = document.createElement('fieldset');
+    fs.className = 'wellness-q';
+    const lg = document.createElement('legend');
+    lg.textContent = q.text;
+    fs.appendChild(lg);
+    const row = document.createElement('div');
+    row.className = 'wellness-scale';
+    for (let v = 1; v <= 5; v++) {
+      const label = document.createElement('label');
+      const input = document.createElement('input');
+      input.type = 'radio';
+      input.name = 'wq_' + q.id;
+      input.value = String(v);
+      label.appendChild(input);
+      const span = document.createElement('span');
+      span.textContent = String(v);
+      label.appendChild(span);
+      row.appendChild(label);
+    }
+    fs.appendChild(row);
+    const ends = document.createElement('div');
+    ends.className = 'wellness-ends small muted';
+    const lo = document.createElement('span');
+    lo.textContent = q.low;
+    const hi = document.createElement('span');
+    hi.textContent = q.high;
+    ends.appendChild(lo);
+    ends.appendChild(hi);
+    fs.appendChild(ends);
+    box.appendChild(fs);
+  });
+  const note = document.createElement('textarea');
+  note.id = 'portalWellnessNote';
+  note.maxLength = 1000;
+  note.rows = 2;
+  note.placeholder = 'Anything you want the Legacy team to know? (optional)';
+  note.className = 'wellness-note';
+  box.appendChild(note);
+  const submit = document.createElement('button');
+  submit.type = 'button';
+  submit.className = 'btn btn-plum btn-sm mt-8';
+  submit.setAttribute('data-action', 'wellness-submit');
+  submit.textContent = 'Save my check-in';
+  box.appendChild(submit);
+  box.classList.remove('d-none');
+  if (btn) btn.classList.add('d-none');
+}
+
+async function submitWellness(button) {
+  const msg = document.getElementById('portalWellnessMsg');
+  const answers = {};
+  for (const q of wellnessQuestions) {
+    const picked = document.querySelector('input[name="wq_' + q.id + '"]:checked');
+    if (!picked) {
+      if (msg) msg.textContent = 'Please answer each question.';
+      return;
+    }
+    answers[q.id] = Number(picked.value);
+  }
+  const noteEl = document.getElementById('portalWellnessNote');
+  if (button) button.disabled = true;
+  try {
+    const res = await fetch('/api/portal/wellness', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ answers: answers, note: noteEl ? noteEl.value : '' })
+    });
+    const data = await res.json().catch(function () { return {}; });
+    if (!res.ok || !data.ok) throw new Error(data.error || 'Could not save your check-in.');
+    const box = document.getElementById('portalWellnessForm');
+    if (box) {
+      box.classList.add('d-none');
+      box.textContent = '';
+    }
+    if (msg) msg.textContent = 'Thank you. Your check-in is saved.';
+    loadWellness();
+  } catch (e) {
+    if (msg) msg.textContent = e.message;
+    if (button) button.disabled = false;
+  }
+}
+
 document.addEventListener('click', function (e) {
   const target = e.target.closest('[data-action]');
   if (!target || target.tagName === 'FORM') return;
@@ -857,6 +1002,12 @@ document.addEventListener('click', function (e) {
     const emailInput = document.getElementById('loginEmail');
     if (emailInput) emailInput.value = 'jane.doe@example.com';
     submitPortalLogin(e);
+  } else if (action === 'wellness-open') {
+    e.preventDefault();
+    openWellnessForm();
+  } else if (action === 'wellness-submit') {
+    e.preventDefault();
+    submitWellness(target);
   } else if (action === 'portal-logout') {
     e.preventDefault();
     portalLogout();

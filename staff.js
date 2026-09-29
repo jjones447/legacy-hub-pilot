@@ -209,7 +209,8 @@ async function loadStaffConsole() {
     searchCaregivers(0),
     loadSiteContent(),
     loadRecentChanges(),
-    loadStaffTeam()
+    loadStaffTeam(),
+    loadWellnessCaregivers()
   ]);
   if (currentEventId) {
     await loadRegistrations(currentEventId, currentEventTitle);
@@ -1436,6 +1437,12 @@ document.addEventListener('DOMContentLoaded', function () {
       loadGrants();
     });
   }
+  const refreshWellnessBtn = document.getElementById('refreshWellnessBtn');
+  if (refreshWellnessBtn) {
+    refreshWellnessBtn.addEventListener('click', function () {
+      loadWellnessCaregivers();
+    });
+  }
   const refreshStaffBtn = document.getElementById('refreshStaffTeamBtn');
   if (refreshStaffBtn) {
     refreshStaffBtn.addEventListener('click', function () {
@@ -1699,6 +1706,9 @@ document.addEventListener('click', function (e) {
   } else if (action === 'close-content-editor') {
     e.stopPropagation();
     closeContentEditor();
+  } else if (action === 'wellness-show') {
+    e.stopPropagation();
+    showWellnessChart();
   } else if (action === 'staff-save' || action === 'staff-deactivate' || action === 'staff-reactivate') {
     e.stopPropagation();
     staffTeamAction(action.replace('staff-', ''), target);
@@ -2337,6 +2347,127 @@ function staffTeamAction(kind, target) {
   } else if (kind === 'reactivate') {
     saveStaffMember(email, { status: 'active' }, target);
   }
+}
+
+/* ---------- Caregiver wellness chart (schema 0012) ---------- */
+const WELLNESS_COLORS = ['#7a3b2e', '#d9774a', '#3f7d6e', '#4a6fa5', '#9a6fb0', '#b8860b', '#555555', '#c0392b', '#2e86ab', '#6b8e23'];
+
+async function loadWellnessCaregivers() {
+  const select = document.getElementById('wellnessCaregivers');
+  if (!select) return;
+  try {
+    const res = await fetch('/api/staff/wellness');
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to load');
+    const chosen = new Set([...select.selectedOptions].map((o) => o.value));
+    select.textContent = '';
+    for (const c of data.caregivers || []) {
+      const opt = document.createElement('option');
+      opt.value = c.id;
+      opt.textContent = `${c.first_name || ''} ${c.last_name || ''}`.trim() + ` (${c.checkins})`;
+      if (chosen.has(c.id)) opt.selected = true;
+      select.appendChild(opt);
+    }
+    if (select.options.length && !select.selectedOptions.length) select.options[0].selected = true;
+    if (select.options.length) showWellnessChart();
+  } catch (e) {
+    const chart = document.getElementById('wellnessChart');
+    if (chart) chart.innerHTML = `<p class="muted small text-center my-20">Error loading wellness: ${escapeHtml(e.message)}</p>`;
+  }
+}
+
+async function showWellnessChart() {
+  const select = document.getElementById('wellnessCaregivers');
+  const range = document.getElementById('wellnessRange');
+  const chart = document.getElementById('wellnessChart');
+  if (!select || !chart) return;
+  const ids = [...select.selectedOptions].map((o) => o.value);
+  if (ids.length === 0) {
+    chart.innerHTML = '<p class="muted small text-center my-20">Pick at least one caregiver.</p>';
+    return;
+  }
+  const params = new URLSearchParams();
+  ids.forEach((id) => params.append('caregiver', id));
+  params.set('range', range ? range.value : 'quarter');
+  try {
+    const res = await fetch(`/api/staff/wellness?${params.toString()}`);
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to load');
+    drawWellnessChart(chart, data);
+  } catch (e) {
+    chart.innerHTML = `<p class="muted small text-center my-20">Error loading wellness: ${escapeHtml(e.message)}</p>`;
+  }
+}
+
+function drawWellnessChart(container, data) {
+  container.textContent = '';
+  const series = (data.series || []).filter((s) => s.points && s.points.length);
+  if (series.length === 0) {
+    container.innerHTML = '<p class="muted small text-center my-20">No check-ins in this time range.</p>';
+    return;
+  }
+  const toMs = (v) => Date.parse(String(v).replace(' ', 'T') + 'Z');
+  const start = toMs(data.since);
+  const end = Date.now();
+  const W = 640, H = 220, L = 34, R = 10, T = 10, B = 24;
+  const x = (ms) => L + ((ms - start) / Math.max(1, end - start)) * (W - L - R);
+  const y = (score) => T + (1 - score / 100) * (H - T - B);
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('role', 'img');
+  svg.setAttribute('aria-label', 'Wellness scores over time');
+  for (const v of [0, 50, 100]) {
+    const line = document.createElementNS(ns, 'line');
+    line.setAttribute('x1', L); line.setAttribute('x2', W - R);
+    line.setAttribute('y1', y(v)); line.setAttribute('y2', y(v));
+    line.setAttribute('class', 'axis');
+    svg.appendChild(line);
+    const label = document.createElementNS(ns, 'text');
+    label.setAttribute('x', 4); label.setAttribute('y', y(v) + 4);
+    label.setAttribute('class', 'axis-label');
+    label.textContent = String(v);
+    svg.appendChild(label);
+  }
+  const startLabel = document.createElementNS(ns, 'text');
+  startLabel.setAttribute('x', L); startLabel.setAttribute('y', H - 6);
+  startLabel.setAttribute('class', 'axis-label');
+  startLabel.textContent = String(data.since).slice(0, 10);
+  svg.appendChild(startLabel);
+  const legend = document.createElement('div');
+  legend.className = 'wellness-legend small';
+  series.forEach((s, i) => {
+    const color = WELLNESS_COLORS[i % WELLNESS_COLORS.length];
+    const pts = s.points.map((p) => `${x(toMs(p.created_at)).toFixed(1)},${y(p.score).toFixed(1)}`);
+    if (pts.length > 1) {
+      const pl = document.createElementNS(ns, 'polyline');
+      pl.setAttribute('points', pts.join(' '));
+      pl.setAttribute('fill', 'none');
+      pl.setAttribute('stroke', color);
+      pl.setAttribute('stroke-width', '2.5');
+      svg.appendChild(pl);
+    }
+    for (const p of s.points) {
+      const dot = document.createElementNS(ns, 'circle');
+      dot.setAttribute('cx', x(toMs(p.created_at)).toFixed(1));
+      dot.setAttribute('cy', y(p.score).toFixed(1));
+      dot.setAttribute('r', '3.5');
+      dot.setAttribute('fill', color);
+      const tip = document.createElementNS(ns, 'title');
+      tip.textContent = `${s.name}: ${p.score} on ${String(p.created_at).slice(0, 10)}`;
+      dot.appendChild(tip);
+      svg.appendChild(dot);
+    }
+    const item = document.createElement('span');
+    const sw = document.createElement('span');
+    sw.className = 'wellness-swatch';
+    sw.style.background = color;
+    item.appendChild(sw);
+    item.appendChild(document.createTextNode(`${s.name} (latest ${s.points[s.points.length - 1].score})`));
+    legend.appendChild(item);
+  });
+  container.appendChild(svg);
+  container.appendChild(legend);
 }
 
 if (typeof window !== 'undefined') {

@@ -142,6 +142,26 @@
           <div id="siteContentEditor" class="d-none"></div>
         </div>
 
+        <div class="panel" id="wellnessPanel">
+          <div class="flex-between-center mb-12">
+            <h4 class="m-0">Caregiver wellness</h4>
+            <button class="btn btn-sm btn-outline" id="refreshWellnessBtn">Refresh</button>
+          </div>
+          <p class="small muted mb-12">Scores from each caregiver's check-ins in the portal: 100 means doing well. Pick one or more caregivers and a time range.</p>
+          <div class="wellness-controls">
+            <select id="wellnessCaregivers" multiple aria-label="Caregivers"></select>
+            <select id="wellnessRange" class="staff-filter-select-sm" aria-label="Time range">
+              <option value="month">Last month</option>
+              <option value="quarter" selected>Last quarter</option>
+              <option value="year">Last year</option>
+            </select>
+            <button class="btn btn-sm btn-plum" data-action="wellness-show">Show</button>
+          </div>
+          <div id="wellnessChart" class="wellness-chart">
+            <p class="muted small text-center my-20">No check-ins yet.</p>
+          </div>
+        </div>
+
         <div class="panel" id="staffTeamPanel">
           <div class="flex-between-center mb-12">
             <h4 class="m-0">Staff</h4>

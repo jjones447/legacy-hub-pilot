@@ -31,7 +31,7 @@ export async function pruneOldBackups(bucket, now = new Date(), retentionDays = 
   return prunedCount;
 }
 
-export const BAKED_IN_LATEST_MIGRATION = "0011_staff_member.sql";
+export const BAKED_IN_LATEST_MIGRATION = "0012_wellness_checkin.sql";
 
 export async function runBackup(env, options = {}) {
   const startTime = Date.now();

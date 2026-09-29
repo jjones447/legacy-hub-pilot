@@ -4,6 +4,7 @@ import { internalError } from '../../_lib/errors.js';
 import * as caregiversDomain from '../../_lib/domain/caregivers.js';
 import * as eventsDomain from '../../_lib/domain/events.js';
 import { getStaffMember, listStaff, updateStaffMember } from '../../_lib/staff.js';
+import { staffSeries, caregiversWithCheckins } from '../../_lib/wellness.js';
 import { _resetContentCache } from '../../_content.mjs';
 
 function json(obj, status = 200) {
@@ -278,6 +279,16 @@ export async function onRequestGet({ request, env }) {
       const actor = getActor(request, env);
       const member = await getStaffMember(env.LEGACY_DB, actor);
       return json({ ok: true, me: member || { email: actor, display_name: null, role: 'staff', status: 'active' } });
+    }
+
+    if (subRoute === 'wellness') {
+      // GET /api/staff/wellness?caregiver=<id>&caregiver=<id>&range=month|quarter|year
+      // With no caregiver, returns who has check-ins (for the selector).
+      const ids = url.searchParams.getAll('caregiver');
+      if (ids.length === 0) {
+        return json({ ok: true, caregivers: await caregiversWithCheckins(env.LEGACY_DB) });
+      }
+      return json({ ok: true, ...(await staffSeries(env.LEGACY_DB, ids, url.searchParams.get('range') || 'quarter')) });
     }
 
     if (subRoute === 'team') {

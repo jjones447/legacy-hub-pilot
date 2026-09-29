@@ -154,7 +154,7 @@ test('API: /api/staff/me, /api/staff/team and PATCH /api/staff/team (email in th
 test('console UI: Staff panel exists, loads with the console, and escapes what it renders', () => {
   assert.match(STAFF_HTML, /id="staffTeamPanel"/);
   assert.match(STAFF_HTML, /@legacyhomehealthservices\.org email/);
-  assert.match(STAFF_JS, /loadStaffTeam\(\)\s*\n\s*\]\);/);
+  assert.match(STAFF_JS, /\n\s*loadStaffTeam\(\),?\r?\n/, 'Staff panel loads with the console');
   assert.match(STAFF_JS, /const email = escapeHtml\(m\.email\)/);
   assert.match(STAFF_JS, /escapeHtml\(m\.display_name \|\| ''\)/);
   assert.doesNotMatch(STAFF_JS, /\/api\/staff\/team\/\$\{/, 'emails must not go into the URL');

@@ -989,3 +989,23 @@ footer a:hover { color: #fff; }
   100% { opacity: 1; }
 }
 
+
+/* ---------- My Wellness check-in (portal) and chart (staff) ---------- */
+.wellness-trend svg { width: 100%; max-width: 280px; height: 60px; margin-top: 8px; }
+.wellness-line { fill: none; stroke: var(--plum); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+.wellness-q { border: 0; padding: 0; margin: 0 0 14px; }
+.wellness-q legend { font-weight: 600; font-size: 14px; margin-bottom: 6px; }
+.wellness-scale { display: flex; gap: 6px; }
+.wellness-scale label { flex: 1; min-height: 44px; display: flex; align-items: center; justify-content: center; border: 1px solid #e2d6cc; border-radius: 10px; cursor: pointer; position: relative; }
+.wellness-scale input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.wellness-scale label:has(input:checked) { background: var(--plum); border-color: var(--plum); color: #fff; font-weight: 700; }
+.wellness-scale label:has(input:focus-visible) { outline: 2px solid var(--coral); outline-offset: 2px; }
+.wellness-ends { display: flex; justify-content: space-between; margin-top: 4px; }
+.wellness-note { width: 100%; min-height: 60px; margin-top: 4px; padding: 8px; border-radius: 10px; border: 1px solid #e2d6cc; font: inherit; }
+.wellness-chart svg { width: 100%; height: 220px; }
+.wellness-chart .axis { stroke: #d8cbbf; stroke-width: 1; }
+.wellness-chart .axis-label { font-size: 11px; fill: #7a6a60; }
+.wellness-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+.wellness-controls select[multiple] { min-width: 220px; min-height: 88px; }
+.wellness-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 6px; }
+.wellness-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
