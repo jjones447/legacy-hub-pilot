@@ -46,3 +46,9 @@ bucket_name = "legacy-hub-media"
 [[env.preview.r2_buckets]]
 binding = "MEDIA"
 bucket_name = "legacy-hub-media-staging"
+
+# Preview-only: makes POST /api/portal/login return dev_link so staging sign-in is testable
+# without an email sender. Production never sets either var, so the link is never returned there.
+[env.preview.vars]
+ENVIRONMENT = "preview"
+PORTAL_DEV_RETURN_LINK = "1"
