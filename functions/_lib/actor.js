@@ -19,7 +19,11 @@ export function getActor(request, env) {
       const payloadBase64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
       const payloadJson = atob(payloadBase64);
       const payload = JSON.parse(payloadJson);
-      return payload.email || payload.sub || 'unknown_staff';
+      if (payload.email) return payload.email;
+      // Cloudflare Access service tokens carry no email; name them by their common_name so audit
+      // rows say which token acted (e.g. the acceptance-check token).
+      if (payload.common_name) return `service:${payload.common_name}`;
+      return payload.sub || 'unknown_staff';
     }
   } catch (e) {
     // Fallback if parsing fails
