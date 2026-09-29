@@ -36,6 +36,8 @@ const ROUTE_AREA_MAP = {
   '/sanctuary.html': 'sanctuary',
   '/donate': 'donate',
   '/donate.html': 'donate',
+  '/portal': 'portal',
+  '/portal.html': 'portal',
 };
 
 export function isGalleryRoute(path) {
