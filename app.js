@@ -997,11 +997,6 @@ document.addEventListener('click', function (e) {
   } else if (action === 'submit-portal-login') {
     e.preventDefault();
     submitPortalLogin(e);
-  } else if (action === 'demo-portal-login') {
-    e.preventDefault();
-    const emailInput = document.getElementById('loginEmail');
-    if (emailInput) emailInput.value = 'jane.doe@example.com';
-    submitPortalLogin(e);
   } else if (action === 'wellness-open') {
     e.preventDefault();
     openWellnessForm();
@@ -1011,9 +1006,6 @@ document.addEventListener('click', function (e) {
   } else if (action === 'portal-logout') {
     e.preventDefault();
     portalLogout();
-  } else if (action === 'demo-view-application') {
-    e.preventDefault();
-    alert('Your application status, review notes and award details, all from your caregiver record.');
   } else if (action === 'agent-confirm') {
     e.preventDefault();
     agentConfirm(target);
