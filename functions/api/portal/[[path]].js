@@ -132,11 +132,15 @@ export async function onRequestGet({ request, env }) {
 
       const caregiverId = tokenRow.caregiver_id;
 
-      // Mark token as used
-      await env.LEGACY_DB
-        .prepare(`UPDATE portal_token SET used = 1 WHERE token_hash = ?`)
+      // Claim the token atomically: only one request can flip used 0 -> 1, so two simultaneous
+      // clicks on the same link cannot both sign in.
+      const claim = await env.LEGACY_DB
+        .prepare(`UPDATE portal_token SET used = 1 WHERE token_hash = ? AND used = 0`)
         .bind(tokenHash)
         .run();
+      if (!claim || !claim.meta || claim.meta.changes !== 1) {
+        return htmlErrorPage('This access link has already been used.');
+      }
 
       // Audit log portal.login_success
       await env.LEGACY_DB

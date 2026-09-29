@@ -19,7 +19,8 @@ function d1(db) {
               return db.prepare(sql).get(...params) ?? null;
             },
             async run() {
-              return db.prepare(sql).run(...params);
+              const r = db.prepare(sql).run(...params);
+              return { ...r, meta: { changes: r.changes, last_row_id: Number(r.lastInsertRowid) } };
             },
             async all() {
               return { results: db.prepare(sql).all(...params) };
@@ -30,7 +31,8 @@ function d1(db) {
           return db.prepare(sql).get() ?? null;
         },
         async run() {
-          return db.prepare(sql).run();
+          const r = db.prepare(sql).run();
+          return { ...r, meta: { changes: r.changes, last_row_id: Number(r.lastInsertRowid) } };
         },
         async all() {
           return { results: db.prepare(sql).all() };
@@ -203,6 +205,36 @@ test('SEC-3: a magic-link token cannot be pasted directly as a session cookie', 
   // session-cookie parsing. Pre-fix (shared secret + format) this returned 200
   // with the caregiver's data.
   assert.equal(res2.status, 401);
+});
+
+test('two simultaneous clicks on one link: exactly one signs in', async () => {
+  const res1 = await postPortal({ request: mockRequest('http://localhost/api/portal/login', 'POST', { email: 'jane.doe@example.com' }), env });
+  const link = 'http://localhost' + (await res1.json()).dev_link;
+  // Hold both token lookups until both have read the row, so both see used = 0 and then race to claim it.
+  let arrived = 0;
+  let release;
+  const bothRead = new Promise((r) => { release = r; });
+  const racingDb = {
+    prepare(sql) {
+      const stmt = env.LEGACY_DB.prepare(sql);
+      if (!/SELECT caregiver_id, used, expires_at FROM portal_token/.test(sql)) return stmt;
+      return {
+        bind(...p) {
+          const bound = stmt.bind(...p);
+          return { ...bound, async first() { const row = await bound.first(); if (++arrived === 2) release(); await bothRead; return row; } };
+        },
+      };
+    },
+  };
+  const raceEnv = { ...env, LEGACY_DB: racingDb };
+  const [a, b] = await Promise.all([
+    getPortal({ request: mockRequest(link, 'GET'), env: raceEnv }),
+    getPortal({ request: mockRequest(link, 'GET'), env: raceEnv }),
+  ]);
+  const statuses = [a.status, b.status].sort();
+  assert.deepEqual(statuses, [302, 400]);
+  const signedIn = [a, b].filter((r) => (r.headers.get('Set-Cookie') || '').includes('portal_session=') && r.status === 302);
+  assert.equal(signedIn.length, 1);
 });
 
 test('verify rejects a random token that was never minted', async () => {
