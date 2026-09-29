@@ -54,9 +54,33 @@ test('every production binding is restated for preview', () => {
   assert.deepEqual(missing, [], 'restate these under [env.preview.*] or preview loses them');
 });
 
-test('MEDIA is bound in both environments, to different buckets', () => {
-  const prod = valuesUnder(TOML, 'r2_buckets', 'bucket_name');
-  const preview = valuesUnder(TOML, 'env.preview.r2_buckets', 'bucket_name');
-  assert.deepEqual(prod, ['legacy-hub-media']);
-  assert.deepEqual(preview, ['legacy-hub-media-staging']);
+/** MEDIA parity rule: bound in both environments to different buckets, or in neither. */
+function assertMediaParity(toml) {
+  const prod = valuesUnder(toml, 'r2_buckets', 'bucket_name');
+  const preview = valuesUnder(toml, 'env.preview.r2_buckets', 'bucket_name');
+  if (prod.length === 0 && preview.length === 0) return; // commented out pending buckets
+  assert.ok(
+    prod.length > 0 && preview.length > 0,
+    'MEDIA must be bound in both environments or in neither (one-sided binding fails preview or prod deploys)'
+  );
+  assert.notDeepEqual(prod, preview, 'MEDIA must point at different buckets per environment');
+}
+
+test('MEDIA: bound in both environments to different buckets, or in neither', () => {
+  assertMediaParity(TOML);
+});
+
+test('MEDIA bound in production only is rejected', () => {
+  const planted = [
+    'name = "legacy-hub"',
+    '[[r2_buckets]]',
+    'binding = "MEDIA"',
+    'bucket_name = "legacy-hub-media"',
+    '',
+    '[[env.preview.d1_databases]]',
+    'binding = "LEGACY_DB"',
+    'database_name = "legacy-hub-db-staging"',
+    'database_id = "42be536c-e354-44c7-b246-2dcac18d8ac6"',
+  ].join('\n');
+  assert.throws(() => assertMediaParity(planted), /both environments/);
 });

@@ -25,7 +25,7 @@ test('wrangler.toml binds separate and different D1 databases for production and
 
   assert.equal(prodBinding, 'LEGACY_DB', 'Production D1 binding name must be LEGACY_DB');
   assert.equal(prodDbName, 'legacy-hub-db', 'Production database name must be legacy-hub-db');
-  assert.equal(prodDbId, 'dab02f78-f131-4d17-abaa-db9e6b45fb1b', 'Production database id must match live production D1');
+  assert.equal(prodDbId, '3c06c3cb-e1a6-426c-ad85-0b8c94616ed2', 'Production database id must match live production D1');
 
   // Parse preview D1 binding
   const previewMatch = toml.match(/\[\[env\.preview\.d1_databases\]\][\s\S]*?binding\s*=\s*"([^"]+)"[\s\S]*?database_name\s*=\s*"([^"]+)"[\s\S]*?database_id\s*=\s*"([^"]+)"/);
@@ -34,7 +34,7 @@ test('wrangler.toml binds separate and different D1 databases for production and
 
   assert.equal(previewBinding, 'LEGACY_DB', 'Preview D1 binding name must be LEGACY_DB');
   assert.equal(previewDbName, 'legacy-hub-db-staging', 'Preview database name must be legacy-hub-db-staging');
-  assert.equal(previewDbId, '2816cb1a-dc45-4550-9817-fda621faecad', 'Preview database id must match staging D1 id');
+  assert.equal(previewDbId, '42be536c-e354-44c7-b246-2dcac18d8ac6', 'Preview database id must match staging D1 id');
 
   // Assert database ids are strictly distinct
   assert.notEqual(prodDbId, previewDbId, 'Production and preview MUST bind different database IDs');

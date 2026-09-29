@@ -15,6 +15,9 @@ python build.py --verify
 npm run build:site
 npx wrangler pages deploy dist --project-name=legacy-hub --branch=staging
 ```
+When the signed-in Wrangler session can see more than one Cloudflare account, export
+`CLOUDFLARE_ACCOUNT_ID` matching the `account_id` in `wrangler.toml` before deploying, or Wrangler
+may target the wrong account.
 To seed or refresh page sections on staging: `node scripts/seed-page-sections.mjs --staging --remote`.
 To restore a backup into a scratch drill database: `node scripts/restore-from-backup.mjs <dump-dir> <scratch-db-name> --remote`.
 
