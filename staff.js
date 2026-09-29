@@ -208,7 +208,8 @@ async function loadStaffConsole() {
     loadGrants(),
     searchCaregivers(0),
     loadSiteContent(),
-    loadRecentChanges()
+    loadRecentChanges(),
+    loadStaffTeam()
   ]);
   if (currentEventId) {
     await loadRegistrations(currentEventId, currentEventTitle);
@@ -1435,6 +1436,12 @@ document.addEventListener('DOMContentLoaded', function () {
       loadGrants();
     });
   }
+  const refreshStaffBtn = document.getElementById('refreshStaffTeamBtn');
+  if (refreshStaffBtn) {
+    refreshStaffBtn.addEventListener('click', function () {
+      loadStaffTeam();
+    });
+  }
   const refreshChangesBtn = document.getElementById('refreshRecentChangesBtn');
   if (refreshChangesBtn) {
     refreshChangesBtn.addEventListener('click', function () {
@@ -1692,6 +1699,9 @@ document.addEventListener('click', function (e) {
   } else if (action === 'close-content-editor') {
     e.stopPropagation();
     closeContentEditor();
+  } else if (action === 'staff-save' || action === 'staff-deactivate' || action === 'staff-reactivate') {
+    e.stopPropagation();
+    staffTeamAction(action.replace('staff-', ''), target);
   } else if (action === 'undo-change') {
     e.stopPropagation();
     const id = Number(target.getAttribute('data-audit-id'));
@@ -2218,6 +2228,114 @@ async function handleUndoChange(auditId, button) {
   } catch (e) {
     alert(`Undo failed: ${e.message}`);
     if (button) button.disabled = false;
+  }
+}
+
+/* ---------- Staff team (schema 0011) ---------- */
+let staffMe = null;
+let staffTeam = [];
+
+async function loadStaffTeam() {
+  const list = document.getElementById('staffTeamList');
+  try {
+    const [meRes, teamRes] = await Promise.all([fetch('/api/staff/me'), fetch('/api/staff/team')]);
+    const meData = await meRes.json();
+    const teamData = await teamRes.json();
+    if (!meRes.ok || !meData.ok) throw new Error(meData.error || 'Failed to load your staff record');
+    if (!teamRes.ok || !teamData.ok) throw new Error(teamData.error || 'Failed to load staff');
+    staffMe = meData.me;
+    staffTeam = teamData.team || [];
+    renderStaffTeam();
+  } catch (e) {
+    if (list) list.innerHTML = `<p class="muted small text-center my-20">Error loading staff: ${escapeHtml(e.message)}</p>`;
+  }
+}
+
+function renderStaffTeam() {
+  const container = document.getElementById('staffTeamList');
+  if (!container) return;
+  if (staffTeam.length === 0) {
+    container.innerHTML = '<p class="muted small text-center my-20">No staff have signed in yet.</p>';
+    return;
+  }
+  const isAdmin = !!(staffMe && staffMe.role === 'admin' && staffMe.status === 'active');
+  const myEmail = staffMe ? String(staffMe.email || '').toLowerCase() : '';
+  let rows = '';
+  for (const m of staffTeam) {
+    const email = escapeHtml(m.email);
+    const isSelf = String(m.email).toLowerCase() === myEmail;
+    const active = m.status === 'active';
+    const lastSeen = m.last_seen_at ? escapeHtml(m.last_seen_at) : 'never';
+    const nameCell = isAdmin
+      ? `<input type="text" class="staff-search-input" data-staff-name="${email}" value="${escapeHtml(m.display_name || '')}" placeholder="Add a name" maxlength="120">`
+      : escapeHtml(m.display_name || '');
+    const roleCell = isAdmin && !isSelf
+      ? `<select class="staff-filter-select-sm" data-staff-role="${email}">
+           <option value="staff"${m.role === 'staff' ? ' selected' : ''}>Staff</option>
+           <option value="admin"${m.role === 'admin' ? ' selected' : ''}>Admin</option>
+         </select>`
+      : (m.role === 'admin' ? 'Admin' : 'Staff');
+    let actions = '';
+    if (isAdmin) {
+      actions += `<button class="btn btn-sm btn-plum btn-compact-mr" data-action="staff-save" data-email="${email}">Save</button>`;
+      if (!isSelf) {
+        actions += active
+          ? `<button class="btn btn-sm btn-outline btn-compact-mr" data-action="staff-deactivate" data-email="${email}">Turn off access</button>`
+          : `<button class="btn btn-sm btn-coral btn-compact-mr" data-action="staff-reactivate" data-email="${email}">Turn access back on</button>`;
+      }
+    }
+    rows += `
+      <tr>
+        <td>${nameCell}<div class="small muted">${email}${isSelf ? ' (you)' : ''}</div></td>
+        <td>${roleCell}</td>
+        <td><span class="badge ${active ? 'badge-green' : 'badge-amber'}">${active ? 'Active' : 'Access off'}</span><div class="small muted">Last seen: ${lastSeen}</div></td>
+        <td>${actions}</td>
+      </tr>`;
+  }
+  container.innerHTML = `
+    <table class="data">
+      <thead><tr><th>Person</th><th>Role</th><th>Status</th><th></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <p class="small muted mt-8" id="staffTeamMessage"></p>`;
+}
+
+async function saveStaffMember(email, changes, button) {
+  const msg = document.getElementById('staffTeamMessage');
+  if (button) button.disabled = true;
+  try {
+    const res = await fetch('/api/staff/team', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email, ...changes })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.error || 'Could not save');
+    await loadStaffTeam();
+    const after = document.getElementById('staffTeamMessage');
+    if (after) after.textContent = 'Saved.';
+    loadRecentChanges();
+  } catch (e) {
+    if (msg) msg.textContent = e.message;
+    if (button) button.disabled = false;
+  }
+}
+
+function staffTeamAction(kind, target) {
+  const email = target.getAttribute('data-email');
+  if (!email) return;
+  if (kind === 'save') {
+    const nameInput = document.querySelector(`[data-staff-name="${CSS.escape(email)}"]`);
+    const roleSelect = document.querySelector(`[data-staff-role="${CSS.escape(email)}"]`);
+    const changes = {};
+    if (nameInput) changes.display_name = nameInput.value;
+    if (roleSelect) changes.role = roleSelect.value;
+    saveStaffMember(email, changes, target);
+  } else if (kind === 'deactivate') {
+    if (!window.confirm(`Turn off staff access for ${email}? They will be refused even if their email still works.`)) return;
+    saveStaffMember(email, { status: 'deactivated' }, target);
+  } else if (kind === 'reactivate') {
+    saveStaffMember(email, { status: 'active' }, target);
   }
 }
 
