@@ -13,6 +13,8 @@ import { onRequest } from '../functions/_middleware.js';
 // Endpoints that return or mutate data spanning multiple caregivers.
 const MUST_BE_GUARDED = [
   '/staff.html',
+  '/staff',   // Pages pretty-URL spelling of staff.html
+  '/staff/',  // trailing-slash spelling
   '/api/staff/registrations',
   '/api/agent/edit',
   '/api/registrations',
@@ -30,6 +32,8 @@ const MUST_STAY_REACHABLE = [
   '/api/events',      // public listing, no personal data
   '/api/health',
   '/index.html',
+  '/',          // site root
+  '/about',     // pretty-URL spelling of a public page must stay public
 ];
 
 async function statusFor(path, env = {}) {
@@ -56,6 +60,8 @@ test('public and self-authenticating routes are not blocked', async () => {
 test('a lookalike path does not inherit a guard it should not have', async () => {
   // '/api/grants' must not be widened into guarding '/api/grants-public'.
   assert.equal(await statusFor('/api/grants-public'), 200);
+  // '/staff' must not be widened into guarding '/staffing'.
+  assert.equal(await statusFor('/staffing'), 200);
 });
 
 test('guarded routes still fail closed when only one Access variable is set', async () => {

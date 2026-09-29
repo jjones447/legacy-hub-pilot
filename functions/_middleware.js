@@ -50,7 +50,22 @@ const CONSOLE_API_PREFIXES = [
   '/api/followups',
   '/api/grants',
 ];
+// Pages serves every *.html at its pretty URL too and redirects the spelled-out
+// form to it, so a console page is reachable as '/staff', '/staff/' and
+// '/staff.html'. Entries keep the real file spelling —
+// extractConsoleDestinations() parses this array to build the Access app, and
+// it already expands each '.html' entry to its pretty form.
 const CONSOLE_PAGES = ['/staff.html'];
+
+// Normalize a trailing '/' and a trailing '.html' so one list entry covers
+// every spelling Pages serves; lookalikes like '/staffing' do not normalize in.
+function normalizePagePath(path) {
+  let p = path;
+  if (p.length > 1 && p.endsWith('/')) p = p.slice(0, -1);
+  if (p.endsWith('.html')) p = p.slice(0, -5);
+  return p;
+}
+const CONSOLE_PAGE_SET = new Set(CONSOLE_PAGES.map(normalizePagePath));
 
 // Prefix match that cannot be widened by a lookalike path: '/api/grants' guards
 // '/api/grants' and '/api/grants/123' but not a hypothetical '/api/grants-public'.
@@ -166,7 +181,8 @@ export async function onRequest(context) {
   const url = new URL(request.url);
   const path = url.pathname;
   const isConsole =
-    CONSOLE_API_PREFIXES.some((p) => matchesPrefix(path, p)) || CONSOLE_PAGES.includes(path);
+    CONSOLE_API_PREFIXES.some((p) => matchesPrefix(path, p)) ||
+    CONSOLE_PAGE_SET.has(normalizePagePath(path));
 
   if (isConsole) {
     // Non-prod escape for preview/demo (never set in production).
