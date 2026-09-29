@@ -34,16 +34,14 @@ migrations_dir = "schema"
 binding = "AI"
 
 
-# MEDIA (R2) binding, ADR 0007. COMMENTED OUT 2026-09-29: neither bucket exists in this account
-# yet, and a binding to a missing bucket makes every Pages deploy fail at the Functions step
-# (2026-09-16). Re-enable BOTH blocks together once `legacy-hub-media` and
-# `legacy-hub-media-staging` exist in this account.
-#[[r2_buckets]]
-#binding = "MEDIA"
-#bucket_name = "legacy-hub-media"
+# MEDIA (R2) binding, ADR 0007. Both buckets exist in this account (created 2026-09-29) and must
+# keep existing: a binding to a missing bucket makes every Pages deploy fail at the Functions step.
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "legacy-hub-media"
 
 # Non-inheritable: preview must restate MEDIA. Preview reads a separate staging bucket,
 # matching its separate staging D1, so staging media and manifests never touch production.
-#[[env.preview.r2_buckets]]
-#binding = "MEDIA"
-#bucket_name = "legacy-hub-media-staging"
+[[env.preview.r2_buckets]]
+binding = "MEDIA"
+bucket_name = "legacy-hub-media-staging"
