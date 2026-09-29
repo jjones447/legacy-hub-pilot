@@ -7,7 +7,7 @@ export const EMAIL_REPLY_TO = 'info@legacyhomehealthservices.org';
 const RESEND_URL = 'https://api.resend.com/emails';
 
 export function canSendEmail(env) {
-  if (!env || !env.EMAIL_API_KEY) return false;
+  if (!env || !String(env.EMAIL_API_KEY || '').trim()) return false;
   return env.ENVIRONMENT !== 'preview' && env.ENVIRONMENT !== 'development';
 }
 
@@ -43,7 +43,8 @@ export async function sendEmail(env, { to, subject, text, html }, fetchImpl = fe
   try {
     const res = await fetchImpl(RESEND_URL, {
       method: 'POST',
-      headers: { authorization: `Bearer ${env.EMAIL_API_KEY}`, 'content-type': 'application/json' },
+      // Trim: a key stored with a trailing newline (e.g. piped from PowerShell) breaks the header.
+      headers: { authorization: `Bearer ${String(env.EMAIL_API_KEY).trim()}`, 'content-type': 'application/json' },
       body: JSON.stringify({ from: EMAIL_FROM, reply_to: EMAIL_REPLY_TO, to: [to], subject, text, html }),
     });
     return { ok: res.ok, status: res.status };
