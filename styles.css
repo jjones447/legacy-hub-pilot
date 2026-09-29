@@ -130,7 +130,7 @@ nav.main-nav a.active { color: var(--plum); border-bottom-color: var(--coral); }
 .nav-feature.active { background: var(--sand); }
 .nav-v2 .nav-item.has-drop > .nav-feature + .drop-toggle { margin-left: 2px; }
 
-.nav-toggle { display: none; background: none; border: none; font-size: 26px; color: var(--plum); cursor: pointer; }
+.nav-toggle { display: none; background: none; border: none; font-size: 26px; color: var(--plum); cursor: pointer; min-width: 44px; min-height: 44px; }
 
 /* ---------- Hero ---------- */
 .hero {
@@ -273,6 +273,11 @@ nav.main-nav a.active { color: var(--plum); border-bottom-color: var(--coral); }
 .btn:focus-visible, a:focus-visible { outline: 2.5px solid var(--amber); outline-offset: 2px; border-radius: 4px; }
 .btn-sm, .btn-coral.btn-sm {
   padding: 8px 18px; font-size: 13.5px; font-weight: 600; min-height: 36px; line-height: 1.25;
+}
+/* Phones: 44px tap-target floor for the small buttons (portal Sign out, card
+   CTAs). .btn already centres vertically via inline-flex; desktop keeps 36px. */
+@media (max-width: 768px) {
+  .btn-sm, .btn-coral.btn-sm { min-height: 44px; }
 }
 
 /* ---------- Sections ---------- */
