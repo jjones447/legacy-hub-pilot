@@ -2,6 +2,7 @@
 import { checkIpRequestLimit, IP_LIMITS } from '../_shared.mjs';
 import { canSendEmail, sendEmail, signInEmail } from '../../_lib/email.js';
 import { QUESTIONS, validateCheckin, recordCheckin, caregiverHistory, isCheckinDue, CHECKIN_EVERY_DAYS } from '../../_lib/wellness.js';
+import { handlePortalSupport } from '../../_lib/portal-support.js';
 
 async function getHmacSha256(message, secret) {
   const enc = new TextEncoder();
@@ -236,6 +237,23 @@ export async function onRequestPost({ request, env }) {
     const secret = env.PORTAL_TOKEN_SECRET;
     if (!secret) {
       return json({ ok: false, error: 'auth_not_configured' }, 503);
+    }
+
+    if (action === 'support') {
+      // Keep this bounded slice separate from login, wellness and public intake.
+      // Only an exact, single portal_session cookie may establish its owner.
+      const cookie = request.headers.get('Cookie') || '';
+      const sessions = [...cookie.matchAll(/(?:^|;\s*)portal_session=([^;]*)/g)];
+      let caregiverId = null;
+      if (cookie.length <= 4096 && sessions.length === 1) {
+        try {
+          caregiverId = await parseSessionCookie(`portal_session=${sessions[0][1]}`, secret);
+        } catch {
+          // Malformed encoding is an authentication denial, not an internal leak.
+        }
+      }
+      if (!caregiverId) return json({ ok: false, error: 'unauthorized' }, 401);
+      return handlePortalSupport(request, env.LEGACY_DB, caregiverId);
     }
 
     if (action === 'login') {
