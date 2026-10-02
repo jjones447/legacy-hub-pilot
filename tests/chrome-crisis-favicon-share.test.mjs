@@ -105,8 +105,8 @@ test('Every public page carries crisis bar, skip link, main landmark, descriptio
       const ogDescMatch = html.match(/<meta\s+property=["']og:description["']\s+content=["'](.*?)["']/i);
       assert.ok(ogDescMatch && ogDescMatch[1].trim().length > 0, `${page} must have non-empty og:description`);
 
-      assert.ok(html.includes('property="og:image" content="https://legacy-hub.pages.dev/media/share-default.jpg"'), `${page} must carry production og:image`);
-      assert.ok(html.includes('property="og:url" content="https://legacy-hub.pages.dev'), `${page} must carry production og:url`);
+      assert.ok(html.includes('property="og:image" content="https://caregiversanctuary.org/media/share-default.jpg"'), `${page} must carry production og:image`);
+      assert.ok(html.includes('property="og:url" content="https://caregiversanctuary.org'), `${page} must carry production og:url`);
       assert.ok(html.includes('property="og:type" content="website"'), `${page} must carry og:type=website`);
       assert.ok(html.includes('property="og:site_name" content="Legacy Home &amp; Respite Care Foundation, Inc."') ||
                 html.includes('property="og:site_name" content="Legacy Home & Respite Care Foundation, Inc."'), `${page} must carry og:site_name`);

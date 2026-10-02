@@ -18,7 +18,7 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 ROOT = Path(__file__).parent
 
-SITE_URL = "https://legacy-hub.pages.dev"
+SITE_URL = "https://caregiversanctuary.org"
 DEFAULT_SHARE_IMAGE = f"{SITE_URL}/media/share-default.jpg"
 
 PAGE_METADATA = {
