@@ -48,6 +48,60 @@ h1, h2, h3, .display { font-family: var(--font-display); font-weight: 600; line-
 .container { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
 
 
+/* ---------- Accessibility: Skip Link ---------- */
+.skip-link {
+  position: absolute;
+  top: -9999px;
+  left: -9999px;
+  background: var(--cream);
+  color: var(--plum-dark);
+  padding: 10px 18px;
+  border: 2px solid var(--coral);
+  border-radius: var(--radius);
+  font-weight: 700;
+  font-size: 15px;
+  text-decoration: none;
+  z-index: 10000;
+}
+.skip-link:focus {
+  top: 8px;
+  left: 8px;
+}
+
+/* ---------- Crisis Bar ---------- */
+.crisis-bar {
+  background: var(--plum-dark);
+  color: var(--cream);
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14.5px;
+  padding: 8px 16px;
+  text-align: center;
+  position: static;
+  z-index: 40;
+}
+.crisis-bar-inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+.crisis-bar a {
+  color: var(--cream);
+  text-decoration: underline;
+  font-weight: 600;
+}
+.crisis-bar a:hover {
+  color: var(--white);
+}
+.crisis-bar strong {
+  font-weight: 700;
+  color: var(--cream);
+}
+
 /* ---------- Header / nav ---------- */
 header.site-header {
   background: var(--white);
