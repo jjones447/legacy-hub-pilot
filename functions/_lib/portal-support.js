@@ -77,6 +77,9 @@ export async function handlePortalSupport(request, db, caregiverId) {
     // D1 batch is one serialized SQL transaction: no check-then-insert race,
     // no separate task/audit writes, and a failed statement rolls both back.
     // Recheck archive state INSIDE that transaction, not only before mutation.
+    // Only a newly inserted row may acquire the original portal audit. SQLite
+    // changes() in the next statement is the preceding INSERT's change count;
+    // a conflict is zero, never permission to adopt another producer's row.
     const result = await db.batch([
       db.prepare(`INSERT INTO followup (caregiver_id, kind, detail, source, external_ref)
         SELECT id, 'support_request', ?, ?, ? FROM caregiver
@@ -87,15 +90,20 @@ export async function handlePortalSupport(request, db, caregiverId) {
         SELECT f.caregiver_id, 'portal.support_requested', 'followup', CAST(f.id AS TEXT)
         FROM followup f JOIN caregiver c ON c.id = f.caregiver_id
         WHERE f.source = ? AND f.external_ref = ? AND f.caregiver_id = ?
-          AND f.kind = 'support_request' AND c.status != 'archived'
+          AND f.kind = 'support_request' AND f.detail = ? AND c.status != 'archived'
+          AND changes() = 1
           AND NOT EXISTS (SELECT 1 FROM audit_log a
             WHERE a.actor = f.caregiver_id AND a.action = 'portal.support_requested'
               AND a.entity = 'followup' AND a.entity_id = CAST(f.id AS TEXT))`)
-        .bind(SUPPORT_SOURCE, externalRef, caregiverId),
+        .bind(SUPPORT_SOURCE, externalRef, caregiverId, SUPPORT_DETAIL),
       db.prepare(`SELECT f.id FROM followup f JOIN caregiver c ON c.id = f.caregiver_id
         WHERE f.source = ? AND f.external_ref = ? AND f.caregiver_id = ?
-          AND f.kind = 'support_request' AND c.status != 'archived'`)
-        .bind(SUPPORT_SOURCE, externalRef, caregiverId),
+          AND f.kind = 'support_request' AND f.detail = ? AND c.status != 'archived'
+          AND EXISTS (SELECT 1 FROM audit_log a
+            WHERE a.actor = f.caregiver_id AND a.action = 'portal.support_requested'
+              AND a.entity = 'followup' AND a.entity_id = CAST(f.id AS TEXT)
+              AND a.before_json IS NULL AND a.after_json IS NULL)`)
+        .bind(SUPPORT_SOURCE, externalRef, caregiverId, SUPPORT_DETAIL),
     ]);
     if (!Array.isArray(result) || result.length !== 3 || result.some(r => r.success !== true)) {
       return reply({ ok: false, error: 'unavailable' }, 503);

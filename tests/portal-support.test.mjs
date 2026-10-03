@@ -5,6 +5,8 @@ import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { onRequestGet, onRequestPost } from '../functions/api/portal/[[path]].js';
 import { SUPPORT_DETAIL, SUPPORT_SOURCE, SUPPORT_BODY_MAX_BYTES } from '../functions/_lib/portal-support.js';
+import { handleIntake } from '../functions/api/_shared.mjs';
+import { onRequestPost as postIntake } from '../functions/api/intake.js';
 
 const SCHEMA = readFileSync(new URL('../schema/0001_init.sql', import.meta.url), 'utf8');
 const ORIGIN = 'https://portal.example.test';
@@ -18,7 +20,11 @@ let env;
 function d1(options = {}) {
   return {
     prepare(sql) {
-      return { bind(...params) { return { sql, params }; } };
+      return { bind(...params) { return {
+        sql, params,
+        async first() { return raw.prepare(sql).get(...params) ?? null; },
+        async run() { return raw.prepare(sql).run(...params); },
+      }; } };
     },
     async batch(statements) {
       if (options.beforeBatch) await options.beforeBatch();
@@ -121,6 +127,69 @@ test('case variants of a UUID replay the same request', async () => {
   assert.equal((await submit({ body: { request_id: ID.toUpperCase() } })).status, 202);
   assert.equal(counts().tasks, 1);
   assert.equal(counts().audits, 1);
+});
+
+async function supportRef(owner = 'cg_synthetic_a') {
+  const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify([owner, ID])));
+  return Array.from(new Uint8Array(bytes), b => b.toString(16).padStart(2, '0')).join('');
+}
+
+test('public intake cannot occupy the signed support namespace, and ordinary intake still works', async () => {
+  raw.prepare('UPDATE caregiver SET email = ? WHERE id = ?').run('synthetic@example.test', 'cg_synthetic_a');
+  const body = { kind: 'support_request', first_name: 'Synthetic A', email: 'synthetic@example.test',
+    source: SUPPORT_SOURCE, external_ref: await supportRef(), message: 'Synthetic intake text' };
+  const denied = await postIntake({ env, request: new Request(`${ORIGIN}/api/intake`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  }) });
+  assert.equal(denied.status, 400);
+  assert.equal(counts().tasks, 0);
+  assert.equal(raw.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'portal.support_requested'").get().n, 0);
+  assert.equal((await submit()).status, 202);
+  const ordinary = await postIntake({ env, request: new Request(`${ORIGIN}/api/intake`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...body, source: 'site_form' }),
+  }) });
+  assert.equal(ordinary.status, 201);
+  assert.equal(counts().tasks, 2);
+  assert.equal(raw.prepare("SELECT detail FROM followup WHERE source = 'site_form'").get().detail, body.message);
+});
+
+test('reserved source is refused before any intake core database access', async () => {
+  const res = await handleIntake({ prepare() { throw new Error('must not read or mutate'); } }, {
+    kind: 'support_request', first_name: 'Synthetic', email: 'synthetic@example.test',
+    external_ref: 'synthetic-key', source: SUPPORT_SOURCE,
+  });
+  assert.equal(res.status, 400);
+  empty();
+});
+
+for (const [name, owner, kind, detail] of [
+  ['same-owner arbitrary detail', 'cg_synthetic_a', 'support_request', 'Synthetic untrusted intake text'],
+  ['same-owner exact detail without original portal audit', 'cg_synthetic_a', 'support_request', SUPPORT_DETAIL],
+  ['another owner occupying this owner key', 'cg_synthetic_b', 'support_request', SUPPORT_DETAIL],
+  ['same-owner incompatible kind', 'cg_synthetic_a', 'membership_welcome', SUPPORT_DETAIL],
+]) {
+  test(`legacy namespace pollution is refused without adoption or mutation: ${name}`, async () => {
+    // Synthetic historical rows only; no repair/deletion of existing history.
+    raw.prepare('INSERT INTO followup (caregiver_id, kind, detail, source, external_ref) VALUES (?, ?, ?, ?, ?)')
+      .run(owner, kind, detail, SUPPORT_SOURCE, await supportRef());
+    const before = raw.prepare('SELECT * FROM followup').all();
+    for (let retry = 0; retry < 2; retry++) {
+      assert.equal((await submit()).status, 404);
+      assert.equal(counts().audits, 0);
+      assert.deepEqual(raw.prepare('SELECT * FROM followup').all(), before);
+    }
+  });
+}
+
+test('a genuine audit does not bless later noncanonical detail and remains immutable', async () => {
+  assert.equal((await submit()).status, 202);
+  raw.prepare('UPDATE followup SET detail = ?').run('Synthetic changed detail');
+  const before = raw.prepare('SELECT * FROM followup').all();
+  const audit = raw.prepare('SELECT * FROM audit_log').all();
+  assert.equal((await submit()).status, 404);
+  assert.deepEqual(raw.prepare('SELECT * FROM followup').all(), before);
+  assert.deepEqual(raw.prepare('SELECT * FROM audit_log').all(), audit);
 });
 
 test('a new request id creates a distinct intentional request', async () => {
