@@ -161,6 +161,7 @@ test('functions/api/webhooks/givebutter.js handles unexpected database error wit
   });
   const env = {
     GIVEBUTTER_WEBHOOK_SECRET: secret,
+    GIVEBUTTER_WEBHOOK_SIGNATURE_MODE: 'hmac_sha256',
     LEGACY_DB: throwingDb
   };
 
