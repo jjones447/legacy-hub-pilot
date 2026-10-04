@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Database restore script (Slice 10a, Requirement 2; updated LEGACY-RESTORE-REMOTE-FIX-R1)
-// Refuses to run if target is 'legacy-hub-db' (live DB guard).
+// Refuses production names/IDs and validates CLI target identity before restore.
 // Recreates schema from schema/*.sql in order (statement by statement),
 // loads table data in configurable batches, verifies row counts against manifest.json,
 // and spot-checks relationships.
@@ -15,6 +15,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const ROOT_DIR = resolve(__dirname, '..');
 
+// Source-configured production ID; account metadata below also guards renamed IDs.
+export const PROTECTED_DATABASE_ID = '3c06c3cb-e1a6-426c-ad85-0b8c94616ed2';
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export function checkTargetDatabase(targetName) {
   if (!targetName || typeof targetName !== 'string') {
     throw new Error('Target database name is required');
@@ -23,6 +27,70 @@ export function checkTargetDatabase(targetName) {
   if (clean === 'legacy-hub-db') {
     throw new Error("REFUSAL: Target database cannot be the live database 'legacy-hub-db'. Restoring over live DB is strictly prohibited.");
   }
+  if (clean === PROTECTED_DATABASE_ID) {
+    throw new Error('REFUSAL: Target database cannot be the configured live database UUID.');
+  }
+}
+
+// CLI restores must use a single verified account identity, never an unchecked
+// config binding or a caller-supplied ID that overrides the verified target.
+export function resolveRestoreTarget({
+  targetDatabase, databaseId = null, configPath = null,
+  execFn = execSync, cwd = ROOT_DIR
+} = {}) {
+  checkTargetDatabase(targetDatabase);
+  const target = targetDatabase.trim();
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(target)) {
+    throw new Error('REFUSAL: Invalid restore target identifier.');
+  }
+  if (configPath !== null) {
+    throw new Error('REFUSAL: Custom restore configuration is unverified; use the generated target configuration.');
+  }
+  if (databaseId !== null) {
+    checkTargetDatabase(databaseId);
+    if (!UUID_PATTERN.test(databaseId)) {
+      throw new Error('REFUSAL: Invalid explicit database ID.');
+    }
+  }
+
+  let records;
+  try {
+    records = JSON.parse(execFn('npx wrangler d1 list --json', {
+      cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+      // Preserve the existing CLI token alias without mutating parent state.
+      env: { ...process.env, ...(process.env.CLOUDFLARE_API_TOKEN ? {} :
+        process.env.CF_API_TOKEN ? { CLOUDFLARE_API_TOKEN: process.env.CF_API_TOKEN } : {}) }
+    }));
+  } catch (err) {
+    throw new Error(`REFUSAL: Cannot verify restore target identity: ${err.message}`);
+  }
+  if (!Array.isArray(records)) {
+    throw new Error('REFUSAL: Invalid database identity list.');
+  }
+  const matches = records.filter((record) => record && (
+    record.name === target || (
+      typeof record.uuid === 'string' && record.uuid.toLowerCase() === target.toLowerCase()
+    )
+  ));
+  if (matches.length !== 1) {
+    throw new Error('REFUSAL: Restore target identity is missing or ambiguous.');
+  }
+  const record = matches[0];
+  checkTargetDatabase(record.name);
+  checkTargetDatabase(record.uuid);
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(record.name) || !UUID_PATTERN.test(record.uuid)) {
+    throw new Error('REFUSAL: Invalid resolved database identity.');
+  }
+  const uuid = record.uuid.toLowerCase();
+  if (records.some((entry) => entry && typeof entry.name === 'string'
+      && entry.name.trim().toLowerCase() === 'legacy-hub-db'
+      && typeof entry.uuid === 'string' && entry.uuid.toLowerCase() === uuid)) {
+    throw new Error('REFUSAL: Resolved restore identity aliases the live database.');
+  }
+  if (databaseId !== null && databaseId.toLowerCase() !== uuid) {
+    throw new Error('REFUSAL: Explicit database ID does not match the verified restore target.');
+  }
+  return { name: record.name, uuid };
 }
 
 export function resolveDatabaseId(targetName, { execFn = execSync, cwd = ROOT_DIR } = {}) {
@@ -294,6 +362,15 @@ export async function restoreDatabase({
 } = {}) {
   // 1. Live DB refusal guard
   checkTargetDatabase(targetDatabase);
+  let restoreIdentity = null;
+  if (db) {
+    if (databaseId !== null || configPath !== null) {
+      throw new Error('REFUSAL: Direct database fixtures cannot carry CLI identity overrides.');
+    }
+  } else {
+    restoreIdentity = resolveRestoreTarget({ targetDatabase, databaseId, configPath, execFn });
+    targetDatabase = restoreIdentity.name;
+  }
 
   const dumpPath = resolve(dumpDir);
   const manifestPath = join(dumpPath, 'manifest.json');
@@ -456,12 +533,8 @@ export async function restoreDatabase({
       process.env.CLOUDFLARE_API_TOKEN = process.env.CF_API_TOKEN;
     }
 
-    let effectiveConfig = configPath;
-    if (!effectiveConfig) {
-      const resolvedId = databaseId || resolveDatabaseId(targetDatabase, { execFn, cwd: ROOT_DIR });
-      tempConfig = createTempWranglerConfig(targetDatabase, resolvedId);
-      effectiveConfig = tempConfig;
-    }
+    tempConfig = createTempWranglerConfig(restoreIdentity.name, restoreIdentity.uuid);
+    const effectiveConfig = tempConfig;
 
     const persistDir = join(ROOT_DIR, '.wrangler', 'state', 'v3');
     const localFlag = isLocal ? `--local --persist-to "${persistDir}"` : '--remote';
