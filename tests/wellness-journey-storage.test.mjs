@@ -1,13 +1,18 @@
 // Synthetic in-memory SQLite schema tests, NOT workerd/D1 or authenticated endpoint acceptance.
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 
 const schema = name => readFileSync(new URL(`../schema/${name}`, import.meta.url), 'utf8');
-const migration = schema('0013_wellness_journey.sql');
+const migration = schema('candidates/0013_wellness_journey.sql');
 let db;
 const staff = 'staff@example.invalid';
+test('candidate is excluded from the active migration and backup catalog', () => {
+  const active = readdirSync(new URL('../schema/', import.meta.url)).filter(name => name.endsWith('.sql')).sort();
+  assert.equal(active.at(-1), '0012_wellness_checkin.sql');
+  assert.equal(active.includes('0013_wellness_journey.sql'), false);
+});
 beforeEach(() => {
   db = new DatabaseSync(':memory:');
   db.exec('PRAGMA foreign_keys = ON; PRAGMA recursive_triggers = OFF;');

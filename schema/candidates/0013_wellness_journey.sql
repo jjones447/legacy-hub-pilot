@@ -1,4 +1,5 @@
--- LP04 additive candidate. SOURCE ONLY: do not apply until independent review and D1 acceptance.
+-- LP04 additive candidate, deliberately outside the active schema/*.sql migration catalog.
+-- SOURCE ONLY: do not promote/apply until independent review and D1 acceptance.
 -- Extends 0001/0011 without rewriting legacy 0012 observations or selecting anyone automatically.
 -- Caller must authenticate staff/signed caregiver, validate snapshots/answers with the journey
 -- producers, and derive calendar periods server-side. SQL is not an authentication boundary.

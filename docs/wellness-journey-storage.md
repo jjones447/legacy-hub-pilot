@@ -2,7 +2,9 @@
 
 This additive source candidate preserves the existing 30-day wellness observations while
 providing separate version, participation, quarter-assignment and response records. It is not
-an applied migration or an enabled collection feature. No existing route imports it.
+an applied migration or an enabled collection feature. No existing route imports it. Its SQL
+lives in `schema/candidates/`, outside the non-recursive active migration catalog. Existing
+bootstrap, restore and backup metadata therefore remain at their unchanged schema0012 contract.
 
 ## Data relationships
 
@@ -51,10 +53,13 @@ tests/wellness-reminders.test.mjs` as one command (without the line break). Thes
 synthetic in-memory Node SQLite only. Serial compare-and-append, cross-owner refusal and rollback
 cases are not real D1 concurrency, workerd, deployed or authenticated endpoint acceptance.
 
-Before applying `0013_wellness_journey.sql`, independently review the exact source, verify the
+Before promoting `schema/candidates/0013_wellness_journey.sql` into the active migration catalog,
+independently review the exact source, verify the
 installed schema sequence and rehearse it on a separately authorized isolated D1 binding. Then
 integrate authenticated producers and history/dashboard consumers with cross-user, validation,
-same-ID retry, real concurrency and failure tests. The period and questionnaire source
+same-ID retry, real concurrency and failure tests. Promotion must update backup/restore migration
+metadata and integration fixtures together; never report an unapplied candidate as installed.
+The period and questionnaire source
 foundations are separate review candidates; this candidate does not silently integrate them.
 
 Disable producers to roll back. Preserve new and legacy rows, assignments, questionnaires and
