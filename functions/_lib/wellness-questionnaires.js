@@ -77,7 +77,9 @@ function questionSnapshot(question) {
     conditional_choice: ['options', 'textWhen', 'textMax'],
   };
   const type = question && Object.getOwnPropertyDescriptor(question, 'type')?.value;
-  if (!Object.hasOwn(kinds, type)) throw new TypeError('Unsupported question type');
+  if (typeof type !== 'string' || !Object.hasOwn(kinds, type)) {
+    throw new TypeError('Unsupported question type');
+  }
   object(question, [...fields, ...kinds[type]]);
   if (typeof question.required !== 'boolean') throw new TypeError('Requiredness must be explicit');
   const snapshot = {

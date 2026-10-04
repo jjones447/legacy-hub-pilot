@@ -313,3 +313,56 @@ test('canonical null-prototype records still preserve frozen detached snapshots'
   input.selection[0] = 'a';
   assert.deepEqual(response.answers.selection, ['b', 'a']);
 });
+
+for (const kind of ['single_choice', 'multi_choice', 'conditional_choice']) {
+  for (const nested of [false, true]) {
+    for (const admission of ['snapshot', 'answers', 'revision']) {
+      test(`${admission} rejects ${nested ? 'nested ' : ''}JSON-array question type ${kind}`, () => {
+        const draft = JSON.parse(JSON.stringify(make()));
+        const question = draft.questions.find(item => item.type === kind);
+        question.type = nested ? [[kind]] : [kind];
+        if (admission === 'snapshot') {
+          assert.throws(() => questionnaireSnapshot(draft), TypeError);
+        } else if (admission === 'answers') {
+          assert.throws(() => questionnaireAnswers(draft, {}), TypeError);
+        } else {
+          assert.throws(() => reviseQuestionnaire(draft, {
+            title: 'Next', questions: make().questions,
+          }), TypeError);
+        }
+      });
+    }
+  }
+}
+
+for (const [kind, id, answer] of [
+  ['numeric', 'rating', 2], ['single_choice', 'choice', 'a'],
+  ['multi_choice', 'selection', ['b', 'a']],
+  ['conditional_choice', 'detail', { choice: 'yes', text: 'example' }],
+]) {
+  test(`primitive ${kind} preserves dispatch and detached version history`, () => {
+    const draft = make();
+    const response = questionnaireAnswers(draft, { [id]: answer });
+    const next = reviseQuestionnaire(draft, { title: 'Next', questions: make().questions });
+    draft.questions.find(item => item.id === id).type = 'changed';
+    assert.equal(response.questionnaire.questions.find(item => item.id === id).type, kind);
+    assert.deepEqual(response.answers[id], answer);
+    assert.equal(next.version, 2);
+    assert.equal(next.questions.find(item => item.id === id).type, kind);
+    assert.ok(Object.isFrozen(response.questionnaire.questions.find(item => item.id === id)));
+  });
+}
+
+test('boxed question type is not a supported primitive string', () => {
+  const draft = make();
+  draft.questions[1].type = new String('single_choice');
+  assert.throws(() => questionnaireSnapshot(draft), TypeError);
+});
+
+test('question kind lookup never coerces a nonstring type', () => {
+  const draft = make();
+  let calls = 0;
+  draft.questions[1].type = { toString() { calls++; return 'single_choice'; } };
+  assert.throws(() => questionnaireSnapshot(draft), TypeError);
+  assert.equal(calls, 0);
+});
