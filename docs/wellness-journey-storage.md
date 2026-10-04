@@ -46,6 +46,27 @@ row as acknowledged; the schema does not itself implement HTTP replay acknowledg
 Never use `INSERT OR REPLACE` to recover an uncertain acknowledgement. Guards reject replacement,
 updates and deletions, including SQLite replacement with recursive triggers disabled.
 
+## Read consumers
+
+`functions/_lib/wellness-journey-history.js` supplies read-only, parameter-bound candidate
+queries. Owner history is newest sequence first, with original questionnaire and quarter-policy
+snapshots. A baseline never becomes a quarterly response. Withdrawal preserves earlier history.
+The staff selector uses the latest selection event and includes selected caregivers who have
+never submitted a baseline or response; withdrawn and inactive caregivers are excluded.
+
+Pages default to 25, cap at 50, and use exclusive sequence or caregiver-ID cursors. Reads omit
+contacts, request keys, staff identities and audit records. JSON is capped at 64 KiB per field
+and 256 KiB per page; invalid stored shapes fail closed with sanitized errors. Results are fresh
+detached objects, not a mutable shared cache. Active staff status is checked by the participant
+query, but authentication must occur in the future caller. Never accept an owner or staff identity
+from an unverified body or query parameter. These helpers are not imported by any route and do
+not grant staff access to owner history, enable export, collect answers or apply the schema.
+
+History and selection pages are separate point-in-time reads, not a transactionally consistent
+dashboard snapshot. Cursors do not authorize identities. Later integration must prove verified
+staff/portal sessions, cross-user refusals, safe rendering of stored text, deployed bindings and
+any read-replication consistency policy before enabling a consumer.
+
 ## Validation and rollout
 
 Run `node --test tests/wellness-journey-storage.test.mjs tests/wellness-checkin.test.mjs
