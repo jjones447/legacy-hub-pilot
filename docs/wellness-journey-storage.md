@@ -46,6 +46,16 @@ row as acknowledged; the schema does not itself implement HTTP replay acknowledg
 Never use `INSERT OR REPLACE` to recover an uncertain acknowledgement. Guards reject replacement,
 updates and deletions, including SQLite replacement with recursive triggers disabled.
 
+Trusted producers must omit sequence IDs from inserts. All three sequence tables require a
+strictly positive persisted ID after automatic allocation; an explicitly supplied `-1` cannot
+be recorded behind an existing selected event or add a misleading audit. The conservative
+BEFORE INSERT ID fence rejects other caller-assigned IDs in the tested SQLite environment,
+but SQLite documents an unspecified `NEW.rowid` before allocation as undefined. That fence
+is not portable proof of caller omission or an authentication boundary. If another runtime
+uses a different preallocation value it fails closed; ordinary D1 auto-ID availability remains
+unverified until the separate rehearsal. Do not remove the positive stored-ID constraint or
+relax sequence admission to accommodate a runtime without reviewing the ordering contract.
+
 ## Validation and rollout
 
 Run `node --test tests/wellness-journey-storage.test.mjs tests/wellness-checkin.test.mjs
@@ -68,5 +78,7 @@ Coming Soon and reminders remain disabled until the separate client go-ahead.
 
 References: [D1 foreign keys](https://developers.cloudflare.com/d1/sql-api/foreign-keys/)
 and [SQL statements](https://developers.cloudflare.com/d1/sql-api/sql-statements/).
+Sequence semantics: [SQLite automatic IDs](https://www.sqlite.org/autoinc.html) and
+[BEFORE trigger cautions](https://www.sqlite.org/lang_createtrigger.html#cautions_on_the_use_of_before_triggers).
 
 Authored by [pc2-codex-13].
