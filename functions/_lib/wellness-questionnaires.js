@@ -2,14 +2,38 @@
 // profile/task update, score, diagnosis or collection authorization is implied.
 // Extends the journey design separately from legacy wellness.js's mutable fixed
 // questions: historical wording/options/types must travel with future responses.
+// Inputs are inert serialized-data records (ordinary/null prototypes) and dense
+// ordinary arrays with own data properties only. This is not a hostile-JS/proxy
+// sandbox; the caller owns parsing, authentication and the unmodified JS realm.
 export const QUESTIONNAIRE_LIMITS = Object.freeze({ questions: 50, options: 20, text: 1000 });
 
 function object(value, allowed) {
   if (!value || typeof value !== 'object' || Array.isArray(value) ||
       ![Object.prototype, null].includes(Object.getPrototypeOf(value)) ||
-      Reflect.ownKeys(value).some(key => typeof key !== 'string' || !allowed.includes(key))) {
+      Reflect.ownKeys(value).some(key => typeof key !== 'string' || !allowed.includes(key) ||
+        !Object.hasOwn(Object.getOwnPropertyDescriptor(value, key) ?? {}, 'value'))) {
     throw new TypeError('Invalid questionnaire data');
   }
+}
+
+// Capture indexed values ONCE without reading any input iterator or accessor.
+// Bounds, item validation, order and uniqueness all use this same detached list.
+function arraySnapshot(value, min, max) {
+  if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) {
+    throw new TypeError('Invalid questionnaire array');
+  }
+  const length = Object.getOwnPropertyDescriptor(value, 'length')?.value;
+  if (!Number.isSafeInteger(length) || length < min || length > max ||
+      Reflect.ownKeys(value).length !== length + 1) {
+    throw new TypeError('Invalid questionnaire array');
+  }
+  const items = [];
+  for (let index = 0; index < length; index++) {
+    const item = Object.getOwnPropertyDescriptor(value, String(index));
+    if (!item || !Object.hasOwn(item, 'value')) throw new TypeError('Invalid questionnaire array');
+    items.push(item.value);
+  }
+  return items;
 }
 
 function string(value, max) {
@@ -35,11 +59,9 @@ function integer(value, min, max) {
 }
 
 function optionsSnapshot(options) {
-  if (!Array.isArray(options) || options.length < 2 || options.length > QUESTIONNAIRE_LIMITS.options) {
-    throw new TypeError('Invalid questionnaire options');
-  }
+  const items = arraySnapshot(options, 2, QUESTIONNAIRE_LIMITS.options);
   const ids = new Set();
-  return Object.freeze(Array.from(options, option => {
+  return Object.freeze(items.map(option => {
     object(option, ['id', 'label']);
     const id = identifier(option.id);
     if (ids.has(id)) throw new TypeError('Duplicate option identifier');
@@ -54,12 +76,13 @@ function questionSnapshot(question) {
     numeric: ['min', 'max'], single_choice: ['options'], multi_choice: ['options'],
     conditional_choice: ['options', 'textWhen', 'textMax'],
   };
-  if (!question || !Object.hasOwn(kinds, question.type)) throw new TypeError('Unsupported question type');
-  object(question, [...fields, ...kinds[question.type]]);
+  const type = question && Object.getOwnPropertyDescriptor(question, 'type')?.value;
+  if (!Object.hasOwn(kinds, type)) throw new TypeError('Unsupported question type');
+  object(question, [...fields, ...kinds[type]]);
   if (typeof question.required !== 'boolean') throw new TypeError('Requiredness must be explicit');
   const snapshot = {
     id: identifier(question.id), label: string(question.label, 500),
-    type: question.type, required: question.required,
+    type, required: question.required,
   };
   if (snapshot.type === 'numeric') {
     snapshot.min = integer(question.min, -1000, 1000);
@@ -82,10 +105,9 @@ export function questionnaireSnapshot(value) {
   object(value, ['id', 'version', 'title', 'questions']);
   const id = identifier(value.id);
   const version = integer(value.version, 1, 1000000);
-  if (!Array.isArray(value.questions) || !value.questions.length ||
-      value.questions.length > QUESTIONNAIRE_LIMITS.questions) throw new TypeError('Invalid question count');
+  const items = arraySnapshot(value.questions, 1, QUESTIONNAIRE_LIMITS.questions);
   const ids = new Set();
-  const questions = Array.from(value.questions, question => {
+  const questions = items.map(question => {
     const snapshot = questionSnapshot(question);
     if (ids.has(snapshot.id)) throw new TypeError('Duplicate question identifier');
     ids.add(snapshot.id);
@@ -114,9 +136,9 @@ function answerSnapshot(question, value) {
   };
   if (question.type === 'single_choice') return option(value);
   if (question.type === 'multi_choice') {
-    if (!Array.isArray(value) || !value.length || value.length > question.options.length ||
-        new Set(value).size !== value.length) throw new TypeError('Invalid answer');
-    return Object.freeze(Array.from(value, option));
+    const items = arraySnapshot(value, 1, question.options.length);
+    if (new Set(items).size !== items.length) throw new TypeError('Invalid answer');
+    return Object.freeze(items.map(option));
   }
   object(value, ['choice', 'text']);
   const choice = option(value.choice);

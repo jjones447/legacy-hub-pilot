@@ -187,3 +187,129 @@ test('symbol and nonplain payloads fail closed without copying unknown fields', 
   inheritedQuestion.questions[0] = Object.create(inheritedQuestion.questions[0]);
   assert.throws(() => questionnaireSnapshot(inheritedQuestion));
 });
+
+test('question arrays reject iterators that hide indexed questions', () => {
+  const draft = make();
+  let calls = 0;
+  draft.questions[Symbol.iterator] = function* () { calls++; };
+  assert.throws(() => questionnaireSnapshot(draft), TypeError);
+  assert.equal(calls, 0);
+});
+
+test('question arrays reject iterators that exceed the checked count', () => {
+  const draft = make();
+  draft.questions = [draft.questions[0]];
+  let calls = 0;
+  draft.questions[Symbol.iterator] = function* () {
+    calls++;
+    for (let i = 0; i < 51; i++) yield { ...draft.questions[0], id: `q${i}` };
+  };
+  assert.throws(() => questionnaireSnapshot(draft), TypeError);
+  assert.equal(calls, 0);
+});
+
+for (const count of [0, 21]) {
+  test(`option arrays reject iterators yielding ${count} different items`, () => {
+    const draft = make();
+    const options = draft.questions[1].options;
+    let calls = 0;
+    options[Symbol.iterator] = function* () {
+      calls++;
+      for (let i = 0; i < count; i++) yield { id: `o${i}`, label: `Option ${i}` };
+    };
+    assert.throws(() => questionnaireSnapshot(draft), TypeError);
+    assert.equal(calls, 0);
+  });
+}
+
+test('selection arrays reject iterators changing between uniqueness and copying', () => {
+  const selection = ['a', 'b'];
+  let calls = 0;
+  selection[Symbol.iterator] = function* () {
+    yield 'a';
+    yield ++calls === 1 ? 'b' : 'a';
+  };
+  assert.throws(() => questionnaireAnswers(make(), { selection }), TypeError);
+  assert.equal(calls, 0);
+});
+
+test('input arrays reject subclasses, changed prototypes and extra own fields', () => {
+  class Questions extends Array {}
+  for (const change of [
+    draft => { draft.questions = Questions.from(draft.questions); },
+    draft => { Object.setPrototypeOf(draft.questions, Object.create(Array.prototype)); },
+    draft => { draft.questions.extra = true; },
+    draft => { draft.questions[1].options.extra = true; },
+  ]) {
+    const draft = make();
+    change(draft);
+    assert.throws(() => questionnaireSnapshot(draft), TypeError);
+  }
+  const selection = ['a'];
+  selection.extra = true;
+  assert.throws(() => questionnaireAnswers(make(), { selection }), TypeError);
+});
+
+test('array index accessors are rejected without invocation', () => {
+  const draft = make();
+  const question = draft.questions[0];
+  let calls = 0;
+  Object.defineProperty(draft.questions, '0', { get() { calls++; return question; } });
+  assert.throws(() => questionnaireSnapshot(draft), TypeError);
+  assert.equal(calls, 0);
+  const options = make();
+  const option = options.questions[1].options[0];
+  Object.defineProperty(options.questions[1].options, '0', { get() { calls++; return option; } });
+  assert.throws(() => questionnaireSnapshot(options), TypeError);
+  const selection = ['a'];
+  Object.defineProperty(selection, '0', { get() { calls++; return 'a'; } });
+  assert.throws(() => questionnaireAnswers(make(), { selection }), TypeError);
+  assert.equal(calls, 0);
+});
+
+test('record accessors cannot change questionnaire or answer fields while copying', () => {
+  const draft = make();
+  let calls = 0;
+  Object.defineProperty(draft, 'title', { get() { calls++; return 'Changed'; } });
+  assert.throws(() => questionnaireSnapshot(draft), TypeError);
+  assert.equal(calls, 0);
+  const input = {};
+  Object.defineProperty(input, 'rating', { get() { calls++; return 1; } });
+  assert.throws(() => questionnaireAnswers(make(), input), TypeError);
+  assert.equal(calls, 0);
+  for (const field of ['type', 'required', 'min']) {
+    const nested = make();
+    const value = nested.questions[0][field];
+    Object.defineProperty(nested.questions[0], field, { get() { calls++; return value; } });
+    assert.throws(() => questionnaireSnapshot(nested), TypeError);
+  }
+  const options = make();
+  Object.defineProperty(options.questions[1].options[0], 'id', { get() { calls++; return 'a'; } });
+  assert.throws(() => questionnaireSnapshot(options), TypeError);
+  assert.equal(calls, 0);
+});
+
+test('array symbol fields are rejected even with ordinary iteration', () => {
+  const draft = make();
+  draft.questions[Symbol('extra')] = true;
+  assert.throws(() => questionnaireSnapshot(draft), TypeError);
+  const selection = ['a'];
+  selection[Symbol('extra')] = true;
+  assert.throws(() => questionnaireAnswers(make(), { selection }), TypeError);
+});
+
+test('canonical null-prototype records still preserve frozen detached snapshots', () => {
+  const draft = make();
+  const plain = value => Object.assign(Object.create(null), value);
+  draft.questions = draft.questions.map(question => plain(question.options ? {
+    ...question, options: question.options.map(plain),
+  } : question));
+  const source = plain(draft);
+  const input = plain({ rating: 2, selection: ['b', 'a'], detail: plain({ choice: 'yes', text: '' }) });
+  const response = questionnaireAnswers(source, input);
+  assert.deepEqual(response.answers, { rating: 2, selection: ['b', 'a'], detail: { choice: 'yes', text: '' } });
+  assert.equal(response.questionnaire.questions.length, 4);
+  assert.ok(Object.isFrozen(response.answers.selection));
+  input.selection[0] = 'a';
+  assert.deepEqual(response.answers.selection, ['b', 'a']);
+});
