@@ -46,6 +46,16 @@ row as acknowledged; the schema does not itself implement HTTP replay acknowledg
 Never use `INSERT OR REPLACE` to recover an uncertain acknowledgement. Guards reject replacement,
 updates and deletions, including SQLite replacement with recursive triggers disabled.
 
+Trusted producers must omit sequence IDs from inserts. All three sequence tables require a
+strictly positive persisted ID after automatic allocation; an explicitly supplied `-1` cannot
+be recorded behind an existing selected event or add a misleading audit. The conservative
+BEFORE INSERT ID fence rejects other caller-assigned IDs in the tested SQLite environment,
+but SQLite documents an unspecified `NEW.rowid` before allocation as undefined. That fence
+is not portable proof of caller omission or an authentication boundary. If another runtime
+uses a different preallocation value it fails closed; ordinary D1 auto-ID availability remains
+unverified until the separate rehearsal. Do not remove the positive stored-ID constraint or
+relax sequence admission to accommodate a runtime without reviewing the ordering contract.
+
 ## Read consumers
 
 `functions/_lib/wellness-journey-history.js` supplies read-only, parameter-bound candidate
@@ -69,7 +79,8 @@ any read-replication consistency policy before enabling a consumer.
 
 ## Validation and rollout
 
-Run `node --test tests/wellness-journey-storage.test.mjs tests/wellness-checkin.test.mjs
+Run `node --test tests/wellness-journey-history.test.mjs
+tests/wellness-journey-storage.test.mjs tests/wellness-checkin.test.mjs
 tests/wellness-reminders.test.mjs` as one command (without the line break). These tests use
 synthetic in-memory Node SQLite only. Serial compare-and-append, cross-owner refusal and rollback
 cases are not real D1 concurrency, workerd, deployed or authenticated endpoint acceptance.
@@ -80,8 +91,9 @@ installed schema sequence and rehearse it on a separately authorized isolated D1
 integrate authenticated producers and history/dashboard consumers with cross-user, validation,
 same-ID retry, real concurrency and failure tests. Promotion must update backup/restore migration
 metadata and integration fixtures together; never report an unapplied candidate as installed.
-The period and questionnaire source
-foundations are separate review candidates; this candidate does not silently integrate them.
+Calendar, questionnaire and storage foundations are already source-integrated on main. This
+read-consumer branch explicitly composes that reviewed main; its helper and tests retain their
+original content. Composition does not enable any existing unused foundation or read consumer.
 
 Disable producers to roll back. Preserve new and legacy rows, assignments, questionnaires and
 audit history; do not drop tables, rewrite old observations or enable reminders during rollback.
@@ -89,5 +101,7 @@ Coming Soon and reminders remain disabled until the separate client go-ahead.
 
 References: [D1 foreign keys](https://developers.cloudflare.com/d1/sql-api/foreign-keys/)
 and [SQL statements](https://developers.cloudflare.com/d1/sql-api/sql-statements/).
+Sequence semantics: [SQLite automatic IDs](https://www.sqlite.org/autoinc.html) and
+[BEFORE trigger cautions](https://www.sqlite.org/lang_createtrigger.html#cautions_on_the_use_of_before_triggers).
 
 Authored by [pc2-codex-13].

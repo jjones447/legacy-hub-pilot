@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS journey_questionnaire (
 );
 
 CREATE TABLE IF NOT EXISTS journey_participation (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id INTEGER PRIMARY KEY AUTOINCREMENT CHECK (id > 0),
   caregiver_id TEXT NOT NULL REFERENCES caregiver(id),
   state TEXT NOT NULL CHECK (state IN ('selected', 'withdrawn')),
   previous_id INTEGER REFERENCES journey_participation(id),
@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS journey_participation (
 CREATE INDEX IF NOT EXISTS journey_participation_owner ON journey_participation(caregiver_id, id DESC);
 
 CREATE TABLE IF NOT EXISTS journey_period (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id INTEGER PRIMARY KEY AUTOINCREMENT CHECK (id > 0),
   caregiver_id TEXT NOT NULL REFERENCES caregiver(id),
   period_id TEXT NOT NULL CHECK (period_id GLOB '[0-9][0-9][0-9][0-9]-Q[1-4]'
                                 AND substr(period_id, 1, 4) BETWEEN '0001' AND '9998'),
@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS journey_period (
 );
 
 CREATE TABLE IF NOT EXISTS journey_response (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id INTEGER PRIMARY KEY AUTOINCREMENT CHECK (id > 0),
   caregiver_id TEXT NOT NULL REFERENCES caregiver(id),
   kind TEXT NOT NULL CHECK (kind IN ('baseline', 'quarterly')),
   period_assignment_id INTEGER,
@@ -71,6 +71,11 @@ CREATE INDEX IF NOT EXISTS journey_response_history ON journey_response(caregive
 
 -- BEFORE INSERT guards also reject INSERT OR REPLACE, including when recursive triggers are off.
 -- Same-key retries must read/compare the existing canonical record, not attempt replacement.
+-- Trusted producers MUST omit IDs. NEW.rowid before automatic allocation is undefined in
+-- SQLite's documented contract: the conservative -1 fence below is NOT proof of omission.
+-- CHECK(id > 0) validates the persisted ID after allocation, closing explicit -1 admission
+-- without relying on that sentinel for ordering safety. A different runtime sentinel fails
+-- closed at the BEFORE fence; D1 auto-ID availability must be rehearsed before promotion.
 CREATE TRIGGER IF NOT EXISTS journey_questionnaire_insert_guard BEFORE INSERT ON journey_questionnaire
 BEGIN
   SELECT RAISE(ABORT, 'questionnaire version already exists') WHERE EXISTS (

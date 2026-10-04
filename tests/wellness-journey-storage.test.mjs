@@ -191,3 +191,41 @@ test('callers cannot inject participation sequence IDs to reorder history', () =
     .run(100, 'cg1', 'selected', 'injected', staff), /database assigned sequence/);
   assert.equal(count('journey_participation'), 0);
 });
+
+test('explicit minus-one withdrawal cannot hide behind a positive selected event', () => {
+  const assignment = selectedPeriod();
+  const selected = db.prepare('SELECT max(id) id FROM journey_participation').get().id;
+  const before = db.prepare('SELECT * FROM journey_participation').all();
+  const audits = count('audit_log');
+  assert.throws(() => db.prepare('INSERT INTO journey_participation(id,caregiver_id,state,previous_id,request_id,changed_by) VALUES (?,?,?,?,?,?)')
+    .run(-1, 'cg1', 'withdrawn', selected, 'withdraw-minus-one', staff), /CHECK constraint failed: id > 0/);
+  assert.deepEqual(db.prepare('SELECT * FROM journey_participation').all(), before);
+  assert.equal(count('audit_log'), audits);
+
+  const withdrawn = participation('withdrawn', selected);
+  assert.ok(withdrawn > selected);
+  assert.equal(db.prepare('SELECT state FROM journey_participation ORDER BY id DESC LIMIT 1').get().state, 'withdrawn');
+  assert.throws(() => period(withdrawn, 'cg1', 1, '2027-Q1'), /current selection/);
+  assert.throws(() => response({ kind: 'quarterly', assignment }), /current selection/);
+  const reselected = participation('selected', withdrawn);
+  assert.ok(reselected > withdrawn);
+  response({ kind: 'quarterly', assignment: period(reselected, 'cg1', 1, '2027-Q1') });
+  assert.equal(count('journey_response'), 1);
+});
+
+for (const table of ['journey_participation', 'journey_period', 'journey_response']) {
+  for (const id of [-1, -2, 0, 100]) test(`${table} rejects explicit sequence ID ${id} atomically`, () => {
+    questionnaire(); const selection = participation();
+    const before = db.prepare(`SELECT * FROM ${table}`).all(); const audits = count('audit_log');
+    let insert;
+    if (table === 'journey_participation') insert = () => db.prepare('INSERT INTO journey_participation(id,caregiver_id,state,previous_id,request_id,changed_by) VALUES (?,?,?,?,?,?)')
+      .run(id, 'cg1', 'withdrawn', selection, 'injected-withdrawal', staff);
+    if (table === 'journey_period') insert = () => db.prepare('INSERT INTO journey_period(id,caregiver_id,period_id,policy_json,participation_id,questionnaire_id,questionnaire_version,assigned_by) VALUES (?,?,?,?,?,?,?,?)')
+      .run(id, 'cg1', '2026-Q4', '{}', selection, 'demo', 1, staff);
+    if (table === 'journey_response') insert = () => db.prepare('INSERT INTO journey_response(id,caregiver_id,kind,questionnaire_id,questionnaire_version,answers_json,request_id) VALUES (?,?,?,?,?,?,?)')
+      .run(id, 'cg1', 'baseline', 'demo', 1, '{}', 'injected-response');
+    assert.throws(insert, id === -1 ? /CHECK constraint failed: id > 0/ : /database assigned sequence/);
+    assert.deepEqual(db.prepare(`SELECT * FROM ${table}`).all(), before);
+    assert.equal(count('audit_log'), audits);
+  });
+}
