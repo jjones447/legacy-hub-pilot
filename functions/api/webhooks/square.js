@@ -67,8 +67,8 @@ export async function onRequestPost({ request, env }) {
       return json({ ok: false, error: 'invalid JSON body' }, 400);
     }
 
-    const externalRef = body.event_id || body.id;
-    if (!externalRef) {
+    const eventId = body.event_id || body.id;
+    if (typeof eventId !== 'string' || !eventId.trim()) {
       return json({ ok: false, error: 'missing event id' }, 400);
     }
 
@@ -86,14 +86,21 @@ export async function onRequestPost({ request, env }) {
       return json({ ok: true, ignored: true });
     }
 
-    // Idempotency: same (source='square', external_ref) -> no-op, return 200
+    const paymentId = payment.id;
+    if (typeof paymentId !== 'string' || !paymentId.trim()) {
+      return json({ ok: false, error: 'missing payment id' }, 400);
+    }
+    // A completed payment can emit multiple payment.updated events (e.g. fees).
+    // New records deduplicate the payment, not each delivery event. Preserve the
+    // old event-key lookup for same-event retries without rewriting old rows.
+    const externalRef = `payment:${paymentId}`;
     const dupReg = await env.LEGACY_DB
-      .prepare('SELECT id FROM registration WHERE source = \'square\' AND external_ref = ?')
-      .bind(externalRef)
+      .prepare('SELECT id FROM registration WHERE source = \'square\' AND external_ref IN (?, ?)')
+      .bind(externalRef, eventId)
       .first();
     const dupFollow = await env.LEGACY_DB
-      .prepare('SELECT id FROM followup WHERE source = \'square\' AND external_ref = ?')
-      .bind(externalRef)
+      .prepare('SELECT id FROM followup WHERE source = \'square\' AND external_ref IN (?, ?)')
+      .bind(externalRef, eventId)
       .first();
 
     if (dupReg || dupFollow) {
@@ -123,8 +130,7 @@ export async function onRequestPost({ request, env }) {
 
     // Contact extraction & unmatched handling
     if (!email && !phone) {
-      const paymentId = payment.id || body.data?.id || 'unknown';
-      let detail = `Square unmatched payment: payment_id=${paymentId}, event_id=${externalRef}`;
+      let detail = `Square unmatched payment: payment_id=${paymentId}, event_id=${eventId}`;
       if (payment.amount_money?.amount != null) {
         const amt = (payment.amount_money.amount / 100).toFixed(2);
         detail += `, amount=$${amt}`;
@@ -157,7 +163,7 @@ export async function onRequestPost({ request, env }) {
         .bind(
           `webhook.${eventType}`,
           entityId.toString(),
-          JSON.stringify({ kind: 'payment_unmatched', external_ref: externalRef, detail })
+          JSON.stringify({ kind: 'payment_unmatched', external_ref: externalRef, payment_id: paymentId, event_id: eventId, detail })
         )
         .run();
 
@@ -286,7 +292,7 @@ export async function onRequestPost({ request, env }) {
         `webhook.${eventType}`,
         entity,
         entityId.toString(),
-        JSON.stringify({ caregiver_id: caregiverId, external_ref: externalRef })
+        JSON.stringify({ caregiver_id: caregiverId, external_ref: externalRef, payment_id: paymentId, event_id: eventId })
       )
       .run();
 
