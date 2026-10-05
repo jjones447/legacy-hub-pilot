@@ -213,7 +213,7 @@
         {"dot": "var(--green)", "title": "2 · We reach out", "when": "Within two business days, by your preferred contact"},
         {"dot": "var(--amber)", "title": "3 · We connect you", "when": "Membership, respite, grants, groups — whatever fits"}
       ],
-      "crisis_html": "<strong>In crisis right now?</strong> Don't wait on a form — see <a href=\"resources.html\">Crisis Help in the Resource Hub</a> for the caregiver support hotline."
+      "crisis_html": "<strong>In crisis right now?</strong> Don't wait on a form — see <a href=\"crisis-help.html\">Crisis &amp; Emergency Help</a> for crisis support contacts."
     }
   }
 }
