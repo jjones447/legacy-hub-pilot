@@ -23,7 +23,7 @@
 
 <section>
   <div class="container">
-    <div class="card-grid">
+    <div class="card-grid" id="liveEventsGrid" data-event-time-zone="America/Chicago" aria-live="polite">
 {%- for ev in events %}
       <div class="card event-card">
 {% if ev.schedule_confirmed | default(false) %}

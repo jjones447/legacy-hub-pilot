@@ -563,14 +563,121 @@ function agentSend() {
 }
 
 /* ---------- Events live D1 listing ---------- */
+// Staff datetime-local values are Legacy wall time, not the visitor's browser zone.
+// Explicit-offset API timestamps represent instants. The page owns the zone default.
+function publicEventTime(value, now, timeZone) {
+  if (typeof value !== 'string') return null;
+  const local = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/.exec(value);
+  if (local) {
+    const normalized = local[1] + '-' + local[2] + '-' + local[3] + 'T' + local[4] + ':' + local[5] + ':' + (local[6] || '00');
+    const date = new Date(normalized + 'Z');
+    if (isNaN(date.getTime()) || date.toISOString().slice(0, 19) !== normalized) return null;
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: timeZone, year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'
+    });
+    function wallAt(instant) {
+      const wall = {};
+      parts.formatToParts(new Date(instant)).forEach(function (part) { wall[part.type] = part.value; });
+      return wall.year + '-' + wall.month + '-' + wall.day + 'T' + wall.hour + ':' + wall.minute + ':' + wall.second;
+    }
+    // Resolve a wall value only if it names one real instant. DST gaps and repeated
+    // hours are not enough information to offer registration; staff can use an offset.
+    let instant = date.getTime();
+    for (let attempt = 0; attempt < 3; attempt++) {
+      instant += date.getTime() - Date.parse(wallAt(instant) + 'Z');
+    }
+    if (wallAt(instant) !== normalized) return null;
+    if ([-3600000, -1800000, 1800000, 3600000].some(function (shift) { return wallAt(instant + shift) === normalized; })) return null;
+    return { display: normalized.replace('T', ' ').slice(0, 16) + ' (' + timeZone + ')', future: instant > now.getTime(), instant: instant };
+  }
+  if (!/^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/.test(value)) return null;
+  const instant = new Date(value);
+  if (isNaN(instant.getTime())) return null;
+  const datePart = value.slice(0, 10);
+  const day = new Date(datePart + 'T00:00:00Z');
+  if (isNaN(day.getTime()) || day.toISOString().slice(0, 10) !== datePart) return null;
+  return { display: value, future: instant.getTime() > now.getTime(), instant: instant.getTime() };
+}
+
+function renderPublicEvents(events, grid, now) {
+  if (!Array.isArray(events)) return false;
+  const timeZone = grid.dataset.eventTimeZone || 'America/Chicago';
+  const cards = [];
+  let unknown = false;
+  const labels = { support_group: 'Support Group', memory_social: 'Memory Social', wellness: 'Wellness', caregiver_event: 'Caregiver Event' };
+  events.forEach(function (event) {
+    if (!event || typeof event.id !== 'string' || !event.id || typeof event.title !== 'string' || !event.title.trim()) { unknown = true; return; }
+    if (event.publish_state && event.publish_state !== 'published') return;
+    const start = publicEventTime(event.starts_at, now, timeZone);
+    const end = event.ends_at ? publicEventTime(event.ends_at, now, timeZone) : null;
+    if (!start || (event.ends_at && !end) || (end && end.instant < start.instant)) { unknown = true; return; }
+    if (!(end || start).future) return;
+    const count = event.registered_count;
+    const capacity = event.capacity;
+    if (!Number.isSafeInteger(count) || count < 0 || (capacity !== null && (!Number.isSafeInteger(capacity) || capacity < 1))) { unknown = true; return; }
+    const card = document.createElement('div');
+    card.className = 'card event-card';
+    const body = document.createElement('div');
+    body.className = 'flex-1';
+    const badge = document.createElement('span');
+    badge.className = 'badge badge-plum';
+    badge.textContent = labels[event.type] || 'Event';
+    const title = document.createElement('h3');
+    title.className = 'fs-19-m-8-0-4';
+    title.textContent = event.title;
+    const meta = document.createElement('p');
+    meta.className = 'event-meta';
+    meta.textContent = start.display + (end ? ' – ' + end.display : '') + (typeof event.location === 'string' && event.location ? ' · ' + event.location : ' · Location pending');
+    const row = document.createElement('div');
+    row.className = 'flex-center-gap-12';
+    const button = document.createElement('button');
+    const full = capacity !== null && count >= capacity;
+    button.className = full || !start.future ? 'btn btn-outline btn-sm' : 'btn btn-plum btn-sm';
+    button.type = 'button';
+    button.textContent = full ? 'Full' : !start.future ? 'Registration closed' : 'Register';
+    button.disabled = full || !start.future;
+    if (!button.disabled) {
+      button.dataset.action = 'open-register';
+      button.dataset.eventId = event.id;
+      button.dataset.eventTitle = event.title;
+    }
+    const note = document.createElement('span');
+    note.className = 'small muted';
+    note.textContent = count + ' registered' + (capacity !== null ? ' · capacity ' + capacity : '');
+    row.appendChild(button);
+    row.appendChild(note);
+    body.appendChild(badge);
+    body.appendChild(title);
+    body.appendChild(meta);
+    body.appendChild(row);
+    card.appendChild(body);
+    cards.push(card);
+  });
+  if (!cards.length) {
+    if (unknown) return false;
+    const empty = document.createElement('p');
+    empty.className = 'small muted';
+    empty.textContent = 'No upcoming published events. Please check back for confirmed dates and registration.';
+    cards.push(empty);
+  }
+  grid.replaceChildren.apply(grid, cards);
+  return true;
+}
+
 function loadLiveEvents() {
+  const grid = document.getElementById('liveEventsGrid');
   const cards = document.querySelectorAll('.event-card');
-  if (!cards.length) return;
+  if (!grid && !cards.length) return;
 
   fetch('/api/events')
-    .then(function (res) { return res.json(); })
+    .then(function (res) { if (!res.ok) throw new Error('events_unavailable'); return res.json(); })
     .then(function (data) {
       if (!data.ok || !data.events) return;
+      if (grid) {
+        renderPublicEvents(data.events, grid, new Date());
+        return;
+      }
       
       data.events.forEach(function (e) {
         const btn = Array.from(document.querySelectorAll('button')).find(function (b) {
