@@ -439,22 +439,20 @@ export async function onRequestPost({ request, env }) {
         const beforeJson = typeof item.data === 'string' ? item.data : JSON.stringify(item.data);
         const afterJson = JSON.stringify(parsedData);
 
-        await env.LEGACY_DB
-          .prepare(`
+        // The content mutation and original audit must commit or roll back together.
+        await env.LEGACY_DB.batch([
+          env.LEGACY_DB.prepare(`
             UPDATE content_item
             SET data = ?, updated_by = ?, updated_at = datetime('now')
             WHERE id = ?
           `)
-          .bind(afterJson, updatedBy, item.id)
-          .run();
-
-        await env.LEGACY_DB
-          .prepare(`
+          .bind(afterJson, updatedBy, item.id),
+          env.LEGACY_DB.prepare(`
             INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
             VALUES (?, 'content_item.direct_edit', 'content_item', ?, ?, ?)
           `)
-          .bind(actor, item.id, beforeJson, afterJson)
-          .run();
+          .bind(actor, item.id, beforeJson, afterJson),
+        ]);
 
         try {
           _resetContentCache();
@@ -608,18 +606,13 @@ export async function onRequestPost({ request, env }) {
           return json({ ok: false, error: 'target item not found' }, 404);
         }
 
-        await env.LEGACY_DB
-          .prepare(`UPDATE content_item SET data = ?, status = 'published', updated_by = ?, updated_at = datetime('now') WHERE id = ?`)
-          .bind(item.data, 'staff_' + actor, item.draft_of)
-          .run();
-
-        await env.LEGACY_DB
-          .prepare(`UPDATE content_item SET status = 'archived', updated_at = datetime('now') WHERE id = ?`)
-          .bind(body.draft_id)
-          .run();
-
-        await env.LEGACY_DB
-          .prepare(`
+        // Include draft archival: a failed archive or audit must leave the target unchanged.
+        await env.LEGACY_DB.batch([
+          env.LEGACY_DB.prepare(`UPDATE content_item SET data = ?, status = 'published', updated_by = ?, updated_at = datetime('now') WHERE id = ?`)
+            .bind(item.data, 'staff_' + actor, item.draft_of),
+          env.LEGACY_DB.prepare(`UPDATE content_item SET status = 'archived', updated_at = datetime('now') WHERE id = ?`)
+            .bind(body.draft_id),
+          env.LEGACY_DB.prepare(`
             INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
             VALUES (?, 'content_item.publish', 'content_item', ?, ?, ?)
           `)
@@ -628,18 +621,15 @@ export async function onRequestPost({ request, env }) {
             item.draft_of,
             JSON.stringify({ status: target.status, data: JSON.parse(target.data) }),
             JSON.stringify({ status: 'published', data: JSON.parse(item.data) })
-          )
-          .run();
+          ),
+        ]);
 
         return json({ ok: true });
       } else {
-        await env.LEGACY_DB
-          .prepare(`UPDATE content_item SET status = 'published', updated_by = ?, updated_at = datetime('now') WHERE id = ?`)
-          .bind('staff_' + actor, body.draft_id)
-          .run();
-
-        await env.LEGACY_DB
-          .prepare(`
+        await env.LEGACY_DB.batch([
+          env.LEGACY_DB.prepare(`UPDATE content_item SET status = 'published', updated_by = ?, updated_at = datetime('now') WHERE id = ?`)
+            .bind('staff_' + actor, body.draft_id),
+          env.LEGACY_DB.prepare(`
             INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
             VALUES (?, 'content_item.publish', 'content_item', ?, ?, ?)
           `)
@@ -648,8 +638,8 @@ export async function onRequestPost({ request, env }) {
             body.draft_id,
             JSON.stringify({ status: 'draft', data: JSON.parse(item.data) }),
             JSON.stringify({ status: 'published', data: JSON.parse(item.data) })
-          )
-          .run();
+          ),
+        ]);
 
         return json({ ok: true });
       }
@@ -681,13 +671,10 @@ export async function onRequestPost({ request, env }) {
         return json({ ok: false, error: `cannot discard from status ${item.status}` }, 409);
       }
 
-      await env.LEGACY_DB
-        .prepare(`UPDATE content_item SET status = 'archived', updated_by = 'staff', updated_at = datetime('now') WHERE id = ?`)
-        .bind(body.draft_id)
-        .run();
-
-      await env.LEGACY_DB
-        .prepare(`
+      await env.LEGACY_DB.batch([
+        env.LEGACY_DB.prepare(`UPDATE content_item SET status = 'archived', updated_by = 'staff', updated_at = datetime('now') WHERE id = ?`)
+          .bind(body.draft_id),
+        env.LEGACY_DB.prepare(`
           INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
           VALUES ('staff', 'content_item.discard', 'content_item', ?, ?, ?)
         `)
@@ -695,8 +682,8 @@ export async function onRequestPost({ request, env }) {
           body.draft_id,
           JSON.stringify({ status: 'draft', data: JSON.parse(item.data) }),
           JSON.stringify({ status: 'archived', data: JSON.parse(item.data) })
-        )
-        .run();
+        ),
+      ]);
 
       return json({ ok: true });
     }

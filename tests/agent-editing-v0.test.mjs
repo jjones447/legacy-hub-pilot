@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { onRequestGet as getAgent, onRequestPost as postAgent } from '../functions/api/agent/[[path]].js';
+import { getPublishedSections, _resetContentCache } from '../functions/_content.mjs';
 
 const SCHEMA_1 = readFileSync(new URL('../schema/0001_init.sql', import.meta.url), 'utf8');
 const SCHEMA_3 = readFileSync(new URL('../schema/0003_grant_award.sql', import.meta.url), 'utf8');
@@ -11,10 +12,29 @@ const SCHEMA_4 = readFileSync(new URL('../schema/0004_content_types.sql', import
 
 function d1(db) {
   return {
+    // Synthetic SQLite transaction/results model, not native D1 acceptance.
+    async batch(statements) {
+      db.exec('BEGIN');
+      try {
+        const results = statements.map(({ sql, params }) => {
+          const statement = db.prepare(sql);
+          if (statement.columns().length) return { success: true, results: statement.all(...params), meta: {} };
+          const result = statement.run(...params);
+          return { success: true, results: [], meta: { changes: Number(result.changes) } };
+        });
+        db.exec('COMMIT');
+        return results;
+      } catch (error) {
+        db.exec('ROLLBACK');
+        throw error;
+      }
+    },
     prepare(sql) {
       return {
+        sql, params: [],
         bind(...params) {
           return {
+            sql, params,
             async first() {
               return db.prepare(sql).get(...params) ?? null;
             },
@@ -372,3 +392,175 @@ test('gateway client handles refuse_request tool call from gateway', async () =>
     globalThis.fetch = originalFetch;
   }
 });
+
+// Regression home for the existing Content/Form editing mutation contract.
+// All data and trigger failures are synthetic, in memory, with no provider I/O.
+function atomicContentFixture(area, kind, fault = null) {
+  const db = new DatabaseSync(':memory:');
+  db.exec('PRAGMA foreign_keys=ON');
+  for (const file of ['0001_init.sql', '0003_grant_award.sql', '0004_content_types.sql', '0009_content_live.sql', '0010_page_section_forms.sql']) {
+    db.exec(readFileSync(new URL(`../schema/${file}`, import.meta.url), 'utf8'));
+  }
+  const section = area === 'form' ? 'form.membership' : 'home.hero';
+  const beforeData = area === 'form'
+    ? { section_key: section, heading: 'Original synthetic heading', submit_label: 'Original label' }
+    : { section_key: section, title: 'Original synthetic title', lede: 'Original lede' };
+  const afterData = area === 'form'
+    ? { section_key: section, heading: 'New synthetic heading', submit_label: 'New label' }
+    : { section_key: section, title: 'New synthetic title', lede: 'New lede' };
+  const target = `ps_${section}`;
+  const draft = 'cid_synthetic';
+  const actor = 'synthetic_staff@example.invalid';
+  const token = `h.${Buffer.from(JSON.stringify({ email: actor })).toString('base64url')}.sig`;
+  const insert = (id, data, status, draftOf, by) => db.prepare(`
+    INSERT INTO content_item (id, type_id, data, status, draft_of, updated_by, updated_at)
+    VALUES (?, 'page_section', ?, ?, ?, ?, '2000-01-01 00:00:00')
+  `).run(id, JSON.stringify(data), status, draftOf, by);
+  insert(target, beforeData, 'published', null, 'staff_original');
+  if (kind !== 'direct') insert(draft, afterData, 'draft', kind === 'new' ? null : target, 'agent');
+  db.prepare(`INSERT INTO audit_log (actor, action, entity, entity_id, at)
+    VALUES ('fixture', 'fixture', 'fixture', 'unrelated', '2000-01-01 00:00:00')`).run();
+  if (fault === 'audit') db.exec(`CREATE TRIGGER synthetic_content_audit_fault BEFORE INSERT ON audit_log
+    BEGIN SELECT RAISE(ABORT, 'SYNTHETIC_CONTENT_FAULT_NO_CLIENT_LEAK'); END;`);
+  if (fault === 'archive') db.exec(`CREATE TRIGGER synthetic_content_archive_fault BEFORE UPDATE ON content_item
+    WHEN OLD.id = 'cid_synthetic' AND NEW.status = 'archived'
+    BEGIN SELECT RAISE(ABORT, 'SYNTHETIC_CONTENT_FAULT_NO_CLIENT_LEAK'); END;`);
+  const adapter = d1(db);
+  const batch = adapter.batch;
+  let batches = 0;
+  adapter.batch = async statements => { batches++; return batch(statements); };
+  const localEnv = { LEGACY_DB: adapter };
+  const action = kind === 'direct' ? 'change/direct' : kind === 'discard' ? 'discard' : 'confirm';
+  const body = kind === 'direct'
+    ? { target_id: target, data: afterData, staff_id: 'spoof_synthetic' }
+    : { draft_id: draft, staff_id: 'spoof_synthetic' };
+  const deliver = () => postAgent({ env: localEnv, request: new Request(`http://localhost/api/agent/${action}`, {
+    method: 'POST', headers: { 'Cf-Access-Jwt-Assertion': token }, body: JSON.stringify(body),
+  }) });
+  const snapshot = () => ({
+    content: db.prepare('SELECT * FROM content_item ORDER BY id').all(),
+    audits: db.prepare('SELECT * FROM audit_log ORDER BY id').all(),
+  });
+  return { db, target, draft, actor, kind, beforeData, afterData, deliver, snapshot, localEnv, batches: () => batches };
+}
+
+function verifyAtomicContentSuccess(f, before, after) {
+  const entityId = f.kind === 'new' || f.kind === 'discard' ? f.draft : f.target;
+  const row = after.content.find(item => item.id === entityId);
+  const prior = before.content.find(item => item.id === entityId);
+  assert.equal(after.audits.length, before.audits.length + 1);
+  assert.deepEqual(after.audits.slice(0, -1), before.audits, 'existing append-only audits must be untouched');
+  const audit = after.audits.at(-1);
+  assert.equal(audit.actor, f.kind === 'discard' ? 'staff' : f.actor);
+  assert.equal(audit.entity, 'content_item');
+  assert.equal(audit.entity_id, entityId);
+  assert.equal(audit.action, f.kind === 'direct' ? 'content_item.direct_edit'
+    : f.kind === 'discard' ? 'content_item.discard' : 'content_item.publish');
+  assert.equal(row.status, f.kind === 'discard' ? 'archived' : 'published');
+  assert.equal(row.updated_by, f.kind === 'discard' ? 'staff' : `staff_${f.actor}`);
+  assert.notEqual(row.updated_at, prior.updated_at);
+  if (f.kind === 'direct') {
+    assert.deepEqual(JSON.parse(audit.before_json), JSON.parse(prior.data));
+    assert.deepEqual(JSON.parse(audit.after_json), f.afterData);
+  } else {
+    assert.deepEqual(JSON.parse(audit.before_json), { status: prior.status, data: JSON.parse(prior.data) });
+    assert.deepEqual(JSON.parse(audit.after_json), { status: row.status, data: JSON.parse(row.data) });
+  }
+  if (f.kind === 'targeted') {
+    const draftRow = after.content.find(item => item.id === f.draft);
+    assert.equal(draftRow.status, 'archived');
+    assert.equal(draftRow.updated_by, 'agent');
+    assert.equal(draftRow.data, before.content.find(item => item.id === f.draft).data);
+  }
+  if (f.kind === 'new' || f.kind === 'discard') {
+    assert.deepEqual(after.content.find(item => item.id === f.target), before.content.find(item => item.id === f.target));
+  }
+}
+
+async function withoutSyntheticContentErrorLog(run) {
+  const original = console.error;
+  console.error = () => {};
+  try { return await run(); } finally { console.error = original; }
+}
+
+for (const area of ['page', 'form']) {
+  for (const kind of ['targeted', 'new', 'direct', 'discard']) {
+    test(`atomic Content/Form ${area} ${kind}: healthy mutation preserves original audit provenance`, async () => {
+      const f = atomicContentFixture(area, kind);
+      try {
+        const before = f.snapshot();
+        const response = await f.deliver();
+        assert.equal(response.status, 200);
+        assert.equal((await response.json()).ok, true);
+        verifyAtomicContentSuccess(f, before, f.snapshot());
+        assert.equal(f.batches(), 1, 'mutation set must use exactly one batch');
+      } finally { f.db.close(); }
+    });
+    test(`atomic Content/Form ${area} ${kind}: audit failure rolls back complete snapshot; retry preserves original provenance`, async () => {
+      const f = atomicContentFixture(area, kind, 'audit');
+      try {
+        const before = f.snapshot();
+        const failed = await withoutSyntheticContentErrorLog(f.deliver);
+        assert.equal(failed.status, 500);
+        const errorText = await failed.text();
+        assert.deepEqual(JSON.parse(errorText), { ok: false, error: 'internal_error' });
+        assert.ok(!errorText.includes('SYNTHETIC_CONTENT_FAULT_NO_CLIENT_LEAK'));
+        assert.deepEqual(f.snapshot(), before, 'content, actor, timestamp, draft and audit must all roll back');
+        f.db.exec('DROP TRIGGER synthetic_content_audit_fault');
+        const retry = await f.deliver();
+        assert.equal(retry.status, 200);
+        assert.equal((await retry.json()).ok, true);
+        verifyAtomicContentSuccess(f, before, f.snapshot());
+        assert.equal(f.batches(), 2, 'failed delivery and healthy retry each use one batch');
+      } finally { f.db.close(); }
+    });
+  }
+  test(`atomic Content/Form ${area} targeted: archive failure rolls back target and retains retry provenance`, async () => {
+    const f = atomicContentFixture(area, 'targeted', 'archive');
+    try {
+      const before = f.snapshot();
+      const failed = await withoutSyntheticContentErrorLog(f.deliver);
+      assert.equal(failed.status, 500);
+      assert.deepEqual(await failed.json(), { ok: false, error: 'internal_error' });
+      assert.deepEqual(f.snapshot(), before);
+      f.db.exec('DROP TRIGGER synthetic_content_archive_fault');
+      const retry = await f.deliver();
+      assert.equal(retry.status, 200);
+      assert.equal((await retry.json()).ok, true);
+      verifyAtomicContentSuccess(f, before, f.snapshot());
+      assert.equal(f.batches(), 2);
+    } finally { f.db.close(); }
+  });
+  test(`atomic Content/Form ${area} direct: cache stays intact on failure and resets only after success`, async () => {
+    const f = atomicContentFixture(area, 'direct', 'audit');
+    _resetContentCache();
+    try {
+      const before = f.snapshot();
+      const cached = await getPublishedSections(f.localEnv, 1000);
+      const sectionKey = f.target.slice(3);
+      assert.deepEqual(cached[sectionKey], f.beforeData);
+      const failed = await withoutSyntheticContentErrorLog(f.deliver);
+      assert.equal(failed.status, 500);
+      assert.deepEqual(f.snapshot(), before);
+      assert.equal(await getPublishedSections(f.localEnv, 1001), cached);
+      f.db.exec('DROP TRIGGER synthetic_content_audit_fault');
+      assert.equal((await f.deliver()).status, 200);
+      const refreshed = await getPublishedSections(f.localEnv, 1002);
+      assert.notEqual(refreshed, cached);
+      assert.deepEqual(refreshed[sectionKey], f.afterData);
+      verifyAtomicContentSuccess(f, before, f.snapshot());
+    } finally { _resetContentCache(); f.db.close(); }
+  });
+  test(`atomic Content/Form ${area} historical archived draft: no mutation or audit repair`, async () => {
+    const f = atomicContentFixture(area, 'targeted');
+    try {
+      f.db.prepare("UPDATE content_item SET status = 'archived' WHERE id = ?").run(f.draft);
+      const before = f.snapshot();
+      const response = await f.deliver();
+      assert.equal(response.status, 409);
+      assert.deepEqual(await response.json(), { ok: false, error: 'cannot confirm from status archived' });
+      assert.deepEqual(f.snapshot(), before);
+      assert.equal(f.batches(), 0);
+    } finally { f.db.close(); }
+  });
+}
