@@ -148,6 +148,20 @@ test('Events template provides a configurable API target without changing the ho
   assert.match(renderSource, /b\.dataset\.eventId === e\.id/);
 });
 
+test('staff instructions distinguish new-event drafts, selected-event chat and explicit publication', () => {
+  for (const path of ['templates/events.html.j2', 'events.html']) {
+    const markup = readFileSync(new URL('../' + path, import.meta.url), 'utf8');
+    const instructions = markup.match(/<strong>How staff manage this page:<\/strong>(.*?)<\/p>/s)?.[1];
+    assert.ok(instructions);
+    assert.match(instructions, /New Event form to create a draft/);
+    assert.match(instructions, /select an existing event to draft a change by chat/);
+    assert.match(instructions, /Review the preview before confirming/);
+    assert.match(instructions, /publishing a draft event is a separate action/);
+    assert.match(instructions, /published events when their schedule and registration details load successfully/);
+    assert.doesNotMatch(instructions, /next Saturday|goes live|reminder|automatic/i);
+  }
+});
+
 test('existing published-events endpoint feeds the renderer and registration-modal identity', async () => {
   const published = event({ id: 'ev_mock_published_123' });
   const response = await getEvents({ env: { LEGACY_DB: { prepare(sql) {
