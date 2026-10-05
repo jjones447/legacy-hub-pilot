@@ -259,7 +259,7 @@ test('Square webhook with good signature creates caregiver, followup, and audit 
   assert.equal(fu.kind, 'donation_received');
   assert.equal(fu.detail, 'Square donation received: $75.00');
   assert.equal(fu.source, 'square');
-  assert.equal(fu.external_ref, 'evt_sq_donation_1');
+  assert.equal(fu.external_ref, 'payment:pay_sq_100');
 
   // Verify audit log
   const audit = raw.prepare('SELECT * FROM audit_log WHERE entity_id = ?').get(fu.id.toString());
@@ -362,7 +362,7 @@ test('Square webhook lands event registration when order line item maps to a pub
   assert.ok(reg);
   assert.equal(reg.event_id, 'ev_virtual_support_group');
   assert.equal(reg.source, 'square');
-  assert.equal(reg.external_ref, 'evt_sq_reg_1');
+  assert.equal(reg.external_ref, 'payment:pay_sq_200');
 
   // Verify audit log
   const audit = raw.prepare('SELECT * FROM audit_log WHERE entity_id = ?').get(reg.id.toString());
@@ -448,7 +448,7 @@ test('Square webhook is idempotent on event replay', async () => {
   assert.equal(data2.duplicate, true);
 
   // Exactly one followup created
-  const count = raw.prepare('SELECT COUNT(*) AS n FROM followup WHERE source = \'square\' AND external_ref = \'evt_sq_replay_test\'').get();
+  const count = raw.prepare('SELECT COUNT(*) AS n FROM followup WHERE source = \'square\' AND external_ref = \'payment:pay_sq_replay\'').get();
   assert.equal(count.n, 1);
 });
 
@@ -478,7 +478,7 @@ test('Square webhook unmatched payment creates staff followup under placeholder 
   assert.equal(data1.unmatched, true);
 
   // Followup exists with kind payment_unmatched and caregiver_id cg_unmatched_square
-  const fu1 = raw.prepare('SELECT * FROM followup WHERE external_ref = \'evt_sq_unmatched_1\'').get();
+  const fu1 = raw.prepare('SELECT * FROM followup WHERE external_ref = \'payment:pay_sq_unmatched_1\'').get();
   assert.ok(fu1);
   assert.equal(fu1.caregiver_id, 'cg_unmatched_square');
   assert.equal(fu1.kind, 'payment_unmatched');
@@ -526,7 +526,7 @@ test('Square webhook unmatched payment creates staff followup under placeholder 
   assert.equal(data2.ok, true);
   assert.equal(data2.unmatched, true);
 
-  const fu2 = raw.prepare('SELECT * FROM followup WHERE external_ref = \'evt_sq_unmatched_2\'').get();
+  const fu2 = raw.prepare('SELECT * FROM followup WHERE external_ref = \'payment:pay_sq_unmatched_2\'').get();
   assert.ok(fu2);
   assert.equal(fu2.caregiver_id, 'cg_unmatched_square');
 
