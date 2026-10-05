@@ -62,6 +62,17 @@ function json(obj, status = 200) {
   });
 }
 
+function batchEntityId(results) {
+  if (!Array.isArray(results) || results.length !== 4 || [0, 1, 2, 3].some(index => results[index]?.success !== true)) {
+    throw new Error('invalid payment batch result');
+  }
+  const rows = results[3].results;
+  if (!Array.isArray(rows) || rows.length !== 1 || !Number.isSafeInteger(rows[0]?.id) || rows[0].id <= 0) {
+    throw new Error('missing payment result identity');
+  }
+  return rows[0].id;
+}
+
 export async function onRequestPost({ request, env }) {
   try {
     const secret = env.GIVEBUTTER_WEBHOOK_SECRET;
@@ -135,23 +146,22 @@ export async function onRequestPost({ request, env }) {
       .first();
 
     let caregiverId;
+    let caregiverWrite;
     const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
 
     if (caregiver) {
       caregiverId = caregiver.id;
-      await env.LEGACY_DB
+      caregiverWrite = env.LEGACY_DB
         .prepare(`UPDATE caregiver SET updated_at = ? WHERE id = ?`)
-        .bind(now, caregiverId)
-        .run();
+        .bind(now, caregiverId);
     } else {
       caregiverId = 'cg_' + crypto.randomUUID();
-      await env.LEGACY_DB
+      caregiverWrite = env.LEGACY_DB
         .prepare(`
           INSERT INTO caregiver (id, first_name, last_name, email, phone, source)
           VALUES (?, ?, ?, ?, ?, 'givebutter')
         `)
-        .bind(caregiverId, firstName, lastName, email, phone)
-        .run();
+        .bind(caregiverId, firstName, lastName, email, phone);
     }
 
     // Check if it maps to an event in our event table
@@ -168,16 +178,13 @@ export async function onRequestPost({ request, env }) {
     }
 
     let entity;
-    let entityId;
+    let resultWrite;
 
     if (eventExists) {
       entity = 'registration';
-      await env.LEGACY_DB
+      resultWrite = env.LEGACY_DB
         .prepare(`INSERT INTO registration (caregiver_id, event_id, source, external_ref) VALUES (?, ?, 'givebutter', ?)`)
-        .bind(caregiverId, eventId, externalRef)
-        .run();
-      const row = await env.LEGACY_DB.prepare(`SELECT last_insert_rowid() AS id`).first();
-      entityId = row ? row.id : externalRef;
+        .bind(caregiverId, eventId, externalRef);
     } else {
       entity = 'followup';
       const eventType = body.event || '';
@@ -191,27 +198,31 @@ export async function onRequestPost({ request, env }) {
         detail = `Givebutter registration: ${body.data.campaign_name}`;
       }
 
-      await env.LEGACY_DB
+      resultWrite = env.LEGACY_DB
         .prepare(`INSERT INTO followup (caregiver_id, kind, detail, source, external_ref) VALUES (?, ?, ?, 'givebutter', ?)`)
-        .bind(caregiverId, kind, detail, externalRef)
-        .run();
-      const row = await env.LEGACY_DB.prepare(`SELECT last_insert_rowid() AS id`).first();
-      entityId = row ? row.id : externalRef;
+        .bind(caregiverId, kind, detail, externalRef);
     }
 
-    // Write audit log
-    await env.LEGACY_DB
-      .prepare(`
+    // All three mutations share one transaction. entity is a fixed branch value.
+    const results = await env.LEGACY_DB.batch([
+      caregiverWrite,
+      resultWrite,
+      env.LEGACY_DB.prepare(`
         INSERT INTO audit_log (actor, action, entity, entity_id, after_json)
-        VALUES ('givebutter_webhook', ?, ?, ?, ?)
+        SELECT 'givebutter_webhook', ?, ?, CAST(id AS TEXT), ? FROM ${entity}
+        WHERE source = 'givebutter' AND external_ref = ? AND caregiver_id = ?
       `)
       .bind(
         `webhook.${body.event || 'generic'}`,
         entity,
-        entityId.toString(),
-        JSON.stringify({ caregiver_id: caregiverId, external_ref: externalRef })
-      )
-      .run();
+        JSON.stringify({ caregiver_id: caregiverId, external_ref: externalRef }),
+        externalRef, caregiverId
+      ),
+      env.LEGACY_DB.prepare(`SELECT id FROM ${entity}
+        WHERE source = 'givebutter' AND external_ref = ? AND caregiver_id = ?`)
+        .bind(externalRef, caregiverId),
+    ]);
+    const entityId = batchEntityId(results);
 
     return json({ ok: true, caregiver_id: caregiverId, entity, entity_id: entityId });
   } catch (e) {

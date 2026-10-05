@@ -40,6 +40,17 @@ function json(obj, status = 200) {
   });
 }
 
+function batchEntityId(results) {
+  if (!Array.isArray(results) || results.length !== 4 || [0, 1, 2, 3].some(index => results[index]?.success !== true)) {
+    throw new Error('invalid payment batch result');
+  }
+  const rows = results[3].results;
+  if (!Array.isArray(rows) || rows.length !== 1 || !Number.isSafeInteger(rows[0]?.id) || rows[0].id <= 0) {
+    throw new Error('missing payment result identity');
+  }
+  return rows[0].id;
+}
+
 export async function onRequestPost({ request, env }) {
   try {
     const signatureKey = env.SQUARE_WEBHOOK_SIGNATURE_KEY;
@@ -137,35 +148,31 @@ export async function onRequestPost({ request, env }) {
       }
 
       const caregiverId = 'cg_unmatched_square';
-      await env.LEGACY_DB
-        .prepare(`
+      const results = await env.LEGACY_DB.batch([
+        env.LEGACY_DB.prepare(`
           INSERT OR IGNORE INTO caregiver (id, first_name, last_name, source, status)
           VALUES ('cg_unmatched_square', 'Unmatched', 'Square payment', 'square', 'inactive')
-        `)
-        .run();
-
-      await env.LEGACY_DB
-        .prepare(`
+        `),
+        env.LEGACY_DB.prepare(`
           INSERT INTO followup (caregiver_id, kind, detail, source, external_ref)
           VALUES (?, 'payment_unmatched', ?, 'square', ?)
         `)
-        .bind(caregiverId, detail, externalRef)
-        .run();
-
-      const row = await env.LEGACY_DB.prepare('SELECT last_insert_rowid() AS id').first();
-      const entityId = row ? row.id : externalRef;
-
-      await env.LEGACY_DB
-        .prepare(`
+        .bind(caregiverId, detail, externalRef),
+        env.LEGACY_DB.prepare(`
           INSERT INTO audit_log (actor, action, entity, entity_id, after_json)
-          VALUES ('square_webhook', ?, 'followup', ?, ?)
+          SELECT 'square_webhook', ?, 'followup', CAST(id AS TEXT), ? FROM followup
+          WHERE source = 'square' AND external_ref = ? AND caregiver_id = ?
         `)
         .bind(
           `webhook.${eventType}`,
-          entityId.toString(),
-          JSON.stringify({ kind: 'payment_unmatched', external_ref: externalRef, payment_id: paymentId, event_id: eventId, detail })
-        )
-        .run();
+          JSON.stringify({ kind: 'payment_unmatched', external_ref: externalRef, payment_id: paymentId, event_id: eventId, detail }),
+          externalRef, caregiverId
+        ),
+        env.LEGACY_DB.prepare(`SELECT id FROM followup
+          WHERE source = 'square' AND external_ref = ? AND caregiver_id = ?`)
+          .bind(externalRef, caregiverId),
+      ]);
+      const entityId = batchEntityId(results);
 
       return json({ ok: true, unmatched: true, entity: 'followup', entity_id: entityId });
     }
@@ -194,23 +201,22 @@ export async function onRequestPost({ request, env }) {
       .first();
 
     let caregiverId;
+    let caregiverWrite;
     const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
 
     if (caregiver) {
       caregiverId = caregiver.id;
-      await env.LEGACY_DB
+      caregiverWrite = env.LEGACY_DB
         .prepare('UPDATE caregiver SET updated_at = ? WHERE id = ?')
-        .bind(now, caregiverId)
-        .run();
+        .bind(now, caregiverId);
     } else {
       caregiverId = 'cg_' + crypto.randomUUID();
-      await env.LEGACY_DB
+      caregiverWrite = env.LEGACY_DB
         .prepare(`
           INSERT INTO caregiver (id, first_name, last_name, email, phone, source, donor)
           VALUES (?, ?, ?, ?, ?, 'square', 1)
         `)
-        .bind(caregiverId, firstName, lastName, email, phone)
-        .run();
+        .bind(caregiverId, firstName, lastName, email, phone);
     }
 
     // Check if an order line item note or catalog_object_id maps to a published event
@@ -246,19 +252,16 @@ export async function onRequestPost({ request, env }) {
     }
 
     let entity;
-    let entityId;
+    let resultWrite;
 
     if (matchedEventId) {
       entity = 'registration';
-      await env.LEGACY_DB
+      resultWrite = env.LEGACY_DB
         .prepare(`
           INSERT INTO registration (caregiver_id, event_id, source, external_ref)
           VALUES (?, ?, 'square', ?)
         `)
-        .bind(caregiverId, matchedEventId, externalRef)
-        .run();
-      const row = await env.LEGACY_DB.prepare('SELECT last_insert_rowid() AS id').first();
-      entityId = row ? row.id : externalRef;
+        .bind(caregiverId, matchedEventId, externalRef);
     } else {
       entity = 'followup';
       let amountStr = '';
@@ -271,30 +274,35 @@ export async function onRequestPost({ request, env }) {
       }
       const detail = amountStr ? `Square donation received: ${amountStr}` : 'Square donation received';
 
-      await env.LEGACY_DB
+      resultWrite = env.LEGACY_DB
         .prepare(`
           INSERT INTO followup (caregiver_id, kind, detail, source, external_ref)
           VALUES (?, 'donation_received', ?, 'square', ?)
         `)
-        .bind(caregiverId, detail, externalRef)
-        .run();
-      const row = await env.LEGACY_DB.prepare('SELECT last_insert_rowid() AS id').first();
-      entityId = row ? row.id : externalRef;
+        .bind(caregiverId, detail, externalRef);
     }
 
-    // Write audit log
-    await env.LEGACY_DB
-      .prepare(`
+    // Caregiver, result and original audit commit together; no cross-call row ID.
+    // entity is selected only from the two fixed branches above, never input SQL.
+    const results = await env.LEGACY_DB.batch([
+      caregiverWrite,
+      resultWrite,
+      env.LEGACY_DB.prepare(`
         INSERT INTO audit_log (actor, action, entity, entity_id, after_json)
-        VALUES ('square_webhook', ?, ?, ?, ?)
+        SELECT 'square_webhook', ?, ?, CAST(id AS TEXT), ? FROM ${entity}
+        WHERE source = 'square' AND external_ref = ? AND caregiver_id = ?
       `)
       .bind(
         `webhook.${eventType}`,
         entity,
-        entityId.toString(),
-        JSON.stringify({ caregiver_id: caregiverId, external_ref: externalRef, payment_id: paymentId, event_id: eventId })
-      )
-      .run();
+        JSON.stringify({ caregiver_id: caregiverId, external_ref: externalRef, payment_id: paymentId, event_id: eventId }),
+        externalRef, caregiverId
+      ),
+      env.LEGACY_DB.prepare(`SELECT id FROM ${entity}
+        WHERE source = 'square' AND external_ref = ? AND caregiver_id = ?`)
+        .bind(externalRef, caregiverId),
+    ]);
+    const entityId = batchEntityId(results);
 
     return json({ ok: true, caregiver_id: caregiverId, entity, entity_id: entityId });
   } catch (e) {

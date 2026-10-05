@@ -17,10 +17,27 @@ function fixture() {
   let accesses = 0;
   const env = {
     SQUARE_WEBHOOK_URL: url, SQUARE_WEBHOOK_SIGNATURE_KEY: key,
-    LEGACY_DB: { prepare(sql) {
+    LEGACY_DB: { async batch(statements) {
+      accesses++;
+      db.exec('BEGIN');
+      try {
+        const results = statements.map(({ sql, args }) => {
+          const statement = db.prepare(sql);
+          if (statement.columns().length) return { success: true, results: statement.all(...args), meta: {} };
+          const result = statement.run(...args);
+          return { success: true, results: [], meta: { changes: Number(result.changes) } };
+        });
+        db.exec('COMMIT');
+        return results;
+      } catch (error) {
+        db.exec('ROLLBACK');
+        throw error;
+      }
+    }, prepare(sql) {
       accesses++;
       const statement = db.prepare(sql);
       const bound = (args) => ({
+        sql, args,
         first: async () => statement.get(...args) ?? null,
         run: async () => statement.run(...args),
       });
