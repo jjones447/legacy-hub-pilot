@@ -102,7 +102,8 @@ export async function validate(db, { id, operation, payload = {} }) {
   };
 }
 
-export async function apply(db, { id, operation, payload = {} }, actor) {
+// Additional statements are supplied only by trusted server callers (not request payloads).
+export async function apply(db, { id, operation, payload = {} }, actor, additionalStatements = []) {
   const v = await validate(db, { id, operation, payload });
   if (!v.ok) {
     return v;
@@ -135,15 +136,16 @@ export async function apply(db, { id, operation, payload = {} }, actor) {
   `;
   setParams.push(id);
 
-  await db.prepare(updateSql).bind(...setParams).run();
-
-  await db
+  await db.batch([
+    db.prepare(updateSql).bind(...setParams),
+    db
     .prepare(`
       INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
       VALUES (?, 'caregiver.update', 'caregiver', ?, ?, ?)
     `)
-    .bind(actor, id, JSON.stringify(v.before), JSON.stringify(v.after))
-    .run();
+      .bind(actor, id, JSON.stringify(v.before), JSON.stringify(v.after)),
+    ...additionalStatements
+  ]);
 
   const updatedProfile = await db
     .prepare('SELECT * FROM caregiver WHERE id = ?')

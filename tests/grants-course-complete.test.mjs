@@ -14,10 +14,29 @@ const STAFF_JS = readFileSync(new URL('../staff.js', import.meta.url), 'utf8');
 
 function d1(db) {
   return {
+    // Synthetic transaction model, not real D1/workerd acceptance.
+    async batch(statements) {
+      db.exec('BEGIN');
+      try {
+        const results = statements.map(({ sql, params }) => {
+          const statement = db.prepare(sql);
+          if (statement.columns().length) return { success: true, results: statement.all(...params), meta: {} };
+          const result = statement.run(...params);
+          return { success: true, results: [], meta: { changes: Number(result.changes) } };
+        });
+        db.exec('COMMIT');
+        return results;
+      } catch (error) {
+        db.exec('ROLLBACK');
+        throw error;
+      }
+    },
     prepare(sql) {
       return {
+        sql, params: [],
         bind(...params) {
           return {
+            sql, params,
             async first() {
               return db.prepare(sql).get(...params) ?? null;
             },
@@ -314,4 +333,3 @@ test('(g) grant transitions record verified actor in audit log', async () => {
   assert.ok(audit);
   assert.equal(audit.actor, 'coordinator@legacysanctuary.org');
 });
-

@@ -6,6 +6,11 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { onRequestGet as getAgent, onRequestPost as postAgent } from '../functions/api/agent/[[path]].js';
+import * as caregiversDomain from '../functions/_lib/domain/caregivers.js';
+import * as grantsDomain from '../functions/_lib/domain/grants.js';
+import * as eventsDomain from '../functions/_lib/domain/events.js';
+import { onRequestPost as postGrants } from '../functions/api/grants/[[path]].js';
+import { onRequestPost as postStaff, onRequestPatch as patchStaff } from '../functions/api/staff/[[path]].js';
 
 const SCHEMA_1 = readFileSync(new URL('../schema/0001_init.sql', import.meta.url), 'utf8');
 const SCHEMA_3 = readFileSync(new URL('../schema/0003_grant_award.sql', import.meta.url), 'utf8');
@@ -20,10 +25,29 @@ const STYLES_CSS = readFileSync(new URL('../styles.css', import.meta.url), 'utf8
 
 function d1(db) {
   return {
+    // Synthetic transaction model, not real D1/workerd acceptance.
+    async batch(statements) {
+      db.exec('BEGIN');
+      try {
+        const results = statements.map(({ sql, params }) => {
+          const statement = db.prepare(sql);
+          if (statement.columns().length) return { success: true, results: statement.all(...params), meta: {} };
+          const result = statement.run(...params);
+          return { success: true, results: [], meta: { changes: Number(result.changes) } };
+        });
+        db.exec('COMMIT');
+        return results;
+      } catch (error) {
+        db.exec('ROLLBACK');
+        throw error;
+      }
+    },
     prepare(sql) {
       return {
+        sql, params: [],
         bind(...params) {
           return {
+            sql, params,
             async first() {
               return db.prepare(sql).get(...params) ?? null;
             },
@@ -488,3 +512,260 @@ test('UI wiring: staff.html contains chat area selector and zero inline styles i
   assert.match(STAFF_JS, /action === 'agent-change-confirm'/);
   assert.match(STAFF_JS, /action === 'agent-change-discard'/);
 });
+
+// Atomic mutation + original domain audit + optional governed change publication.
+// In-memory SQLite models D1 batches; pre-read validation is not a CAS guarantee.
+const atomicDomainCases = [
+  { name: 'caregiver update', area: 'caregiver', operation: 'update', id: 'cg_atomic',
+    payload: { email: 'new@example.org', segment_tags: ['caregiver'], outcome_status: 'improving', outcome_notes: 'Synthetic progress' }, table: 'caregiver' },
+  { name: 'grant review', area: 'grant', operation: 'review', id: '1', payload: { review_notes: 'Reviewed' }, status: 'submitted', table: 'grant_application' },
+  { name: 'grant awarded decision', area: 'grant', operation: 'decision', id: '1', payload: { decision: 'awarded', amount: '$500', care_package: 'Standard', review_notes: 'Approved' }, status: 'in_review', table: 'grant_application', extraFaults: ['award_insert', 'followup_insert'] },
+  { name: 'grant declined decision', area: 'grant', operation: 'decision', id: '1', payload: { decision: 'declined', review_notes: 'Declined' }, status: 'in_review', table: 'grant_application' },
+  { name: 'grant course complete', area: 'grant', operation: 'course_complete', id: '1', payload: {}, status: 'awarded', table: 'grant_application' },
+  { name: 'grant close with award', area: 'grant', operation: 'close', id: '1', payload: { outcome: 'Synthetic completion' }, status: 'course_complete', table: 'grant_application', award: true, extraFaults: ['award_update'] },
+  { name: 'grant close without award', area: 'grant', operation: 'close', id: '1', payload: { outcome: 'Declined closeout' }, status: 'declined', table: 'grant_application' },
+  { name: 'event create', area: 'event', operation: 'create', id: 'new', payload: { id: 'ev_atomic_new', title: 'Synthetic Circle', type: 'support_group', starts_at: '2026-10-20 14:00', location: 'Room B', capacity: 15 }, table: 'event' },
+  { name: 'event update', area: 'event', operation: 'update', id: 'ev_atomic', payload: { location: 'New Room', capacity: 25 }, table: 'event' },
+  { name: 'event publish', area: 'event', operation: 'publish', id: 'ev_atomic', payload: {}, table: 'event' },
+  { name: 'event archive with registration override', area: 'event', operation: 'archive', id: 'ev_atomic', payload: { confirm_with_registrations: true }, table: 'event', registration: true }
+];
+const atomicTables = ['caregiver', 'grant_application', 'award', 'followup', 'event', 'registration', 'contact_history', 'agent_change', 'audit_log'];
+const atomicModules = { caregiver: caregiversDomain, grant: grantsDomain, event: eventsDomain };
+const atomicActor = 'atomic_confirmer@example.org';
+const oldTime = '2000-01-01 00:00:00';
+
+function atomicSnapshot(db) {
+  return Object.fromEntries(atomicTables.map(table => [table, db.prepare('SELECT * FROM ' + table + ' ORDER BY 1').all()]));
+}
+function atomicRequest(path, body, method = 'POST') {
+  return new Request('http://localhost' + path, { method, headers: { 'Content-Type': 'application/json', 'x-dev-actor': atomicActor }, body: JSON.stringify(body) });
+}
+async function atomicFixture(c, governed) {
+  const db = new DatabaseSync(':memory:');
+  db.exec('PRAGMA foreign_keys=ON;');
+  for (const schema of [SCHEMA_1, SCHEMA_3, SCHEMA_4, SCHEMA_6, SCHEMA_7, SCHEMA_8]) db.exec(schema);
+  db.prepare("INSERT INTO caregiver(id,first_name,email,created_at,updated_at,outcome_updated_at) VALUES('cg_atomic','Synthetic','old@example.org',?,?,?)").run(oldTime, oldTime, oldTime);
+  db.prepare("INSERT INTO grant_application(id,caregiver_id,status,source,external_ref,created_at,updated_at) VALUES(1,'cg_atomic',?,'staff','atomic_grant',?,?)").run(c.status || 'submitted', oldTime, oldTime);
+  db.prepare("INSERT INTO event(id,title,type,starts_at,location,capacity,publish_state,created_at,updated_at) VALUES('ev_atomic','Synthetic Event','support_group','2026-10-20 10:00','Old Room',10,'draft',?,?)").run(oldTime, oldTime);
+  if (c.award) db.prepare("INSERT INTO award(id,grant_application_id,amount,care_package,outcome,created_at,updated_at) VALUES(1,1,'$500','Standard','Prior outcome',?,?)").run(oldTime, oldTime);
+  if (c.registration) db.prepare("INSERT INTO registration(caregiver_id,event_id,status,source,external_ref,created_at,updated_at) VALUES('cg_atomic','ev_atomic','registered','staff','atomic_registration',?,?)").run(oldTime, oldTime);
+  db.prepare("INSERT INTO audit_log(actor,action,entity,entity_id,before_json,after_json,at) VALUES('prior_staff','prior.synthetic','fixture','prior','{}','{}',?)").run(oldTime);
+  const adapter = d1(db);
+  const stats = { batches: 0 };
+  const originalBatch = adapter.batch.bind(adapter);
+  adapter.batch = statements => { stats.batches++; return originalBatch(statements); };
+  const env = { LEGACY_DB: adapter, ALLOW_DEV_CONSOLE: '1', AGENT_MAPPER_BACKEND: () => ({ ok: true, operation: c.operation, payload: c.payload }) };
+  const change = { id: c.id, operation: c.operation, payload: c.payload };
+  const expected = await atomicModules[c.area].validate(adapter, change);
+  assert.equal(expected.ok, true);
+  let changeId;
+  if (governed) {
+    const response = await postAgent({ request: atomicRequest('/api/agent/change/draft', { area: c.area, target_id: c.id, request: 'Synthetic bounded draft' }), env });
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.ok, true);
+    changeId = body.change_id;
+    db.prepare("UPDATE agent_change SET created_at=?,updated_at=? WHERE id=?").run(oldTime, oldTime, changeId);
+  }
+  return { db, adapter, env, change, expected, changeId, stats };
+}
+function atomicFault(f, c, mode) {
+  let trigger;
+  if (mode === 'mutation') trigger = 'BEFORE ' + (c.operation === 'create' ? 'INSERT' : 'UPDATE') + ' ON ' + c.table;
+  if (mode === 'domain_audit') trigger = "BEFORE INSERT ON audit_log WHEN NEW.action='" + (c.area === 'grant' ? 'grant_application' : c.area) + '.' + c.operation + "'";
+  if (mode === 'change_status') trigger = "BEFORE UPDATE ON agent_change WHEN NEW.status='published'";
+  if (mode === 'confirm_audit') trigger = "BEFORE INSERT ON audit_log WHEN NEW.action='agent_change.confirm'";
+  if (mode === 'award_insert') trigger = 'BEFORE INSERT ON award';
+  if (mode === 'followup_insert') trigger = 'BEFORE INSERT ON followup';
+  if (mode === 'award_update') trigger = 'BEFORE UPDATE ON award';
+  if (trigger) f.db.exec("CREATE TRIGGER atomic_fault " + trigger + " BEGIN SELECT RAISE(ABORT,'SYNTHETIC_DOMAIN_FAULT_NO_CLIENT_LEAK'); END;");
+}
+async function atomicInvoke(f, c, route) {
+  if (route === 'agent') return postAgent({ request: atomicRequest('/api/agent/change/confirm', { change_id: f.changeId, actor: 'spoof' }), env: f.env });
+  if (route === 'direct') return atomicModules[c.area].apply(f.adapter, f.change, atomicActor);
+  if (c.area === 'grant') return postGrants({ request: atomicRequest('/api/grants/1/' + c.operation, c.payload), env: f.env });
+  const path = c.area === 'caregiver' ? '/api/staff/caregiver/cg_atomic' : c.operation === 'create' ? '/api/staff/event' : '/api/staff/event/ev_atomic' + (c.operation === 'update' ? '' : '/' + c.operation);
+  const request = atomicRequest(path, c.payload, ['caregiver', 'event'].includes(c.area) && c.operation === 'update' ? 'PATCH' : 'POST');
+  return (request.method === 'PATCH' ? patchStaff : postStaff)({ request, env: f.env });
+}
+function atomicAssertSuccess(f, c, before, governed) {
+  const after = atomicSnapshot(f.db);
+  assert.deepEqual(after.audit_log.slice(0, before.audit_log.length), before.audit_log);
+  const newAudits = after.audit_log.slice(before.audit_log.length);
+  assert.equal(newAudits.length, governed ? 2 : 1);
+  const domain = newAudits[0];
+  assert.equal(domain.actor, atomicActor);
+  assert.equal(domain.entity, c.area === 'grant' ? 'grant_application' : c.area);
+  assert.equal(domain.action, domain.entity + '.' + c.operation);
+  assert.equal(domain.entity_id, String(f.expected.projected.id));
+  assert.deepEqual(JSON.parse(domain.before_json), f.expected.before);
+  assert.deepEqual(JSON.parse(domain.after_json), f.expected.after);
+  if (governed) {
+    const row = after.agent_change.find(r => r.id === f.changeId);
+    const old = before.agent_change.find(r => r.id === f.changeId);
+    assert.equal(row.status, 'published');
+    assert.equal(row.confirmed_by, atomicActor);
+    for (const key of ['area', 'operation', 'target_id', 'payload_json', 'before_json', 'after_json', 'requested_by', 'created_at', 'error']) assert.equal(row[key], old[key]);
+    assert.notEqual(row.updated_at, oldTime);
+    assert.equal(newAudits[1].action, 'agent_change.confirm');
+    assert.equal(newAudits[1].actor, atomicActor);
+    assert.equal(newAudits[1].entity_id, f.changeId);
+    assert.deepEqual(JSON.parse(newAudits[1].before_json), { status: 'draft' });
+    assert.deepEqual(JSON.parse(newAudits[1].after_json), { status: 'published', confirmed_by: atomicActor });
+  } else assert.deepEqual(after.agent_change, before.agent_change);
+  if (c.area === 'caregiver') {
+    const row = after.caregiver.find(r => r.id === c.id);
+    assert.equal(row.email, 'new@example.org');
+    assert.equal(row.segment_tags, '["caregiver"]');
+    assert.equal(row.outcome_status, 'improving');
+    assert.notEqual(row.outcome_updated_at, oldTime);
+  }
+  if (c.operation === 'decision') {
+    assert.equal(after.grant_application.find(r => r.id === 1).status, c.payload.decision);
+    assert.equal(after.award.length, c.payload.decision === 'awarded' ? 1 : 0);
+    assert.equal(after.followup.length, c.payload.decision === 'awarded' ? 1 : 0);
+    if (c.payload.decision === 'awarded') {
+      assert.equal(after.award[0].grant_application_id, 1);
+      assert.equal(after.award[0].amount, '$500');
+      assert.equal(after.followup[0].external_ref, 'grant_award_1');
+      assert.equal(after.followup[0].caregiver_id, 'cg_atomic');
+    }
+  }
+  if (c.operation === 'close' && c.award) assert.equal(after.award[0].outcome, c.payload.outcome);
+  if (c.area === 'event') {
+    const row = after.event.find(r => r.id === f.expected.projected.id);
+    assert.equal(row.publish_state, f.expected.projected.publish_state);
+    assert.equal(row.location, f.expected.projected.location);
+  }
+  assert.deepEqual(after.registration, before.registration);
+  assert.deepEqual(after.contact_history, before.contact_history);
+  // Unrelated seeded historical domain rows are preserved byte-for-byte.
+  assert.deepEqual(after.caregiver.filter(r => r.id !== 'cg_atomic'), before.caregiver.filter(r => r.id !== 'cg_atomic'));
+  assert.deepEqual(after.grant_application.filter(r => r.id !== 1), before.grant_application.filter(r => r.id !== 1));
+}
+for (const c of atomicDomainCases) {
+  for (const route of ['agent', 'direct', 'rest']) {
+    const modes = ['healthy', 'mutation', 'domain_audit', ...(route === 'agent' ? ['change_status', 'confirm_audit'] : []), ...(c.extraFaults || [])];
+    for (const mode of modes) test('atomic domain: ' + c.name + ' ' + route + ' ' + mode, async () => {
+      const f = await atomicFixture(c, route === 'agent');
+      try {
+        const before = atomicSnapshot(f.db);
+        atomicFault(f, c, mode);
+        if (mode !== 'healthy') {
+          if (route === 'direct') await assert.rejects(() => atomicInvoke(f, c, route), /SYNTHETIC_DOMAIN_FAULT/);
+          else {
+            const response = await atomicInvoke(f, c, route);
+            assert.equal(response.status, 500);
+            assert.deepEqual(await response.json(), { ok: false, error: 'internal_error' });
+          }
+          assert.deepEqual(atomicSnapshot(f.db), before, 'every mutation, timestamp, actor, draft and audit rolls back');
+          f.db.exec('DROP TRIGGER atomic_fault');
+        }
+        const response = await atomicInvoke(f, c, route);
+        if (route === 'direct') assert.equal(response.ok, true);
+        else {
+          assert.equal(response.status, c.operation === 'create' && route === 'rest' ? 201 : 200);
+          assert.equal((await response.json()).ok, true);
+        }
+        atomicAssertSuccess(f, c, before, route === 'agent');
+        assert.equal(f.stats.batches, mode === 'healthy' ? 1 : 2, 'one ordered transaction per apply attempt');
+        if (route === 'agent') {
+          const committed = atomicSnapshot(f.db);
+          const duplicate = await atomicInvoke(f, c, route);
+          assert.equal(duplicate.status, 409);
+          assert.deepEqual(atomicSnapshot(f.db), committed, 'no historical repair on second confirmation');
+        }
+      } finally { f.db.close(); }
+    });
+  }
+}
+for (const mode of ['healthy', 'change_status', 'discard_audit']) test('atomic domain: discard ' + mode, async () => {
+  const f = await atomicFixture(atomicDomainCases[1], true);
+  try {
+    const before = atomicSnapshot(f.db);
+    if (mode !== 'healthy') f.db.exec("CREATE TRIGGER atomic_fault " + (mode === 'change_status' ? "BEFORE UPDATE ON agent_change WHEN NEW.status='discarded'" : "BEFORE INSERT ON audit_log WHEN NEW.action='agent_change.discard'") + " BEGIN SELECT RAISE(ABORT,'SYNTHETIC_DOMAIN_FAULT_NO_CLIENT_LEAK'); END;");
+    const invoke = () => postAgent({ request: atomicRequest('/api/agent/change/discard', { change_id: f.changeId }), env: f.env });
+    if (mode !== 'healthy') {
+      const response = await invoke();
+      assert.equal(response.status, 500);
+      assert.deepEqual(await response.json(), { ok: false, error: 'internal_error' });
+      assert.deepEqual(atomicSnapshot(f.db), before);
+      f.db.exec('DROP TRIGGER atomic_fault');
+    }
+    assert.equal((await invoke()).status, 200);
+    assert.equal(f.stats.batches, mode === 'healthy' ? 1 : 2);
+    const after = atomicSnapshot(f.db);
+    for (const table of atomicTables.filter(t => !['agent_change', 'audit_log'].includes(t))) assert.deepEqual(after[table], before[table]);
+    assert.equal(after.agent_change[0].status, 'discarded');
+    assert.equal(after.agent_change[0].confirmed_by, null);
+    assert.deepEqual(after.audit_log.slice(0, before.audit_log.length), before.audit_log);
+    const audit = after.audit_log.at(-1);
+    assert.equal(audit.actor, atomicActor);
+    assert.equal(audit.action, 'agent_change.discard');
+    assert.equal(audit.entity_id, f.changeId);
+    assert.deepEqual(JSON.parse(audit.before_json), { status: 'draft' });
+    assert.deepEqual(JSON.parse(audit.after_json), { status: 'discarded' });
+    assert.equal((await invoke()).status, 409);
+    assert.deepEqual(atomicSnapshot(f.db), after);
+  } finally { f.db.close(); }
+});
+test('atomic domain: registration refusal commits nothing', async () => {
+  const c = { ...atomicDomainCases.at(-1), payload: {} };
+  const f = await atomicFixture({ ...c, payload: { confirm_with_registrations: true } }, false);
+  try {
+    const before = atomicSnapshot(f.db);
+    const response = await eventsDomain.apply(f.adapter, { id: c.id, operation: c.operation, payload: {} }, atomicActor);
+    assert.equal(response.ok, false);
+    assert.equal(response.status, 409);
+    assert.deepEqual(atomicSnapshot(f.db), before);
+    assert.equal(f.stats.batches, 0);
+  } finally { f.db.close(); }
+});
+
+for (const status of ['published', 'discarded', 'failed']) test('atomic domain: historical ' + status + ' changes are not repaired', async () => {
+  const f = await atomicFixture(atomicDomainCases[1], true);
+  try {
+    f.db.prepare('UPDATE agent_change SET status=? WHERE id=?').run(status, f.changeId);
+    const before = atomicSnapshot(f.db);
+    for (const action of ['confirm', 'discard']) {
+      const response = await postAgent({ request: atomicRequest('/api/agent/change/' + action, { change_id: f.changeId }), env: f.env });
+      assert.equal(response.status, 409);
+      assert.deepEqual(atomicSnapshot(f.db), before);
+    }
+    assert.equal(f.stats.batches, 0);
+  } finally { f.db.close(); }
+});
+for (const c of atomicDomainCases.filter(c => c.area === 'caregiver' || c.area === 'event')) {
+  for (const route of ['agent', 'direct', 'rest']) test('atomic domain: post-commit read failure ' + c.name + ' ' + route, async () => {
+    const f = await atomicFixture(c, route === 'agent');
+    try {
+      const before = atomicSnapshot(f.db);
+      let committed = false;
+      const originalBatch = f.adapter.batch.bind(f.adapter);
+      f.adapter.batch = async statements => {
+        const result = await originalBatch(statements);
+        committed = true;
+        return result;
+      };
+      const prepare = f.adapter.prepare.bind(f.adapter);
+      const wrap = statement => ({
+        ...statement,
+        bind: (...params) => wrap(statement.bind(...params)),
+        first: async () => {
+          if (committed && statement.sql.startsWith('SELECT * FROM ' + c.table)) throw new Error('SYNTHETIC_POST_COMMIT_READ_FAULT');
+          return statement.first();
+        }
+      });
+      f.adapter.prepare = sql => wrap(prepare(sql));
+      if (route === 'direct') await assert.rejects(() => atomicInvoke(f, c, route), /SYNTHETIC_POST_COMMIT_READ_FAULT/);
+      else {
+        const response = await atomicInvoke(f, c, route);
+        assert.equal(response.status, 500);
+        assert.deepEqual(await response.json(), { ok: false, error: 'internal_error' });
+      }
+      // Write transaction already succeeded: both original audits/status are present.
+      atomicAssertSuccess(f, c, before, route === 'agent');
+      assert.equal(f.stats.batches, 1);
+    } finally { f.db.close(); }
+  });
+}

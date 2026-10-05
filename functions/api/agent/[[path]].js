@@ -284,26 +284,38 @@ export async function onRequestPost({ request, env }) {
           }
         }
 
-        // Apply via domain module (writes domain audit row with confirming actor)
+        // Trusted server-side statements join the domain mutations and original audit.
+        const additionalStatements = [
+          env.LEGACY_DB
+            .prepare("UPDATE agent_change SET status = 'published', confirmed_by = ?, updated_at = datetime('now') WHERE id = ?")
+            .bind(actor, change.id),
+          env.LEGACY_DB
+            .prepare(`
+              INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
+              VALUES (?, 'agent_change.confirm', 'agent_change', ?, ?, ?)
+            `)
+            .bind(actor, change.id, JSON.stringify({ status: 'draft' }), JSON.stringify({ status: 'published', confirmed_by: actor }))
+        ];
+        // Domain apply commits its mutation(s), original audit and these statements together.
         let applyRes;
         if (change.area === 'grant') {
           applyRes = await grantsDomain.apply(env.LEGACY_DB, {
             id: change.target_id,
             operation: change.operation,
             payload
-          }, actor);
+          }, actor, additionalStatements);
         } else if (change.area === 'caregiver') {
           applyRes = await caregiversDomain.apply(env.LEGACY_DB, {
             id: change.target_id,
             operation: change.operation,
             payload
-          }, actor);
+          }, actor, additionalStatements);
         } else if (change.area === 'event') {
           applyRes = await eventsDomain.apply(env.LEGACY_DB, {
             id: change.target_id,
             operation: change.operation,
             payload
-          }, actor);
+          }, actor, additionalStatements);
         }
 
         if (!applyRes || !applyRes.ok) {
@@ -313,26 +325,6 @@ export async function onRequestPost({ request, env }) {
             .run();
           return json({ ok: false, error: applyRes?.error || 'apply failed' }, applyRes?.status || 500);
         }
-
-        // Mark published with confirmed_by
-        await env.LEGACY_DB
-          .prepare("UPDATE agent_change SET status = 'published', confirmed_by = ?, updated_at = datetime('now') WHERE id = ?")
-          .bind(actor, change.id)
-          .run();
-
-        // Audit log agent_change.confirm
-        await env.LEGACY_DB
-          .prepare(`
-            INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
-            VALUES (?, 'agent_change.confirm', 'agent_change', ?, ?, ?)
-          `)
-          .bind(
-            actor,
-            change.id,
-            JSON.stringify({ status: 'draft' }),
-            JSON.stringify({ status: 'published', confirmed_by: actor })
-          )
-          .run();
 
         return json({ ok: true });
       }
@@ -357,12 +349,11 @@ export async function onRequestPost({ request, env }) {
           return json({ ok: false, error: `cannot discard change in status ${change.status}` }, 409);
         }
 
-        await env.LEGACY_DB
-          .prepare("UPDATE agent_change SET status = 'discarded', updated_at = datetime('now') WHERE id = ?")
-          .bind(change.id)
-          .run();
-
-        await env.LEGACY_DB
+        await env.LEGACY_DB.batch([
+          env.LEGACY_DB
+            .prepare("UPDATE agent_change SET status = 'discarded', updated_at = datetime('now') WHERE id = ?")
+            .bind(change.id),
+          env.LEGACY_DB
           .prepare(`
             INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
             VALUES (?, 'agent_change.discard', 'agent_change', ?, ?, ?)
@@ -373,7 +364,7 @@ export async function onRequestPost({ request, env }) {
             JSON.stringify({ status: 'draft' }),
             JSON.stringify({ status: 'discarded' })
           )
-          .run();
+        ]);
 
         return json({ ok: true });
       }
