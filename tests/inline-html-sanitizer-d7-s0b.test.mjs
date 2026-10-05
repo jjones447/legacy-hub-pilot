@@ -25,10 +25,29 @@ const SCHEMA_9 = readFileSync(new URL('../schema/0009_content_live.sql', import.
 
 function d1(db) {
   return {
+    // Synthetic SQLite transaction/results model, not native D1 acceptance.
+    async batch(statements) {
+      db.exec('BEGIN');
+      try {
+        const results = statements.map(({ sql, params }) => {
+          const statement = db.prepare(sql);
+          if (statement.columns().length) return { success: true, results: statement.all(...params), meta: {} };
+          const result = statement.run(...params);
+          return { success: true, results: [], meta: { changes: Number(result.changes) } };
+        });
+        db.exec('COMMIT');
+        return results;
+      } catch (error) {
+        db.exec('ROLLBACK');
+        throw error;
+      }
+    },
     prepare(sql) {
       return {
+        sql, params: [],
         bind(...params) {
           return {
+            sql, params,
             async first() {
               return db.prepare(sql).get(...params) ?? null;
             },
