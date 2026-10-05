@@ -84,3 +84,29 @@ test('docs/runbook-staging.md documents staging seed shortcut', () => {
     'runbook-staging.md must document seed-page-sections.mjs --staging --remote'
   );
 });
+
+test('staging runbook leads with current identity qualification and labels August procedures historical', () => {
+  const runbook = readFileSync(resolve(ROOT_DIR, 'docs', 'runbook-staging.md'), 'utf8');
+  assert.match(runbook, /Current-use guard.*October 5, 2026/);
+  assert.match(runbook, /September 29.*account move.*already recorded/);
+  assert.match(runbook, /staging\.caregiversanctuary\.org.*production alias/);
+  assert.match(runbook, /not proof of an isolated preview/);
+  assert.match(runbook, /exact account, project, source revision, deployment, environment and D1 name plus UUID/);
+  assert.match(runbook, /Legacy_Delivery_Tracker\.md/);
+  assert.match(runbook, /legacy-account-setup-record\.md/);
+  assert.match(runbook, /before any write, deployment or practice/);
+  assert.match(runbook, /All command samples below are historical, non-executable examples for this correction scope/);
+  assert.match(runbook, /no recreation or repointing is authorized by this history/);
+});
+
+test('staging runbook preserves current runtime STOP and distinct acceptance gates', () => {
+  const runbook = readFileSync(resolve(ROOT_DIR, 'docs', 'runbook-staging.md'), 'utf8');
+  assert.match(runbook, /Branch pushes and merges are not deployment evidence/);
+  assert.match(runbook, /no additional Lead publishing approval is required/);
+  assert.match(runbook, /no customer, production or shared-staging writes and no production restore/);
+  assert.match(runbook, /runtime preparation remains STOP: no bypass, alternate retry or installation/);
+  assert.match(runbook, /Missing or skipped real-workerd evidence is UNVERIFIED, not accepted/);
+  assert.match(runbook, /source, review, CI, runtime, deployed and client-accepted states separately/);
+  assert.match(runbook, /Coming Soon and reminders.*Shanelle's go through Jacob/);
+  assert.match(runbook, /Do not run the historical seed, restore, installation, workerd-download or broad test commands/);
+});
