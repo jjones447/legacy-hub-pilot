@@ -294,7 +294,8 @@ export async function validate(db, { id, operation, payload = {} }) {
   return { ok: false, status: 400, error: 'unsupported operation' };
 }
 
-export async function apply(db, { id, operation, payload = {} }, actor) {
+// Additional statements are supplied only by trusted server callers (not request payloads).
+export async function apply(db, { id, operation, payload = {} }, actor, additionalStatements = []) {
   const v = await validate(db, { id, operation, payload });
   if (!v.ok) {
     return v;
@@ -303,7 +304,8 @@ export async function apply(db, { id, operation, payload = {} }, actor) {
   const targetId = v.projected.id;
 
   if (operation === 'create') {
-    await db
+    await db.batch([
+      db
       .prepare(`
         INSERT INTO event (id, title, type, starts_at, ends_at, location, capacity, recurring, publish_state)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'draft')
@@ -317,16 +319,15 @@ export async function apply(db, { id, operation, payload = {} }, actor) {
         v.projected.location,
         v.projected.capacity,
         v.projected.recurring
-      )
-      .run();
-
-    await db
+      ),
+      db
       .prepare(`
         INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
         VALUES (?, 'event.create', 'event', ?, ?, ?)
       `)
-      .bind(actor, targetId, JSON.stringify(v.before), JSON.stringify(v.after))
-      .run();
+        .bind(actor, targetId, JSON.stringify(v.before), JSON.stringify(v.after)),
+      ...additionalStatements
+    ]);
 
     const created = await db
       .prepare('SELECT * FROM event WHERE id = ?')
@@ -353,15 +354,16 @@ export async function apply(db, { id, operation, payload = {} }, actor) {
     const sql = `UPDATE event SET ${setClauses.join(', ')} WHERE id = ?`;
     setParams.push(targetId);
 
-    await db.prepare(sql).bind(...setParams).run();
-
-    await db
+    await db.batch([
+      db.prepare(sql).bind(...setParams),
+      db
       .prepare(`
         INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
         VALUES (?, 'event.update', 'event', ?, ?, ?)
       `)
-      .bind(actor, targetId, JSON.stringify(v.before), JSON.stringify(v.after))
-      .run();
+        .bind(actor, targetId, JSON.stringify(v.before), JSON.stringify(v.after)),
+      ...additionalStatements
+    ]);
 
     const updated = await db
       .prepare('SELECT * FROM event WHERE id = ?')
@@ -375,18 +377,18 @@ export async function apply(db, { id, operation, payload = {} }, actor) {
   }
 
   if (operation === 'publish') {
-    await db
+    await db.batch([
+      db
       .prepare("UPDATE event SET publish_state = 'published', updated_at = datetime('now') WHERE id = ?")
-      .bind(targetId)
-      .run();
-
-    await db
+        .bind(targetId),
+      db
       .prepare(`
         INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
         VALUES (?, 'event.publish', 'event', ?, ?, ?)
       `)
-      .bind(actor, targetId, JSON.stringify(v.before), JSON.stringify(v.after))
-      .run();
+        .bind(actor, targetId, JSON.stringify(v.before), JSON.stringify(v.after)),
+      ...additionalStatements
+    ]);
 
     const updated = await db
       .prepare('SELECT * FROM event WHERE id = ?')
@@ -400,18 +402,18 @@ export async function apply(db, { id, operation, payload = {} }, actor) {
   }
 
   if (operation === 'archive') {
-    await db
+    await db.batch([
+      db
       .prepare("UPDATE event SET publish_state = 'archived', updated_at = datetime('now') WHERE id = ?")
-      .bind(targetId)
-      .run();
-
-    await db
+        .bind(targetId),
+      db
       .prepare(`
         INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
         VALUES (?, 'event.archive', 'event', ?, ?, ?)
       `)
-      .bind(actor, targetId, JSON.stringify(v.before), JSON.stringify(v.after))
-      .run();
+        .bind(actor, targetId, JSON.stringify(v.before), JSON.stringify(v.after)),
+      ...additionalStatements
+    ]);
 
     const updated = await db
       .prepare('SELECT * FROM event WHERE id = ?')

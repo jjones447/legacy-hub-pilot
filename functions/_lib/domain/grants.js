@@ -116,7 +116,8 @@ export async function validate(db, { id, operation, payload = {} }) {
   return { ok: false, status: 400, error: 'unsupported action' };
 }
 
-export async function apply(db, { id, operation, payload = {} }, actor) {
+// Additional statements are supplied only by trusted server callers (not request payloads).
+export async function apply(db, { id, operation, payload = {} }, actor, additionalStatements = []) {
   const v = await validate(db, { id, operation, payload });
   if (!v.ok) {
     return v;
@@ -127,18 +128,18 @@ export async function apply(db, { id, operation, payload = {} }, actor) {
 
   if (normalizedOp === 'review') {
     const { review_notes } = v.payload;
-    await db
+    await db.batch([
+      db
       .prepare("UPDATE grant_application SET status = 'in_review', review_notes = ?, updated_at = datetime('now') WHERE id = ?")
-      .bind(review_notes, grantId)
-      .run();
-
-    await db
+        .bind(review_notes, grantId),
+      db
       .prepare(`
         INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
         VALUES (?, 'grant_application.review', 'grant_application', ?, ?, ?)
       `)
-      .bind(actor, grantId.toString(), JSON.stringify(v.before), JSON.stringify(v.after))
-      .run();
+        .bind(actor, grantId.toString(), JSON.stringify(v.before), JSON.stringify(v.after)),
+      ...additionalStatements
+    ]);
 
     return { ok: true, grant: v.projected };
   }
@@ -146,50 +147,46 @@ export async function apply(db, { id, operation, payload = {} }, actor) {
   if (normalizedOp === 'decision') {
     const { decision, amount, care_package, review_notes } = v.payload;
 
-    await db
+    const statements = [db
       .prepare("UPDATE grant_application SET status = ?, review_notes = ?, updated_at = datetime('now') WHERE id = ?")
-      .bind(decision, review_notes, grantId)
-      .run();
+      .bind(decision, review_notes, grantId)];
 
     if (decision === 'awarded') {
-      await db
+      statements.push(db
         .prepare('INSERT INTO award (grant_application_id, amount, care_package) VALUES (?, ?, ?)')
-        .bind(grantId, amount, care_package)
-        .run();
-
-      await db
+        .bind(grantId, amount, care_package));
+      statements.push(db
         .prepare(`
           INSERT INTO followup (caregiver_id, kind, detail, source, external_ref)
           VALUES (?, 'grant_award_delivery', ?, 'staff_console', ?)
         `)
-        .bind(v.current.caregiver_id, 'Deliver care package', `grant_award_${grantId}`)
-        .run();
+        .bind(v.current.caregiver_id, 'Deliver care package', `grant_award_${grantId}`));
     }
 
-    await db
+    statements.push(db
       .prepare(`
         INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
         VALUES (?, 'grant_application.decision', 'grant_application', ?, ?, ?)
       `)
-      .bind(actor, grantId.toString(), JSON.stringify(v.before), JSON.stringify(v.after))
-      .run();
+      .bind(actor, grantId.toString(), JSON.stringify(v.before), JSON.stringify(v.after)));
+    await db.batch([...statements, ...additionalStatements]);
 
     return { ok: true, grant: v.projected };
   }
 
   if (normalizedOp === 'course_complete') {
-    await db
+    await db.batch([
+      db
       .prepare("UPDATE grant_application SET status = 'course_complete', updated_at = datetime('now') WHERE id = ?")
-      .bind(grantId)
-      .run();
-
-    await db
+        .bind(grantId),
+      db
       .prepare(`
         INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
         VALUES (?, 'grant_application.course_complete', 'grant_application', ?, ?, ?)
       `)
-      .bind(actor, grantId.toString(), JSON.stringify(v.before), JSON.stringify(v.after))
-      .run();
+        .bind(actor, grantId.toString(), JSON.stringify(v.before), JSON.stringify(v.after)),
+      ...additionalStatements
+    ]);
 
     return { ok: true, grant: v.projected };
   }
@@ -197,25 +194,23 @@ export async function apply(db, { id, operation, payload = {} }, actor) {
   if (normalizedOp === 'close') {
     const { outcome } = v.payload;
 
-    await db
+    const statements = [db
       .prepare("UPDATE grant_application SET status = 'closed', updated_at = datetime('now') WHERE id = ?")
-      .bind(grantId)
-      .run();
+      .bind(grantId)];
 
     if (v.award) {
-      await db
+      statements.push(db
         .prepare("UPDATE award SET outcome = ?, updated_at = datetime('now') WHERE id = ?")
-        .bind(outcome, v.award.id)
-        .run();
+        .bind(outcome, v.award.id));
     }
 
-    await db
+    statements.push(db
       .prepare(`
         INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
         VALUES (?, 'grant_application.close', 'grant_application', ?, ?, ?)
       `)
-      .bind(actor, grantId.toString(), JSON.stringify(v.before), JSON.stringify(v.after))
-      .run();
+      .bind(actor, grantId.toString(), JSON.stringify(v.before), JSON.stringify(v.after)));
+    await db.batch([...statements, ...additionalStatements]);
 
     return { ok: true, grant: v.projected };
   }

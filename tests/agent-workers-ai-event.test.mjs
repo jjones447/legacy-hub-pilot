@@ -144,7 +144,21 @@ test('model refusal and malformed responses retain existing fail-closed behavior
 // pipeline, not actual SQL or Cloudflare D1 atomicity/authentication.
 function workflowDb() {
   const state = { event: { ...event }, change: null, audits: [], writes: [] };
-  return { state, prepare(sql) {
+  return { state, async batch(statements) {
+    const before = structuredClone(state);
+    try {
+      const results = [];
+      for (const statement of statements) {
+        await statement.run();
+        results.push({ success: true, results: [], meta: {} });
+      }
+      return results;
+    } catch (error) {
+      for (const key of Object.keys(state)) delete state[key];
+      Object.assign(state, before);
+      throw error;
+    }
+  }, prepare(sql) {
     let values = [];
     return { bind(...args) { values = args; return this; }, async first() {
       if (sql.includes('FROM event')) return { ...state.event };
