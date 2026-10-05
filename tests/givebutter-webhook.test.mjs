@@ -76,8 +76,114 @@ beforeEach(() => {
   raw.exec(SCHEMA_2); // has public events: ev_morning_yoga, ev_support_group
   env = {
     LEGACY_DB: d1(raw),
+    GIVEBUTTER_WEBHOOK_SIGNATURE_MODE: 'hmac_sha256', // Explicit legacy adapter fixtures.
     GIVEBUTTER_WEBHOOK_SECRET: WEBHOOK_SECRET
   };
+});
+
+// Provider-shaped fixtures use synthetic contacts and resource IDs only.
+function providerPayload(event = 'transaction.succeeded', id = 'synthetic_resource_1') {
+  return { event, data: { id, first_name: 'Synthetic', last_name: 'Fixture', email: 'fixture@example.invalid', amount: 1 } };
+}
+
+async function postProvider(payload, signature = WEBHOOK_SECRET, mode) {
+  const providerEnv = { ...env };
+  delete providerEnv.GIVEBUTTER_WEBHOOK_SIGNATURE_MODE;
+  if (mode !== undefined) providerEnv.GIVEBUTTER_WEBHOOK_SIGNATURE_MODE = mode;
+  return postGiveButter({
+    request: mockRequest('https://example.invalid/api/webhooks/givebutter', 'POST', payload, { Signature: signature }),
+    env: providerEnv
+  });
+}
+
+test('documented secret signature and transaction data.id create a donation followup', async () => {
+  const res = await postProvider(providerPayload());
+  assert.equal(res.status, 200);
+  assert.equal((await res.json()).entity, 'followup');
+  const row = raw.prepare('SELECT kind, external_ref FROM followup').get();
+  assert.equal(row.kind, 'donation');
+  assert.equal(row.external_ref, 'transaction.succeeded:synthetic_resource_1');
+});
+
+test('documented ticket data.id without event mapping remains a registration followup', async () => {
+  const payload = providerPayload('ticket.created');
+  delete payload.data.amount;
+  assert.equal((await postProvider(payload)).status, 200);
+  const row = raw.prepare('SELECT kind, external_ref FROM followup').get();
+  assert.equal(row.kind, 'gb_registration');
+  assert.equal(row.external_ref, 'ticket.created:synthetic_resource_1');
+  assert.equal(raw.prepare('SELECT COUNT(*) AS n FROM registration').get().n, 0);
+});
+
+test('provider-shaped sequential replay creates only one task and audit', async () => {
+  const payload = providerPayload();
+  assert.equal((await postProvider(payload)).status, 200);
+  const replay = await postProvider(payload);
+  assert.equal(replay.status, 200);
+  assert.equal((await replay.json()).duplicate, true);
+  assert.equal(raw.prepare('SELECT COUNT(*) AS n FROM followup').get().n, 1);
+  assert.equal(raw.prepare('SELECT COUNT(*) AS n FROM audit_log').get().n, 1);
+});
+
+test('transaction and ticket resource IDs cannot collide across event kinds', async () => {
+  assert.equal((await postProvider(providerPayload())).status, 200);
+  const ticket = providerPayload('ticket.created');
+  delete ticket.data.amount;
+  assert.equal((await postProvider(ticket)).status, 200);
+  assert.equal(raw.prepare('SELECT COUNT(*) AS n FROM followup').get().n, 2);
+});
+
+test('documented secret mode is explicit and rejects HMAC rather than auto detecting', async () => {
+  const payload = providerPayload();
+  assert.equal((await postProvider(payload, WEBHOOK_SECRET, 'secret')).status, 200);
+  const signature = computeSignature(JSON.stringify(payload), WEBHOOK_SECRET);
+  assert.equal((await postProvider(payload, signature)).status, 401);
+});
+
+test('legacy HMAC mode rejects a bare secret and still binds the body', async () => {
+  const payload = providerPayload();
+  assert.equal((await postProvider(payload, WEBHOOK_SECRET, 'hmac_sha256')).status, 401);
+  const signature = computeSignature(JSON.stringify(payload), WEBHOOK_SECRET);
+  assert.equal((await postProvider(payload, signature, 'hmac_sha256')).status, 200);
+  const changed = providerPayload('transaction.succeeded', 'another_resource');
+  assert.equal((await postProvider(changed, signature, 'hmac_sha256')).status, 401);
+});
+
+test('unknown signature mode fails closed before database access', async () => {
+  assert.equal((await postProvider(providerPayload(), WEBHOOK_SECRET, 'anything')).status, 503);
+  assert.equal(raw.prepare('SELECT COUNT(*) AS n FROM caregiver').get().n, 0);
+});
+
+test('wrong documented secret fails closed before database access', async () => {
+  assert.equal((await postProvider(providerPayload(), 'wrong-secret')).status, 401);
+  assert.equal(raw.prepare('SELECT COUNT(*) AS n FROM caregiver').get().n, 0);
+});
+
+test('missing or malformed resource IDs fail before database access', async () => {
+  for (const id of [undefined, null, '', {}, [], 'x'.repeat(201), -1, 1.5]) {
+    const payload = providerPayload();
+    payload.data.id = id;
+    assert.equal((await postProvider(payload)).status, 400);
+  }
+  assert.equal(raw.prepare('SELECT COUNT(*) AS n FROM caregiver').get().n, 0);
+});
+
+test('resource-ID fallback does not activate unrelated provider events', async () => {
+  assert.equal((await postProvider(providerPayload('contact.created'))).status, 400);
+  assert.equal(raw.prepare('SELECT COUNT(*) AS n FROM caregiver').get().n, 0);
+});
+
+test('numeric resource IDs are normalized without changing explicit event IDs', async () => {
+  assert.equal((await postProvider(providerPayload('transaction.succeeded', 42))).status, 200);
+  const payload = { ...providerPayload('ticket.created'), id: 'original_delivery_id' };
+  assert.equal((await postProvider(payload)).status, 200);
+  assert.equal(raw.prepare("SELECT COUNT(*) AS n FROM followup WHERE external_ref IN ('transaction.succeeded:42', 'original_delivery_id')").get().n, 2);
+});
+
+test('non-object JSON bodies fail with 400 rather than internal error', async () => {
+  for (const payload of ['string', [1, 2], 123]) {
+    assert.equal((await postProvider(payload)).status, 400);
+  }
 });
 
 test('GiveButter webhook rejects missing signature with 401', async () => {

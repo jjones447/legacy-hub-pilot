@@ -20,13 +20,39 @@ async function getHmacSha256(message, secret) {
     .join("");
 }
 
-function constantTimeEqual(a, b) {
-  if (a.length !== b.length) return false;
+async function secretEqual(a, b) {
+  const enc = new TextEncoder();
+  const [aHash, bHash] = await Promise.all([
+    crypto.subtle.digest('SHA-256', enc.encode(a)),
+    crypto.subtle.digest('SHA-256', enc.encode(b)),
+  ]);
+  // Workers provides the native timing-safe operation. Node synthetic tests
+  // use a fixed-size comparison instead; neither branch compares secret lengths.
+  if (typeof crypto.subtle.timingSafeEqual === 'function') {
+    return crypto.subtle.timingSafeEqual(aHash, bHash);
+  }
+  const aBytes = new Uint8Array(aHash);
+  const bBytes = new Uint8Array(bHash);
   let result = 0;
-  for (let i = 0; i < a.length; i++) {
-    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  for (let i = 0; i < aBytes.length; i++) {
+    result |= aBytes[i] ^ bBytes[i];
   }
   return result === 0;
+}
+
+function resourceId(value) {
+  if (typeof value === 'string' && value.length > 0 && value.length <= 200) return value;
+  if (Number.isSafeInteger(value) && value >= 0) return String(value);
+  return null;
+}
+
+function externalReference(body) {
+  // Preserve explicit delivery IDs used by the legacy adapter. Official
+  // transaction/ticket payloads carry only data.id; namespace by event kind.
+  if (body.id !== undefined && body.id !== null) return resourceId(body.id);
+  if (body.event !== 'transaction.succeeded' && body.event !== 'ticket.created') return null;
+  const id = resourceId(body.data?.id);
+  return id === null ? null : `${body.event}:${id}`;
 }
 
 function json(obj, status = 200) {
@@ -43,14 +69,21 @@ export async function onRequestPost({ request, env }) {
       return json({ ok: false, error: 'webhook_not_configured' }, 503);
     }
 
+    // Givebutter documents a Signature header containing the dashboard secret.
+    // Old adapters can explicitly retain raw-body HMAC; never auto-detect modes.
+    const mode = env.GIVEBUTTER_WEBHOOK_SIGNATURE_MODE ?? 'secret';
+    if (mode !== 'secret' && mode !== 'hmac_sha256') {
+      return json({ ok: false, error: 'webhook_not_configured' }, 503);
+    }
+
     const signatureHeader = request.headers.get('Signature');
     if (!signatureHeader) {
       return json({ ok: false, error: 'missing signature header' }, 401);
     }
 
     const rawBody = await request.text();
-    const computedSignature = await getHmacSha256(rawBody, secret);
-    if (!constantTimeEqual(computedSignature, signatureHeader)) {
+    const expectedSignature = mode === 'secret' ? secret : await getHmacSha256(rawBody, secret);
+    if (!await secretEqual(expectedSignature, signatureHeader)) {
       return json({ ok: false, error: 'invalid signature' }, 401);
     }
 
@@ -61,8 +94,11 @@ export async function onRequestPost({ request, env }) {
       return json({ ok: false, error: 'invalid JSON body' }, 400);
     }
 
-    const externalRef = body.id; // top-level GiveButter event ID
-    if (!externalRef) {
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return json({ ok: false, error: 'invalid JSON body' }, 400);
+    }
+    const externalRef = externalReference(body);
+    if (externalRef === null) {
       return json({ ok: false, error: 'missing event id' }, 400);
     }
 
