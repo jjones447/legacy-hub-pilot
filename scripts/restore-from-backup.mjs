@@ -4,6 +4,9 @@
 // Recreates schema from schema/*.sql in order (statement by statement),
 // loads table data in configurable batches, verifies row counts against manifest.json,
 // and spot-checks relationships.
+// Input preflight caches the complete JSON snapshot before target SQL/config writes.
+// This costs snapshot-sized memory, not unbounded-scale/integrity acceptance, and
+// does not make later schema, SQL, provider or runtime restore failures atomic.
 
 import { readdirSync, readFileSync, writeFileSync, unlinkSync, existsSync } from 'node:fs';
 import { resolve, join, dirname } from 'node:path';
@@ -375,9 +378,62 @@ export async function restoreDatabase({
   const dumpPath = resolve(dumpDir);
   const manifestPath = join(dumpPath, 'manifest.json');
   if (!existsSync(manifestPath)) {
-    throw new Error(`Invalid dump directory: manifest.json not found in ${dumpPath}`);
+    throw new Error('REFUSAL: Backup manifest is missing.');
   }
-  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  let manifest;
+  try {
+    manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  } catch (_) {
+    throw new Error('REFUSAL: Backup manifest is unreadable or invalid JSON.');
+  }
+  const isPlainRecord = (value) => value !== null && typeof value === 'object'
+    && (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null);
+  if (!isPlainRecord(manifest) || !isPlainRecord(manifest.tables)
+      || Object.keys(manifest.tables).length === 0) {
+    throw new Error('REFUSAL: Backup tables must be a nonempty object.');
+  }
+  const identifierPattern = /^[A-Za-z_][A-Za-z0-9_]*$/;
+  const tableNames = Object.keys(manifest.tables);
+  const tableRows = new Map();
+  // Validate and preload every declared file, including zero-count tables, before
+  // either restore branch can prepare/execute target SQL or create CLI files.
+  for (const tableName of tableNames) {
+    if (!identifierPattern.test(tableName)) {
+      throw new Error('REFUSAL: Invalid backup table identifier.');
+    }
+    const expectedCount = manifest.tables[tableName];
+    if (!Number.isSafeInteger(expectedCount) || expectedCount < 0) {
+      throw new Error('REFUSAL: Backup row counts must be safe nonnegative integers.');
+    }
+    const tableFile = join(dumpPath, `${tableName}.json`);
+    if (!existsSync(tableFile)) {
+      throw new Error('REFUSAL: A required backup table file is missing.');
+    }
+    let rows;
+    try {
+      rows = JSON.parse(readFileSync(tableFile, 'utf8'));
+    } catch (_) {
+      throw new Error('REFUSAL: A backup table file is unreadable or invalid JSON.');
+    }
+    if (!Array.isArray(rows) || rows.length !== expectedCount) {
+      throw new Error('REFUSAL: Backup table rows must be an array matching the declared count.');
+    }
+    for (const row of rows) {
+      if (!isPlainRecord(row) || Object.keys(row).length === 0) {
+        throw new Error('REFUSAL: Backup rows must be nonempty objects.');
+      }
+      for (const [column, value] of Object.entries(row)) {
+        if (!identifierPattern.test(column)) {
+          throw new Error('REFUSAL: Invalid backup column identifier.');
+        }
+        if (!(value === null || typeof value === 'string' || typeof value === 'boolean'
+            || (typeof value === 'number' && Number.isFinite(value)))) {
+          throw new Error('REFUSAL: Backup values must be finite JSON scalars.');
+        }
+      }
+    }
+    tableRows.set(tableName, rows);
+  }
 
   const schemasPath = schemaDir ? resolve(schemaDir) : join(ROOT_DIR, 'schema');
   const schemaFiles = readdirSync(schemasPath)
@@ -432,8 +488,6 @@ export async function restoreDatabase({
       await db.prepare('PRAGMA foreign_keys = OFF;').run();
     }
 
-    const tableNames = Object.keys(manifest.tables);
-
     // Delete in reverse dependency order (children first)
     const deleteOrder = sortTablesForDelete(tableNames);
     for (const tableName of deleteOrder) {
@@ -449,9 +503,7 @@ export async function restoreDatabase({
     // Insert in dependency order (parents first) in batches
     const insertOrder = sortTablesForInsert(tableNames);
     for (const tableName of insertOrder) {
-      const tableFile = join(dumpPath, `${tableName}.json`);
-      if (!existsSync(tableFile)) continue;
-      const rows = JSON.parse(readFileSync(tableFile, 'utf8'));
+      const rows = tableRows.get(tableName);
       if (rows.length > 0) {
         const chunks = chunkArray(rows, batchSize);
         for (const chunk of chunks) {
@@ -601,8 +653,6 @@ export async function restoreDatabase({
     // 2. Load table data in batches over --command
     console.log(`[restore] Loading table data from ${dumpPath} (batch size: ${batchSize})...`);
     executeCmd('PRAGMA foreign_keys = OFF;');
-    const tableNames = Object.keys(manifest.tables);
-
     // Delete in reverse dependency order (children first)
     const deleteOrder = sortTablesForDelete(tableNames);
     for (const tableName of deleteOrder) {
@@ -614,9 +664,7 @@ export async function restoreDatabase({
     // Insert in dependency order (parents first) in batches
     const insertOrder = sortTablesForInsert(tableNames);
     for (const tableName of insertOrder) {
-      const tableFile = join(dumpPath, `${tableName}.json`);
-      if (!existsSync(tableFile)) continue;
-      const rows = JSON.parse(readFileSync(tableFile, 'utf8'));
+      const rows = tableRows.get(tableName);
       if (rows.length > 0) {
         const chunks = chunkArray(rows, batchSize);
         for (const chunk of chunks) {
