@@ -3,7 +3,7 @@
 // Discovers every table from sqlite_master and dumps to local directory as JSON + manifest.json.
 // No HTTP routes. Can be invoked directly or via Wrangler.
 
-import { readdirSync, mkdirSync, writeFileSync, unlinkSync, existsSync } from 'node:fs';
+import { readdirSync, mkdirSync, writeFileSync, unlinkSync, existsSync, lstatSync } from 'node:fs';
 import { resolve, join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
@@ -45,6 +45,13 @@ export async function exportDatabase({
   const now = new Date();
   const dateStr = now.toISOString().slice(0, 10);
   const targetDir = outputDir ? resolve(outputDir) : resolve(ROOT_DIR, 'backups', dateStr);
+
+  // Preserve any existing completion entry without reading or repairing its body.
+  // Lookup errors fail closed; this preflight is not a concurrent-export lock.
+  if (lstatSync(join(targetDir, 'manifest.json'), { throwIfNoEntry: false }) !== undefined) {
+    throw new Error(`Refusal: completed export already exists at ${targetDir}`);
+  }
+
   mkdirSync(targetDir, { recursive: true });
 
   const latestMigration = resolveLatestMigration(schemaDir);
