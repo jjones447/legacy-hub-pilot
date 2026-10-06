@@ -332,17 +332,18 @@ export async function spotCheckRelationships(queryFn) {
     checks.grantId = cg.grant_id;
     checks.hasAward = Boolean(cg.award_id);
     checks.awardId = cg.award_id;
+    const caregiverIdLiteral = escapeSqlValue(cg.caregiver_id);
 
     // Followups
-    const fuRows = await queryFn(`SELECT COUNT(*) as count FROM followup WHERE caregiver_id = '${cg.caregiver_id}'`);
+    const fuRows = await queryFn(`SELECT COUNT(*) as count FROM followup WHERE caregiver_id = ${caregiverIdLiteral}`);
     checks.followupCount = fuRows[0]?.count ?? 0;
 
     // Contact history
-    const chRows = await queryFn(`SELECT COUNT(*) as count FROM contact_history WHERE caregiver_id = '${cg.caregiver_id}'`);
+    const chRows = await queryFn(`SELECT COUNT(*) as count FROM contact_history WHERE caregiver_id = ${caregiverIdLiteral}`);
     checks.contactHistoryCount = chRows[0]?.count ?? 0;
 
     // Notes
-    const noteRows = await queryFn(`SELECT COUNT(*) as count FROM note WHERE caregiver_id = '${cg.caregiver_id}'`);
+    const noteRows = await queryFn(`SELECT COUNT(*) as count FROM note WHERE caregiver_id = ${caregiverIdLiteral}`);
     checks.noteCount = noteRows[0]?.count ?? 0;
   }
 
