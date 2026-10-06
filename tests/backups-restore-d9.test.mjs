@@ -9,7 +9,7 @@
 
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { readdirSync, readFileSync, rmSync, existsSync } from 'node:fs';
+import { readdirSync, readFileSync, rmSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
@@ -604,5 +604,117 @@ test('14. Existing manifest object is preserved without downloading or repairing
   assert.deepEqual(f.snapshot(), before);
   assert.deepEqual(f.calls, {
     head: ['legacy-hub/2026-10-06/manifest.json'], prepare: [], put: [], list: [], delete: []
+  });
+});
+
+// [pc2-codex-13] Local completion-entry protection; no exporter CLI or real backup fixtures.
+async function withLocalExportFixture(caseName, run) {
+  const fixtureRoot = join(ROOT_DIR, 'tests', 'fixtures', 'temp-export-completion-test');
+  assert.equal(existsSync(fixtureRoot), false, 'the sole synthetic fixture root must start absent');
+  try {
+    await run(join(fixtureRoot, caseName));
+  } finally {
+    assert.equal(dirname(fixtureRoot), join(ROOT_DIR, 'tests', 'fixtures'));
+    if (existsSync(fixtureRoot)) rmSync(fixtureRoot, { recursive: true, force: true });
+  }
+}
+
+function localExportFixture() {
+  const calls = [];
+  const state = { second: false };
+  const db = {
+    prepare(sql) {
+      calls.push(sql);
+      return {
+        async all() {
+          if (sql.includes('sqlite_master')) return { results: [{ name: 'alpha' }, { name: 'beta' }] };
+          assert.match(sql, /^SELECT \* FROM (alpha|beta)$/);
+          if (sql.endsWith('beta')) {
+            if (state.second) throw new Error('synthetic beta SELECT failure');
+            return { results: [{ id: 'b', value: 'original-beta' }] };
+          }
+          return { results: state.second
+            ? [{ id: 'a', value: 'changed-alpha' }, { id: 'a2', value: 'added-alpha' }]
+            : [{ id: 'a', value: 'original-alpha' }] };
+        }
+      };
+    }
+  };
+  return { db, calls, state };
+}
+
+function localExportSnapshot(root, base = root) {
+  const entries = [];
+  for (const item of readdirSync(root, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+    const path = join(root, item.name);
+    const key = path.slice(base.length + 1);
+    if (item.isDirectory()) {
+      entries.push([key, 'directory']);
+      entries.push(...localExportSnapshot(path, base));
+    } else {
+      entries.push([key, readFileSync(path)]);
+    }
+  }
+  return entries;
+}
+
+test('15. Completed local export preserves all bytes and refuses repeat before any database call', async () => {
+  await withLocalExportFixture('completed', async outputDir => {
+    const f = localExportFixture();
+    const first = await exportDatabase({ db: f.db, outputDir, schemaDir: SCHEMAS_DIR });
+    assert.deepEqual(first.tables, { alpha: 1, beta: 1 });
+    writeFileSync(join(outputDir, 'unrelated.txt'), 'preserve this unrelated synthetic file');
+    const before = localExportSnapshot(outputDir);
+    f.state.second = true;
+    f.calls.length = 0;
+    let refusal;
+    try { await exportDatabase({ db: f.db, outputDir, schemaDir: SCHEMAS_DIR }); }
+    catch (error) { refusal = error; }
+    assert.deepEqual(localExportSnapshot(outputDir), before);
+    assert.match(refusal?.message || '', /completed export/i);
+    assert.deepEqual(f.calls, []);
+  });
+});
+
+test('16. Opaque local completion marker is preserved without parsing or repair', async () => {
+  await withLocalExportFixture('opaque', async outputDir => {
+    mkdirSync(outputDir, { recursive: true });
+    writeFileSync(join(outputDir, 'manifest.json'), 'historical opaque marker bytes');
+    const before = localExportSnapshot(outputDir);
+    const f = localExportFixture();
+    await assert.rejects(exportDatabase({ db: f.db, outputDir, schemaDir: SCHEMAS_DIR }), /completed export/i);
+    assert.deepEqual(localExportSnapshot(outputDir), before);
+    assert.deepEqual(f.calls, []);
+  });
+});
+
+test('17. Fresh local output without a completion marker retains the existing export format', async () => {
+  await withLocalExportFixture('fresh', async outputDir => {
+    assert.equal(existsSync(outputDir), false);
+    const f = localExportFixture();
+    const result = await exportDatabase({ db: f.db, outputDir, schemaDir: SCHEMAS_DIR });
+    assert.equal(result.outputDir, outputDir);
+    assert.deepEqual(result.tables, { alpha: 1, beta: 1 });
+    assert.equal(result.totalRows, 2);
+    assert.deepEqual(readdirSync(outputDir).sort(), ['alpha.json', 'beta.json', 'manifest.json']);
+    assert.deepEqual(JSON.parse(readFileSync(join(outputDir, 'manifest.json'), 'utf8')), {
+      version: 1, timestamp: result.manifest.timestamp, latest_migration: '0012_wellness_checkin.sql',
+      tables: { alpha: 1, beta: 1 }, total_rows: 2
+    });
+  });
+});
+
+test('18. A directory at the completion marker refuses without new files or database reads', async () => {
+  await withLocalExportFixture('directory-marker', async outputDir => {
+    mkdirSync(join(outputDir, 'manifest.json'), { recursive: true });
+    writeFileSync(join(outputDir, 'manifest.json', 'unchanged.txt'), 'keep this synthetic entry');
+    const before = localExportSnapshot(outputDir);
+    const f = localExportFixture();
+    let refusal;
+    try { await exportDatabase({ db: f.db, outputDir, schemaDir: SCHEMAS_DIR }); }
+    catch (error) { refusal = error; }
+    assert.deepEqual(localExportSnapshot(outputDir), before);
+    assert.match(refusal?.message || '', /completed export/i);
+    assert.deepEqual(f.calls, []);
   });
 });
