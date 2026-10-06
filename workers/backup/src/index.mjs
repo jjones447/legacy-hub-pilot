@@ -50,6 +50,13 @@ export async function runBackup(env, options = {}) {
   const prefix = options.prefix || `legacy-hub/${dateStr}`;
   const retentionDays = options.retentionDays !== undefined ? options.retentionDays : 30;
 
+  // A completed prefix must never be overwritten by a later sequential run.
+  // Lookup failure also refuses before database reads, uploads or pruning.
+  // This preflight is not a lock against concurrent runs or a database snapshot.
+  if (await bucket.head(`${prefix}/manifest.json`) !== null) {
+    throw new Error(`Refusal: completed backup already exists at ${prefix}`);
+  }
+
   // 1. Discover all tables dynamically from sqlite_master (excluding sqlite_% and _cf_%)
   const masterRes = await db.prepare(
     "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY name"

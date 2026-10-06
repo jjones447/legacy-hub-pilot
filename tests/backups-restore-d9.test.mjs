@@ -103,6 +103,12 @@ class MockR2Bucket {
     this.store = new Map();
   }
 
+  async head(key) {
+    if (!this.store.has(key)) return null;
+    const item = this.store.get(key);
+    return { key, size: Buffer.byteLength(item.value), httpMetadata: item.metadata.httpMetadata };
+  }
+
   async put(key, value, options = {}) {
     this.store.set(key, { value: String(value), metadata: options });
     return { key };
@@ -484,3 +490,119 @@ test('9. Manifest migration test: fails if recorded value is older than newest f
   );
 });
 
+// [pc2-codex-13] Sequential completed-prefix protection, not native R2/D1 or concurrency proof.
+function backupPrefixFixture() {
+  const bucket = new MockR2Bucket();
+  const rows = { alpha: [{ id: 'a', value: 'original-alpha' }], beta: [{ id: 'b', value: 'original-beta' }] };
+  const calls = { head: [], prepare: [], put: [], list: [], delete: [] };
+  for (const method of ['head', 'put', 'list', 'delete']) {
+    const original = bucket[method].bind(bucket);
+    bucket[method] = async (...args) => {
+      calls[method].push(args[0]);
+      return original(...args);
+    };
+  }
+  const db = {
+    prepare(sql) {
+      calls.prepare.push(sql);
+      return {
+        async all() {
+          if (sql.includes('sqlite_master')) return { results: [{ name: 'alpha' }, { name: 'beta' }] };
+          const match = sql.match(/^SELECT \* FROM "(alpha|beta)"$/);
+          assert.ok(match, 'only synthetic table SELECTs are allowed');
+          return { results: rows[match[1]] };
+        },
+        async first() {
+          assert.equal(sql, 'SELECT name FROM d1_migrations ORDER BY name DESC LIMIT 1');
+          return { name: '0012_wellness_checkin.sql' };
+        }
+      };
+    }
+  };
+  return {
+    bucket, rows, calls, env: { DB: db, BACKUPS: bucket },
+    snapshot: () => structuredClone([...bucket.store.entries()].sort(([a], [b]) => a.localeCompare(b))),
+    reset: () => { for (const method of Object.keys(calls)) calls[method].length = 0; }
+  };
+}
+
+for (const [label, prefix] of [['default date', undefined], ['explicit prefix', 'legacy-hub/synthetic-selected-prefix']]) {
+  test(`10. Completed backup ${label} refuses repeat before reads, overwrites or pruning`, async () => {
+    const f = backupPrefixFixture();
+    const options = { now: '2026-10-06T03:00:00.000Z', ...(prefix ? { prefix } : {}) };
+    const first = await runBackup(f.env, options);
+    assert.equal(first.success, true);
+    f.bucket.store.set('legacy-hub/2026-09-01/unrelated-expired.json', { value: 'preserve-on-refusal', metadata: {} });
+    const before = f.snapshot();
+    f.rows.alpha.push({ id: 'a2', value: 'changed-second-run' });
+    f.reset();
+    // Reproduce the old failure mode if the guard ever disappears.
+    const originalPut = f.bucket.put.bind(f.bucket);
+    f.bucket.put = async (...args) => {
+      if (f.calls.put.length === 1) {
+        f.calls.put.push(args[0]);
+        throw new Error('synthetic second-put failure');
+      }
+      return originalPut(...args);
+    };
+    let refusal;
+    try { await runBackup(f.env, { ...options, now: '2026-10-06T04:00:00.000Z' }); }
+    catch (error) { refusal = error; }
+    assert.deepEqual(f.snapshot(), before, 'all completed table bytes, manifest and unrelated objects must survive');
+    assert.match(refusal?.message || '', /completed backup/i);
+    assert.deepEqual(f.calls, {
+      head: [`${first.prefix}/manifest.json`], prepare: [], put: [], list: [], delete: []
+    });
+  });
+}
+
+test('11. Manifest HEAD lookup failure propagates before any database read or bucket mutation', async () => {
+  const f = backupPrefixFixture();
+  f.bucket.store.set('legacy-hub/2026-09-01/unrelated.json', { value: 'unchanged', metadata: {} });
+  const before = f.snapshot();
+  const lookupError = new Error('synthetic HEAD unavailable');
+  f.bucket.head = async (key) => { f.calls.head.push(key); throw lookupError; };
+  await assert.rejects(runBackup(f.env, { now: '2026-10-06T03:00:00.000Z' }), error => error === lookupError);
+  assert.deepEqual(f.snapshot(), before);
+  assert.deepEqual(f.calls, {
+    head: ['legacy-hub/2026-10-06/manifest.json'], prepare: [], put: [], list: [], delete: []
+  });
+});
+
+test('12. Absent manifest permits the existing complete backup and manifest format', async () => {
+  const f = backupPrefixFixture();
+  const result = await runBackup(f.env, { now: '2026-10-06T03:00:00.000Z' });
+  assert.equal(result.success, true);
+  assert.deepEqual(f.calls.head, ['legacy-hub/2026-10-06/manifest.json']);
+  assert.deepEqual(f.calls.put, ['legacy-hub/2026-10-06/alpha.json', 'legacy-hub/2026-10-06/beta.json', 'legacy-hub/2026-10-06/manifest.json']);
+  assert.equal(f.calls.list.length, 1);
+  assert.equal(f.calls.delete.length, 0);
+  assert.deepEqual(JSON.parse(f.bucket.store.get('legacy-hub/2026-10-06/manifest.json').value), {
+    version: 1, timestamp: '2026-10-06T03:00:00.000Z', latest_migration: '0012_wellness_checkin.sql',
+    tables: { alpha: 1, beta: 1 }, total_rows: 2
+  });
+});
+
+test('13. A different date backs up new rows while preserving the completed prior prefix', async () => {
+  const f = backupPrefixFixture();
+  await runBackup(f.env, { now: '2026-10-06T03:00:00.000Z' });
+  const before = f.snapshot();
+  f.rows.alpha.push({ id: 'a2', value: 'new-day' });
+  f.reset();
+  const result = await runBackup(f.env, { now: '2026-10-07T03:00:00.000Z' });
+  assert.deepEqual(result.tables, { alpha: 2, beta: 1 });
+  assert.deepEqual(f.calls.head, ['legacy-hub/2026-10-07/manifest.json']);
+  assert.equal(f.calls.put.length, 3);
+  for (const [key, item] of before) assert.deepEqual(f.bucket.store.get(key), item);
+});
+
+test('14. Existing manifest object is preserved without downloading or repairing its body', async () => {
+  const f = backupPrefixFixture();
+  f.bucket.store.set('legacy-hub/2026-10-06/manifest.json', { value: 'historical opaque bytes', metadata: { custom: 'preserve' } });
+  const before = f.snapshot();
+  await assert.rejects(runBackup(f.env, { now: '2026-10-06T03:00:00.000Z' }), /completed backup/i);
+  assert.deepEqual(f.snapshot(), before);
+  assert.deepEqual(f.calls, {
+    head: ['legacy-hub/2026-10-06/manifest.json'], prepare: [], put: [], list: [], delete: []
+  });
+});
