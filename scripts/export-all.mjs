@@ -28,9 +28,35 @@ export function resolveLatestMigration(schemaDir = join(ROOT_DIR, 'schema')) {
   return '0008_agent_change.sql';
 }
 
-function createTempWranglerConfig(dbName) {
+export function selectExportDatabaseIdentity(records, target) {
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const validName = value => typeof value === 'string' && value.trim().length > 0 && !/[\u0000-\u001f\u007f]/.test(value);
+  if (!Array.isArray(records) || !validName(target)) {
+    throw new Error('REFUSAL: Invalid export database identity metadata or target.');
+  }
+  const identities = records.map(record => {
+    if (!record || Array.isArray(record) || typeof record !== 'object' || !validName(record.name)
+        || typeof record.uuid !== 'string' || !uuidPattern.test(record.uuid)) {
+      throw new Error('REFUSAL: Malformed export database identity metadata.');
+    }
+    return { name: record.name, uuid: record.uuid.toLowerCase() };
+  });
+  const matches = identities.filter(record => record.name === target || record.uuid === target.toLowerCase());
+  if (matches.length !== 1) {
+    throw new Error('REFUSAL: Export database identity is missing or ambiguous.');
+  }
+  const identity = matches[0];
+  if (identities.filter(record => record.name === identity.name).length !== 1
+      || identities.filter(record => record.uuid === identity.uuid).length !== 1) {
+    throw new Error('REFUSAL: Export database identity is ambiguous.');
+  }
+  return identity;
+}
+
+function createTempWranglerConfig(dbName, dbId) {
+  const identity = selectExportDatabaseIdentity([{ name: dbName, uuid: dbId }], dbId);
   const tmpPath = join(ROOT_DIR, `.wrangler-export-${Date.now()}-${Math.random().toString(36).slice(2)}.toml`);
-  const content = `name = "legacy-hub"\ncompatibility_date = "2026-07-01"\n[[d1_databases]]\nbinding = "DB"\ndatabase_name = "${dbName}"\ndatabase_id = "${dbName}-id"\n`;
+  const content = `name = "legacy-hub"\ncompatibility_date = "2026-07-01"\n[[d1_databases]]\nbinding = "DB"\ndatabase_name = ${JSON.stringify(identity.name)}\ndatabase_id = ${JSON.stringify(identity.uuid)}\n`;
   writeFileSync(tmpPath, content, 'utf8');
   return tmpPath;
 }
@@ -117,7 +143,21 @@ export async function exportDatabase({
   try {
     let effectiveConfig = configPath;
     if (!effectiveConfig) {
-      tempConfig = createTempWranglerConfig(databaseName);
+      // Listing reads remote account metadata even for a local export.
+      // Do not expose provider output/errors or guess an unresolved identity.
+      let records;
+      try {
+        const output = execFileSync(process.execPath, [wranglerEntry, 'd1', 'list', '--json'], {
+          cwd: ROOT_DIR, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+          shell: false, windowsHide: true
+        });
+        records = JSON.parse(output);
+      } catch (_) {
+        throw new Error('REFUSAL: Cannot read export database identity metadata.');
+      }
+      const identity = selectExportDatabaseIdentity(records, databaseName);
+      databaseName = identity.name;
+      tempConfig = createTempWranglerConfig(identity.name, identity.uuid);
       effectiveConfig = tempConfig;
     }
 

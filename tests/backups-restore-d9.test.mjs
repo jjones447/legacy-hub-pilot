@@ -17,6 +17,7 @@ import vm from 'node:vm';
 
 import backupWorker, { runBackup, pruneOldBackups, BAKED_IN_LATEST_MIGRATION } from '../workers/backup/src/index.mjs';
 import { exportDatabase, resolveLatestMigration } from '../scripts/export-all.mjs';
+import * as exporterIdentity from '../scripts/export-all.mjs';
 import {
   restoreDatabase,
   checkTargetDatabase,
@@ -847,4 +848,99 @@ test('27. Project-local entry presence qualifies only construction, not boot or 
   const context = { ROOT_DIR: root, join, existsSync(path) { lookups.push(path); return true; } };
   vm.runInNewContext(exporterCliPreflightConstruction(), context, { timeout: 1000 });
   assert.deepEqual(lookups, [join(root, 'node_modules', 'wrangler', 'bin', 'wrangler.js')]);
+});
+
+// [pc2-codex-13] Primary CLI list shape: array of canonical name/uuid rows; no provider execution.
+const exportIdentityRow = { name: 'synthetic-export-db', uuid: 'a1b2c3d4-e5f6-47a8-89bc-d0e1f2a3b4c5' };
+test('28. Export identity selects exact name or UUID and normalizes canonical UUID case', () => {
+  const row = { ...exportIdentityRow, uuid: exportIdentityRow.uuid.toUpperCase() };
+  for (const target of [row.name, row.uuid]) {
+    assert.deepEqual(exporterIdentity.selectExportDatabaseIdentity([row], target), exportIdentityRow);
+  }
+});
+test('29. Production READ export is not subject to restore-only production denial', () => {
+  const row = { name: 'legacy-hub-db', uuid: '3c06c3cb-e1a6-426c-ad85-0b8c94616ed2' };
+  assert.deepEqual(exporterIdentity.selectExportDatabaseIdentity([row], row.name), row);
+});
+test('30. Missing and ambiguous export identities fail closed', () => {
+  for (const rows of [[], [exportIdentityRow, exportIdentityRow],
+    [exportIdentityRow, { name: 'alias', uuid: exportIdentityRow.uuid }],
+    [exportIdentityRow, { name: exportIdentityRow.name, uuid: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee' }]]) {
+    assert.throws(() => exporterIdentity.selectExportDatabaseIdentity(rows, exportIdentityRow.name), /REFUSAL/);
+  }
+});
+test('31. Malformed list shape and metadata including placeholders refuse', () => {
+  for (const rows of [null, {}, [null], [{ ...exportIdentityRow, uuid: 'name-id' }],
+    [{ ...exportIdentityRow, name: '' }], [{ ...exportIdentityRow, name: 'bad\nname' }],
+    [{ ...exportIdentityRow, uuid: 7 }]]) {
+    assert.throws(() => exporterIdentity.selectExportDatabaseIdentity(rows, exportIdentityRow.name), /REFUSAL/);
+  }
+});
+test('32. Invalid targets and non-exact names refuse without guessing', () => {
+  for (const target of [undefined, null, 7, '', '   ', 'bad\nname', 'SYNTHETIC-EXPORT-DB']) {
+    assert.throws(() => exporterIdentity.selectExportDatabaseIdentity([exportIdentityRow], target), /REFUSAL/);
+  }
+});
+
+function exportIdentityConstruction({ target = exportIdentityRow.name, configPath = null, output = JSON.stringify([exportIdentityRow]), readError = false } = {}) {
+  const start = exporterTransportSource.indexOf('function createTempWranglerConfig(');
+  const end = exporterTransportSource.indexOf('\n\nexport async function exportDatabase', start);
+  const setupStart = exporterTransportSource.indexOf('    let effectiveConfig = configPath;');
+  const setupEnd = exporterTransportSource.indexOf('\n    const persistDir', setupStart);
+  assert.ok(start >= 0 && end > start && setupStart >= 0 && setupEnd > setupStart);
+  const calls = { metadata: [], writes: [] };
+  const root = 'synthetic repository';
+  const entry = join(root, 'node_modules', 'wrangler', 'bin', 'wrangler.js');
+  const context = {
+    ROOT_DIR: root, join, databaseName: target, configPath, tempConfig: null, wranglerEntry: entry,
+    process: { execPath: 'synthetic node' }, selectExportDatabaseIdentity: exporterIdentity.selectExportDatabaseIdentity,
+    execFileSync(file, args, options) {
+      calls.metadata.push({ file, args: Array.from(args), options: JSON.parse(JSON.stringify(options)) });
+      if (readError) throw new Error('private-provider-error-marker');
+      return output;
+    },
+    writeFileSync(path, content, encoding) { calls.writes.push({ path, content, encoding }); }
+  };
+  const result = () => vm.runInNewContext(`${exporterTransportSource.slice(start, end)}\n${exporterTransportSource.slice(setupStart, setupEnd)}\n({ databaseName, effectiveConfig, tempConfig });`, context, { timeout: 1000 });
+  return { calls, result, root, entry };
+}
+for (const target of [exportIdentityRow.name, exportIdentityRow.uuid]) {
+  test(`33. Auto config resolves ${target === exportIdentityRow.name ? 'name' : 'UUID'} through inert remote metadata before one config write`, () => {
+    const f = exportIdentityConstruction({ target });
+    const result = f.result();
+    assert.equal(result.databaseName, exportIdentityRow.name);
+    assert.equal(f.calls.metadata.length, 1);
+    assert.deepEqual(f.calls.metadata[0], { file: 'synthetic node', args: [f.entry, 'd1', 'list', '--json'],
+      options: { cwd: f.root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], shell: false, windowsHide: true } });
+    assert.equal(f.calls.writes.length, 1);
+    assert.ok(f.calls.writes[0].content.includes(`database_id = "${exportIdentityRow.uuid}"`));
+    assert.equal(result.effectiveConfig, f.calls.writes[0].path);
+  });
+}
+for (const [label, options] of [
+  ['provider failure', { readError: true }], ['invalid JSON', { output: '{broken' }],
+  ['non-array', { output: '{}' }], ['missing identity', { output: '[]' }],
+  ['ambiguous', { output: JSON.stringify([exportIdentityRow, exportIdentityRow]) }],
+  ['placeholder', { output: JSON.stringify([{ ...exportIdentityRow, uuid: 'name-id' }]) }]
+]) {
+  test(`34. Auto config ${label} refuses with no config writes or raw provider errors`, () => {
+    const f = exportIdentityConstruction(options);
+    assert.throws(f.result, error => /REFUSAL/.test(error.message) && !error.message.includes('private-provider-error-marker'));
+    assert.equal(f.calls.metadata.length, 1);
+    assert.equal(f.calls.writes.length, 0);
+  });
+}
+test('35. Explicit configuration keeps operator-provided behavior without identity verification claim', () => {
+  const f = exportIdentityConstruction({ configPath: 'operator-provided.toml' });
+  const result = f.result();
+  assert.equal(result.effectiveConfig, 'operator-provided.toml');
+  assert.deepEqual(f.calls, { metadata: [], writes: [] });
+});
+test('36. Canonical metadata names are encoded as one TOML string without injection', () => {
+  const name = 'synthetic "quoted" \\ name';
+  const f = exportIdentityConstruction({ target: exportIdentityRow.uuid, output: JSON.stringify([{ name, uuid: exportIdentityRow.uuid }]) });
+  f.result();
+  const line = f.calls.writes[0].content.split('\n').find(value => value.startsWith('database_name = '));
+  assert.equal(JSON.parse(line.slice('database_name = '.length)), name);
+  assert.equal(f.calls.writes[0].content.split('\n').filter(value => value.startsWith('database_id = ')).length, 1);
 });
