@@ -151,3 +151,37 @@ test('(d) an item with an empty url still renders the "link coming" treatment ra
   assert.doesNotMatch(rendered, /href=""/);
   assert.doesNotMatch(rendered, /href="#"/);
 });
+
+test('(e) pending blog stories have noninteractive coming-soon copy, not fake article links', () => {
+  for (const path of ['blog.html', 'templates/blog.html.j2']) {
+    const html = loadHtml(path);
+    assert.equal((html.match(/Story coming soon\./g) || []).length, 3);
+    assert.doesNotMatch(html, /<a[^>]+href="#"[^>]*>Read more<\/a>/);
+  }
+});
+
+test('(f) Programs schedule copy comes from canonical sections without unconfirmed dates or reminder promises', () => {
+  const sections = JSON.parse(loadHtml('content/page-sections.json')).items;
+  const copy = JSON.stringify([sections['programs.membership'], sections['programs.support_group']]);
+  assert.doesNotMatch(copy, /weekly|Wednesdays|Every Wednesday|5:00|6:00|reminders.*come to you/i);
+  assert.equal(sections['programs.support_group'].rows[0].v, 'Schedule pending — dates and times to be confirmed');
+  assert.equal(sections['programs.support_group'].panel_cta_label, 'View Events');
+  const html = loadHtml('programs.html');
+  assert.match(html, /Schedule pending — dates and times to be confirmed/);
+  assert.match(html, /Session and registration details will be shared when confirmed\./);
+  assert.doesNotMatch(html, /Weekly Support Group|Wednesdays|Every Wednesday|reminders.*come to you/);
+  assert.match(loadHtml('templates/programs.html.j2'), /sections\["programs\.support_group"\]\.paragraphs/);
+});
+
+test('(g) Events registration receipt and canonical description do not promise unsent email or reminders', () => {
+  const events = JSON.parse(loadHtml('content/events.json')).items;
+  const supportGroup = events.find(event => event.id === 'ev_virtual_support_group');
+  assert.ok(supportGroup);
+  assert.doesNotMatch(supportGroup.description, /link and reminders come to you/);
+  for (const path of ['events.html', 'templates/events.html.j2']) {
+    const html = loadHtml(path);
+    assert.match(html, /Registration received — thank you\./);
+    assert.doesNotMatch(html, /A confirmation is on its way|link and reminders come to you/);
+    assert.match(html, /id="regForm" data-action="submit-register"/);
+  }
+});
