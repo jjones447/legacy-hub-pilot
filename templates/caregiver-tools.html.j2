@@ -46,7 +46,7 @@
         <h3>{{ r.title | e }}</h3>
         <p>{{ r.description | e }}</p>
 {%- if r.link == "#demo" %}
-        <a class="more" href="#" data-action="demo-resource-link">{{ r.link_label | e }}</a>
+        <p class="small muted">Resource link pending. This material is not available yet.</p>
 {%- elif r.link == "#demo-grant" %}
         <a class="more" href="#" data-action="demo-grant-status">{{ r.link_label | e }}</a>
 {%- else %}
