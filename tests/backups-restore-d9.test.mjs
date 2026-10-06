@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 
 import backupWorker, { runBackup, pruneOldBackups, BAKED_IN_LATEST_MIGRATION } from '../workers/backup/src/index.mjs';
-import { exportDatabase } from '../scripts/export-all.mjs';
+import { exportDatabase, resolveLatestMigration } from '../scripts/export-all.mjs';
 import {
   restoreDatabase,
   checkTargetDatabase,
@@ -718,3 +718,60 @@ test('18. A directory at the completion marker refuses without new files or data
     assert.deepEqual(f.calls, []);
   });
 });
+
+// [pc2-codex-13] Repository-schema metadata only, not installed database migration evidence.
+for (const [label, lookup] of [
+  ['omitted argument', () => resolveLatestMigration()],
+  ['undefined argument', () => resolveLatestMigration(undefined)],
+  ['null argument', () => resolveLatestMigration(null)]
+]) {
+  test(`19. Migration lookup ${label} selects the newest repository schema`, () => {
+    const newest = readdirSync(SCHEMAS_DIR).filter(name => name.endsWith('.sql')).sort().at(-1);
+    assert.equal(lookup(), newest);
+  });
+}
+
+test('20. Explicit schema override retains sorted SQL-only candidate selection', async () => {
+  await withLocalExportFixture('schema-override', async schemaDir => {
+    mkdirSync(schemaDir, { recursive: true });
+    writeFileSync(join(schemaDir, '0002_synthetic.sql'), '');
+    writeFileSync(join(schemaDir, '0042_synthetic.sql'), '');
+    writeFileSync(join(schemaDir, '9999_ignored.txt'), '');
+    assert.equal(resolveLatestMigration(schemaDir), '0042_synthetic.sql');
+  });
+});
+
+test('21. Explicit missing schema path retains the historical migration fallback', async () => {
+  await withLocalExportFixture('missing-schema', async schemaDir => {
+    assert.equal(existsSync(schemaDir), false);
+    assert.equal(resolveLatestMigration(schemaDir), '0008_agent_change.sql');
+    assert.equal(existsSync(schemaDir), false);
+  });
+});
+
+test('22. Explicit empty schema directory retains the historical migration fallback', async () => {
+  await withLocalExportFixture('empty-schema', async schemaDir => {
+    mkdirSync(schemaDir, { recursive: true });
+    assert.equal(resolveLatestMigration(schemaDir), '0008_agent_change.sql');
+  });
+});
+
+test('23. Explicit non-null invalid schema values retain the historical fallback', () => {
+  for (const schemaDir of ['', false, 42]) {
+    assert.equal(resolveLatestMigration(schemaDir), '0008_agent_change.sql');
+  }
+});
+
+for (const [label, schemaOptions] of [['omitted schema option', {}], ['explicit null schema option', { schemaDir: null }]]) {
+  test(`24. Fake database export with ${label} records the newest repository migration`, async () => {
+    await withLocalExportFixture(`metadata-${label.split(' ')[0]}`, async outputDir => {
+      const f = localExportFixture();
+      const newest = readdirSync(SCHEMAS_DIR).filter(name => name.endsWith('.sql')).sort().at(-1);
+      const result = await exportDatabase({ db: f.db, outputDir, ...schemaOptions });
+      assert.equal(result.manifest.latest_migration, newest);
+      assert.equal(JSON.parse(readFileSync(join(outputDir, 'manifest.json'), 'utf8')).latest_migration, newest);
+      assert.deepEqual(result.tables, { alpha: 1, beta: 1 });
+      assert.equal(result.totalRows, 2);
+    });
+  });
+}

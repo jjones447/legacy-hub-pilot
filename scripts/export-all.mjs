@@ -14,6 +14,7 @@ const __dirname = dirname(__filename);
 const ROOT_DIR = resolve(__dirname, '..');
 
 export function resolveLatestMigration(schemaDir = join(ROOT_DIR, 'schema')) {
+  schemaDir ??= join(ROOT_DIR, 'schema');
   try {
     if (existsSync(schemaDir)) {
       const files = readdirSync(schemaDir)
