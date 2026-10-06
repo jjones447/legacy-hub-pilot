@@ -3,11 +3,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { mkdtempSync, mkdirSync, writeFileSync, unlinkSync, readdirSync, rmdirSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, unlinkSync, readdirSync, rmdirSync, existsSync, readFileSync } from 'node:fs';
+import vm from 'node:vm';
 import { resolve, join, dirname, basename, sep } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
-  PROTECTED_DATABASE_ID, checkTargetDatabase, resolveRestoreTarget, restoreDatabase
+  PROTECTED_DATABASE_ID, checkTargetDatabase, resolveRestoreTarget, restoreDatabase, buildInsertSql
 } from '../scripts/restore-from-backup.mjs';
 
 const scratchId = '17be929b-64e8-43e0-9e0e-702775f7073a';
@@ -328,4 +329,279 @@ test('preflight: later schema failure remains outside input-preflight rollback g
     assert.equal('prior_marker' in f.state().tables, false, 'no whole-restore transaction claimed');
     assert.equal(f.cliCalls, 0);
   } finally { f.cleanup(); }
+});
+
+
+// The trusted current transport callbacks are evaluated without restoreDatabase's
+// CLI entry/identity/config path. Map-only file stubs and capture-only execFn
+// model dispatch; no Windows shell, Wrangler, provider or real filesystem I/O.
+// Query argv is captured through a separate execFileFn stub, never a child.
+// Wrangler4.139.0 remote --file returns import statistics, --command SELECT rows:
+// https://github.com/cloudflare/workers-sdk/blob/wrangler%404.139.0/packages/wrangler/src/d1/execute.ts
+function transportFixture(database, options = {}) {
+  const source = readFileSync(new URL('../scripts/restore-from-backup.mjs', import.meta.url), 'utf8');
+  const executeStart = source.indexOf('    const executeCmd = (sql) => {');
+  const queryStart = source.indexOf('    const queryCmd = (sql) => {', executeStart);
+  const callbackEnd = source.indexOf('    // 0. Drop existing tables', queryStart);
+  assert.ok(executeStart > 0 && queryStart > executeStart && callbackEnd > queryStart);
+  const callbackSource = source.slice(executeStart, callbackEnd);
+  const files = new Map(), fileWrites = [], fileDeletes = [], calls = [];
+  const sandbox = {
+    ROOT_DIR: '/synthetic-no-filesystem',
+    targetDatabase: 'legacy-hub-restore-synthetic',
+    localFlag: options.local ? '--local --persist-to "/synthetic-no-persist"' : '--remote',
+    effectiveConfig: '/synthetic-no-config.toml',
+    isLocal: Boolean(options.local),
+    persistDir: '/synthetic-no-persist',
+    wranglerEntry: join('/synthetic-no-filesystem', 'node_modules', 'wrangler', 'bin', 'wrangler.js'),
+    process: { execPath: '/synthetic-node.exe' },
+    join,
+    writeFileSync(path, text, encoding) {
+      assert.equal(encoding, 'utf8');
+      const bytes = Buffer.from(text, encoding);
+      files.set(path, bytes);
+      fileWrites.push({ path, bytes });
+    },
+    existsSync(path) { return files.has(path); },
+    unlinkSync(path) { assert.ok(files.has(path)); files.delete(path); fileDeletes.push(path); },
+    execFn(command, commandOptions) {
+      // Capture only. NEVER pass this string to child_process or any shell.
+      let transport, sql, path = null, bytes = null;
+      const fileMatch = command.match(/ --file "([^"]+)"$/);
+      const commandMatch = command.match(/ --command "([\s\S]*)"$/);
+      if (fileMatch) {
+        transport = 'file'; path = fileMatch[1];
+        assert.ok(files.has(path));
+        bytes = Buffer.from(files.get(path));
+        sql = bytes.toString('utf8');
+      } else if (commandMatch) {
+        // Old-source RED capture model only, not genuine Windows argument parsing.
+        transport = 'command'; sql = commandMatch[1].replaceAll('\\"', '"');
+      } else assert.fail('Unexpected trusted callback transport shape');
+      calls.push({ command, options: JSON.parse(JSON.stringify(commandOptions)), transport, sql, path, bytes });
+      if (options.failExecutor) throw new Error('SYNTHETIC_EXECUTOR_FAILURE');
+      if (Object.hasOwn(options, 'queryResponse')) return options.queryResponse;
+      if (command.includes(' --json ')) {
+        if (transport === 'file' && !options.local) {
+          // Exact remote import response category, NOT fabricated SELECT rows.
+          return JSON.stringify([{ results: [{ 'Total queries executed': 1, 'Rows read': 1,
+            'Rows written': 0, 'Database size (MB)': '0.00' }], success: true }]);
+        }
+        return JSON.stringify([{ results: database.prepare(sql).all() }]);
+      }
+      return '';
+    },
+    execFileFn(executable, args, commandOptions) {
+      const argv = Array.from(args);
+      const commandIndex = argv.indexOf('--command');
+      assert.ok(commandIndex >= 0 && commandIndex === argv.length - 2);
+      const sql = argv[commandIndex + 1];
+      calls.push({ transport: 'argv', executable, argv, sql, bytes: Buffer.from(sql, 'utf8'),
+        options: JSON.parse(JSON.stringify(commandOptions)) });
+      if (options.failExecutor) throw new Error('SYNTHETIC_EXECUTOR_FAILURE');
+      if (Object.hasOwn(options, 'queryResponse')) return options.queryResponse;
+      return JSON.stringify([{ results: database.prepare(sql).all(), success: true }]);
+    }
+  };
+  assert.equal('require' in sandbox, false);
+  const callbacks = vm.runInNewContext(callbackSource + '\n({executeCmd,queryCmd});', sandbox, { timeout: 1000 });
+  return { ...callbacks, files, fileWrites, fileDeletes, calls };
+}
+const transportTexts = [
+  ['plain short', 'SQL_DATA_SENTINEL plain'],
+  ['LF', 'SQL_DATA_SENTINEL first\nsecond'],
+  ['CRLF', 'SQL_DATA_SENTINEL first\r\nsecond'],
+  ['tab and repeated spaces', 'SQL_DATA_SENTINEL first\tsecond   third'],
+  ['Unicode', 'SQL_DATA_SENTINEL café 漢字 🙂'],
+  ['quotes and shell metacharacters', 'SQL_DATA_SENTINEL O\'Example "quoted" $(never-run) $VARIABLE %VARIABLE% & | < > ^ ! ' + String.fromCharCode(96)],
+  ['large plain', 'SQL_DATA_SENTINEL ' + 'x'.repeat(5000)],
+  ['large multiline Unicode', 'SQL_DATA_SENTINEL café\n漢字\tthree   spaces ' + 'x'.repeat(5000)]
+];
+for (const [name, text] of transportTexts) {
+  for (const local of [false, true]) test('SQL file transport: exact insert ' + name + ' ' + (local ? 'local' : 'remote'), () => {
+    const direct = new DatabaseSync(':memory:'), captured = new DatabaseSync(':memory:');
+    try {
+      direct.exec('CREATE TABLE fixture(id INTEGER,value TEXT);');
+      captured.exec('CREATE TABLE fixture(id INTEGER,value TEXT);');
+      const f = transportFixture(captured, { local });
+      // Include surrounding SQL whitespace: only blank detection may trim a view.
+      const sql = ' \r\n' + buildInsertSql('fixture', [{ id: 1, value: text }]) + '\n\t ';
+      direct.exec(sql);
+      assert.equal(direct.prepare('SELECT value FROM fixture').get().value, text);
+      f.executeCmd(sql);
+      assert.equal(f.calls.length, 1);
+      const call = f.calls[0];
+      assert.equal(call.transport, 'file');
+      assert.deepEqual(call.bytes, Buffer.from(sql, 'utf8'), 'raw UTF8 file bytes unchanged');
+      assert.equal(call.command.includes('SQL_DATA_SENTINEL'), false, 'no SQL payload in shell arguments');
+      assert.equal(call.command.includes('--command'), false);
+      assert.equal(call.command.includes('--json'), false);
+      assert.equal(call.command.includes(local ? '--local --persist-to "/synthetic-no-persist"' : '--remote'), true);
+      assert.equal(call.command.includes('-c "/synthetic-no-config.toml"'), true);
+      assert.deepEqual(call.options, { cwd: '/synthetic-no-filesystem', stdio: ['ignore', 'pipe', 'pipe'] });
+      captured.exec(call.sql);
+      assert.deepEqual(captured.prepare('SELECT * FROM fixture').all(), direct.prepare('SELECT * FROM fixture').all());
+      assert.equal(f.files.size, 0);
+      assert.equal(f.fileWrites.length, 1);
+      assert.deepEqual(f.fileDeletes, [call.path]);
+    } finally { direct.close(); captured.close(); }
+  });
+}
+
+for (const [name, text] of transportTexts) {
+  for (const local of [false, true]) test('SQL argv query: exact query ' + name + ' ' + (local ? 'local' : 'remote'), () => {
+    const database = new DatabaseSync(':memory:');
+    try {
+      database.exec('CREATE TABLE fixture(id INTEGER,value TEXT);');
+      database.prepare('INSERT INTO fixture VALUES(1,?)').run(text);
+      const f = transportFixture(database, { local });
+      const sql = " \nSELECT COUNT(*) AS count FROM fixture WHERE value = '" + text.replaceAll("'", "''") + "';\t ";
+      const direct = database.prepare(sql).get().count;
+      assert.equal(direct, 1);
+      const result = f.queryCmd(sql);
+      assert.equal(result[0].count, direct);
+      const call = f.calls[0];
+      assert.equal(call.transport, 'argv');
+      assert.equal(call.executable, '/synthetic-node.exe');
+      assert.deepEqual(call.bytes, Buffer.from(sql, 'utf8'));
+      assert.deepEqual(call.argv, [join('/synthetic-no-filesystem', 'node_modules', 'wrangler', 'bin', 'wrangler.js'),
+        'd1', 'execute', 'legacy-hub-restore-synthetic',
+        ...(local ? ['--local', '--persist-to', '/synthetic-no-persist'] : ['--remote']),
+        '-c', '/synthetic-no-config.toml', '--json', '--command', sql]);
+      assert.deepEqual(call.options, { cwd: '/synthetic-no-filesystem', encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'], shell: false, windowsHide: true });
+      assert.equal(f.files.size, 0);
+      assert.deepEqual(f.fileWrites, []);
+      assert.deepEqual(f.fileDeletes, []);
+    } finally { database.close(); }
+  });
+}
+
+test('SQL file transport: original JSON audit string bytes survive insert and query', () => {
+  const database = new DatabaseSync(':memory:');
+  try {
+    database.exec('CREATE TABLE audit_log(id INTEGER,actor TEXT,after_json TEXT,at TEXT);');
+    const row = { id: 7, actor: 'synthetic_staff', after_json: '{\n  "detail": "two   spaces\\tand Unicode café",\n  "original": true\n}',
+      at: '2000-01-01T00:00:00Z' };
+    const f = transportFixture(database);
+    const sql = buildInsertSql('audit_log', [row]);
+    f.executeCmd(sql);
+    assert.equal(f.calls[0].transport, 'file');
+    assert.deepEqual(f.calls[0].bytes, Buffer.from(sql, 'utf8'));
+    database.exec(f.calls[0].sql);
+    assert.deepEqual(JSON.parse(JSON.stringify(database.prepare('SELECT * FROM audit_log').get())), row);
+    const query = "SELECT COUNT(*) AS count FROM audit_log WHERE after_json = '" + row.after_json.replaceAll("'", "''") + "'";
+    assert.equal(f.queryCmd(query)[0].count, 1);
+    assert.equal(f.calls[1].transport, 'argv');
+    assert.deepEqual(f.calls[1].bytes, Buffer.from(query, 'utf8'));
+    assert.equal(f.files.size, 0);
+  } finally { database.close(); }
+});
+
+test('SQL file transport: blank execution remains a no-op', () => {
+  const database = new DatabaseSync(':memory:');
+  try {
+    const f = transportFixture(database);
+    for (const sql of ['', ' ', '\r\n\t   ']) f.executeCmd(sql);
+    assert.deepEqual(f.calls, []);
+    assert.deepEqual(f.fileWrites, []);
+    assert.deepEqual(f.fileDeletes, []);
+    assert.equal(f.files.size, 0);
+  } finally { database.close(); }
+});
+
+for (const kind of ['execute', 'query']) test('SQL transport: ' + kind + ' executor failure leaves no file', () => {
+  const database = new DatabaseSync(':memory:');
+  try {
+    const f = transportFixture(database, { failExecutor: true });
+    assert.throws(() => kind === 'execute' ? f.executeCmd('SELECT 1') : f.queryCmd('SELECT 1'), /SYNTHETIC_EXECUTOR_FAILURE/);
+    assert.equal(f.fileWrites.length, kind === 'execute' ? 1 : 0);
+    assert.equal(f.calls[0].transport, kind === 'execute' ? 'file' : 'argv');
+    assert.equal(f.files.size, 0);
+    assert.deepEqual(f.fileDeletes, kind === 'execute' ? [f.fileWrites[0].path] : []);
+  } finally { database.close(); }
+});
+
+test('SQL argv query: malformed JSON still throws without creating a file', () => {
+  const database = new DatabaseSync(':memory:');
+  try {
+    const f = transportFixture(database, { queryResponse: '{invalid' });
+    assert.throws(() => f.queryCmd('SELECT 1'), error => error.name === 'SyntaxError');
+    assert.equal(f.fileWrites.length, 0);
+    assert.equal(f.files.size, 0);
+    assert.deepEqual(f.fileDeletes, []);
+  } finally { database.close(); }
+});
+
+for (const response of ['[]', '{}', '[{}]', '[{"results":[]}]']) test('SQL argv query: empty-result fallback retained ' + response, () => {
+  const database = new DatabaseSync(':memory:');
+  try {
+    const f = transportFixture(database, { queryResponse: response });
+    assert.deepEqual(JSON.parse(JSON.stringify(f.queryCmd('SELECT 1'))), []);
+    assert.equal(f.fileWrites.length, 0);
+    assert.equal(f.files.size, 0);
+    assert.deepEqual(f.fileDeletes, []);
+  } finally { database.close(); }
+});
+
+test('SQL file transport: repeated execute/query calls get distinct paths and cleanup', () => {
+  const database = new DatabaseSync(':memory:');
+  try {
+    const f = transportFixture(database, { queryResponse: '[]' });
+    for (let i = 0; i < 4; i++) { f.executeCmd('SELECT ' + i); f.queryCmd('SELECT ' + i); }
+    assert.equal(f.fileWrites.length, 4);
+    assert.equal(new Set(f.fileWrites.map(file => file.path)).size, 4);
+    assert.equal(f.calls.filter(call => call.transport === 'argv').length, 4);
+    assert.deepEqual(f.fileDeletes, f.fileWrites.map(file => file.path));
+    assert.equal(f.files.size, 0);
+  } finally { database.close(); }
+});
+
+
+for (const isLocal of [false, true]) test('SQL argv entry guard: missing project-local Wrangler refuses before config or target SQL ' + (isLocal ? 'local' : 'remote'), async () => {
+  const source = readFileSync(new URL('../scripts/restore-from-backup.mjs', import.meta.url), 'utf8');
+  const start = source.indexOf('export const PROTECTED_DATABASE_ID');
+  const end = source.indexOf('// CLI entry point', start);
+  assert.ok(start > 0 && end > start);
+  const moduleBody = source.slice(start, end).replace(/^export /gm, '');
+  const root = resolve('/synthetic-no-filesystem');
+  const dumpDir = join(root, 'dump'), schemaDir = join(root, 'schema');
+  const files = new Map([
+    [join(dumpDir, 'manifest.json'), '{"tables":{"caregiver":1,"audit_log":0}}'],
+    [join(dumpDir, 'caregiver.json'), '[{"id":"cg_synthetic"}]'],
+    [join(dumpDir, 'audit_log.json'), '[]']
+  ]);
+  const writes = [], targetCalls = [], metadataCalls = [];
+  const sandbox = {
+    ROOT_DIR: root, resolve, join, dirname, process: { env: {}, execPath: '/synthetic-node.exe' },
+    existsSync: path => files.has(path),
+    readFileSync(path) { assert.ok(files.has(path)); return files.get(path); },
+    readdirSync: () => [],
+    writeFileSync(...args) { writes.push(args); throw new Error('FORBIDDEN_CONFIG_OR_FILE_WRITE'); },
+    unlinkSync(...args) { writes.push(args); throw new Error('FORBIDDEN_FILE_DELETE'); },
+    execSync(command) {
+      if (command === 'npx wrangler d1 list --json') { metadataCalls.push(command); return JSON.stringify([scratch]); }
+      targetCalls.push(command); throw new Error('FORBIDDEN_TARGET_SQL');
+    },
+    execFileSync(...args) { targetCalls.push(args); throw new Error('FORBIDDEN_REAL_CHILD'); },
+    console: { log() {}, error() {} }
+  };
+  const restore = vm.runInNewContext(moduleBody + '\nrestoreDatabase;', sandbox, { timeout: 1000 });
+  await assert.rejects(restore({ dumpDir, schemaDir, targetDatabase: scratch.name, isLocal }), /REFUSAL:.*project-local Wrangler/);
+  assert.deepEqual(metadataCalls, ['npx wrangler d1 list --json'], 'existing verified metadata boundary retained');
+  assert.deepEqual(writes, [], 'entry guard precedes config and SQL files');
+  assert.deepEqual(targetCalls, [], 'entry guard is outside swallowed drop-query block');
+});
+
+test('SQL argv query: remote import statistics cannot substitute for SELECT rows', () => {
+  const database = new DatabaseSync(':memory:');
+  try {
+    database.exec('CREATE TABLE fixture(id INTEGER,value TEXT); INSERT INTO fixture VALUES(1,\'Synthetic\');');
+    const f = transportFixture(database);
+    const result = f.queryCmd('SELECT COUNT(*) AS count FROM fixture');
+    assert.equal(result[0].count, 1);
+    assert.equal(f.calls[0].transport, 'argv');
+    assert.equal(f.files.size, 0);
+    assert.equal(f.fileWrites.length, 0);
+  } finally { database.close(); }
 });

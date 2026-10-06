@@ -7,11 +7,13 @@
 // Input preflight caches the complete JSON snapshot before target SQL/config writes.
 // This costs snapshot-sized memory, not unbounded-scale/integrity acceptance, and
 // does not make later schema, SQL, provider or runtime restore failures atomic.
+// SQL writes travel as unchanged UTF8 files; queries use one shell-free argv value.
+// Collapsing whitespace would change stored text even when row counts match.
 
 import { readdirSync, readFileSync, writeFileSync, unlinkSync, existsSync } from 'node:fs';
 import { resolve, join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execSync } from 'node:child_process';
+import { execSync, execFileSync } from 'node:child_process';
 import os from 'node:os';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -361,7 +363,8 @@ export async function restoreDatabase({
   configPath = null,
   schemaDir = null,
   batchSize = 25,
-  execFn = execSync
+  execFn = execSync,
+  execFileFn = execFileSync
 } = {}) {
   // 1. Live DB refusal guard
   checkTargetDatabase(targetDatabase);
@@ -578,6 +581,10 @@ export async function restoreDatabase({
   }
 
   // CLI / Wrangler mode
+  const wranglerEntry = join(ROOT_DIR, 'node_modules', 'wrangler', 'bin', 'wrangler.js');
+  if (!existsSync(wranglerEntry)) {
+    throw new Error('REFUSAL: Required project-local Wrangler entry is missing.');
+  }
   let tempConfig = null;
 
   try {
@@ -592,29 +599,27 @@ export async function restoreDatabase({
     const localFlag = isLocal ? `--local --persist-to "${persistDir}"` : '--remote';
 
     const executeCmd = (sql) => {
-      const cleanSql = sql.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim();
-      if (!cleanSql) return;
-      if (cleanSql.length < 4000) {
-        const escapedSql = cleanSql.replace(/"/g, '\\"');
-        const cmd = `npx wrangler d1 execute "${targetDatabase}" ${localFlag} -c "${effectiveConfig}" --command "${escapedSql}"`;
+      if (!sql.trim()) return;
+      const tmpFile = join(ROOT_DIR, `.wrangler-chunk-${Date.now()}-${Math.random().toString(36).slice(2)}.sql`);
+      try {
+        writeFileSync(tmpFile, sql, 'utf8');
+        const cmd = `npx wrangler d1 execute "${targetDatabase}" ${localFlag} -c "${effectiveConfig}" --file "${tmpFile}"`;
         execFn(cmd, { cwd: ROOT_DIR, stdio: ['ignore', 'pipe', 'pipe'] });
-      } else {
-        const tmpFile = join(ROOT_DIR, `.wrangler-chunk-${Date.now()}-${Math.random().toString(36).slice(2)}.sql`);
-        try {
-          writeFileSync(tmpFile, cleanSql, 'utf8');
-          const cmd = `npx wrangler d1 execute "${targetDatabase}" ${localFlag} -c "${effectiveConfig}" --file "${tmpFile}"`;
-          execFn(cmd, { cwd: ROOT_DIR, stdio: ['ignore', 'pipe', 'pipe'] });
-        } finally {
-          if (existsSync(tmpFile)) unlinkSync(tmpFile);
-        }
+      } finally {
+        if (existsSync(tmpFile)) unlinkSync(tmpFile);
       }
     };
 
     const queryCmd = (sql) => {
-      const cleanSql = sql.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim();
-      const escapedSql = cleanSql.replace(/"/g, '\\"');
-      const cmd = `npx wrangler d1 execute "${targetDatabase}" ${localFlag} -c "${effectiveConfig}" --json --command "${escapedSql}"`;
-      const out = execFn(cmd, { cwd: ROOT_DIR, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+      // Remote --file returns import statistics, not SELECT rows. Preserve the
+      // --command query API without passing SQL through a shell or .cmd wrapper.
+      const args = [wranglerEntry, 'd1', 'execute', targetDatabase,
+        ...(isLocal ? ['--local', '--persist-to', persistDir] : ['--remote']),
+        '-c', effectiveConfig, '--json', '--command', sql];
+      const out = execFileFn(process.execPath, args, {
+        cwd: ROOT_DIR, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+        shell: false, windowsHide: true
+      });
       const parsed = JSON.parse(out);
       if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].results) {
         return parsed[0].results;
@@ -650,7 +655,7 @@ export async function restoreDatabase({
     executeCmd('PRAGMA foreign_keys = ON;');
     console.log(`[restore] Schema recreated successfully.`);
 
-    // 2. Load table data in batches over --command
+    // 2. Load table data in batches over unchanged SQL files
     console.log(`[restore] Loading table data from ${dumpPath} (batch size: ${batchSize})...`);
     executeCmd('PRAGMA foreign_keys = OFF;');
     // Delete in reverse dependency order (children first)
