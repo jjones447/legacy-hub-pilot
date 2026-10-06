@@ -8,7 +8,7 @@ import vm from 'node:vm';
 import { resolve, join, dirname, basename, sep } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
-  PROTECTED_DATABASE_ID, checkTargetDatabase, resolveRestoreTarget, restoreDatabase, buildInsertSql
+  PROTECTED_DATABASE_ID, checkTargetDatabase, resolveRestoreTarget, restoreDatabase, buildInsertSql, spotCheckRelationships
 } from '../scripts/restore-from-backup.mjs';
 
 const scratchId = '17be929b-64e8-43e0-9e0e-702775f7073a';
@@ -603,5 +603,79 @@ test('SQL argv query: remote import statistics cannot substitute for SELECT rows
     assert.equal(f.calls[0].transport, 'argv');
     assert.equal(f.files.size, 0);
     assert.equal(f.fileWrites.length, 0);
+  } finally { database.close(); }
+});
+
+
+// Pure relationship helper regressions; new cases use no disk/restore/CLI path.
+const relationshipCases = [
+  { name: 'plain ID', id: 'cg_plain' },
+  { name: 'single quote ID', id: 'cg\'quoted' },
+  { name: 'repeated quote ID', id: 'cg\'\'repeated' },
+  { name: 'read-only OR-looking ID', id: 'cg\' OR 1=1 --' },
+  { name: 'Unicode and LF ID', id: 'cg_café\n漢字' },
+  { name: 'CRLF ID', id: 'cg_line\r\nbreak' },
+  { name: 'zero-related-row control', id: 'cg_zero', counts: [0, 0, 0] },
+  { name: 'awarded target precedes unawarded distractor', id: 'zz_awarded' },
+  { name: 'selected grant without award', id: 'zz_no_award', hasAward: false, distractorGrant: false },
+  { name: 'no grant preserves original empty-selection behavior', id: 'cg_no_grant', hasGrant: false },
+  { name: 'no caregiver preserves original empty-selection behavior', id: 'cg_no_caregiver', hasCaregiver: false }
+];
+for (const c of relationshipCases) test('restore relationships: ' + c.name, async () => {
+  const database = new DatabaseSync(':memory:');
+  try {
+    database.exec('PRAGMA foreign_keys=ON; CREATE TABLE caregiver(id TEXT PRIMARY KEY,first_name TEXT,last_name TEXT); CREATE TABLE grant_application(id INTEGER PRIMARY KEY,caregiver_id TEXT REFERENCES caregiver(id)); CREATE TABLE award(id INTEGER PRIMARY KEY,grant_application_id INTEGER REFERENCES grant_application(id)); CREATE TABLE followup(id INTEGER PRIMARY KEY,caregiver_id TEXT REFERENCES caregiver(id)); CREATE TABLE contact_history(id INTEGER PRIMARY KEY,caregiver_id TEXT REFERENCES caregiver(id)); CREATE TABLE note(id INTEGER PRIMARY KEY,caregiver_id TEXT REFERENCES caregiver(id)); CREATE TABLE audit_log(id INTEGER PRIMARY KEY,actor TEXT,action TEXT,at TEXT);');
+    const counts = c.counts || [2, 1, 3];
+    const otherId = 'aa_other';
+    if (c.hasCaregiver !== false) {
+      database.prepare('INSERT INTO caregiver VALUES(?,?,?)').run(c.id, 'Synthetic', 'Target');
+      database.prepare('INSERT INTO caregiver VALUES(?,?,?)').run(otherId, 'Synthetic', 'Distractor');
+      if (c.hasGrant !== false) {
+        database.prepare('INSERT INTO grant_application VALUES(?,?)').run(1, c.id);
+        if (c.distractorGrant !== false) database.prepare('INSERT INTO grant_application VALUES(?,?)').run(2, otherId);
+        if (c.hasAward !== false) database.prepare('INSERT INTO award VALUES(?,?)').run(1, 1);
+      }
+      for (const [index, table] of ['followup', 'contact_history', 'note'].entries()) {
+        const insert = database.prepare('INSERT INTO ' + table + '(id,caregiver_id) VALUES(?,?)');
+        for (let i = 0; i < counts[index]; i++) insert.run(i + 1, c.id);
+        for (let i = 0; i < [3, 2, 4][index]; i++) insert.run(counts[index] + i + 1, otherId);
+      }
+    }
+    database.prepare('INSERT INTO audit_log VALUES(?,?,?,?)').run(1, 'synthetic_staff', 'original', '2000-01-01T00:00:00Z');
+    database.prepare('INSERT INTO audit_log VALUES(?,?,?,?)').run(2, 'synthetic_staff', 'prior', '2000-01-02T00:00:00Z');
+    const snapshot = () => {
+      const schema = database.prepare('SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name').all();
+      const tables = Object.fromEntries(schema.filter(row => row.type === 'table').map(row => [
+        row.name, database.prepare('SELECT * FROM "' + row.name + '" ORDER BY rowid').all()
+      ]));
+      return JSON.parse(JSON.stringify({ schema, tables, foreignKeys: database.prepare('PRAGMA foreign_keys').all() }));
+    };
+    const before = snapshot();
+    const golden = ['followup', 'contact_history', 'note'].map(table =>
+      database.prepare('SELECT COUNT(*) AS count FROM ' + table + ' WHERE caregiver_id=?').all(c.id)[0].count);
+    const queries = [];
+    const result = await spotCheckRelationships(async sql => {
+      assert.match(sql.trim(), /^SELECT\b/i);
+      assert.equal(sql.includes(';'), false, 'only single read-only SELECTs are permitted');
+      queries.push(sql);
+      return database.prepare(sql).all();
+    });
+    assert.deepEqual(snapshot(), before, 'complete schema, owner/distractor/audit rows and FK state unchanged');
+    const selected = c.hasCaregiver !== false && c.hasGrant !== false;
+    assert.deepEqual(result, {
+      caregiverFound: selected,
+      caregiverId: selected ? c.id : null,
+      hasGrant: selected,
+      grantId: selected ? 1 : null,
+      hasAward: selected && c.hasAward !== false,
+      awardId: selected && c.hasAward !== false ? 1 : null,
+      followupCount: selected ? golden[0] : 0,
+      contactHistoryCount: selected ? golden[1] : 0,
+      noteCount: selected ? golden[2] : 0,
+      auditLogPreserved: true,
+      auditLogCount: 2
+    });
+    assert.equal(queries.length, selected ? 5 : 2);
+    if (selected) assert.deepEqual(golden, counts);
   } finally { database.close(); }
 });
