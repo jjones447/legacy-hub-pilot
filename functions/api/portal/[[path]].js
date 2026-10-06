@@ -250,6 +250,25 @@ export async function onRequestPost({ request, env }) {
         return json({ ok: false, error: 'invalid_email' }, 400);
       }
 
+      const devReturnLink = (env.PORTAL_DEV_RETURN_LINK === '1' || env.PORTAL_DEV_RETURN_LINK === 1)
+        && (env.ENVIRONMENT === 'preview' || env.ENVIRONMENT === 'development');
+      const emailEnabled = canSendEmail(env);
+      // Deployment-wide readiness is checked before membership lookup, so the
+      // unavailable response cannot reveal whether this address is registered.
+      if (!emailEnabled && !devReturnLink) {
+        const reason = env.ENVIRONMENT === 'preview' || env.ENVIRONMENT === 'development'
+          ? 'email_disabled_in_environment' : 'email_not_configured';
+        try {
+          await env.LEGACY_DB.prepare(`
+            INSERT INTO audit_log (actor, action, entity, entity_id, after_json)
+            VALUES ('system', 'portal.login_unavailable', 'portal_token', 'configuration', ?)
+          `).bind(JSON.stringify({ reason, provider_status: 0 })).run();
+        } catch (error) {
+          console.error('portal configuration audit unavailable:', error instanceof Error ? error.name : typeof error);
+        }
+        return json({ ok: false, error: 'signin_unavailable' }, 503);
+      }
+
       const normalizedEmail = email.toLowerCase().trim();
       const emailHash = await sha256(normalizedEmail);
 
@@ -294,21 +313,30 @@ export async function onRequestPost({ request, env }) {
         // If dev return link mode is enabled, provide the link in response
         // SEC-4: dev-return-link only in an explicitly non-prod environment (positive
         // allowlist — never leaks when ENVIRONMENT is unset, i.e. production default).
-        if ((env.PORTAL_DEV_RETURN_LINK === '1' || env.PORTAL_DEV_RETURN_LINK === 1)
-            && (env.ENVIRONMENT === 'preview' || env.ENVIRONMENT === 'development')) {
+        if (devReturnLink) {
           responseObj.dev_link = `/api/portal/verify?token=${encodeURIComponent(tokenValue)}`;
         }
 
         // Production: email the link. The response stays the same generic { ok: true } whether or
         // not the email went, so the page never reveals who is a Legacy client.
-        if (canSendEmail(env)) {
+        if (emailEnabled) {
           const origin = new URL(request.url).origin;
           const link = `${origin}/api/portal/verify?token=${encodeURIComponent(tokenValue)}`;
           const sent = await sendEmail(env, { to: caregiver.email, ...signInEmail(link) });
-          await env.LEGACY_DB
-            .prepare(`INSERT INTO audit_log (actor, action, entity, entity_id) VALUES ('system', ?, 'caregiver', ?)`)
-            .bind(sent.ok ? 'portal.link_emailed' : 'portal.link_email_failed', caregiver.id)
-            .run();
+          const providerStatus = Number.isInteger(sent.status) ? sent.status : -1;
+          const reason = sent.ok ? 'provider_accepted' : providerStatus === -1 ? 'network_error'
+            : providerStatus === 0 ? 'email_not_configured' : 'provider_rejected';
+          try {
+            await env.LEGACY_DB
+              .prepare(`INSERT INTO audit_log (actor, action, entity, entity_id, after_json) VALUES ('system', ?, 'caregiver', ?, ?)`)
+              .bind(sent.ok ? 'portal.link_emailed' : 'portal.link_email_failed', caregiver.id,
+                JSON.stringify({ provider_status: providerStatus, reason }))
+              .run();
+          } catch (error) {
+            // Sending is an external side effect, not a rollbackable DB operation.
+            // Audit unavailability must not reveal membership through a different response.
+            console.error('portal delivery audit unavailable:', error instanceof Error ? error.name : typeof error, providerStatus);
+          }
         }
       }
 
