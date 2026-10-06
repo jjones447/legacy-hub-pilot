@@ -96,3 +96,93 @@ test('a key stored with surrounding whitespace or a newline still works; a blank
   assert.deepEqual(seen, ['Bearer re_abc']);
   assert.equal(canSendEmail({ EMAIL_API_KEY: '  ' + String.fromCharCode(10) }), false);
 });
+
+
+test('production disabled delivery is a uniform 503 before caregiver lookup, without mint or send', async () => {
+  for (const key of [undefined, '', '  \n']) {
+    for (const email of ['jane.doe@example.com', 'stranger@example.invalid']) {
+      const statements = [];
+      const db = d1(raw), prepare = db.prepare.bind(db);
+      db.prepare = sql => { statements.push(sql); return prepare(sql); };
+      const res = await postPortal({ request: request('https://synthetic.invalid/api/portal/login', { email }),
+        env: { LEGACY_DB: db, PORTAL_TOKEN_SECRET: 's', EMAIL_API_KEY: key } });
+      assert.equal(res.status, 503);
+      assert.deepEqual(await res.json(), { ok: false, error: 'signin_unavailable' });
+      assert.equal(statements.some(sql => sql.includes('FROM caregiver')), false);
+      assert.equal(calls.length, 0);
+      assert.equal(raw.prepare('SELECT COUNT(*) AS n FROM portal_token').get().n, 0);
+    }
+  }
+  const audits = raw.prepare("SELECT actor,entity_id,after_json FROM audit_log WHERE action='portal.login_unavailable'").all();
+  assert.equal(audits.length, 6);
+  for (const audit of audits) {
+    assert.equal(audit.actor, 'system');
+    assert.equal(audit.entity_id, 'configuration');
+    assert.deepEqual(JSON.parse(audit.after_json), { reason: 'email_not_configured', provider_status: 0 });
+    assert.doesNotMatch(audit.after_json, /jane|stranger|re_test_key|token=/i);
+  }
+});
+
+test('preview requires explicit dev-link mode; disabled mail never becomes a silent email success', async () => {
+  for (const email of ['jane.doe@example.com', 'stranger@example.invalid']) {
+    const res = await postPortal({ request: request('https://synthetic.invalid/api/portal/login', { email }),
+      env: { ...PROD(), ENVIRONMENT: 'preview' } });
+    assert.equal(res.status, 503);
+    assert.deepEqual(await res.json(), { ok: false, error: 'signin_unavailable' });
+  }
+  assert.equal(calls.length, 0);
+  assert.equal(raw.prepare('SELECT COUNT(*) AS n FROM portal_token').get().n, 0);
+  const rows = raw.prepare("SELECT after_json FROM audit_log WHERE action='portal.login_unavailable'").all();
+  assert.ok(rows.every(row => JSON.parse(row.after_json).reason === 'email_disabled_in_environment'));
+});
+
+test('legacy padded recipient is matched and normalized before a mocked send', async () => {
+  raw.prepare('UPDATE caregiver SET email=? WHERE id=?').run('  Jane.Doe@Example.com  ', 'cg1');
+  const res = await postPortal({ request: request('https://synthetic.invalid/api/portal/login', { email: 'jane.doe@example.com' }), env: PROD() });
+  assert.deepEqual(await res.json(), { ok: true });
+  assert.deepEqual(JSON.parse(calls[0].init.body).to, ['Jane.Doe@Example.com']);
+});
+
+test('sendEmail normalizes recipient edge whitespace without changing its case', async () => {
+  const seen = [];
+  await sendEmail({ EMAIL_API_KEY: 'k' }, { to: '  Jane.Doe@Example.invalid \r\n', subject: 's', text: 't', html: 'h' },
+    async (url, init) => { seen.push(JSON.parse(init.body).to); return { ok: true, status: 200 }; });
+  assert.deepEqual(seen, [['Jane.Doe@Example.invalid']]);
+});
+
+for (const [name, result, status, reason] of [
+  ['provider acceptance', { ok: true, status: 202 }, 202, 'provider_accepted'],
+  ['provider rejection', { ok: false, status: 401 }, 401, 'provider_rejected'],
+  ['network failure', null, -1, 'network_error']
+]) test('private delivery audit records only safe status/reason for ' + name, async () => {
+  globalThis.fetch = async () => {
+    if (result === null) throw new Error('PRIVATE_PROVIDER_BODY_SHOULD_NOT_LEAK');
+    return result;
+  };
+  const known = await postPortal({ request: request('https://synthetic.invalid/api/portal/login', { email: 'jane.doe@example.com' }), env: PROD() });
+  const unknown = await postPortal({ request: request('https://synthetic.invalid/api/portal/login', { email: 'stranger@example.invalid' }), env: PROD() });
+  assert.equal(known.status, unknown.status);
+  assert.deepEqual(await known.json(), await unknown.json(), 'failed send cannot reveal membership');
+  const audit = raw.prepare("SELECT after_json FROM audit_log WHERE action IN('portal.link_emailed','portal.link_email_failed')").get();
+  assert.deepEqual(JSON.parse(audit.after_json), { provider_status: status, reason });
+  assert.doesNotMatch(audit.after_json, /PRIVATE_PROVIDER|jane|re_test_key|token=/i);
+});
+
+test('configuration audit failure still returns uniform unavailable status without delivery', async () => {
+  raw.exec("CREATE TRIGGER unavailable_audit_failure BEFORE INSERT ON audit_log WHEN NEW.action='portal.login_unavailable' BEGIN SELECT RAISE(ABORT,'SYNTHETIC_AUDIT_FAILURE'); END;");
+  const res = await postPortal({ request: request('https://synthetic.invalid/api/portal/login', { email: 'jane.doe@example.com' }),
+    env: { LEGACY_DB: d1(raw), PORTAL_TOKEN_SECRET: 's' } });
+  assert.equal(res.status, 503);
+  assert.deepEqual(await res.json(), { ok: false, error: 'signin_unavailable' });
+  assert.equal(calls.length, 0);
+});
+
+test('delivery audit failure cannot change the public response by membership', async () => {
+  raw.exec("CREATE TRIGGER delivery_audit_failure BEFORE INSERT ON audit_log WHEN NEW.action IN('portal.link_emailed','portal.link_email_failed') BEGIN SELECT RAISE(ABORT,'SYNTHETIC_AUDIT_FAILURE'); END;");
+  const known = await postPortal({ request: request('https://synthetic.invalid/api/portal/login', { email: 'jane.doe@example.com' }), env: PROD() });
+  const unknown = await postPortal({ request: request('https://synthetic.invalid/api/portal/login', { email: 'stranger@example.invalid' }), env: PROD() });
+  assert.equal(known.status, 200);
+  assert.equal(unknown.status, 200);
+  assert.deepEqual(await known.json(), await unknown.json());
+  assert.equal(calls.length, 1, 'only the registered fixture receives a mocked send');
+});

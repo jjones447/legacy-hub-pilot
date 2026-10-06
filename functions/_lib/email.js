@@ -45,7 +45,7 @@ export async function sendEmail(env, { to, subject, text, html }, fetchImpl = fe
       method: 'POST',
       // Trim: a key stored with a trailing newline (e.g. piped from PowerShell) breaks the header.
       headers: { authorization: `Bearer ${String(env.EMAIL_API_KEY).trim()}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ from: EMAIL_FROM, reply_to: EMAIL_REPLY_TO, to: [to], subject, text, html }),
+      body: JSON.stringify({ from: EMAIL_FROM, reply_to: EMAIL_REPLY_TO, to: [typeof to === 'string' ? to.trim() : to], subject, text, html }),
     });
     return { ok: res.ok, status: res.status };
   } catch (e) {

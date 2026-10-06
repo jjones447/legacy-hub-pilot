@@ -317,7 +317,7 @@ function submitPortalLogin(e) {
   statusDiv.style.display = 'block';
   statusDiv.style.background = '#f3f4f6';
   statusDiv.style.color = '#4b5563';
-  statusDiv.textContent = 'Sending sign-in link...';
+  statusDiv.textContent = 'Requesting sign-in link...';
   if (btn) btn.disabled = true;
 
   fetch('/api/portal/login', {
@@ -359,7 +359,7 @@ function submitPortalLogin(e) {
             statusDiv.appendChild(a);
           }
         } else {
-          statusDiv.textContent = "If you're a member, check your email for a secure sign-in link!";
+          statusDiv.textContent = 'If this address is registered and delivery is available, check your inbox for a secure sign-in link. If no link arrives, contact Legacy.';
         }
       } else {
         throw new Error(data.error || 'Failed to request link.');
@@ -370,6 +370,8 @@ function submitPortalLogin(e) {
       statusDiv.style.color = '#b91c1c';
       if (err.message === 'rate_limited') {
         statusDiv.textContent = 'Too many requests. Please wait a few minutes and try again.';
+      } else if (err.message === 'signin_unavailable') {
+        statusDiv.textContent = 'Sign-in is temporarily unavailable. Please contact Legacy or try again later.';
       } else {
         statusDiv.textContent = "We couldn't request a sign-in link just now. Please try again later.";
       }
