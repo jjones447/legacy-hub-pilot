@@ -6,7 +6,7 @@
 import { readdirSync, mkdirSync, writeFileSync, unlinkSync, existsSync, lstatSync } from 'node:fs';
 import { resolve, join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import os from 'node:os';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -109,6 +109,10 @@ export async function exportDatabase({
   }
 
   // Otherwise, invoke via Wrangler CLI
+  const wranglerEntry = join(ROOT_DIR, 'node_modules', 'wrangler', 'bin', 'wrangler.js');
+  if (!existsSync(wranglerEntry)) {
+    throw new Error('REFUSAL: Required project-local Wrangler entry is missing.');
+  }
   let tempConfig = null;
   try {
     let effectiveConfig = configPath;
@@ -118,12 +122,14 @@ export async function exportDatabase({
     }
 
     const persistDir = join(ROOT_DIR, '.wrangler', 'state', 'v3');
-    const localFlag = isLocal ? `--local --persist-to "${persistDir}"` : '--remote';
     const queryCmd = (sql) => {
-      const cleanSql = sql.replace(/\s+/g, ' ').trim();
-      const escapedSql = cleanSql.replace(/"/g, '\\"');
-      const cmd = `npx wrangler d1 execute "${databaseName}" ${localFlag} -c "${effectiveConfig}" --json --command "${escapedSql}"`;
-      const out = execSync(cmd, { cwd: ROOT_DIR, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+      const args = [wranglerEntry, 'd1', 'execute', databaseName,
+        ...(isLocal ? ['--local', '--persist-to', persistDir] : ['--remote']),
+        '-c', effectiveConfig, '--json', '--command', sql];
+      const out = execFileSync(process.execPath, args, {
+        cwd: ROOT_DIR, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+        shell: false, windowsHide: true
+      });
       const parsed = JSON.parse(out);
       if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].results) {
         return parsed[0].results;
