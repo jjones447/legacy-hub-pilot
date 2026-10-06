@@ -13,6 +13,7 @@ import { readdirSync, readFileSync, rmSync, existsSync, mkdirSync, writeFileSync
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
+import vm from 'node:vm';
 
 import backupWorker, { runBackup, pruneOldBackups, BAKED_IN_LATEST_MIGRATION } from '../workers/backup/src/index.mjs';
 import { exportDatabase, resolveLatestMigration } from '../scripts/export-all.mjs';
@@ -775,3 +776,75 @@ for (const [label, schemaOptions] of [['omitted schema option', {}], ['explicit 
     });
   });
 }
+
+// [pc2-codex-13] Trusted source-construction models only, not a VM security boundary or CLI execution.
+const exporterTransportSource = readFileSync(new URL('../scripts/export-all.mjs', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
+function exporterQueryConstruction() {
+  const start = exporterTransportSource.indexOf('    const queryCmd = (sql) => {');
+  const end = exporterTransportSource.indexOf('\n\n    const tablesRes', start);
+  assert.ok(start >= 0 && end > start);
+  return exporterTransportSource.slice(start, end);
+}
+
+function exporterCliPreflightConstruction() {
+  const start = exporterTransportSource.indexOf('  // Otherwise, invoke via Wrangler CLI');
+  const end = exporterTransportSource.indexOf('  let tempConfig = null;', start) + '  let tempConfig = null;'.length;
+  assert.ok(start >= 0 && end > start);
+  return exporterTransportSource.slice(start, end);
+}
+
+const queryPayloads = [
+  ['plain', "SELECT 'plain' AS synthetic"],
+  ['repeated spaces', "SELECT 'two  spaces' AS synthetic"],
+  ['literal tab', "SELECT 'tab\tvalue' AS synthetic"],
+  ['literal newline', "SELECT 'line\nvalue' AS synthetic"],
+  ['quotes and Unicode', `SELECT '"quote" Ω' AS synthetic`]
+];
+for (const isLocal of [false, true]) {
+  for (const [label, sql] of queryPayloads) {
+    test(`25. Export query ${isLocal ? 'local' : 'remote'} ${label} retains raw SQL in one shell-free argv`, () => {
+      const root = 'synthetic repository';
+      const wranglerEntry = join(root, 'node_modules', 'wrangler', 'bin', 'wrangler.js');
+      const persistDir = join(root, '.wrangler', 'state', 'v3');
+      const databaseName = 'synthetic database " name';
+      const effectiveConfig = 'synthetic directory/config " name.toml';
+      const nodePath = 'synthetic node executable';
+      const calls = [];
+      const context = {
+        ROOT_DIR: root, wranglerEntry, persistDir, isLocal, databaseName, effectiveConfig,
+        localFlag: isLocal ? `--local --persist-to "${persistDir}"` : '--remote',
+        inputSql: sql, process: { execPath: nodePath },
+        execFileSync(file, args, options) {
+          calls.push({ file, args: Array.from(args), options: JSON.parse(JSON.stringify(options)) });
+          return JSON.stringify([{ results: [{ synthetic: true }] }]);
+        }
+      };
+      const result = vm.runInNewContext(`${exporterQueryConstruction()}\nqueryCmd(inputSql);`, context, { timeout: 1000 });
+      assert.equal(JSON.stringify(result), '[{"synthetic":true}]');
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0].file, nodePath);
+      assert.deepEqual(calls[0].args, [wranglerEntry, 'd1', 'execute', databaseName,
+        ...(isLocal ? ['--local', '--persist-to', persistDir] : ['--remote']),
+        '-c', effectiveConfig, '--json', '--command', sql]);
+      assert.deepEqual(calls[0].options, {
+        cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], shell: false, windowsHide: true
+      });
+    });
+  }
+}
+
+test('26. Missing project-local Wrangler entry refuses before temporary config construction', () => {
+  const root = 'synthetic repository';
+  const lookups = [];
+  const context = { ROOT_DIR: root, join, existsSync(path) { lookups.push(path); return false; } };
+  assert.throws(() => vm.runInNewContext(exporterCliPreflightConstruction(), context, { timeout: 1000 }), /Required project-local Wrangler entry is missing/);
+  assert.deepEqual(lookups, [join(root, 'node_modules', 'wrangler', 'bin', 'wrangler.js')]);
+});
+
+test('27. Project-local entry presence qualifies only construction, not boot or configuration identity', () => {
+  const root = 'synthetic repository';
+  const lookups = [];
+  const context = { ROOT_DIR: root, join, existsSync(path) { lookups.push(path); return true; } };
+  vm.runInNewContext(exporterCliPreflightConstruction(), context, { timeout: 1000 });
+  assert.deepEqual(lookups, [join(root, 'node_modules', 'wrangler', 'bin', 'wrangler.js')]);
+});
