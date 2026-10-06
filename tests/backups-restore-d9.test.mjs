@@ -851,7 +851,7 @@ test('27. Project-local entry presence qualifies only construction, not boot or 
 });
 
 // [pc2-codex-13] Primary CLI list shape: array of canonical name/uuid rows; no provider execution.
-const exportIdentityRow = { name: 'synthetic-export-db', uuid: '11111111-2222-4333-8444-555555555555' };
+const exportIdentityRow = { name: 'synthetic-export-db', uuid: 'a1b2c3d4-e5f6-47a8-89bc-d0e1f2a3b4c5' };
 test('28. Export identity selects exact name or UUID and normalizes canonical UUID case', () => {
   const row = { ...exportIdentityRow, uuid: exportIdentityRow.uuid.toUpperCase() };
   for (const target of [row.name, row.uuid]) {
