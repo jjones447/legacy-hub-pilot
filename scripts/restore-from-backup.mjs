@@ -7,6 +7,8 @@
 // Input preflight caches the complete JSON snapshot before target SQL/config writes.
 // This costs snapshot-sized memory, not unbounded-scale/integrity acceptance, and
 // does not make later schema, SQL, provider or runtime restore failures atomic.
+// SQL payloads travel as unchanged UTF8 file contents, never shell arguments;
+// collapsing whitespace would change stored text even when row counts match.
 
 import { readdirSync, readFileSync, writeFileSync, unlinkSync, existsSync } from 'node:fs';
 import { resolve, join, dirname } from 'node:path';
@@ -592,34 +594,31 @@ export async function restoreDatabase({
     const localFlag = isLocal ? `--local --persist-to "${persistDir}"` : '--remote';
 
     const executeCmd = (sql) => {
-      const cleanSql = sql.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim();
-      if (!cleanSql) return;
-      if (cleanSql.length < 4000) {
-        const escapedSql = cleanSql.replace(/"/g, '\\"');
-        const cmd = `npx wrangler d1 execute "${targetDatabase}" ${localFlag} -c "${effectiveConfig}" --command "${escapedSql}"`;
+      if (!sql.trim()) return;
+      const tmpFile = join(ROOT_DIR, `.wrangler-chunk-${Date.now()}-${Math.random().toString(36).slice(2)}.sql`);
+      try {
+        writeFileSync(tmpFile, sql, 'utf8');
+        const cmd = `npx wrangler d1 execute "${targetDatabase}" ${localFlag} -c "${effectiveConfig}" --file "${tmpFile}"`;
         execFn(cmd, { cwd: ROOT_DIR, stdio: ['ignore', 'pipe', 'pipe'] });
-      } else {
-        const tmpFile = join(ROOT_DIR, `.wrangler-chunk-${Date.now()}-${Math.random().toString(36).slice(2)}.sql`);
-        try {
-          writeFileSync(tmpFile, cleanSql, 'utf8');
-          const cmd = `npx wrangler d1 execute "${targetDatabase}" ${localFlag} -c "${effectiveConfig}" --file "${tmpFile}"`;
-          execFn(cmd, { cwd: ROOT_DIR, stdio: ['ignore', 'pipe', 'pipe'] });
-        } finally {
-          if (existsSync(tmpFile)) unlinkSync(tmpFile);
-        }
+      } finally {
+        if (existsSync(tmpFile)) unlinkSync(tmpFile);
       }
     };
 
     const queryCmd = (sql) => {
-      const cleanSql = sql.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim();
-      const escapedSql = cleanSql.replace(/"/g, '\\"');
-      const cmd = `npx wrangler d1 execute "${targetDatabase}" ${localFlag} -c "${effectiveConfig}" --json --command "${escapedSql}"`;
-      const out = execFn(cmd, { cwd: ROOT_DIR, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-      const parsed = JSON.parse(out);
-      if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].results) {
-        return parsed[0].results;
+      const tmpFile = join(ROOT_DIR, `.wrangler-query-${Date.now()}-${Math.random().toString(36).slice(2)}.sql`);
+      try {
+        writeFileSync(tmpFile, sql, 'utf8');
+        const cmd = `npx wrangler d1 execute "${targetDatabase}" ${localFlag} -c "${effectiveConfig}" --json --file "${tmpFile}"`;
+        const out = execFn(cmd, { cwd: ROOT_DIR, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+        const parsed = JSON.parse(out);
+        if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].results) {
+          return parsed[0].results;
+        }
+        return [];
+      } finally {
+        if (existsSync(tmpFile)) unlinkSync(tmpFile);
       }
-      return [];
     };
 
     // 0. Drop existing tables if any, in reverse dependency order, to ensure clean schema recreation
@@ -650,7 +649,7 @@ export async function restoreDatabase({
     executeCmd('PRAGMA foreign_keys = ON;');
     console.log(`[restore] Schema recreated successfully.`);
 
-    // 2. Load table data in batches over --command
+    // 2. Load table data in batches over unchanged SQL files
     console.log(`[restore] Loading table data from ${dumpPath} (batch size: ${batchSize})...`);
     executeCmd('PRAGMA foreign_keys = OFF;');
     // Delete in reverse dependency order (children first)
