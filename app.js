@@ -946,10 +946,13 @@ function renderWellness(data) {
       const last = history[history.length - 1];
       const when = String(last.created_at || '').slice(0, 10);
       summary.textContent = 'Latest: ' + last.score + ' out of 100 (' + when + '). ' +
-        (data.due ? 'Your next check-in is ready.' : 'Next check-in in about ' + data.every_days + ' days.');
+        (data.due ? 'Your next check-in is ready.' : 'Your next check-in will appear here when ready.');
     }
   }
   if (btn) btn.classList.toggle('d-none', !data.due);
+  const trendHint = document.getElementById('portalWellnessTrendHint');
+  if (trendHint) trendHint.textContent = history.length < 2
+    ? 'A trend appears after two check-ins.' : 'Scores shown oldest to newest.';
   drawWellnessTrend(document.getElementById('portalWellnessTrend'), history.map(function (h) { return h.score; }));
 }
 
@@ -962,7 +965,7 @@ function drawWellnessTrend(container, scores) {
   const svg = document.createElementNS(ns, 'svg');
   svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
   svg.setAttribute('role', 'img');
-  svg.setAttribute('aria-label', 'Wellness score trend: ' + scores.join(', '));
+  svg.setAttribute('aria-label', 'Recent check-in scores, oldest to newest: ' + scores.join(', '));
   const step = (w - pad * 2) / (scores.length - 1);
   const pts = scores.map(function (s, i) {
     return (pad + i * step).toFixed(1) + ',' + (h - pad - (s / 100) * (h - pad * 2)).toFixed(1);

@@ -5,6 +5,7 @@ import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
+import vm from 'node:vm';
 import {
   QUESTIONS, validateCheckin, scoreCheckin, isCheckinDue, recordCheckin, caregiverHistory,
   staffSeries, caregiversWithCheckins, CHECKIN_EVERY_DAYS,
@@ -147,4 +148,78 @@ test('UI: portal My Wellness tile and staff wellness panel are wired, built with
   assert.match(STAFF_JS, /loadWellnessCaregivers\(\)/);
   assert.match(STAFF_JS, /opt\.textContent = /, 'caregiver names go in as text, not HTML');
   assert.doesNotMatch(APP_JS, /wellness[^\n]*innerHTML/, 'portal wellness UI never uses innerHTML');
+});
+
+function wellnessUi() {
+  class Element {
+    constructor(tag = 'div') {
+      this.tagName = tag; this.children = []; this.attributes = {}; this.classes = new Set();
+      this.classList = { toggle: (name, enabled) => enabled ? this.classes.add(name) : this.classes.delete(name) };
+    }
+    set textContent(value) { this.text = value; this.children = []; }
+    get textContent() { return this.text || ''; }
+    setAttribute(name, value) { this.attributes[name] = value; }
+    appendChild(child) { this.children.push(child); return child; }
+  }
+  const elements = Object.fromEntries(['portalWellnessSummary', 'portalWellnessBtn',
+    'portalWellnessTrend', 'portalWellnessTrendHint'].map(id => [id, new Element()]));
+  const source = APP_JS.slice(APP_JS.indexOf('function renderWellness('), APP_JS.indexOf('function openWellnessForm('));
+  assert.ok(source.startsWith('function renderWellness('));
+  const context = vm.createContext({ document: {
+    getElementById: id => elements[id], createElementNS: (_namespace, tag) => new Element(tag)
+  } });
+  vm.runInContext(source, context);
+  return { elements, render: data => context.renderWellness(data) };
+}
+
+test('UI clarity: the full interval is never presented as remaining days', () => {
+  for (const interval of [30, 90]) {
+    const { elements, render } = wellnessUi();
+    render({ history: [{ score: 50, created_at: '2026-10-01 12:00:00' }], due: false, every_days: interval });
+    assert.equal(elements.portalWellnessSummary.textContent,
+      'Latest: 50 out of 100 (2026-10-01). Your next check-in will appear here when ready.');
+    assert.equal(elements.portalWellnessBtn.classes.has('d-none'), true);
+  }
+});
+
+test('UI clarity: empty and one-point histories explain why there is no trend yet', () => {
+  const { elements, render } = wellnessUi();
+  for (const history of [[], [{ score: 75, created_at: '2026-10-01 12:00:00' }]]) {
+    render({ history, due: history.length === 0, every_days: 30 });
+    assert.equal(elements.portalWellnessTrendHint.textContent, 'A trend appears after two check-ins.');
+    assert.equal(elements.portalWellnessTrend.children.length, 0, 'no invented trend points');
+  }
+});
+
+test('UI clarity: recent trend scores retain oldest-first order and a meaningful accessible label', () => {
+  const { elements, render } = wellnessUi();
+  render({ history: [{ score: 25, created_at: '2026-09-01 12:00:00' },
+    { score: 75, created_at: '2026-10-01 12:00:00' }], due: false, every_days: 30 });
+  assert.equal(elements.portalWellnessTrendHint.textContent, 'Scores shown oldest to newest.');
+  const chart = elements.portalWellnessTrend.children[0];
+  assert.equal(chart.attributes['aria-label'], 'Recent check-in scores, oldest to newest: 25, 75');
+  assert.equal(chart.children[0].attributes.points, '4.0,43.0 236.0,17.0');
+  render({ history: [], due: true, every_days: 30 });
+  assert.equal(elements.portalWellnessTrend.children.length, 0, 'old chart clears with empty data');
+});
+
+test('UI clarity: ready check-ins keep the existing prompt and visible action', () => {
+  const { elements, render } = wellnessUi();
+  render({ history: [{ score: 50, created_at: '2026-09-01 12:00:00' }], due: true, every_days: 30 });
+  assert.equal(elements.portalWellnessSummary.textContent,
+    'Latest: 50 out of 100 (2026-09-01). Your next check-in is ready.');
+  assert.equal(elements.portalWellnessBtn.classes.has('d-none'), false);
+});
+
+test('UI clarity: portal explains the four-answer nonclinical score without promising a profile page', () => {
+  assert.match(PORTAL_HTML, /id="portalWellnessExplanation"/);
+  assert.match(PORTAL_HTML, /four answers.*equal weight.*0–100/s);
+  assert.match(PORTAL_HTML, /Less stress raises the score/);
+  assert.match(PORTAL_HTML, /optional note does not affect this score/);
+  assert.match(PORTAL_HTML, /personal check-in, not a clinical assessment/);
+  assert.match(PORTAL_HTML, /Recent check-in scores/);
+  const intro = PORTAL_HTML.match(/<p class="sub">([^<]+)<\/p>/)?.[1];
+  assert.ok(intro);
+  assert.doesNotMatch(intro, /profile/i);
+  assert.match(intro, /wellness check-ins/);
 });
