@@ -109,7 +109,7 @@
     <div class="login-wrap">
       <div class="login-card">
         <h2>Caregiver Portal</h2>
-        <p class="sub">Your Sanctuary membership — profile, grants, events, and resources in one secure place.</p>
+        <p class="sub">Your Sanctuary membership — wellness check-ins, grants, events, and resources in one secure place.</p>
         <div class="field">
           <label for="loginEmail">Email</label>
           <input id="loginEmail" type="email" placeholder="you@example.com">
@@ -138,6 +138,9 @@
       <div class="panel m-0" id="portalWellnessTile">
         <h4>💛 My Wellness</h4>
         <p class="small muted m-0" id="portalWellnessSummary">Loading…</p>
+        <p class="small muted mt-8" id="portalWellnessExplanation">Your four answers carry equal weight in a 0–100 score. Less stress raises the score; higher ratings for sleep, support and time for yourself raise it too. The optional note does not affect this score. This is a personal check-in, not a clinical assessment.</p>
+        <p class="small mt-16 mb-8"><strong>Recent check-in scores</strong></p>
+        <p class="small muted m-0" id="portalWellnessTrendHint">A trend appears after two check-ins.</p>
         <div id="portalWellnessTrend" class="wellness-trend"></div>
         <button type="button" class="btn btn-plum btn-sm mt-16" data-action="wellness-open" id="portalWellnessBtn">Take a 1-minute check-in</button>
         <div id="portalWellnessForm" class="d-none mt-16"></div>
