@@ -18,7 +18,8 @@ test('(a) the crisis page renders and contains tel:988', () => {
   const html = loadFile('crisis-help.html');
   assert.match(html, /<h1 class="hero-title-clamp">Crisis &amp; Emergency Help<\/h1>/);
   assert.match(html, /href="tel:988"/);
-  assert.match(html, /Call or text 988/);
+  assert.match(html, /href="tel:988"[^>]*>Call 988/);
+  assert.match(html, /Call or text <strong>988<\/strong>/);
 });
 
 test('(b) directory.html is gone and _redirects carries the rule', () => {
