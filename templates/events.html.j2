@@ -17,7 +17,7 @@
 <section class="hero py-56-64">
   <div class="container">
     <h1 class="hero-title-clamp">Events</h1>
-    <p class="lede">Register in one click — your registration, attendance, and follow-up all connect to your caregiver profile automatically.</p>
+    <p class="lede">Explore our programs. Register when a confirmed date and registration details are available.</p>
   </div>
 </section>
 
@@ -26,16 +26,24 @@
     <div class="card-grid">
 {%- for ev in events %}
       <div class="card event-card">
+{% if ev.schedule_confirmed | default(false) %}
         <div class="event-date"><div class="month">{{ ev.month | e }}</div><div class="day">{{ ev.day | e }}</div></div>
+{% endif %}
         <div class="flex-1">
           <span class="badge {{ ev.badge_class }}">{{ ev.badge | e }}</span>
-          <h3 class="fs-19-m-8-0-4">{{ ev.title | e }}{% if ev.title_badge %} <span class="badge {{ ev.title_badge_class }}">{{ ev.title_badge | e }}</span>{% endif %}</h3>
+          <h3 class="fs-19-m-8-0-4">{{ ev.title | e }}{% if ev.title_badge and (ev.schedule_confirmed | default(false)) %} <span class="badge {{ ev.title_badge_class }}">{{ ev.title_badge | e }}</span>{% endif %}</h3>
+{% if ev.schedule_confirmed | default(false) %}
           <div class="event-meta">{{ ev.meta | e }}</div>
+{% else %}
+          <p class="small muted">Schedule pending. Date, time, location and registration are not confirmed.</p>
+{% endif %}
           <p class="small muted mb-8">{{ ev.description | e }}</p>
+{% if ev.schedule_confirmed | default(false) %}
           <div class="flex-center-gap-12">
             <button class="btn btn-plum btn-sm" data-action="open-register" data-event-title="{{ ev.register_label | e }}" data-event-id="{{ ev.id }}">Register</button>
             <span class="small muted">{{ ev.registered_note | e }}</span>
           </div>
+{% endif %}
         </div>
       </div>
 {% endfor %}
