@@ -32,6 +32,36 @@ source, review, CI, runtime, deployed and client-accepted states separately.
 Coming Soon and reminders remain disabled until Shanelle's go through Jacob is recorded for the respective action;
 source integration or a deploy authorization does not imply client-send or health-data permission.
 
+## Source test boundary — October 8, 2026
+
+`npm test` and `npm run test:unit` select the non-workerd Node tests through
+`scripts/run-tests.mjs`. They print **runtime NOT RUN**. The existing CI check
+name is preserved, but its job summary explicitly excludes runtime acceptance.
+This is a test-entrypoint correction, not clearance to execute previously held work.
+
+The separate `npm run test:runtime` selects only the required real-workerd harness.
+Do not execute it until the recorded runtime-preparation rejection and incident
+receive explicit disposition. Its opt-in environment marker is a mode selector,
+not authorization. Direct broad-glob use without that marker fails before loading
+Wrangler. The harness requires project-local Wrangler exactly matching the package
+pin, never installs tools or discovers npm-cache copies, and cannot turn missing
+tooling/startup failure into a skip. No dependencies were installed for this repair.
+
+Prepared runtime source uses an explicit synthetic local D1 configuration (no
+production IDs, AI or remote binding), and the existing site allowlist for assets.
+It stops only the worker handle it obtained. Stop failures propagate; the owned
+temporary directory is retained for diagnosis rather than deleted after an unknown
+outcome. Unreturned startup handles still require operator disposition; this source
+change does not establish lifecycle acceptance. No process-wide handle cleanup is
+allowed. The installed dependency graph still needs qualification before execution;
+an exact Wrangler version alone is not a fully locked dependency graph.
+
+The encoded-link security assertion remains unchanged. Pure sanitizer evidence is
+not evidence of real HTMLRewriter serialization. Required page roundtrip, row edit,
+security and shutdown behavior remain **runtime UNVERIFIED** until actually tested.
+Wrangler option review used the [pinned upstream dev API source](https://github.com/cloudflare/workers-sdk/blob/wrangler%404.139.0/packages/wrangler/src/api/dev.ts)
+and [official API documentation](https://developers.cloudflare.com/workers/wrangler/api/).
+
 ## Historical August surface and URLs
 
 **Staging:** https://staging.legacy-hub.pages.dev

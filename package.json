@@ -5,9 +5,11 @@
   "private": true,
   "scripts": {
     "build:site": "node scripts/build-site.mjs",
-    "test": "node --test \"tests/*.test.mjs\""
+    "test": "node scripts/run-tests.mjs unit",
+    "test:unit": "node scripts/run-tests.mjs unit",
+    "test:runtime": "node scripts/run-tests.mjs runtime"
   },
   "devDependencies": {
-    "wrangler": "^4.139.0"
+    "wrangler": "4.139.0"
   }
 }
