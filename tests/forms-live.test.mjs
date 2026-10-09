@@ -76,19 +76,17 @@ test('membership CTA opens the live membership modal instead of an alert stub', 
   assert.doesNotMatch(page, /membership interest form/);
 });
 
-test('event registration buttons carry registerable event ids', () => {
+test('event registration uses published API identities and the live intake form', () => {
   const page = file('events.html');
-  for (const id of [
-    'ev_virtual_support_group',
-    'ev_memory_social_jul18',
-    'ev_wellness_grant_info_aug01',
-    'ev_memory_social_caregiver_aug15',
-  ]) {
-    assert.match(page, new RegExp(id));
-  }
+  const app = file('app.js');
+  // The renderer tests exercise API -> registration button -> modal identity.
+  // Static seed IDs are fixtures, not confirmation that their old dates are live.
+  assert.match(page, /id="liveEventsGrid"/);
+  assert.match(app, /fetch\('\/api\/events'\)/);
+  assert.match(app, /button\.dataset\.eventId = event\.id/);
   assert.match(page, /id="regForm" data-action="submit-register"/);
-  assert.match(file('app.js'), /action === 'submit-register'[\s\S]*submitRegister/);
-  assert.match(file('app.js'), /event_id: eventId/);
+  assert.match(app, /action === 'submit-register'[\s\S]*submitRegister/);
+  assert.match(app, /event_id: eventId/);
   assert.match(page, /consent to Legacy using these details/);
 });
 
