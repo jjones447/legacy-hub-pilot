@@ -20,6 +20,17 @@ test('crisis page does not advertise an unverified hotline or unavailable emerge
   assert.match(html, /href="https:\/\/www\.alz\.org\/help-support"/);
 });
 
+test('988 call actions describe the telephone action without promising to open texting', () => {
+  for (const path of ['templates/crisis-help.html.j2', 'crisis-help.html']) {
+    const html = read(path);
+    const calls = [...html.matchAll(/<a\b[^>]*href="tel:988"[^>]*>([\s\S]*?)<\/a>/g)];
+    assert.equal(calls.filter(([, label]) => /^Call 988(?: →)?$/.test(label)).length, 2);
+    assert.ok(calls.every(([, label]) => !/text/i.test(label)));
+    assert.match(html, /Call or text <strong>988<\/strong>/);
+    assert.match(html, /href="tel:911"/);
+  }
+});
+
 test('unconfirmed sample dates and registration counts are not presented as current events', () => {
   for (const page of ['index.html', 'events.html']) {
     const html = read(page);
