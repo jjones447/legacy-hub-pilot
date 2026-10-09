@@ -182,7 +182,7 @@ function preflightFixture() {
       run(...args) { trace.push({ method: 'run', sql, args }); return stmt.run(...args); }
     };
   };
-  const restore = () => restoreDatabase({ dumpDir, schemaDir, targetDatabase: scratch.name,
+  const restore = (options = {}) => restoreDatabase({ ...options, dumpDir, schemaDir, targetDatabase: scratch.name,
     db: database, execFn() { cliCalls++; assert.fail('FORBIDDEN_CLI_OR_SUBPROCESS'); } });
   return { root, dumpDir, schemaDir, database, manifest, trace, state, write, restore,
     hook(fn) { onFirstMutation = fn; },
@@ -207,6 +207,57 @@ function preflightFixture() {
     }
   };
 }
+const invalidBatchSizes = [
+  ['zero', 0], ['negative', -1], ['fraction', 0.5], ['NaN', NaN],
+  ['infinity', Infinity], ['unsafe integer', Number.MAX_SAFE_INTEGER + 1],
+  ['numeric string', '2'], ['null', null], ['boolean', true], ['object', {}]
+];
+for (const [name, batchSize] of invalidBatchSizes) test('batch preflight: rejects ' + name + ' without target effects', async () => {
+  const f = preflightFixture();
+  try {
+    const before = f.state();
+    await assert.rejects(f.restore({ batchSize }), /^Error: REFUSAL: Restore batch size must be a positive safe integer\.$/);
+    assert.deepEqual(f.state(), before, 'complete prior schema, rows and foreign-key state preserved');
+    assert.deepEqual(f.trace, [], 'no target SQL before batch refusal');
+    assert.equal(f.cliCalls, 0);
+    for (const db of [null, {}]) {
+      await assert.rejects(restoreDatabase({ targetDatabase: scratch.name, db,
+        dumpDir: undefined, batchSize, execFn: forbiddenCommand, execFileFn: forbiddenCommand }),
+      /REFUSAL: Restore batch size must be a positive safe integer/);
+    }
+  } finally { f.cleanup(); }
+});
+
+test('batch preflight: positive sizes retain synthetic restore behavior', async () => {
+  for (const batchSize of [1, 2, 25, Number.MAX_SAFE_INTEGER]) {
+    const f = preflightFixture();
+    try {
+      assert.equal((await f.restore({ batchSize })).success, true);
+      assert.deepEqual(f.state().tables.caregiver, [{ ...fixtureRow, enabled: 1 }]);
+      assert.deepEqual(f.state().tables.audit_log, [fixtureAudit]);
+      assert.equal(f.cliCalls, 0);
+    } finally { f.cleanup(); }
+  }
+});
+
+test('batch CLI parsing: malformed suffixes and fractions are not silently truncated', async () => {
+  const source = readFileSync(resolve('scripts/restore-from-backup.mjs'), 'utf8');
+  const entry = source.slice(source.indexOf('// CLI entry point'));
+  const script = resolve('scripts/restore-from-backup.mjs');
+  for (const [input, expected] of [['2junk', NaN], ['1.5', 1.5], ['0', 0], ['2', 2], [undefined, NaN]]) {
+    const captured = [];
+    vm.runInNewContext(entry, {
+      resolve, __filename: script,
+      process: { argv: ['synthetic-node', script, 'unread-dump', scratch.name, '--batch-size',
+        ...(input === undefined ? [] : [input])], exit() {} },
+      console: { error() {} },
+      restoreDatabase(options) { captured.push(options); return Promise.resolve(); }
+    }, { timeout: 1000 });
+    await Promise.resolve();
+    assert.equal(captured.length, 1);
+    assert.equal(captured[0].batchSize, expected);
+  }
+});
 const invalidSnapshots = [
   ['missing table file', f => f.remove('dump/caregiver.json')],
   ['malformed table JSON', f => f.write('dump/caregiver.json', '{"ROW_VALUE_CANARY":')],
