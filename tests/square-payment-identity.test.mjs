@@ -89,6 +89,50 @@ test('two different payments remain distinct', async () => {
   } finally { f.db.close(); }
 });
 
+// Sandbox preparation, not a Square-generated delivery. Real payment.updated
+// objects may contain only order/customer IDs, not expanded contact/line items.
+test('Sandbox-shaped payment with only customer and order IDs stays unmatched', async () => {
+  const f = fixture();
+  try {
+    const result = await f.deliver('synthetic_sandbox_ids', 'synthetic_ids_payment', {
+      order_id: 'synthetic_order', customer_id: 'synthetic_customer',
+    });
+    assert.equal(result.status, 200);
+    assert.equal(result.body.unmatched, true);
+    const row = f.db.prepare("SELECT * FROM followup WHERE source='square'").get();
+    assert.equal(row.kind, 'payment_unmatched');
+    assert.equal(row.caregiver_id, 'cg_unmatched_square');
+    assert.equal(f.db.prepare("SELECT count(*) n FROM registration WHERE source='square'").get().n, 0);
+    const audit = f.db.prepare("SELECT * FROM audit_log WHERE actor='square_webhook'").get();
+    assert.equal(audit.entity_id, String(row.id));
+    assert.equal(JSON.parse(audit.after_json).payment_id, 'synthetic_ids_payment');
+  } finally { f.db.close(); }
+});
+
+test('Sandbox-shaped buyer email and API payment note select the preseeded caregiver and event', async () => {
+  const f = fixture();
+  try {
+    f.db.prepare(`INSERT INTO caregiver (id, first_name, email, source)
+      VALUES ('cg_sandbox_fixture', 'Synthetic', 'square-test@example.invalid', 'fixture')`).run();
+    const extra = { buyer_email_address: 'square-test@example.invalid',
+      note: 'ev_virtual_support_group', order_id: 'synthetic_order' };
+    const result = await f.deliver('synthetic_sandbox_registration', 'synthetic_registration_payment', extra);
+    assert.equal(result.status, 200);
+    assert.equal(result.body.caregiver_id, 'cg_sandbox_fixture');
+    assert.equal(result.body.entity, 'registration');
+    const row = f.db.prepare("SELECT * FROM registration WHERE source='square'").get();
+    assert.equal(row.event_id, 'ev_virtual_support_group');
+    assert.equal(row.caregiver_id, 'cg_sandbox_fixture');
+    const audit = f.db.prepare("SELECT * FROM audit_log WHERE actor='square_webhook'").get();
+    assert.equal(audit.entity_id, String(row.id));
+    assert.equal(JSON.parse(audit.after_json).payment_id, 'synthetic_registration_payment');
+    assert.equal((await f.deliver('synthetic_sandbox_later_update', 'synthetic_registration_payment', extra)).body.duplicate, true);
+    assert.equal(f.db.prepare("SELECT count(*) n FROM registration WHERE source='square'").get().n, 1);
+    assert.equal(f.db.prepare("SELECT count(*) n FROM audit_log WHERE actor='square_webhook'").get().n, 1);
+    assert.equal(f.db.prepare('SELECT count(*) n FROM caregiver').get().n, 1);
+  } finally { f.db.close(); }
+});
+
 for (const badId of [undefined, null, '', 7, {}, '   ']) {
   test(`malformed completed payment id ${JSON.stringify(badId)} refuses before database`, async () => {
     const f = fixture();
