@@ -16,6 +16,7 @@ permissions:
 
 jobs:
   test:
+    # Preserve the existing check name for branch protection consumers.
     name: node --test
     runs-on: ubuntu-latest
     steps:
@@ -26,4 +27,7 @@ jobs:
           # it is stable and unflagged from 24, which is what the suite is run against locally.
           node-version: "24"
       - name: Run unit tests
-        run: node --test "tests/*.test.mjs"
+        run: npm run test:unit
+      - name: Runtime evidence boundary
+        if: always()
+        run: echo "Real workerd runtime NOT RUN. Unit success is not release/runtime acceptance." >> "$GITHUB_STEP_SUMMARY"

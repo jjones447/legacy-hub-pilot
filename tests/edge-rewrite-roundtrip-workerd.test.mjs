@@ -4,41 +4,35 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync, readdirSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync, existsSync, mkdtempSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { execSync } from 'node:child_process';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { execFileSync } from 'node:child_process';
 import os from 'node:os';
+import { buildSite } from '../scripts/build-site.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const rootDir = resolve(__dirname, '..');
 
 async function getWrangler() {
-  try {
-    return await import('wrangler');
-  } catch {}
-  try {
-    const { createRequire } = await import('node:module');
-    const req = createRequire(import.meta.url);
-    return req('wrangler');
-  } catch {}
-  try {
-    const localAppData = process.env.LOCALAPPDATA;
-    if (localAppData) {
-      const npxBase = join(localAppData, 'npm-cache', '_npx');
-      if (existsSync(npxBase)) {
-        for (const dir of readdirSync(npxBase)) {
-          const candidate = join(npxBase, dir, 'node_modules', 'wrangler', 'wrangler-dist', 'cli.js');
-          if (existsSync(candidate)) {
-            const fileUrl = 'file:///' + candidate.replace(/\\/g, '/');
-            return await import(fileUrl);
-          }
-        }
-      }
-    }
-  } catch {}
-  return null;
+  const packageDir = join(rootDir, 'node_modules', 'wrangler');
+  const installed = JSON.parse(readFileSync(join(packageDir, 'package.json'), 'utf8'));
+  const expected = JSON.parse(readFileSync(join(rootDir, 'package.json'), 'utf8')).devDependencies.wrangler;
+  assert.match(expected, /^\d+\.\d+\.\d+$/, 'Wrangler must be exactly pinned');
+  assert.equal(installed.version, expected, 'Installed Wrangler must match the approved source pin');
+  const cli = join(packageDir, 'bin', 'wrangler.js');
+  assert.ok(existsSync(cli), 'Required local Wrangler CLI is missing; no automatic installation');
+  const api = await import(pathToFileURL(join(packageDir, 'wrangler-dist', 'cli.js')).href);
+  assert.equal(typeof api.unstable_dev, 'function', 'Required local Wrangler API is unavailable');
+  return { ...api, cli };
+}
+
+function runWrangler(cli, args, tempDir) {
+  return execFileSync(process.execPath, [cli, ...args], {
+    cwd: tempDir, stdio: 'pipe', timeout: 60000, shell: false,
+    env: { ...process.env, WRANGLER_SEND_METRICS: 'false' },
+  });
 }
 
 function getPagesWithDataCs() {
@@ -53,7 +47,7 @@ function getPagesWithDataCs() {
   return pages.sort();
 }
 
-function setupDatabase(tempDir) {
+function setupDatabase(tempDir, cli, config) {
   const schemaFiles = readdirSync(resolve(rootDir, 'schema'))
     .filter((f) => /^0.*\.sql$/.test(f))
     .sort();
@@ -85,23 +79,21 @@ function setupDatabase(tempDir) {
   const sqlPath = join(tempDir, 'setup.sql');
   writeFileSync(sqlPath, combinedSql, 'utf8');
 
-  execSync(`npx wrangler d1 execute legacy-hub-db --local --persist-to="${tempDir}" --file="${sqlPath}" --yes`, {
-    cwd: rootDir,
-    stdio: 'ignore'
-  });
+  runWrangler(cli, ['d1', 'execute', 'legacy-runtime-fixture', '--local', '--config', config,
+    '--persist-to', tempDir, '--file', sqlPath, '--yes'], tempDir);
 }
 
-function buildWorkerBundle(tempDir) {
+function buildWorkerBundle(tempDir, cli) {
   const bundleDir = join(tempDir, 'bundle');
-  execSync(`npx wrangler pages functions build --outdir="${bundleDir}"`, {
-    cwd: rootDir,
-    stdio: 'ignore'
-  });
+  runWrangler(cli, ['pages', 'functions', 'build', resolve(rootDir, 'functions'), '--outdir', bundleDir], tempDir);
   return join(bundleDir, 'index.js');
 }
 
-async function startDevWorker(unstable_dev, tempDir, workerScript) {
+async function startDevWorker(unstable_dev, tempDir, workerScript, config) {
   return await unstable_dev(workerScript, {
+    config,
+    local: true,
+    envFiles: [],
     persistTo: tempDir,
     ip: '127.0.0.1',
     logLevel: 'none',
@@ -112,69 +104,37 @@ async function startDevWorker(unstable_dev, tempDir, workerScript) {
       disableDevRegistry: true,
       disableExperimentalWarning: true,
       enablePagesAssetsServiceBinding: {
-        directory: rootDir
-      },
-      d1Databases: [
-        {
-          binding: 'LEGACY_DB',
-          database_name: 'legacy-hub-db',
-          database_id: 'dab02f78-f131-4d17-abaa-db9e6b45fb1b'
-        }
-      ]
+        directory: join(tempDir, 'assets')
+      }
     }
   });
 }
 
-function cleanupRemainingHandles() {
-  for (const h of process._getActiveHandles()) {
-    try {
-      if (typeof h.unref === 'function') h.unref();
-      if (typeof h.close === 'function') h.close();
-    } catch {}
-  }
-}
-
 test('round-trip workerd: edge rewrite on real workerd runtime matches committed build byte-for-byte', async (t) => {
+  // This opt-in separates test modes; it NEVER grants clearance for an operational hold.
+  assert.equal(process.env.LEGACY_RUN_WORKERD, '1', 'Runtime NOT RUN: use the explicit runtime command only after hold disposition');
   const wrangler = await getWrangler();
-  if (!wrangler || typeof wrangler.unstable_dev !== 'function') {
-    t.skip('Skipping workerd round-trip test: wrangler runtime is unavailable or cannot be loaded.');
-    return;
-  }
-
-  try {
-    execSync('npx wrangler --version', { cwd: rootDir, stdio: 'ignore' });
-  } catch {
-    t.skip('Skipping workerd round-trip test: npx wrangler command is unavailable.');
-    return;
-  }
 
   const tempDir = mkdtempSync(join(os.tmpdir(), 'wrangler-workerd-test-'));
   let worker = null;
 
-  try {
-    setupDatabase(tempDir);
-    const workerScript = buildWorkerBundle(tempDir);
-    worker = await startDevWorker(wrangler.unstable_dev, tempDir, workerScript);
-  } catch (err) {
-    try {
-      rmSync(tempDir, { recursive: true, force: true });
-    } catch {}
-    t.skip(`Skipping workerd round-trip test: workerd runtime failed to start (${err.message})`);
-    return;
-  }
-
+  // Register before startup. On unknown startup/stop outcome retain the exact scratch
+  // directory for diagnosis; never enumerate/close unrelated process handles or delete it.
+  t.diagnostic(`Owned synthetic runtime scratch retained: ${tempDir}`);
   t.after(async () => {
-    if (worker) {
-      try {
-        await worker.stop();
-      } catch {}
-      worker = null;
-    }
-    cleanupRemainingHandles();
-    try {
-      rmSync(tempDir, { recursive: true, force: true });
-    } catch {}
+    if (worker) await worker.stop();
   });
+
+  const config = join(tempDir, 'wrangler.json');
+  writeFileSync(config, JSON.stringify({
+    name: 'legacy-runtime-fixture', compatibility_date: '2026-07-01',
+    d1_databases: [{ binding: 'LEGACY_DB', database_name: 'legacy-runtime-fixture',
+      database_id: '00000000-0000-4000-8000-000000000001' }],
+  }), 'utf8');
+  buildSite(rootDir, join(tempDir, 'assets'));
+  setupDatabase(tempDir, wrangler.cli, config);
+  const workerScript = buildWorkerBundle(tempDir, wrangler.cli);
+  worker = await startDevWorker(wrangler.unstable_dev, tempDir, workerScript, config);
 
   const baseUrl = `http://127.0.0.1:${worker.port}`;
   const pages = getPagesWithDataCs();
@@ -183,7 +143,7 @@ test('round-trip workerd: edge rewrite on real workerd runtime matches committed
   for (const page of pages) {
     await t.test(`page ${page} matches committed build byte-for-byte on real workerd`, async () => {
       const committedHtml = readFileSync(resolve(rootDir, page), 'utf8');
-      const response = await fetch(`${baseUrl}/${page}`);
+      const response = await fetch(`${baseUrl}/${page}`, { signal: AbortSignal.timeout(15000) });
       assert.equal(response.status, 200, `Expected 200 OK for ${page}, got ${response.status}`);
       const rewrittenHtml = await response.text();
 
@@ -215,25 +175,24 @@ test('round-trip workerd: edge rewrite on real workerd runtime matches committed
 
     // Locate local D1 SQLite file
     const entries = readdirSync(tempDir, { recursive: true });
-    let sqliteFile = null;
-    for (const e of entries) {
-      if (e.includes('d1') && e.endsWith('.sqlite')) {
-        sqliteFile = join(tempDir, e);
-        break;
-      }
-    }
-    assert.ok(sqliteFile, 'local D1 sqlite file must exist');
+    const sqliteFiles = entries.filter((e) => e.includes('d1') && e.endsWith('.sqlite'));
+    assert.equal(sqliteFiles.length, 1, 'exactly one owned synthetic D1 sqlite file must exist');
+    const sqliteFile = join(tempDir, sqliteFiles[0]);
 
     const { DatabaseSync } = await import('node:sqlite');
     const db = new DatabaseSync(sqliteFile);
-    db.prepare("UPDATE content_item SET data = ?, updated_by = ?, updated_at = datetime('now') WHERE id = ?")
-      .run(JSON.stringify(editData), 'staff_editor', 'ps_home.journey');
-    db.close();
+    try {
+      const result = db.prepare("UPDATE content_item SET data = ?, updated_by = ?, updated_at = datetime('now') WHERE id = ?")
+        .run(JSON.stringify(editData), 'staff_editor', 'ps_home.journey');
+      assert.equal(Number(result.changes), 1, 'exactly one synthetic row must be edited');
+    } finally {
+      db.close();
+    }
 
     const workerScript = join(tempDir, 'bundle', 'index.js');
-    worker = await startDevWorker(wrangler.unstable_dev, tempDir, workerScript);
+    worker = await startDevWorker(wrangler.unstable_dev, tempDir, workerScript, config);
 
-    const res = await fetch(`http://127.0.0.1:${worker.port}/index.html`);
+    const res = await fetch(`http://127.0.0.1:${worker.port}/index.html`, { signal: AbortSignal.timeout(15000) });
     assert.equal(res.status, 200);
     const html = await res.text();
 
