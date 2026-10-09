@@ -369,6 +369,11 @@ export async function restoreDatabase({
 } = {}) {
   // 1. Live DB refusal guard
   checkTargetDatabase(targetDatabase);
+  // Reject invalid batching before metadata lookup, input reads or target SQL.
+  // Otherwise zero/NaN can omit inserts after the target has been recreated.
+  if (!Number.isSafeInteger(batchSize) || batchSize <= 0) {
+    throw new Error('REFUSAL: Restore batch size must be a positive safe integer.');
+  }
   let restoreIdentity = null;
   if (db) {
     if (databaseId !== null || configPath !== null) {
@@ -747,7 +752,7 @@ if (process.argv[1] && resolve(process.argv[1]) === __filename) {
     } else if (args[i] === '--database-id' || args[i] === '--databaseId') {
       databaseId = args[++i];
     } else if (args[i] === '--batch-size' || args[i] === '--batchSize') {
-      batchSize = parseInt(args[++i], 10);
+      batchSize = Number(args[++i]);
     } else if (args[i] === '--remote') {
       isLocal = false;
     } else if (args[i] === '--local') {
