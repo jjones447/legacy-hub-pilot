@@ -117,13 +117,16 @@ test('round-trip workerd: edge rewrite on real workerd runtime matches committed
 
   const tempDir = mkdtempSync(join(os.tmpdir(), 'wrangler-workerd-test-'));
   let worker = null;
+  async function stopWorker() {
+    const owned = worker;
+    worker = null; // A failed stop has unknown effect; do not automatically retry it in after().
+    if (owned) await owned.stop();
+  }
 
   // Register before startup. On unknown startup/stop outcome retain the exact scratch
   // directory for diagnosis; never enumerate/close unrelated process handles or delete it.
   t.diagnostic(`Owned synthetic runtime scratch retained: ${tempDir}`);
-  t.after(async () => {
-    if (worker) await worker.stop();
-  });
+  t.after(stopWorker);
 
   const config = join(tempDir, 'wrangler.json');
   writeFileSync(config, JSON.stringify({
@@ -164,8 +167,7 @@ test('round-trip workerd: edge rewrite on real workerd runtime matches committed
   }
 
   await t.test('row edit: <strong> renders as bold and encoded-scheme link renders inert', async () => {
-    await worker.stop();
-    worker = null;
+    await stopWorker();
 
     const seedJson = JSON.parse(readFileSync(resolve(rootDir, 'content', 'page-sections.json'), 'utf8'));
     const editData = {

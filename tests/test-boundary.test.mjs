@@ -100,7 +100,9 @@ test('runtime opt-in precedes tooling and cleanup registration precedes startup'
   const harness = read(`tests/${RUNTIME_TEST}`);
   assert.ok(harness.indexOf("assert.equal(process.env.LEGACY_RUN_WORKERD") < harness.indexOf('const wrangler = await getWrangler()'));
   assert.ok(harness.indexOf('t.after(') < harness.indexOf('setupDatabase(tempDir, wrangler.cli'));
-  assert.match(harness, /if \(worker\) await worker\.stop\(\)/);
+  assert.match(harness, /if \(owned\) await owned\.stop\(\)/);
+  assert.ok(harness.indexOf('worker = null; // A failed stop') < harness.indexOf('await owned.stop()'));
+  assert.match(harness, /t\.after\(stopWorker\)/);
   assert.match(harness, /scratch retained/);
 });
 
