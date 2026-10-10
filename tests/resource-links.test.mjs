@@ -185,3 +185,48 @@ test('(g) Events registration receipt and canonical description do not promise u
     assert.match(html, /id="regForm" data-action="submit-register"/);
   }
 });
+
+// Synthetic Jinja renders only: no external destinations are requested.
+function collectionFor(items, grouped) {
+  return grouped
+    ? { title: 'Synthetic Pending', groups: [{ title: 'Synthetic Group', items }] }
+    : { title: 'Synthetic Pending', items };
+}
+
+test('(h) flat and grouped multi-link cards keep unavailable destinations noninteractive', () => {
+  for (const grouped of [false, true]) {
+    const rendered = renderPartial(collectionFor([{
+      name: 'Synthetic Creator',
+      links: [
+        { label: 'Known', url: 'https://example.invalid/known' },
+        { label: 'Empty', url: '' },
+        { label: 'Missing' },
+        { label: 'Null', url: null },
+        { label: 'Whitespace', url: ' \t ' }
+      ]
+    }], grouped));
+    assert.equal((rendered.match(/<a\b/g) || []).length, 1);
+    assert.match(rendered, /href="https:\/\/example\.invalid\/known" target="_blank" rel="noopener">Known<\/a>/);
+    for (const label of ['Empty', 'Missing', 'Null', 'Whitespace']) {
+      assert.ok(rendered.includes(`<span class="badge-phase2">${label}: Link coming</span>`));
+    }
+    assert.doesNotMatch(rendered, /href="(?:\s*|None|#)"/);
+    assert.equal((rendered.match(/ &middot;/g) || []).length, 4);
+  }
+});
+
+test('(i) flat and grouped single destinations treat blank, missing and null as pending', () => {
+  for (const grouped of [false, true]) {
+    const rendered = renderPartial(collectionFor([
+      { name: 'Known', url: 'https://example.invalid/known' },
+      { name: 'Empty', url: '' },
+      { name: 'Missing' },
+      { name: 'Null', url: null },
+      { name: 'Whitespace', url: ' \t ' }
+    ], grouped));
+    assert.equal((rendered.match(/<a\b/g) || []).length, 1);
+    assert.match(rendered, /href="https:\/\/example\.invalid\/known"/);
+    assert.equal((rendered.match(/<span class="badge-phase2">Link coming<\/span>/g) || []).length, 4);
+    assert.doesNotMatch(rendered, /href="(?:\s*|None|#)"/);
+  }
+});
