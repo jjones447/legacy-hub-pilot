@@ -9,6 +9,8 @@
 // does not make later schema, SQL, provider or runtime restore failures atomic.
 // SQL writes travel as unchanged UTF8 files; queries use one shell-free argv value.
 // Collapsing whitespace would change stored text even when row counts match.
+// Audit rows are compared to the preloaded snapshot before success. This proves
+// equality to that input, not its provenance, whole-database integrity or atomicity.
 
 import { readdirSync, readFileSync, writeFileSync, unlinkSync, existsSync } from 'node:fs';
 import { resolve, join, dirname } from 'node:path';
@@ -299,6 +301,48 @@ export function sortTablesForDelete(tableNames) {
   });
 }
 
+export function validateAuditSnapshot(rows) {
+  const ids = new Set();
+  for (const row of rows) {
+    if (!Number.isSafeInteger(row.id) || ids.has(row.id)) {
+      throw new Error('REFUSAL: Backup audit IDs must be unique safe integers.');
+    }
+    ids.add(row.id);
+  }
+}
+
+// Page by validated numeric ID/offset; no snapshot values enter query SQL or logs.
+// A truncated result or an additional row must fail, never silently pass counts.
+export async function verifyAuditSnapshot(queryFn, expectedRows) {
+  if (expectedRows === undefined) {
+    return { verified: false, comparedRows: 0, basis: 'audit-not-in-snapshot' };
+  }
+  validateAuditSnapshot(expectedRows);
+  const expected = [...expectedRows].sort((a, b) => a.id - b.id);
+  const pageSize = 100;
+  for (let offset = 0; offset < expected.length; offset += pageSize) {
+    const rows = await queryFn(`SELECT * FROM "audit_log" ORDER BY id LIMIT ${pageSize} OFFSET ${offset}`);
+    const length = Math.min(pageSize, expected.length - offset);
+    if (!Array.isArray(rows) || rows.length !== length) {
+      throw new Error('Audit integrity mismatch: incomplete snapshot comparison.');
+    }
+    for (let index = 0; index < length; index++) {
+      const original = expected[offset + index];
+      const actual = rows[index];
+      const keys = Object.keys(original);
+      if (!actual || typeof actual !== 'object' || Object.keys(actual).length !== keys.length
+          || keys.some(key => !Object.hasOwn(actual, key) || actual[key] !== original[key])) {
+        throw new Error('Audit integrity mismatch: restored record differs from cached snapshot.');
+      }
+    }
+  }
+  const tail = await queryFn(`SELECT * FROM "audit_log" ORDER BY id LIMIT 1 OFFSET ${expected.length}`);
+  if (!Array.isArray(tail) || tail.length !== 0) {
+    throw new Error('Audit integrity mismatch: unexpected audit rows.');
+  }
+  return { verified: true, comparedRows: expected.length, basis: 'cached-backup-audit-rows' };
+}
+
 export async function spotCheckRelationships(queryFn) {
   const checks = {
     caregiverFound: false,
@@ -350,7 +394,8 @@ export async function spotCheckRelationships(queryFn) {
   // Audit log count
   const alRows = await queryFn(`SELECT COUNT(*) as count FROM audit_log`);
   checks.auditLogCount = alRows[0]?.count ?? 0;
-  checks.auditLogPreserved = checks.auditLogCount >= 0;
+  // Counts alone cannot establish preservation. restoreDatabase sets this only
+  // after exact snapshot comparison; standalone spot checks leave it false.
 
   return checks;
 }
@@ -443,6 +488,7 @@ export async function restoreDatabase({
     }
     tableRows.set(tableName, rows);
   }
+  if (tableRows.has('audit_log')) validateAuditSnapshot(tableRows.get('audit_log'));
 
   const schemasPath = schemaDir ? resolve(schemaDir) : join(ROOT_DIR, 'schema');
   const schemaFiles = readdirSync(schemasPath)
@@ -563,12 +609,14 @@ export async function restoreDatabase({
     }
 
     // d) Spot-check relationships
-    const queryFn = async (sql) => {
+    const queryFn = async (sql, { requireRows = false } = {}) => {
       if (typeof db.prepare === 'function') {
         const stmt = db.prepare(sql);
         const res = typeof stmt.all === 'function' ? await stmt.all() : (typeof stmt.get === 'function' ? stmt.get() : null);
-        if (res && res.results) return res.results;
+        if (res?.success === false) throw new Error('Audit integrity mismatch: query failed.');
+        if (res && Array.isArray(res.results)) return res.results;
         if (Array.isArray(res)) return res;
+        if (requireRows) throw new Error('Audit integrity mismatch: query rows unavailable.');
         if (res) return [res];
         return [];
       } else {
@@ -576,13 +624,16 @@ export async function restoreDatabase({
       }
     };
     const spotChecks = await spotCheckRelationships(queryFn);
+    const auditVerification = await verifyAuditSnapshot(sql => queryFn(sql, { requireRows: true }), tableRows.get('audit_log'));
+    spotChecks.auditLogPreserved = auditVerification.verified;
 
     return {
       success: true,
       targetDatabase,
       verifiedCounts,
       manifest,
-      spotChecks
+      spotChecks,
+      auditVerification
     };
   }
 
@@ -616,7 +667,7 @@ export async function restoreDatabase({
       }
     };
 
-    const queryCmd = (sql) => {
+    const queryCmd = (sql, { requireRows = false } = {}) => {
       // Remote --file returns import statistics, not SELECT rows. Preserve the
       // --command query API without passing SQL through a shell or .cmd wrapper.
       const args = [wranglerEntry, 'd1', 'execute', targetDatabase,
@@ -627,6 +678,10 @@ export async function restoreDatabase({
         shell: false, windowsHide: true
       });
       const parsed = JSON.parse(out);
+      if (requireRows && (!Array.isArray(parsed) || parsed.length !== 1
+          || parsed[0]?.success !== true || !Array.isArray(parsed[0].results))) {
+        throw new Error('Audit integrity mismatch: successful query rows unavailable.');
+      }
       if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].results) {
         return parsed[0].results;
       }
@@ -708,6 +763,8 @@ export async function restoreDatabase({
     // 4. Spot check relationships
     console.log(`[restore] Spot-checking entity relationships...`);
     const spotChecks = await spotCheckRelationships(queryCmd);
+    const auditVerification = await verifyAuditSnapshot(sql => queryCmd(sql, { requireRows: true }), tableRows.get('audit_log'));
+    spotChecks.auditLogPreserved = auditVerification.verified;
     if (spotChecks.caregiverFound) {
       console.log(`  - Caregiver (${spotChecks.caregiverId}): found`);
       console.log(`  - Grant Application (${spotChecks.grantId}): ${spotChecks.hasGrant ? 'verified' : 'missing'}`);
@@ -716,16 +773,18 @@ export async function restoreDatabase({
       console.log(`  - Contact History: ${spotChecks.contactHistoryCount} record(s) linked`);
       console.log(`  - Staff Notes: ${spotChecks.noteCount} record(s) linked`);
     }
-    console.log(`  - Audit Log: ${spotChecks.auditLogCount} entry(ies) preserved`);
+    console.log(`  - Audit Log: ${spotChecks.auditLogCount} entry(ies) present (count only; original records not verified)`);
+    console.log(`  - Audit snapshot comparison: ${auditVerification.verified ? 'MATCH' : 'NOT INCLUDED'} (${auditVerification.comparedRows} rows; supplied snapshot provenance and other-table contents remain unverified)`);
 
-    console.log(`\n[RESTORE VERIFICATION SUCCESS]: Database '${targetDatabase}' successfully restored and verified.`);
+    console.log(`\n[RESTORE ROW COUNT VERIFICATION SUCCESS]: Database '${targetDatabase}' row counts match the backup manifest; original audit records are not verified by this check.`);
 
     return {
       success: true,
       targetDatabase,
       verifiedCounts,
       manifest,
-      spotChecks
+      spotChecks,
+      auditVerification
     };
   } finally {
     if (tempConfig && existsSync(tempConfig)) {
