@@ -1,5 +1,29 @@
 # Caregiver Portal — what "done" means
 
+## Historical proposal — not the current closeout checklist
+
+Status clarification, October 10, 2026 [pc2-codex-13]: the September 6 text below is
+preserved as history. Its proposed phase split, unchecked boxes, account-setup
+statements and "Recommended next step" are not current assignments or evidence of
+an installed defect. In particular, do not rebuild the caregiver-facing read or ask
+Legacy to re-decide registrations versus grants based on that recommendation:
+[the existing dashboard](../app.js) and [portal handler](../functions/api/portal/%5B%5Bpath%5D%5D.js)
+already implement scoped reads. Caregiver magic-link sessions and staff Cloudflare
+Access are distinct authentication paths; source implementation does not prove
+current installed access or email delivery.
+
+The customer-folder `Legacy_Delivery_Tracker.md` and
+`2026-10-02 - Portal requirements and work slices.json` remain the Phase 1/2 scope
+and execution queue. Authorized maintainers can follow the existing
+[private acceptance guide](https://github.com/jjones447/legacy-caregiver-hub/blob/main/docs/acceptance/README.md)
+and [journey map](https://github.com/jjones447/legacy-caregiver-hub/blob/main/docs/journey-map/README.md).
+Reuse the dated D2/D4/D5 staging evidence; do not turn later enhancements into
+Phase 1 acceptance gates. Built, reviewed, CI-passing, runtime-verified, deployed
+and client-accepted are separate states. This clarification closes no acceptance
+criterion, authorizes no live test or client send, and changes no signed scope.
+
+## Preserved September 6 proposal
+
 Written 2026-09-06 by pc1-cc-gui-2. The portal task has carried the note *"scope and acceptance
 criteria are not yet written down"* since 2026-08-21; this closes that gap so the next touch base
 has something concrete instead of "still in progress".
