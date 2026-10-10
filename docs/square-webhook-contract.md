@@ -12,6 +12,22 @@ another donation, unmatched-payment follow-up or registration. The original
 delivery event ID and payment ID remain in the original append-only audit entry.
 Distinct payments remain distinct. Non-completed updates remain ignored.
 
+The legacy adapter event `payment.completed` is not proof of completion when its
+payload explicitly reports another status. It now acknowledges explicit
+non-`COMPLETED` statuses with HTTP200 `{ "ok": true, "ignored": true }` before
+database access. This includes FAILED, CANCELED, APPROVED, PENDING, null, empty
+or non-string status values. Its nested payment status takes precedence when
+present; only an absent nested status falls back to the outer object status.
+Legacy adapters with status truly absent retain their existing completion path;
+that compatibility allowance is not genuine Square-generated payment evidence.
+
+The genuine `payment.updated` event retains its existing strict `COMPLETED`
+requirement and truthy nested-to-outer status fallback. Signature authentication
+and delivery-ID validation still precede status handling; ignored noncompletion
+does not need a payment ID, while accepted completion still requires one.
+No payment identity, duplicate, transaction/audit, subscription or credential
+behavior changes. Synthetic regression results are not installed/provider proof.
+
 No schema migration or historical row/audit rewrite is included. The handler also
 checks the incoming event ID against legacy event-keyed rows, preserving exact
 same-event retries. Legacy matched-payment rows generally lack a payment ID, so

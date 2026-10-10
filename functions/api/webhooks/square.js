@@ -91,7 +91,12 @@ export async function onRequestPost({ request, env }) {
     const payment = body.data?.object?.payment || body.data?.object || {};
 
     if (eventType === 'payment.completed') {
-      // Process payment.completed
+      // Retain legacy adapters that omit status, but an explicit failed,
+      // canceled or otherwise non-completed status is never a payment result.
+      const status = payment.status !== undefined ? payment.status : body.data?.object?.status;
+      if (status !== undefined && status !== 'COMPLETED') {
+        return json({ ok: true, ignored: true });
+      }
     } else if (eventType === 'payment.updated') {
       const status = payment.status || body.data?.object?.status;
       if (status !== 'COMPLETED') {
