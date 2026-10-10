@@ -1,6 +1,6 @@
 // [pc2-codex-13] D9 source qualification only: virtual snapshot files and
 // in-memory SQLite. No CLI, workerd, provider, disk write or actual restore.
-// Counts/spotChecks.auditLogPreserved are not original-audit integrity proof.
+// Equality to a supplied snapshot does not authenticate its original provenance.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -27,7 +27,7 @@ const original = [
 ];
 const sorted = rows => rows.map(row => ({ ...row })).sort((a, b) => a.id - b.id);
 
-async function restoreFixture(rows, batchSize = 25) {
+async function restoreFixture(rows, batchSize = 25, alterRead = value => value) {
   const root = resolve('/synthetic-audit-no-filesystem');
   const dumpDir = join(root, 'dump'), schemaDir = join(root, 'schema');
   const tables = { caregiver: [], event: [], registration: [], grant_application: [],
@@ -52,9 +52,20 @@ async function restoreFixture(rows, batchSize = 25) {
   };
   const restore = vm.runInNewContext(moduleBody + '\nrestoreDatabase;', sandbox, { timeout: 1000 });
   const database = new DatabaseSync(':memory:');
+  const restoreDb = {
+    exec: sql => database.exec(sql),
+    prepare(sql) {
+      const stmt = database.prepare(sql);
+      return {
+        get: () => stmt.get(),
+        all: () => sql.startsWith('SELECT * FROM "audit_log" ORDER BY id')
+          ? alterRead(stmt.all()) : stmt.all()
+      };
+    }
+  };
   try {
     const result = await restore({ dumpDir, schemaDir, targetDatabase: 'legacy-hub-audit-synthetic',
-      db: database, batchSize, execFn: forbidden('CLI'), execFileFn: forbidden('CLI') });
+      db: restoreDb, batchSize, execFn: forbidden('CLI'), execFileFn: forbidden('CLI') });
     const restored = JSON.parse(JSON.stringify(database.prepare('SELECT * FROM audit_log ORDER BY id').all()));
     assert.deepEqual(forbiddenCalls, [], 'no CLI/provider/config/disk side effects');
     const triggers = database.prepare("SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE 'audit_log_no_%' ORDER BY name").all();
@@ -78,6 +89,28 @@ for (const batchSize of [1, 25]) test('audit integrity: original IDs and every f
   assert.equal(JSON.stringify(original), before, 'source fixture unchanged');
 });
 
+for (const [field, changed] of Object.entries({
+  id: 30, actor: 'different_synthetic_actor', action: 'different.action', entity: 'different_entity',
+  entity_id: 'different_reference', before_json: '{}', after_json: '{"original":false}',
+  at: '2001-01-02T03:04:05.678Z'
+})) test('restore itself rejects same-count target corruption in ' + field, async () => {
+  await assert.rejects(restoreFixture(original, 25, rows => rows.map((row, index) =>
+    index === 0 ? { ...row, [field]: changed } : row)), /Audit integrity mismatch/);
+});
+
+test('restore verifies more than one audit page and records explicit snapshot comparison', async () => {
+  const rows = Array.from({ length: 205 }, (_, index) => ({ ...original[0], id: index + 1 }));
+  const { result, restored } = await restoreFixture(rows.reverse());
+  assert.deepEqual(restored, sorted(rows));
+  assert.equal(result.auditVerification.verified, true);
+  assert.equal(result.auditVerification.comparedRows, 205);
+  assert.equal(result.auditVerification.basis, 'cached-backup-audit-rows');
+});
+
+test('restore rejects truncated audit query output despite matching COUNT', async () => {
+  await assert.rejects(restoreFixture(original, 25, rows => rows.slice(0, 1)), /Audit integrity mismatch/);
+});
+
 test('audit integrity: explicitly empty snapshot has no fabricated original audit rows', async () => {
   const { result, restored } = await restoreFixture([]);
   assert.equal(result.verifiedCounts.audit_log, 0);
@@ -91,8 +124,8 @@ for (const [field, changed] of Object.entries({
 })) test('audit integrity: same-count altered ' + field + ' is caught by exact-row oracle', async () => {
   const altered = original.map((row, index) => index === 0 ? { ...row, [field]: changed } : { ...row });
   const { result, restored } = await restoreFixture(altered);
-  // Existing count-only output intentionally still passes. This negative control
-  // demonstrates why installed acceptance must compare the trusted original rows.
+  // Even an exact restore comparison cannot authenticate an already changed
+  // backup. Installed acceptance still needs a trusted original snapshot.
   assert.equal(result.success, true);
   assert.equal(result.verifiedCounts.audit_log, original.length);
   assert.equal(result.spotChecks.auditLogPreserved, true);
