@@ -17,32 +17,40 @@
 <section class="hero py-56-64">
   <div class="container">
     <h1 class="hero-title-clamp">Events</h1>
-    <p class="lede">Register in one click — your registration, attendance, and follow-up all connect to your caregiver profile automatically.</p>
+    <p class="lede">Explore our programs. Register when a confirmed date and registration details are available.</p>
   </div>
 </section>
 
 <section>
   <div class="container">
-    <div class="card-grid">
+    <div class="card-grid" id="liveEventsGrid" data-event-time-zone="America/Chicago" aria-live="polite">
 {%- for ev in events %}
       <div class="card event-card">
+{% if ev.schedule_confirmed | default(false) %}
         <div class="event-date"><div class="month">{{ ev.month | e }}</div><div class="day">{{ ev.day | e }}</div></div>
+{% endif %}
         <div class="flex-1">
           <span class="badge {{ ev.badge_class }}">{{ ev.badge | e }}</span>
-          <h3 class="fs-19-m-8-0-4">{{ ev.title | e }}{% if ev.title_badge %} <span class="badge {{ ev.title_badge_class }}">{{ ev.title_badge | e }}</span>{% endif %}</h3>
+          <h3 class="fs-19-m-8-0-4">{{ ev.title | e }}{% if ev.title_badge and (ev.schedule_confirmed | default(false)) %} <span class="badge {{ ev.title_badge_class }}">{{ ev.title_badge | e }}</span>{% endif %}</h3>
+{% if ev.schedule_confirmed | default(false) %}
           <div class="event-meta">{{ ev.meta | e }}</div>
+{% else %}
+          <p class="small muted">Schedule pending. Date, time, location and registration are not confirmed.</p>
+{% endif %}
           <p class="small muted mb-8">{{ ev.description | e }}</p>
+{% if ev.schedule_confirmed | default(false) %}
           <div class="flex-center-gap-12">
             <button class="btn btn-plum btn-sm" data-action="open-register" data-event-title="{{ ev.register_label | e }}" data-event-id="{{ ev.id }}">Register</button>
             <span class="small muted">{{ ev.registered_note | e }}</span>
           </div>
+{% endif %}
         </div>
       </div>
 {% endfor %}
     </div>
 
     <div class="card mt-32 card-sand-dashed">
-      <p class="small m-0"><strong>How staff manage this page:</strong> by chat — <em>"post a Memory Social next Saturday 10–1 in the community room, registration open, capacity 12."</em> The assistant drafts it, staff preview and confirm, and it goes live. Attendance flows back to each caregiver's record for follow-up.</p>
+      <p class="small m-0"><strong>How staff manage this page:</strong> use the New Event form to create a draft, or select an existing event to draft a change by chat. Review the preview before confirming a change; publishing a draft event is a separate action. This page lists current published events when their schedule and registration details load successfully.</p>
     </div>
   </div>
 </section>
@@ -73,7 +81,7 @@
       </div>
       <p class="privacy-line">By registering, you consent to Legacy using these details to create or update your caregiver record, manage attendance, and send event follow-up. Please do not include medical record numbers or emergency details.</p>
       <button type="submit" class="btn btn-coral w-100">Complete registration</button>
-      <div class="success-note" id="regSuccess" data-intake-success role="status" aria-live="polite">✓ You're registered! A confirmation is on its way.</div>
+      <div class="success-note" id="regSuccess" data-intake-success role="status" aria-live="polite">✓ Registration received — thank you.</div>
       <div class="error-note" data-intake-error role="alert" aria-live="assertive"></div>
       <div class="routing-note" id="regRouting" data-intake-routing>Behind the scenes: this registration routed into the caregiver record — profile matched, attendance list updated, follow-up queued for staff.</div>
     </form>

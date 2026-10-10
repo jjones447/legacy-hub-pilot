@@ -64,12 +64,12 @@
       "eyebrow": "Membership",
       "heading": "One membership, every kind of support",
       "paragraphs": [
-        "Sanctuary membership is free and connects you to everything Legacy offers: the weekly Virtual Support Group, Wellness Grants, Memory Socials, caregiver events, and the Resource Hub.",
+        "Sanctuary membership is free and connects you to everything Legacy offers: the Virtual Support Group, Wellness Grants, Memory Socials, caregiver events, and the Resource Hub.",
         "One short form, once — after that, everything you do with Legacy builds on the same profile. No repeating your story every time."
       ],
       "panel_heading": "Membership includes",
       "rows": [
-        {"k": "Virtual Support Group", "v": "Weekly · Wednesdays"},
+        {"k": "Virtual Support Group", "v": "Schedule pending"},
         {"k": "Wellness Grants", "v": "Members eligible"},
         {"k": "Memory Socials", "v": "Drop-in respite"},
         {"k": "Caregiver events", "v": "Wellness · connection · education"},
@@ -79,17 +79,17 @@
     "programs.support_group": {
       "panel_heading": "Virtual Support Group",
       "rows": [
-        {"k": "When", "v": "Wednesdays · 5:00–6:00 PM CST"},
-        {"k": "Where", "v": "Google Meet"},
+        {"k": "When", "v": "Schedule pending — dates and times to be confirmed"},
+        {"k": "Where", "v": "Online — joining details to be confirmed"},
         {"k": "Facilitation", "v": "Alzheimer's Association-certified"},
         {"k": "Cost", "v": "Free"}
       ],
-      "panel_cta_label": "Register",
-      "eyebrow": "Weekly Support Group",
+      "panel_cta_label": "View Events",
+      "eyebrow": "Virtual Support Group",
       "heading": "A judgment-free hour that's just for you",
       "paragraphs": [
-        "Every Wednesday evening, caregivers gather online to talk honestly about the journey — the hard parts, the wins, and everything in between. Certified facilitation, zero judgment, real connection.",
-        "Register once and you're on the list — reminders and the meeting link come to you."
+        "Caregivers gather online to talk honestly about the journey — the hard parts, the wins, and everything in between. Certified facilitation, zero judgment, real connection.",
+        "Session and registration details will be shared when confirmed."
       ]
     },
     "programs.grants": {
@@ -213,7 +213,7 @@
         {"dot": "var(--green)", "title": "2 · We reach out", "when": "Within two business days, by your preferred contact"},
         {"dot": "var(--amber)", "title": "3 · We connect you", "when": "Membership, respite, grants, groups — whatever fits"}
       ],
-      "crisis_html": "<strong>In crisis right now?</strong> Don't wait on a form — see <a href=\"resources.html\">Crisis Help in the Resource Hub</a> for the caregiver support hotline."
+      "crisis_html": "<strong>In crisis right now?</strong> Don't wait on a form — see <a href=\"crisis-help.html\">Crisis &amp; Emergency Help</a> for crisis support contacts."
     }
   }
 }

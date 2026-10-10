@@ -32,7 +32,7 @@
   </div>
 </section>
 
-<section>
+<section class="home-journey">
   <div class="container">
     <div class="section-head">
       <h2 data-cs="home.journey.heading">{{ sections["home.journey"].heading }}</h2>
@@ -41,15 +41,25 @@
   </div>
 </section>
 
-<section class="section-sand">
+<section class="section-sand home-support">
   <div class="container">
     <div class="section-head">
-      <h2 data-cs="home.support.heading">{{ sections["home.support"].heading }}</h2>
+      <h2 class="home-support-heading" data-cs="home.support.heading">{{ sections["home.support"].heading }}</h2>
     </div>
+{% set support_navigation = {
+      "Wellness": {"href": "wellness-passport.html", "description": "Connect with wellness activities, partner experiences, and grant benefits.", "label": "About the passport"},
+      "Respite": {"href": "drop-in-respite.html", "description": "Time to breathe while your loved one is somewhere safe, engaged and cared for.", "label": "About Drop-In Respite"},
+      "Community": {"href": "community-series.html", "description": "Gatherings and wellness sessions for caregivers across the community.", "label": "About the series"}
+} %}
     <div class="card-grid">
 {%- for tile in sections["home.support"].tiles %}
-      <div class="card">
-        <h3>{{ tile.title }}</h3>
+{% set destination = support_navigation.get(tile.title) %}
+      <div class="card home-support-card">
+        <h3>{{ tile.title | e }}</h3>
+{% if destination %}
+        <p>{{ destination.description | e }}</p>
+        <a class="more" href="{{ destination.href }}">{{ destination.label }} <span aria-hidden="true">&rarr;</span></a>
+{% endif %}
       </div>
 {%- endfor %}
     </div>
@@ -113,7 +123,7 @@
       <h2>Join us in the community.</h2>
       <p>Whether it's a caregiver meetup, respite program, educational workshop, or wellness event, there's always an opportunity to connect.</p>
     </div>
-{%- for ev in events if ev.teaser %}
+{%- for ev in events if ev.teaser and (ev.schedule_confirmed | default(false)) %}
     <div class="card event-card{% if not loop.last %} mb-16{% endif %}">
       <div class="event-date"><div class="month">{{ ev.month | e }}</div><div class="day">{{ ev.day | e }}</div></div>
       <div>
@@ -123,6 +133,8 @@
         <a class="more" href="events.html">Register →</a>
       </div>
     </div>
+{%- else %}
+    <p class="muted">Schedule pending. Confirmed dates and registration details will appear on the Events page.</p>
 {%- endfor %}
     <p class="mt-24"><a href="events.html" class="btn btn-outline">View Events</a></p>
   </div>
