@@ -62,8 +62,6 @@ security and shutdown behavior remain **runtime UNVERIFIED** until actually test
 Wrangler option review used the [pinned upstream dev API source](https://github.com/cloudflare/workers-sdk/blob/wrangler%404.139.0/packages/wrangler/src/api/dev.ts)
 and [official API documentation](https://developers.cloudflare.com/workers/wrangler/api/).
 
-## Historical August surface and URLs
-
 ## Restore verification source — October 10, 2026
 
 The restore script now compares every restored `audit_log` row and field against
@@ -80,6 +78,8 @@ holds. Use a trusted snapshot/manifest and an authorized isolated target; retain
 separate installed-build, restore, monitoring and rollback evidence. Unit tests
 exercise virtual fixtures/in-memory SQLite and captured transport only, not D1
 or an installed remote restore. Existing STOPs and protected targets still apply.
+
+## Historical August surface and URLs
 
 **Staging:** https://staging.legacy-hub.pages.dev
 **Production:** https://legacy-hub.pages.dev
