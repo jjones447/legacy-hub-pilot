@@ -153,6 +153,33 @@ test('Square webhook rejects malformed JSON body with 400', async () => {
   assert.equal(data.error, 'invalid JSON body');
 });
 
+for (const bodyText of ['null', '[]', '[{"event_id":"synthetic"}]', '"synthetic"', '7', 'true', 'false']) {
+  test(`Square webhook rejects non-object JSON ${bodyText} before database access`, async () => {
+    const sig = computeSquareSignature(bodyText, WEBHOOK_URL, WEBHOOK_SIGNATURE_KEY);
+    let databaseAccesses = 0;
+    const boundaryEnv = {
+      SQUARE_WEBHOOK_SIGNATURE_KEY: WEBHOOK_SIGNATURE_KEY,
+      SQUARE_WEBHOOK_URL: WEBHOOK_URL,
+      get LEGACY_DB() {
+        databaseAccesses++;
+        throw new Error('Non-object payload must not access the database');
+      },
+    };
+    const req = mockRequest(WEBHOOK_URL, 'POST', bodyText, { 'x-square-hmacsha256-signature': sig });
+    const res = await postSquare({ request: req, env: boundaryEnv });
+    assert.equal(res.status, 400);
+    assert.deepEqual(await res.json(), { ok: false, error: 'invalid JSON body' });
+    assert.equal(databaseAccesses, 0);
+  });
+}
+
+test('Square webhook authenticates a non-object payload before JSON validation', async () => {
+  const req = mockRequest(WEBHOOK_URL, 'POST', 'null', { 'x-square-hmacsha256-signature': 'invalid' });
+  const res = await postSquare({ request: req, env });
+  assert.equal(res.status, 401);
+  assert.deepEqual(await res.json(), { ok: false, error: 'invalid signature' });
+});
+
 test('Square webhook rejects missing event id with 400', async () => {
   const payload = { type: 'payment.completed' };
   const payloadStr = JSON.stringify(payload);
