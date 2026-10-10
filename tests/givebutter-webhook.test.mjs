@@ -187,7 +187,9 @@ test('missing or malformed resource IDs fail before database access', async () =
 });
 
 test('resource-ID fallback does not activate unrelated provider events', async () => {
-  assert.equal((await postProvider(providerPayload('contact.created'))).status, 400);
+  const response = await postProvider(providerPayload('contact.created'));
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { ok: true, ignored: true });
   assert.equal(raw.prepare('SELECT COUNT(*) AS n FROM caregiver').get().n, 0);
 });
 

@@ -108,6 +108,12 @@ export async function onRequestPost({ request, env }) {
     if (!body || typeof body !== 'object' || Array.isArray(body)) {
       return json({ ok: false, error: 'invalid JSON body' }, 400);
     }
+    // Amounts also appear on failed/canceled plans; they are not payments.
+    // Preserve the explicit-ID legacy donation adapter, but never infer an
+    // accepted payment event from its delivery ID or an amount field.
+    if (body.event !== 'transaction.succeeded' && body.event !== 'ticket.created' && body.event !== 'donation') {
+      return json({ ok: true, ignored: true });
+    }
     const externalRef = externalReference(body);
     if (externalRef === null) {
       return json({ ok: false, error: 'missing event id' }, 400);
@@ -188,7 +194,7 @@ export async function onRequestPost({ request, env }) {
     } else {
       entity = 'followup';
       const eventType = body.event || '';
-      const isTransaction = eventType.startsWith('transaction') || body.data?.amount !== undefined;
+      const isTransaction = eventType === 'transaction.succeeded' || eventType === 'donation';
       const kind = isTransaction ? 'donation' : 'gb_registration';
 
       let detail = `Givebutter event: ${eventType}`;
