@@ -382,8 +382,22 @@ function submitPortalLogin(e) {
 }
 
 function portalLogout() {
-  fetch('/api/portal/logout', { method: 'POST' })
-    .then(function () {
+  const btn = document.getElementById('portalLogoutBtn');
+  const logoutStatus = document.getElementById('portalLogoutStatus');
+  if (btn && btn.disabled) return; // pending or uncertain: do not repeat the POST
+  if (btn) btn.disabled = true;
+  if (logoutStatus) {
+    logoutStatus.style.display = 'block';
+    logoutStatus.textContent = 'Signing out...';
+  }
+
+  return fetch('/api/portal/logout', { method: 'POST' })
+    .then(function (res) {
+      if (res.status !== 200 || res.redirected) throw new Error('logout_unconfirmed');
+      return res.json();
+    })
+    .then(function (data) {
+      if (!data || data.ok !== true) throw new Error('logout_unconfirmed');
       const loginView = document.getElementById('loginView');
       const dashView = document.getElementById('dashView');
       const statusDiv = document.getElementById('loginStatus');
@@ -394,7 +408,19 @@ function portalLogout() {
 
       if (dashView) dashView.style.display = 'none';
       if (loginView) loginView.style.display = 'block';
+      if (logoutStatus) logoutStatus.style.display = 'none';
+      if (btn) btn.disabled = false;
       window.scrollTo({ top: 0, behavior: 'smooth' });
+      return true;
+    })
+    .catch(function () {
+      // A failed acknowledgement is not proof that the session cookie was cleared.
+      // Keep the current view and button on HOLD; no automatic or duplicate retry.
+      if (logoutStatus) {
+        logoutStatus.style.display = 'block';
+        logoutStatus.textContent = 'Sign-out could not be confirmed. Close this tab and contact Legacy before trying again.';
+      }
+      return false;
     });
 }
 
