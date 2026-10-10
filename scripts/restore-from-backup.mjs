@@ -716,9 +716,9 @@ export async function restoreDatabase({
       console.log(`  - Contact History: ${spotChecks.contactHistoryCount} record(s) linked`);
       console.log(`  - Staff Notes: ${spotChecks.noteCount} record(s) linked`);
     }
-    console.log(`  - Audit Log: ${spotChecks.auditLogCount} entry(ies) preserved`);
+    console.log(`  - Audit Log: ${spotChecks.auditLogCount} entry(ies) present (count only; original records not verified)`);
 
-    console.log(`\n[RESTORE VERIFICATION SUCCESS]: Database '${targetDatabase}' successfully restored and verified.`);
+    console.log(`\n[RESTORE ROW COUNT VERIFICATION SUCCESS]: Database '${targetDatabase}' row counts match the backup manifest; original audit records are not verified by this check.`);
 
     return {
       success: true,
