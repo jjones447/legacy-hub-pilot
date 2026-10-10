@@ -1943,6 +1943,14 @@ window.agentSend = async function () {
 
     const before = isContent ? (typeof contentItem.data === 'string' ? JSON.parse(contentItem.data) : contentItem.data) : data.preview?.before;
     const after = isContent ? data.draft?.data : data.preview?.after;
+    const isPreviewObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+    if (!isPreviewObject(before) || !isPreviewObject(after)) {
+      // The server may have saved a draft already; do not turn a missing preview into {} or replay it.
+      botDiv.textContent = 'Preview unavailable — nothing has been confirmed. A draft may already exist. Do not retry; have an administrator inspect the saved draft.';
+      body.appendChild(botDiv);
+      body.scrollTop = body.scrollHeight;
+      return;
+    }
     const beforeJson = escapeHtml(JSON.stringify(before || {}, null, 2));
     const afterJson = escapeHtml(JSON.stringify(after || {}, null, 2));
     const areaLabel = { content: '📚 Content Update', form: '📝 Form Copy Update', grant: '🎁 Grant Transition', caregiver: '👤 Caregiver Update', event: '📅 Event Update' }[selectedArea];

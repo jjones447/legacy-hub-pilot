@@ -95,6 +95,44 @@ for (const reply of [{ ok: false, refusal: 'Unavailable' }, { ok: true }]) {
   });
 }
 
+// A durable ID alone is not a reviewable proposal. All cases use synthetic replies.
+for (const area of ['content', 'form']) {
+  for (const draft of [undefined, {}, { data: null }, { data: [] }, { data: 'opaque' }, { data: false }]) {
+    test(`${area} missing or malformed after-copy cannot expose confirmation: ${JSON.stringify(draft)}`, async () => {
+      const h = harness({ area, target: area === 'form' ? 'ps_form.membership' : 'resource_one',
+        reply: { ok: true, draft_id: 'saved_draft', draft } });
+      await h.send();
+      assert.equal(h.calls.length, 1);
+      assert.doesNotMatch(h.html(), /Confirm &amp; publish|data-action="agent-change-confirm"/);
+      assert.match(h.html(), /Preview unavailable/);
+      assert.match(h.html(), /draft may already exist/i);
+      assert.match(h.html(), /Do not retry/);
+    });
+  }
+}
+for (const area of ['event', 'caregiver', 'grant']) {
+  for (const preview of [undefined, {}, { before: {} }, { after: {} },
+    { before: null, after: {} }, { before: {}, after: [] }, { before: 'opaque', after: {} }]) {
+    test(`${area} incomplete or malformed workflow preview cannot expose confirmation: ${JSON.stringify(preview)}`, async () => {
+      const h = harness({ area, reply: { ok: true, change_id: 'saved_change', preview } });
+      await h.send();
+      assert.equal(h.calls.length, 1);
+      assert.doesNotMatch(h.html(), /Confirm &amp; publish|data-action="agent-change-confirm"/);
+      assert.match(h.html(), /Preview unavailable/);
+      assert.match(h.html(), /Do not retry/);
+    });
+  }
+}
+for (const area of ['content', 'form', 'event', 'caregiver', 'grant']) {
+  test(`${area} valid object preview still offers explicit confirmation`, async () => {
+    const h = harness({ area, target: area === 'form' ? 'ps_form.membership' : 'resource_one' });
+    await h.send();
+    assert.equal(h.calls.length, 1);
+    assert.match(h.html(), /Confirm &amp; publish/);
+    assert.match(h.html(), /data-action="agent-change-discard"/);
+  });
+}
+
 for (const kind of ['draft', 'change']) {
   for (const action of ['confirm', 'discard']) {
     test(`${kind} ${action} uses the corresponding durable ID and endpoint`, async () => {
