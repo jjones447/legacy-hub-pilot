@@ -20,6 +20,10 @@ Synthetic SQLite tests model batch rollback for donation/registration branches w
 
 ## Event mapping and installed acceptance
 
+After signature authentication and JSON-object validation, payment routing accepts only `transaction.succeeded`, `ticket.created`, and the existing explicit-delivery-ID legacy adapter event `donation`. The legacy alias retains its existing ID requirement and works in either explicitly selected authentication mode; it is not a new documented Givebutter trigger. Other authenticated event kinds receive HTTP200 with `{ "ok": true, "ignored": true }` before any database access, even when they carry a delivery ID, contact or amount. This intentionally replaces the previous 400 for unsupported resource-ID-only events and prevents explicit-ID events from bypassing the event-kind boundary. Authentication failures still return 401, not an ignored acknowledgement.
+
+Givebutter's current documented `plan.failed`, `plan.canceled`, and `plan.created` payloads include amounts. These amounts do not establish a successful donation. Donation classification now uses the accepted event kind rather than arbitrary amount presence; an unmapped `ticket.created` remains a registration followup even if an adapter includes an amount. No plan, refund, contact, or future unknown event is reclassified as a payment, and no historical row or audit is repaired.
+
 The existing published internal-event lookup is unchanged. A provider ticket without a recognized internal event mapping becomes a `gb_registration` followup, not a claimed event registration. A successful transaction without a recognized mapping becomes a donation followup. No numeric campaign-to-internal-event mapping is invented.
 
 Before integration, obtain a different-author exact-head review of the authentication mode change, fallback identity and legacy compatibility. Before live acceptance, the existing operator must verify the installed source pin, provider destination, selected event subscriptions, matching secret and selected mode without publishing secret values. A sanitized provider delivery receipt and attributable task/audit evidence are still needed. Do not create real payments, customer records or account configuration changes under this source-only correction.
@@ -29,6 +33,7 @@ Unbounded body buffering, identity matching, concurrent deduplication and instal
 ## Sources
 
 - [Givebutter webhook events and authentication](https://help.givebutter.com/en/articles/8828428-how-to-automate-workflows-and-data-using-webhooks), checked October 4, 2026.
+- [Givebutter failed/canceled/created plan payloads and transaction/ticket triggers](https://help.givebutter.com/en/articles/8828428-how-to-automate-workflows-and-data-using-webhooks), checked October 10, 2026 for the event-kind correction. The published plan examples carry a top-level delivery ID, contact email, and `data.amount`; these are source-reference examples, not Legacy provider delivery evidence.
 - [Givebutter webhook creation API](https://docs.givebutter.com/api-reference/webhooks/create-a-webhook), checked October 4, 2026.
 - [Cloudflare Web Crypto reference](https://developers.cloudflare.com/workers/runtime-apis/web-crypto/), checked October 4, 2026.
 - [Cloudflare D1 batch transaction contract](https://developers.cloudflare.com/d1/worker-api/d1-database/#batch), checked October 5, 2026.
