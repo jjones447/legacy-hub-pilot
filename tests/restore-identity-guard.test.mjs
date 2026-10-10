@@ -8,7 +8,8 @@ import vm from 'node:vm';
 import { resolve, join, dirname, basename, sep } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
-  PROTECTED_DATABASE_ID, checkTargetDatabase, resolveRestoreTarget, restoreDatabase, buildInsertSql, spotCheckRelationships
+  PROTECTED_DATABASE_ID, checkTargetDatabase, resolveRestoreTarget, restoreDatabase, buildInsertSql, spotCheckRelationships,
+  verifyAuditSnapshot
 } from '../scripts/restore-from-backup.mjs';
 
 const scratchId = '17be929b-64e8-43e0-9e0e-702775f7073a';
@@ -392,7 +393,7 @@ test('preflight: later schema failure remains outside input-preflight rollback g
 function transportFixture(database, options = {}) {
   const source = readFileSync(new URL('../scripts/restore-from-backup.mjs', import.meta.url), 'utf8');
   const executeStart = source.indexOf('    const executeCmd = (sql) => {');
-  const queryStart = source.indexOf('    const queryCmd = (sql) => {', executeStart);
+  const queryStart = source.indexOf('    const queryCmd = (sql,', executeStart);
   const callbackEnd = source.indexOf('    // 0. Drop existing tables', queryStart);
   assert.ok(executeStart > 0 && queryStart > executeStart && callbackEnd > queryStart);
   const callbackSource = source.slice(executeStart, callbackEnd);
@@ -657,6 +658,63 @@ test('SQL argv query: remote import statistics cannot substitute for SELECT rows
   } finally { database.close(); }
 });
 
+for (const queryResponse of ['[]', '{}', '[{}]', '[{"results":[]}]',
+  '[{"results":[],"success":false}]', '[{"results":{},"success":true}]']) {
+  test('strict audit query refuses unavailable/failed result ' + queryResponse, async () => {
+    const f = transportFixture(null, { queryResponse });
+    await assert.rejects(verifyAuditSnapshot(sql => f.queryCmd(sql, { requireRows: true }), []),
+      /Audit integrity mismatch/);
+    assert.equal(f.fileWrites.length, 0);
+  });
+}
+
+test('strict audit query accepts explicitly successful empty results', async () => {
+  const f = transportFixture(null, { queryResponse: '[{"results":[],"success":true}]' });
+  const result = await verifyAuditSnapshot(sql => f.queryCmd(sql, { requireRows: true }), []);
+  assert.equal(result.verified, true);
+  assert.equal(result.comparedRows, 0);
+});
+
+for (const id of [undefined, '7', 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+  test('audit preflight rejects invalid original ID ' + id + ' before target effects', async () => {
+    const f = preflightFixture();
+    try {
+      f.write('dump/audit_log.json', JSON.stringify([{ ...fixtureAudit, id }]));
+      const before = f.state();
+      await assert.rejects(f.restore(), /Backup audit IDs/);
+      assert.deepEqual(f.state(), before);
+      assert.deepEqual(f.trace, []);
+      assert.equal(f.cliCalls, 0);
+    } finally { f.cleanup(); }
+  });
+}
+
+test('audit preflight rejects duplicate original IDs before target effects', async () => {
+  const f = preflightFixture();
+  try {
+    f.manifest.tables.audit_log = 2;
+    f.write('dump/manifest.json', JSON.stringify(f.manifest));
+    f.write('dump/audit_log.json', JSON.stringify([fixtureAudit, fixtureAudit]));
+    const before = f.state();
+    await assert.rejects(f.restore(), /Backup audit IDs/);
+    assert.deepEqual(f.state(), before);
+    assert.deepEqual(f.trace, []);
+  } finally { f.cleanup(); }
+});
+
+test('audit omitted from supplied snapshot never claims audit preservation', async () => {
+  const f = preflightFixture();
+  try {
+    f.manifest.tables = { caregiver: 1 };
+    f.write('dump/manifest.json', JSON.stringify(f.manifest));
+    const result = await f.restore();
+    assert.equal(result.success, true, 'historical partial snapshots retain count verification');
+    assert.equal(result.spotChecks.auditLogPreserved, false);
+    assert.equal(result.auditVerification.verified, false);
+    assert.equal(result.auditVerification.basis, 'audit-not-in-snapshot');
+  } finally { f.cleanup(); }
+});
+
 
 // Pure relationship helper regressions; new cases use no disk/restore/CLI path.
 const relationshipCases = [
@@ -723,7 +781,7 @@ for (const c of relationshipCases) test('restore relationships: ' + c.name, asyn
       followupCount: selected ? golden[0] : 0,
       contactHistoryCount: selected ? golden[1] : 0,
       noteCount: selected ? golden[2] : 0,
-      auditLogPreserved: true,
+      auditLogPreserved: false,
       auditLogCount: 2
     });
     assert.equal(queries.length, selected ? 5 : 2);
