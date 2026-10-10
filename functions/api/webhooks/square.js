@@ -78,6 +78,10 @@ export async function onRequestPost({ request, env }) {
       return json({ ok: false, error: 'invalid JSON body' }, 400);
     }
 
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return json({ ok: false, error: 'invalid JSON body' }, 400);
+    }
+
     const eventId = body.event_id || body.id;
     if (typeof eventId !== 'string' || !eventId.trim()) {
       return json({ ok: false, error: 'missing event id' }, 400);
