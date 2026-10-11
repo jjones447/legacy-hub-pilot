@@ -48,6 +48,60 @@ h1, h2, h3, .display { font-family: var(--font-display); font-weight: 600; line-
 .container { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
 
 
+/* ---------- Accessibility: Skip Link ---------- */
+.skip-link {
+  position: absolute;
+  top: -9999px;
+  left: -9999px;
+  background: var(--cream);
+  color: var(--plum-dark);
+  padding: 10px 18px;
+  border: 2px solid var(--coral);
+  border-radius: var(--radius);
+  font-weight: 700;
+  font-size: 15px;
+  text-decoration: none;
+  z-index: 10000;
+}
+.skip-link:focus {
+  top: 8px;
+  left: 8px;
+}
+
+/* ---------- Crisis Bar ---------- */
+.crisis-bar {
+  background: var(--plum-dark);
+  color: var(--cream);
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14.5px;
+  padding: 8px 16px;
+  text-align: center;
+  position: static;
+  z-index: 40;
+}
+.crisis-bar-inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+.crisis-bar a {
+  color: var(--cream);
+  text-decoration: underline;
+  font-weight: 600;
+}
+.crisis-bar a:hover {
+  color: var(--white);
+}
+.crisis-bar strong {
+  font-weight: 700;
+  color: var(--cream);
+}
+
 /* ---------- Header / nav ---------- */
 header.site-header {
   background: var(--white);
@@ -291,6 +345,31 @@ section { padding: 64px 0; }
   background: linear-gradient(90deg, var(--amber) 0%, var(--plum) 100%);
 }
 .section-head p { color: var(--ink-soft); font-size: 16.5px; }
+
+/* Homepage hierarchy: keep the approved copy and brand, give its longer journey
+   heading room to breathe instead of inheriting the short-section 620px measure. */
+.home-journey .section-head { max-width: 900px; margin-bottom: 0; }
+.home-journey .section-head h2 {
+  font-size: clamp(26px, 3vw, 34px);
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+.home-journey .section-head p { max-width: 74ch; font-size: 17px; line-height: 1.75; }
+.home-support .section-head { max-width: 760px; margin-bottom: 28px; }
+/* Presentation-only sentence case also applies when the edge supplies the
+   historical uppercase heading. Do not rewrite the client's stored content. */
+.home-support-heading { text-transform: lowercase; }
+.home-support-heading::first-letter { text-transform: uppercase; }
+.home-support .card-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.home-support-card { display: flex; flex-direction: column; min-height: 230px; }
+.home-support-card h3 { font-size: 27px; line-height: 1.2; }
+.home-support-card p { line-height: 1.65; }
+.home-support-card > a.more { margin-top: auto; padding-top: 12px; }
+@media (max-width: 760px) {
+  .home-support .card-grid { grid-template-columns: 1fr; }
+  .home-support-card { min-height: 0; }
+}
 .eyebrow {
   display: inline-block; font-size: 12px; font-weight: 700; letter-spacing: 0.12em;
   text-transform: uppercase; color: var(--coral-dark); margin-bottom: 10px;

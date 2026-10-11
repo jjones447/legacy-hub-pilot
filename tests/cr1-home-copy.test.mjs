@@ -33,15 +33,29 @@ test('home page carries client two-line headline and journey panel copy verbatim
   );
 });
 
-test('home page renders HOW WE SUPPORT CAREGIVERS panel with three titled tiles and secondary line', () => {
+test('home support preserves client copy with sentence-case presentation and useful existing-route cards', () => {
   const html = file('index.html');
-  assert.match(html, /<h2[^>]*>HOW WE SUPPORT CAREGIVERS<\/h2>/);
+  const support = html.match(/<section class="section-sand home-support">([\s\S]*?)<\/section>/)?.[1];
+  assert.ok(support, 'homepage support section exists');
+  assert.match(support, /<h2 class="home-support-heading" data-cs="home.support.heading">HOW WE SUPPORT CAREGIVERS<\/h2>/);
+  assert.deepEqual([...support.matchAll(/<h3>([^<]+)<\/h3>/g)].map(match => match[1]), ['Wellness', 'Respite', 'Community']);
+  const routes = [...support.matchAll(/<a class="more" href="([^"]+)">/g)].map(match => match[1]);
+  assert.deepEqual(routes, ['wellness-passport.html', 'drop-in-respite.html', 'community-series.html']);
+  for (const route of routes) assert.match(file(route), /<!DOCTYPE html>/i);
 
-  // Assert card grid contains the three tiles with exact titles and no body copy
-  assert.match(
-    html,
-    /<div class="card-grid">\s*<div class="card">\s*<h3>Wellness<\/h3>\s*<\/div>\s*<div class="card">\s*<h3>Respite<\/h3>\s*<\/div>\s*<div class="card">\s*<h3>Community<\/h3>\s*<\/div>\s*<\/div>/
-  );
+  // Descriptions are reused verbatim from existing program pages, not new service claims.
+  for (const [description, source] of [
+    ['Connect with wellness activities, partner experiences, and grant benefits.', 'drop-in-respite.html'],
+    ['Time to breathe while your loved one is somewhere safe, engaged and cared for.', 'community-series.html'],
+    ['Gatherings and wellness sessions for caregivers across the community.', 'drop-in-respite.html'],
+  ]) {
+    assert.ok(support.includes(description));
+    assert.ok(file(source).includes(description));
+  }
+  const css = file('styles.css');
+  assert.match(css, /\.home-support-heading\s*\{[^}]*text-transform:\s*lowercase/);
+  assert.match(css, /\.home-support-heading::first-letter\s*\{[^}]*text-transform:\s*uppercase/);
+  assert.match(css, /\.home-support \.card-grid\s*\{[^}]*minmax\(0, 1fr\)/);
 
   // Assert secondary line renders
   assert.match(

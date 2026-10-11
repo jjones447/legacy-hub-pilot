@@ -6,7 +6,8 @@
 
     {% with collection = trusted_organizations %}{% include "_resource-links.html.j2" %}{% endwith %}
 
-  The rule that matters: an entry with no `url` renders as a real card with a "link coming"
+  The rule that matters: a single or multi-link destination with no nonblank `url`
+  renders with a noninteractive "link coming"
   marker, NOT as a clickable tile. Legacy is supplying these destinations over time, and a
   tile that invites a click and goes nowhere is worse than a plain one - the same reasoning
   as the home-page tiles. When the URL arrives, filling it in is the only change needed and
@@ -34,9 +35,9 @@
         {%- endif %}
         {%- if item.get('links') %}
         <p class="mt-12">
-          {%- for link in item['links'] %}<a class="more" href="{{ link.url }}" target="_blank" rel="noopener">{{ link.label }}</a>{% if not loop.last %} &middot; {% endif %}{% endfor %}
+          {%- for link in item['links'] %}{% if link.get('url')|default('', true)|trim %}<a class="more" href="{{ link.url }}" target="_blank" rel="noopener">{{ link.label }}</a>{% else %}<span class="badge-phase2">{{ link.label }}: Link coming</span>{% endif %}{% if not loop.last %} &middot; {% endif %}{% endfor %}
         </p>
-        {%- elif item.get('url') %}
+        {%- elif item.get('url')|default('', true)|trim %}
         <a class="more" href="{{ item.url }}" target="_blank" rel="noopener">Visit {{ item.name }} &rarr;</a>
         {%- else %}
         <span class="badge-phase2">Link coming</span>
@@ -57,9 +58,9 @@
     {%- endif %}
     {%- if item.get('links') %}
     <p class="mt-12">
-      {%- for link in item['links'] %}<a class="more" href="{{ link.url }}" target="_blank" rel="noopener">{{ link.label }}</a>{% if not loop.last %} &middot; {% endif %}{% endfor %}
+      {%- for link in item['links'] %}{% if link.get('url')|default('', true)|trim %}<a class="more" href="{{ link.url }}" target="_blank" rel="noopener">{{ link.label }}</a>{% else %}<span class="badge-phase2">{{ link.label }}: Link coming</span>{% endif %}{% if not loop.last %} &middot; {% endif %}{% endfor %}
     </p>
-    {%- elif item.get('url') %}
+    {%- elif item.get('url')|default('', true)|trim %}
     <a class="more" href="{{ item.url }}" target="_blank" rel="noopener">Visit {{ item.name }} &rarr;</a>
     {%- else %}
     <span class="badge-phase2">Link coming</span>
