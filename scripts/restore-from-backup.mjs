@@ -16,6 +16,7 @@ import { readdirSync, readFileSync, writeFileSync, unlinkSync, existsSync } from
 import { resolve, join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execSync, execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import os from 'node:os';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -400,6 +401,58 @@ export async function spotCheckRelationships(queryFn) {
   return checks;
 }
 
+// Compare original file bytes to the supplied manifest, never to reserialized rows.
+// The manifest must be independently trusted: these hashes are not authentication.
+export function verifyBackupIntegrity(manifest, payloads, { requireIntegrity = false } = {}) {
+  const record = value => value !== null && typeof value === 'object'
+    && (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null);
+  if (typeof requireIntegrity !== 'boolean') throw new Error('REFUSAL: Invalid integrity requirement.');
+  if (!record(manifest) || !record(manifest.tables) || !Object.keys(manifest.tables).length) {
+    throw new Error('REFUSAL: Invalid backup manifest for integrity verification.');
+  }
+  if (!Object.hasOwn(manifest, 'integrity')) {
+    if (requireIntegrity) throw new Error('REFUSAL: Backup integrity metadata is required.');
+    return { verified: false, tableCount: 0, basis: 'legacy-manifest-without-digests' };
+  }
+  const metadata = manifest.integrity;
+  if (!record(metadata) || metadata.algorithm !== 'SHA-256' || metadata.encoding !== 'utf-8'
+      || !record(metadata.tables) || !record(manifest.tables) || !(payloads instanceof Map)) {
+    throw new Error('REFUSAL: Invalid backup integrity metadata.');
+  }
+  const names = Object.keys(manifest.tables);
+  if (!names.length || Object.keys(metadata.tables).length !== names.length
+      || names.some(name => !Object.hasOwn(metadata.tables, name))) {
+    throw new Error('REFUSAL: Backup integrity must cover exactly the declared tables.');
+  }
+  let prefix;
+  for (const name of names) {
+    const reference = metadata.tables[name];
+    const suffix = `/${name}.json`;
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) || !record(reference)
+        || typeof reference.key !== 'string' || !reference.key.endsWith(suffix)
+        || !Number.isSafeInteger(reference.byte_length) || reference.byte_length < 0
+        || typeof reference.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(reference.sha256)) {
+      throw new Error('REFUSAL: Invalid backup object integrity reference.');
+    }
+    const objectPrefix = reference.key.slice(0, -suffix.length);
+    if (!/^legacy-hub\/[A-Za-z0-9_./-]+$/.test(objectPrefix)
+        || objectPrefix.split('/').some(part => part === '' || part === '.' || part === '..')
+        || (prefix !== undefined && prefix !== objectPrefix)) {
+      throw new Error('REFUSAL: Backup integrity object keys must share one safe prefix.');
+    }
+    prefix = objectPrefix;
+    const bytes = payloads.get(name);
+    if (!(bytes instanceof Uint8Array)) throw new Error('REFUSAL: Backup object bytes are unavailable.');
+    try { new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
+    catch (_) { throw new Error('REFUSAL: Backup object encoding is not valid UTF-8.'); }
+    if (bytes.byteLength !== reference.byte_length
+        || createHash('sha256').update(bytes).digest('hex') !== reference.sha256) {
+      throw new Error('REFUSAL: Backup object bytes do not match integrity metadata.');
+    }
+  }
+  return { verified: true, tableCount: names.length, basis: 'sha256-matches-supplied-manifest' };
+}
+
 export async function restoreDatabase({
   dumpDir,
   targetDatabase,
@@ -409,11 +462,15 @@ export async function restoreDatabase({
   configPath = null,
   schemaDir = null,
   batchSize = 25,
+  requireIntegrity = false,
   execFn = execSync,
   execFileFn = execFileSync
 } = {}) {
   // 1. Live DB refusal guard
   checkTargetDatabase(targetDatabase);
+  if (typeof requireIntegrity !== 'boolean') {
+    throw new Error('REFUSAL: Invalid integrity requirement.');
+  }
   // Reject invalid batching before metadata lookup, input reads or target SQL.
   // Otherwise zero/NaN can omit inserts after the target has been recreated.
   if (!Number.isSafeInteger(batchSize) || batchSize <= 0) {
@@ -449,6 +506,7 @@ export async function restoreDatabase({
   const identifierPattern = /^[A-Za-z_][A-Za-z0-9_]*$/;
   const tableNames = Object.keys(manifest.tables);
   const tableRows = new Map();
+  const tableBytes = new Map();
   // Validate and preload every declared file, including zero-count tables, before
   // either restore branch can prepare/execute target SQL or create CLI files.
   for (const tableName of tableNames) {
@@ -465,7 +523,9 @@ export async function restoreDatabase({
     }
     let rows;
     try {
-      rows = JSON.parse(readFileSync(tableFile, 'utf8'));
+      const bytes = readFileSync(tableFile);
+      tableBytes.set(tableName, bytes);
+      rows = JSON.parse(bytes.toString('utf8'));
     } catch (_) {
       throw new Error('REFUSAL: A backup table file is unreadable or invalid JSON.');
     }
@@ -488,6 +548,8 @@ export async function restoreDatabase({
     }
     tableRows.set(tableName, rows);
   }
+  const integrityVerification = verifyBackupIntegrity(manifest, tableBytes, { requireIntegrity });
+  tableBytes.clear(); // Release original bytes before schema/target operations.
   if (tableRows.has('audit_log')) validateAuditSnapshot(tableRows.get('audit_log'));
 
   const schemasPath = schemaDir ? resolve(schemaDir) : join(ROOT_DIR, 'schema');
@@ -633,6 +695,7 @@ export async function restoreDatabase({
       verifiedCounts,
       manifest,
       spotChecks,
+      integrityVerification,
       auditVerification
     };
   }
@@ -784,6 +847,7 @@ export async function restoreDatabase({
       verifiedCounts,
       manifest,
       spotChecks,
+      integrityVerification,
       auditVerification
     };
   } finally {
@@ -802,6 +866,7 @@ if (process.argv[1] && resolve(process.argv[1]) === __filename) {
   let isLocal = true;
   let configPath = null;
   let batchSize = 25;
+  let requireIntegrity = false;
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--dump' || args[i] === '-d') {
@@ -814,6 +879,8 @@ if (process.argv[1] && resolve(process.argv[1]) === __filename) {
       batchSize = Number(args[++i]);
     } else if (args[i] === '--remote') {
       isLocal = false;
+    } else if (args[i] === '--require-integrity') {
+      requireIntegrity = true;
     } else if (args[i] === '--local') {
       isLocal = true;
     } else if (args[i] === '--config' || args[i] === '-c') {
@@ -825,11 +892,11 @@ if (process.argv[1] && resolve(process.argv[1]) === __filename) {
   }
 
   if (!dumpDir || !targetDatabase) {
-    console.error('Usage: node scripts/restore-from-backup.mjs <dump-dir> <target-d1-name> [--local|--remote] [--database-id <uuid>] [--batch-size <n>]');
+    console.error('Usage: node scripts/restore-from-backup.mjs <dump-dir> <target-d1-name> [--local|--remote] [--database-id <uuid>] [--batch-size <n>] [--require-integrity]');
     process.exit(1);
   }
 
-  restoreDatabase({ dumpDir, targetDatabase, databaseId, isLocal, configPath, batchSize })
+  restoreDatabase({ dumpDir, targetDatabase, databaseId, isLocal, configPath, batchSize, requireIntegrity })
     .then(() => {
       process.exit(0);
     })
