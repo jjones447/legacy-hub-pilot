@@ -9,6 +9,7 @@
 
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync, rmSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -579,10 +580,20 @@ test('12. Absent manifest permits the existing complete backup and manifest form
   assert.deepEqual(f.calls.put, ['legacy-hub/2026-10-06/alpha.json', 'legacy-hub/2026-10-06/beta.json', 'legacy-hub/2026-10-06/manifest.json']);
   assert.equal(f.calls.list.length, 1);
   assert.equal(f.calls.delete.length, 0);
-  assert.deepEqual(JSON.parse(f.bucket.store.get('legacy-hub/2026-10-06/manifest.json').value), {
+  const { integrity, ...legacyManifest } = JSON.parse(f.bucket.store.get('legacy-hub/2026-10-06/manifest.json').value);
+  assert.deepEqual(legacyManifest, {
     version: 1, timestamp: '2026-10-06T03:00:00.000Z', latest_migration: '0012_wellness_checkin.sql',
     tables: { alpha: 1, beta: 1 }, total_rows: 2
   });
+  assert.equal(integrity.algorithm, 'SHA-256');
+  assert.equal(integrity.encoding, 'utf-8');
+  assert.deepEqual(Object.keys(integrity.tables).sort(), ['alpha', 'beta']);
+  for (const table of ['alpha', 'beta']) {
+    const key = `legacy-hub/2026-10-06/${table}.json`;
+    const payload = f.bucket.store.get(key).value;
+    assert.deepEqual(integrity.tables[table], { key, byte_length: Buffer.byteLength(payload),
+      sha256: createHash('sha256').update(payload).digest('hex') });
+  }
 });
 
 test('13. A different date backs up new rows while preserving the completed prior prefix', async () => {
