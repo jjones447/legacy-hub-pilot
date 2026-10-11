@@ -33,6 +33,16 @@ export async function pruneOldBackups(bucket, now = new Date(), retentionDays = 
 
 export const BAKED_IN_LATEST_MIGRATION = "0012_wellness_checkin.sql";
 
+// Hash the UTF-8 bytes of the R2 payload, not a separately serialized copy.
+// This is an integrity reference, not a signature or a consistent D1 snapshot.
+export async function describeBackupBytes(bytes) {
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return {
+    byte_length: bytes.byteLength,
+    sha256: Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("")
+  };
+}
+
 export async function runBackup(env, options = {}) {
   const startTime = Date.now();
   const db = env.DB || env.LEGACY_DB;
@@ -66,6 +76,7 @@ export async function runBackup(env, options = {}) {
 
   // 2. Dump each table to R2 as JSON
   const tableCounts = {};
+  const tableIntegrity = Object.create(null);
   let totalRows = 0;
 
   for (const tableName of tables) {
@@ -75,9 +86,13 @@ export async function runBackup(env, options = {}) {
     totalRows += rows.length;
 
     const tableKey = `${prefix}/${tableName}.json`;
-    await bucket.put(tableKey, JSON.stringify(rows, null, 2), {
+    const payload = JSON.stringify(rows, null, 2);
+    const bytes = new TextEncoder().encode(payload);
+    const integrity = await describeBackupBytes(bytes);
+    await bucket.put(tableKey, payload, {
       httpMetadata: { contentType: "application/json" }
     });
+    tableIntegrity[tableName] = { key: tableKey, ...integrity };
   }
 
   // 3. Resolve latest migration name
@@ -102,7 +117,10 @@ export async function runBackup(env, options = {}) {
     timestamp: now.toISOString(),
     latest_migration: latestMigration,
     tables: tableCounts,
-    total_rows: totalRows
+    total_rows: totalRows,
+    // Additive version-1 metadata; existing restore readers still use tables.
+    // Verify against a trusted manifest before restoring; old snapshots have no digests.
+    integrity: { algorithm: "SHA-256", encoding: "utf-8", tables: tableIntegrity }
   };
   await bucket.put(`${prefix}/manifest.json`, JSON.stringify(manifest, null, 2), {
     httpMetadata: { contentType: "application/json" }
