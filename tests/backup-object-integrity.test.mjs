@@ -3,22 +3,27 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import backupWorker, { runBackup, describeBackupBytes } from '../workers/backup/src/index.mjs';
+import backupWorker, { runBackup, describeBackupBytes, SNAPSHOT_LIMITS } from '../workers/backup/src/index.mjs';
 
 function fixture({ rows = { synthetic_table: [{ id: 'fixture-1', text: 'café ☃' }] },
   completed = false, headFailure = false, putFailure = false } = {}) {
-  const calls = { reads: [], puts: [], lists: [], deletes: [] };
+  const calls = { reads: [], batches: [], puts: [], lists: [], deletes: [] };
   const store = new Map();
   const env = {
     DB: {
+      async batch(statements) {
+        calls.batches.push(statements.map(statement => statement.sql));
+        return structuredClone(await Promise.all(statements.map(statement => statement.all())));
+      },
       prepare(sql) {
         calls.reads.push(sql);
         return {
+          sql,
           async all() {
-            if (sql.includes('sqlite_master')) return { results: Object.keys(rows).map(name => ({ name })) };
-            const table = /^SELECT \* FROM "([^"]+)"$/.exec(sql)?.[1];
+            if (sql.includes('sqlite_master')) return { success: true, results: Object.keys(rows).sort().map(name => ({ name, sql: `CREATE TABLE ${name} (id, text)` })) };
+            const table = /^SELECT \* FROM "([^"]+)" LIMIT 4097$/.exec(sql)?.[1];
             assert.ok(Object.hasOwn(rows, table), 'synthetic table only');
-            return { results: rows[table] };
+            return { success: true, results: rows[table] };
           },
           async first() { return { name: '0012_wellness_checkin.sql' }; }
         };
@@ -116,11 +121,64 @@ for (const [name, options, pattern] of [
   test(`${name} refuses before database reads, digest/upload or pruning`, async () => {
     const f = fixture(options);
     await assert.rejects(runBackup(f.env, f.options), pattern);
-    assert.deepEqual(f.calls, { reads: [], puts: [], lists: [], deletes: [] });
+    assert.deepEqual(f.calls, { reads: [], batches: [], puts: [], lists: [], deletes: [] });
   });
 }
 
 test('public fetch remains 404 without touching bindings', async () => {
   const response = await backupWorker.fetch(new Request('https://synthetic.invalid/'), {});
   assert.equal(response.status, 404);
+});
+
+test('one read batch captures all tables before uploads can change source rows', async () => {
+  const rows = { first: [{ id: 1, value: 'old' }], second: [{ id: 2, value: 'old' }] };
+  const f = fixture({ rows });
+  const originalPut = f.env.BACKUPS.put;
+  f.env.BACKUPS.put = async (...args) => {
+    rows.second[0].value = 'new-live-value';
+    return originalPut(...args);
+  };
+  const result = await runBackup(f.env, f.options);
+  assert.equal(f.calls.batches.length, 1);
+  assert.equal(f.calls.batches[0].length, 3);
+  assert.equal(JSON.parse(f.store.get(`${result.prefix}/second.json`))[0].value, 'old');
+  assert.equal(result.manifest.snapshot.mechanism, 'd1-read-batch-v1');
+  assert.match(result.manifest.snapshot.catalog_sha256, /^[a-f0-9]{64}$/);
+});
+
+for (const [label, change] of [
+  ['missing batch', f => { delete f.env.DB.batch; }],
+  ['batch failure', f => { f.env.DB.batch = async () => { throw new Error('synthetic batch failure'); }; }],
+  ['short batch', f => { f.env.DB.batch = async () => []; }],
+  ['failed table', f => { const original = f.env.DB.batch; f.env.DB.batch = async s => { const r = await original(s); r[1].success = false; return r; }; }],
+  ['malformed rows', f => { const original = f.env.DB.batch; f.env.DB.batch = async s => { const r = await original(s); r[1].results = null; return r; }; }],
+  ['malformed row', f => { const original = f.env.DB.batch; f.env.DB.batch = async s => { const r = await original(s); r[1].results = [null]; return r; }; }],
+  ['added catalog table', f => { const original = f.env.DB.batch; f.env.DB.batch = async s => { const r = await original(s); r[0].results.push({ name: 'new_table', sql: 'CREATE TABLE new_table (id)' }); return r; }; }],
+  ['changed table schema', f => { const original = f.env.DB.batch; f.env.DB.batch = async s => { const r = await original(s); r[0].results[0].sql += ' changed'; return r; }; }]
+]) {
+  test(`snapshot ${label} refuses before every R2 write and pruning`, async () => {
+    const f = fixture(); change(f);
+    await assert.rejects(runBackup(f.env, f.options), /Refusal|synthetic batch failure/);
+    assert.deepEqual([f.calls.puts, f.calls.lists, f.calls.deletes], [[], [], []]);
+  });
+}
+
+for (const [label, rows] of [
+  ['table limit', Object.fromEntries(Array.from({ length: SNAPSHOT_LIMITS.tables + 1 }, (_, i) => [`t_${i}`, []]))],
+  ['row limit', { table_a: Array.from({ length: SNAPSHOT_LIMITS.rowsPerTable + 1 }, (_, i) => ({ id: i })) }],
+  ['byte limit', { table_a: [{ text: 'x'.repeat(SNAPSHOT_LIMITS.bytes) }] }],
+  ['unsafe table name', { 'bad/name': [] }]
+]) {
+  test(`snapshot ${label} refuses without partial uploads`, async () => {
+    const f = fixture({ rows });
+    await assert.rejects(runBackup(f.env, f.options), /Refusal/);
+    assert.deepEqual([f.calls.puts, f.calls.lists, f.calls.deletes], [[], [], []]);
+  });
+}
+
+test('applied migration label comes from the same batch, with no later first() query', async () => {
+  const f = fixture({ rows: { d1_migrations: [{ name: '0014_payment_result_guard.sql' }], table_a: [] } });
+  const result = await runBackup(f.env, f.options);
+  assert.equal(result.manifest.latest_migration, '0014_payment_result_guard.sql');
+  assert.ok(f.calls.reads.every(sql => !sql.includes('ORDER BY name DESC')));
 });

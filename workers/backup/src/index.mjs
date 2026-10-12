@@ -36,6 +36,50 @@ export async function pruneOldBackups(bucket, now = new Date(), retentionDays = 
 // must be qualified separately. Observed applied migrations can report newer.
 export const BAKED_IN_LATEST_MIGRATION = "0012_wellness_checkin.sql";
 
+// One read-only D1 transaction captures every table before any R2 write.
+// These conservative source limits refuse rather than emit a partial snapshot.
+export const SNAPSHOT_LIMITS = Object.freeze({ tables: 32, rowsPerTable: 4096, bytes: 8 * 1024 * 1024 });
+const CATALOG_SQL = "SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY name LIMIT 33";
+function resultRows(result) {
+  if (result?.success !== true || !Array.isArray(result.results)) throw new Error("Refusal: incomplete D1 snapshot result");
+  return result.results;
+}
+function catalogRows(result) {
+  const rows = resultRows(result);
+  if (rows.length > SNAPSHOT_LIMITS.tables) throw new Error("Refusal: D1 snapshot table limit exceeded");
+  const names = new Set();
+  return rows.map(row => {
+    if (!row || typeof row.name !== 'string' || !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(row.name)
+      || ['__proto__', 'constructor', 'prototype'].includes(row.name)
+      || typeof row.sql !== 'string' || !row.sql || names.has(row.name)) throw new Error("Refusal: invalid D1 snapshot catalog");
+    names.add(row.name);
+    return { name: row.name, sql: row.sql };
+  });
+}
+export async function readBackupSnapshot(db) {
+  const catalog = catalogRows(await db.prepare(CATALOG_SQL).all());
+  if (typeof db.batch !== 'function') throw new Error("Refusal: transactional D1 batch unavailable");
+  const results = await db.batch([
+    db.prepare(CATALOG_SQL),
+    ...catalog.map(({ name }) => db.prepare(`SELECT * FROM "${name}" LIMIT ${SNAPSHOT_LIMITS.rowsPerTable + 1}`))
+  ]);
+  if (!Array.isArray(results) || results.length !== catalog.length + 1) throw new Error("Refusal: incomplete D1 snapshot batch");
+  if (JSON.stringify(catalogRows(results[0])) !== JSON.stringify(catalog)) throw new Error("Refusal: D1 snapshot catalog changed");
+  let byteLength = 0;
+  const tables = catalog.map(({ name }, index) => {
+    const rows = resultRows(results[index + 1]);
+    if (rows.some(row => !row || typeof row !== 'object' || Array.isArray(row))) throw new Error("Refusal: invalid D1 snapshot row");
+    if (rows.length > SNAPSHOT_LIMITS.rowsPerTable) throw new Error("Refusal: D1 snapshot row limit exceeded");
+    const payload = JSON.stringify(rows, null, 2);
+    const bytes = new TextEncoder().encode(payload);
+    byteLength += bytes.byteLength;
+    if (byteLength > SNAPSHOT_LIMITS.bytes) throw new Error("Refusal: D1 snapshot byte limit exceeded");
+    return { name, rows, payload, bytes };
+  });
+  const catalogBytes = new TextEncoder().encode(JSON.stringify(catalog));
+  return { tables, catalog_sha256: (await describeBackupBytes(catalogBytes)).sha256 };
+}
+
 // Hash the UTF-8 bytes of the R2 payload, not a separately serialized copy.
 // This is an integrity reference, not a signature or a consistent D1 snapshot.
 export async function describeBackupBytes(bytes) {
@@ -70,27 +114,21 @@ export async function runBackup(env, options = {}) {
     throw new Error(`Refusal: completed backup already exists at ${prefix}`);
   }
 
-  // 1. Discover all tables dynamically from sqlite_master (excluding sqlite_% and _cf_%)
-  const masterRes = await db.prepare(
-    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY name"
-  ).all();
-  const rawTables = masterRes.results || masterRes || [];
-  const tables = rawTables.map((r) => r.name);
+  // Discovery is outside the transaction; catalog revalidation inside the SAME
+  // read-only batch refuses schema drift. No sequential-table fallback/retry.
+  const snapshot = await readBackupSnapshot(db);
+  const tables = snapshot.tables.map(table => table.name);
 
   // 2. Dump each table to R2 as JSON
   const tableCounts = {};
   const tableIntegrity = Object.create(null);
   let totalRows = 0;
 
-  for (const tableName of tables) {
-    const rowRes = await db.prepare(`SELECT * FROM "${tableName}"`).all();
-    const rows = rowRes.results || rowRes || [];
+  for (const { name: tableName, rows, payload, bytes } of snapshot.tables) {
     tableCounts[tableName] = rows.length;
     totalRows += rows.length;
 
     const tableKey = `${prefix}/${tableName}.json`;
-    const payload = JSON.stringify(rows, null, 2);
-    const bytes = new TextEncoder().encode(payload);
     const integrity = await describeBackupBytes(bytes);
     await bucket.put(tableKey, payload, {
       httpMetadata: { contentType: "application/json" }
@@ -101,14 +139,9 @@ export async function runBackup(env, options = {}) {
   // 3. Resolve latest migration name
   let latestMigration = options.latestMigration || null;
   if (!latestMigration) {
-    try {
-      const migRes = await db.prepare("SELECT name FROM d1_migrations ORDER BY name DESC LIMIT 1").first();
-      if (migRes && migRes.name) {
-        latestMigration = migRes.name;
-      }
-    } catch (_) {
-      // d1_migrations may not exist if migrations executed directly
-    }
+    // Migration history, if present, was read in that same snapshot transaction.
+    const history = snapshot.tables.find(table => table.name === 'd1_migrations');
+    latestMigration = history?.rows.map(row => row.name).filter(name => typeof name === 'string').sort().at(-1) || null;
   }
   if (!latestMigration || latestMigration < BAKED_IN_LATEST_MIGRATION) {
     latestMigration = BAKED_IN_LATEST_MIGRATION;
@@ -121,6 +154,7 @@ export async function runBackup(env, options = {}) {
     latest_migration: latestMigration,
     tables: tableCounts,
     total_rows: totalRows,
+    snapshot: { mechanism: "d1-read-batch-v1", catalog_sha256: snapshot.catalog_sha256 },
     // Additive version-1 metadata; existing restore readers still use tables.
     // Verify against a trusted manifest before restoring; old snapshots have no digests.
     integrity: { algorithm: "SHA-256", encoding: "utf-8", tables: tableIntegrity }

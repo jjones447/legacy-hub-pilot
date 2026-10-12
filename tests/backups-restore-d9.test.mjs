@@ -145,6 +145,14 @@ class MockR2Bucket {
 
 function d1Adapter(db) {
   return {
+    async batch(statements) {
+      db.exec('BEGIN');
+      try {
+        const results = await Promise.all(statements.map(statement => statement.all()));
+        db.exec('COMMIT');
+        return results;
+      } catch (error) { db.exec('ROLLBACK'); throw error; }
+    },
     prepare(sql) {
       return {
         bind(...params) {
@@ -153,7 +161,7 @@ function d1Adapter(db) {
               return db.prepare(sql).get(...params) ?? null;
             },
             async all() {
-              return { results: db.prepare(sql).all(...params) };
+              return { success: true, results: db.prepare(sql).all(...params) };
             },
             async run() {
               const res = db.prepare(sql).run(...params);
@@ -165,7 +173,7 @@ function d1Adapter(db) {
           return db.prepare(sql).get() ?? null;
         },
         async all() {
-          return { results: db.prepare(sql).all() };
+          return { success: true, results: db.prepare(sql).all() };
         },
         async run() {
           const res = db.prepare(sql).run();
@@ -470,12 +478,14 @@ test('9. Missing migration history retains conservative fallback; observed newer
   // Missing history stays conservatively at the existing legacy source fallback.
   let observedMigration = null;
   const mockDb = {
+    async batch(statements) { return Promise.all(statements.map(statement => statement.all())); },
     prepare: (sql) => ({
       all: async () => {
         if (sql.includes('sqlite_master')) {
-          return [{ name: 'caregiver' }];
+          return { success: true, results: [{ name: 'caregiver', sql: 'CREATE TABLE caregiver (id)' },
+            ...(observedMigration ? [{ name: 'd1_migrations', sql: 'CREATE TABLE d1_migrations (name)' }] : [])] };
         }
-        return [];
+        return { success: true, results: sql.includes('d1_migrations') ? [{ name: observedMigration }] : [] };
       },
       first: async () => {
         if (sql.includes('d1_migrations')) {
@@ -509,14 +519,15 @@ function backupPrefixFixture() {
     };
   }
   const db = {
+    async batch(statements) { return structuredClone(await Promise.all(statements.map(statement => statement.all()))); },
     prepare(sql) {
       calls.prepare.push(sql);
       return {
         async all() {
-          if (sql.includes('sqlite_master')) return { results: [{ name: 'alpha' }, { name: 'beta' }] };
-          const match = sql.match(/^SELECT \* FROM "(alpha|beta)"$/);
+          if (sql.includes('sqlite_master')) return { success: true, results: [{ name: 'alpha', sql: 'CREATE TABLE alpha (id, value)' }, { name: 'beta', sql: 'CREATE TABLE beta (id, value)' }] };
+          const match = sql.match(/^SELECT \* FROM "(alpha|beta)" LIMIT 4097$/);
           assert.ok(match, 'only synthetic table SELECTs are allowed');
-          return { results: rows[match[1]] };
+          return { success: true, results: rows[match[1]] };
         },
         async first() {
           assert.equal(sql, 'SELECT name FROM d1_migrations ORDER BY name DESC LIMIT 1');
@@ -583,12 +594,14 @@ test('12. Absent manifest permits the existing complete backup and manifest form
   assert.deepEqual(f.calls.put, ['legacy-hub/2026-10-06/alpha.json', 'legacy-hub/2026-10-06/beta.json', 'legacy-hub/2026-10-06/manifest.json']);
   assert.equal(f.calls.list.length, 1);
   assert.equal(f.calls.delete.length, 0);
-  const { integrity, ...legacyManifest } = JSON.parse(f.bucket.store.get('legacy-hub/2026-10-06/manifest.json').value);
+  const { integrity, snapshot, ...legacyManifest } = JSON.parse(f.bucket.store.get('legacy-hub/2026-10-06/manifest.json').value);
   assert.deepEqual(legacyManifest, {
     version: 1, timestamp: '2026-10-06T03:00:00.000Z', latest_migration: '0012_wellness_checkin.sql',
     tables: { alpha: 1, beta: 1 }, total_rows: 2
   });
   assert.equal(integrity.algorithm, 'SHA-256');
+  assert.equal(snapshot.mechanism, 'd1-read-batch-v1');
+  assert.match(snapshot.catalog_sha256, /^[a-f0-9]{64}$/);
   assert.equal(integrity.encoding, 'utf-8');
   assert.deepEqual(Object.keys(integrity.tables).sort(), ['alpha', 'beta']);
   for (const table of ['alpha', 'beta']) {
