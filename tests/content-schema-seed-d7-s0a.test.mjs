@@ -3,7 +3,8 @@ import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
-import { onRequestGet as getAgent, onRequestPost as postAgent } from '../functions/api/agent/[[path]].js';
+import { onRequestGet as getAgent } from '../functions/api/agent/[[path]].js';
+import { postAgentFixture as postAgent } from './helpers/confirmed-agent.mjs';
 import { generatePageSectionSchema } from '../scripts/gen-page-section-schema.mjs';
 import { seedPageSections } from '../scripts/seed-page-sections.mjs';
 

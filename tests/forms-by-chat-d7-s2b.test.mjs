@@ -9,7 +9,7 @@ import { DatabaseSync } from 'node:sqlite';
 
 import { onRequest } from '../functions/_middleware.js';
 import { _resetContentCache } from '../functions/_content.mjs';
-import { onRequestPost as postAgent } from '../functions/api/agent/[[path]].js';
+import { postAgentFixture as postAgent } from './helpers/confirmed-agent.mjs';
 import { seedPageSections } from '../scripts/seed-page-sections.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -317,6 +317,7 @@ test('5. assistant draft to form.membership goes through draft, preview, confirm
   // 1. Create draft
   const draftReq = new Request('http://localhost/api/agent/draft', {
     method: 'POST',
+    headers: { 'x-dev-actor': 'staff_manager@example.org' },
     body: JSON.stringify({
       target_id: 'ps_form.membership',
       type_id: 'page_section',

@@ -95,7 +95,10 @@ service/dev/missing/error/deactivated staff proof. Updated application/caller fi
 explicitly model trusted middleware and retained browser receipts; test header decoding
 is clearly test support, not authentication or deployed proof.
 
-The focused affected set passes 357 tests, 0 failures/skips. New pure tests are in the
+The focused affected sets pass 393 tests, 0 failures/skips. This includes three
+additional caller fixtures identified by the first hosted CI check; they now model
+the same initiating staff actor and retain the server version instead of posting
+unbound IDs. Production authorization was not relaxed. New pure tests are in the
 explicit unit allowlist. No broad old suite was repeated locally, real workerd harness
 ran, migration applied, target provisioned, or provider/customer/runtime write made.
 Existing native/served/company/Cloudflare holds and integration ownership remain.
