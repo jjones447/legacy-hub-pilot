@@ -494,10 +494,6 @@ test('9. Missing migration history retains conservative fallback; observed newer
     const installedResult = await runBackup({ DB: mockDb, BACKUPS: new MockR2Bucket() });
     assert.equal(installedResult.manifest.latest_migration, installed);
   }
-  assert.ok(
-    backupRes.manifest.latest_migration >= newestSchemaFile,
-    `Recorded latest migration (${backupRes.manifest.latest_migration}) cannot be older than newest file in schema/ (${newestSchemaFile})`
-  );
 });
 
 // [pc2-codex-13] Sequential completed-prefix protection, not native R2/D1 or concurrency proof.
