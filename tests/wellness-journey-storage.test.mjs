@@ -10,7 +10,7 @@ let db;
 const staff = 'staff@example.invalid';
 test('candidate is excluded from the active migration and backup catalog', () => {
   const active = readdirSync(new URL('../schema/', import.meta.url)).filter(name => name.endsWith('.sql')).sort();
-  assert.equal(active.at(-1), '0012_wellness_checkin.sql');
+  assert.equal(active.at(-1), '0014_payment_result_guard.sql');
   assert.equal(active.includes('0013_wellness_journey.sql'), false);
 });
 beforeEach(() => {

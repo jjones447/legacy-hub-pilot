@@ -31,6 +31,9 @@ export async function pruneOldBackups(bucket, now = new Date(), retentionDays = 
   return prunedCount;
 }
 
+// Conservative legacy fallback when applied-migration history is unavailable.
+// Do not advance this just because source adds a migration: its installation
+// must be qualified separately. Observed applied migrations can report newer.
 export const BAKED_IN_LATEST_MIGRATION = "0012_wellness_checkin.sql";
 
 // Hash the UTF-8 bytes of the R2 payload, not a separately serialized copy.
