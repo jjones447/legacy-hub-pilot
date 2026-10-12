@@ -3,29 +3,32 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { testPlan, runTests, RUNTIME_TEST, ROOT } from '../scripts/run-tests.mjs';
+import { UNIT_TEST_FILES } from '../scripts/unit-test-files.mjs';
 import { isAllowedHref, sanitizeInlineHtml } from '../functions/_content.mjs';
 
 const names = ['z.test.mjs', RUNTIME_TEST, 'helper.mjs', 'a.test.mjs'];
+const approvedUnits = ['a.test.mjs', 'z.test.mjs'];
+const fixturePlan = (mode, inventory) => testPlan(mode, inventory, approvedUnits);
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
 test('unit selection is deterministic and explicitly reports runtime NOT RUN', () => {
-  const plan = testPlan('unit', names);
+  const plan = fixturePlan('unit', names);
   assert.deepEqual(plan.files, ['tests/a.test.mjs', 'tests/z.test.mjs']);
   assert.match(plan.message, /runtime NOT RUN/);
   assert.match(plan.message, /not release\/runtime acceptance/);
 });
 
 test('runtime selection includes exactly the required harness', () => {
-  assert.deepEqual(testPlan('runtime', names).files, [`tests/${RUNTIME_TEST}`]);
-  assert.match(testPlan('runtime', names).message, /must FAIL, never SKIP/);
+  assert.deepEqual(fixturePlan('runtime', names).files, [`tests/${RUNTIME_TEST}`]);
+  assert.match(fixturePlan('runtime', names).message, /must FAIL, never SKIP/);
 });
 
 test('unknown modes, missing runtime, empty units and unclassified runtime tests refuse', () => {
-  assert.throws(() => testPlan('all', names), /Choose unit or runtime/);
-  assert.throws(() => testPlan('unit', ['a.test.mjs']), /Required runtime test is missing/);
-  assert.throws(() => testPlan('unit', [RUNTIME_TEST]), /empty test selection/);
-  assert.throws(() => testPlan('unit', [...names, 'new-runtime.test.mjs']), /Unclassified runtime/);
-  assert.throws(() => testPlan('unit', [...names, '../elsewhere.test.mjs']), /top-level/);
+  assert.throws(() => fixturePlan('all', names), /Choose unit or runtime/);
+  assert.throws(() => fixturePlan('unit', ['a.test.mjs']), /Required runtime test is missing/);
+  assert.throws(() => fixturePlan('unit', [RUNTIME_TEST]), /empty test selection/);
+  assert.throws(() => fixturePlan('unit', [...names, 'new-runtime.test.mjs']), /Unclassified runtime/);
+  assert.throws(() => fixturePlan('unit', [...names, '../elsewhere.test.mjs']), /top-level/);
 });
 
 test('real repository inventory excludes the runtime harness without importing any test', () => {
@@ -34,13 +37,35 @@ test('real repository inventory excludes the runtime harness without importing a
   assert.ok(units.includes('tests/test-boundary.test.mjs'));
   assert.ok(!units.includes(`tests/${RUNTIME_TEST}`));
   assert.equal(units.length + 1, inventory.filter((name) => name.endsWith('.test.mjs')).length);
+  assert.deepEqual(units, [...UNIT_TEST_FILES].sort().map(name => `tests/${name}`));
+  assert.ok(Object.isFrozen(UNIT_TEST_FILES));
+});
+
+test('unknown innocently named tests refuse before any launch or report', () => {
+  for (const mode of ['unit', 'runtime']) {
+    let launches = 0;
+    let reports = 0;
+    assert.throws(() => runTests(mode, {
+      names: [...names, 'provider-check.test.mjs'], approvedUnits,
+      report() { reports++; }, launch() { launches++; return { status: 0 }; },
+    }), /Unclassified test: provider-check/);
+    assert.equal(launches, 0);
+    assert.equal(reports, 0);
+  }
+});
+
+test('missing, duplicate and unsafe unit allowlist entries fail closed', () => {
+  assert.throws(() => fixturePlan('unit', [RUNTIME_TEST, 'a.test.mjs']), /Allowlisted unit test is missing: z/);
+  for (const invalid of [null, ['a.test.mjs', 'a.test.mjs'], [RUNTIME_TEST], ['../a.test.mjs'], ['a.mjs'], [1]]) {
+    assert.throws(() => testPlan('unit', names, invalid), /Invalid unit allowlist/);
+  }
 });
 
 test('unit launch uses literal argv, disables inherited runtime opt-in and propagates failure', () => {
   let calls = 0;
   const reports = [];
   const status = runTests('unit', {
-    names, env: { LEGACY_RUN_WORKERD: '1' }, report: (value) => reports.push(value),
+    names, approvedUnits, env: { LEGACY_RUN_WORKERD: '1' }, report: (value) => reports.push(value),
     launch(executable, args, options) {
       calls++;
       assert.equal(executable, process.execPath);
@@ -58,7 +83,7 @@ test('unit launch uses literal argv, disables inherited runtime opt-in and propa
 
 test('runtime dispatcher is verified with an inert launch, never a runtime process', () => {
   assert.equal(runTests('runtime', {
-    names, env: {}, report() {}, launch(_executable, args, options) {
+    names, approvedUnits, env: {}, report() {}, launch(_executable, args, options) {
       assert.deepEqual(args, ['--test', `tests/${RUNTIME_TEST}`]);
       assert.equal(options.env.LEGACY_RUN_WORKERD, '1');
       return { status: 0 };
@@ -70,7 +95,7 @@ test('child errors, signals and unknown exit status fail closed without another 
   for (const result of [{ error: new Error('spawn refused') }, { signal: 'SIGTERM', status: null }, {}]) {
     let calls = 0;
     assert.throws(() => runTests('unit', {
-      names, report() {}, launch() { calls++; return result; },
+      names, approvedUnits, report() {}, launch() { calls++; return result; },
     }));
     assert.equal(calls, 1);
   }

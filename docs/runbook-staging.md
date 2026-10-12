@@ -39,6 +39,12 @@ source integration or a deploy authorization does not imply client-send or healt
 name is preserved, but its job summary explicitly excludes runtime acceptance.
 This is a test-entrypoint correction, not clearance to execute previously held work.
 
+October 12 source hardening: `scripts/unit-test-files.mjs` explicitly lists the
+accepted unit inventory. Unknown test files and missing allowlisted files fail
+before launch, rather than silently entering the unit suite through discovery.
+Review additions for effects before changing that list; a filename or allowlist
+entry is not runtime authorization or proof that a test is side-effect-free.
+
 The separate `npm run test:runtime` selects only the required real-workerd harness.
 Do not execute it until the recorded runtime-preparation rejection and incident
 receive explicit disposition. Its opt-in environment marker is a mode selector,
