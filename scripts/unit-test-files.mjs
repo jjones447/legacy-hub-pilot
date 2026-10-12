@@ -2,6 +2,7 @@
 // requires an explicit source/review change here; filenames alone do not prove
 // absence of runtime effects. The separately gated workerd harness is excluded.
 export const UNIT_TEST_FILES = Object.freeze([
+  'governed-agent-tools.test.mjs',
   'payment-concurrent-routing.test.mjs',
   'actor-service-token.test.mjs',
   'agent-data-changes-d7.test.mjs',
