@@ -65,6 +65,12 @@ the exact preview control. A click sends the actual draft/change key plus that
 version, disables duplicate controls immediately, and reports only app responses.
 Missing preview/version offers no confirming control.
 
+Before the first confirmation await, a shared client reservation blocks new drafts,
+discard and confirmation on every preview row. It remains reserved while fetching,
+reading the response and refreshing the console. Only a successful app response and
+completed refresh release it; an error keeps HOLD. A response arriving without its
+parsed success result cannot release the reservation.
+
 An error, timeout or uncertain confirmation latches HOLD before any repeat,
 discard or replacement. The tab's session storage retains that latch through a
 reload; storage errors keep the in-memory latch closed. Operator reconciliation

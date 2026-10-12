@@ -1791,6 +1791,7 @@ function refreshStaffChatTargets() {
 }
 
 let agentConfirmationHold = false;
+let agentConfirmationPending = false;
 try { agentConfirmationHold = window.sessionStorage?.getItem('agent-confirmation-hold') === '1'; }
 catch { agentConfirmationHold = true; }
 function holdAgentConfirmation(row) {
@@ -1807,9 +1808,11 @@ async function confirmAgentChange(target) {
   const draftId = target.getAttribute('data-draft-id');
   if (!changeId && !draftId) return;
   const row = target.closest('.confirm-row');
-  if (agentConfirmationHold || row?.dataset?.confirmationState) return;
+  if (agentConfirmationHold || agentConfirmationPending || row?.dataset?.confirmationState) return;
   const previewVersion = target.getAttribute('data-preview-version');
   if (!previewVersion) { holdAgentConfirmation(row); return; }
+  // Reserve every chat mutation before yielding, including controls on other previews.
+  agentConfirmationPending = true;
   if (row) {
     row.dataset ||= {};
     row.dataset.confirmationState = 'confirming';
@@ -1835,13 +1838,14 @@ async function confirmAgentChange(target) {
     if (panel && panel.dataset.caregiverId) {
       await viewCaregiver(panel.dataset.caregiverId);
     }
+    agentConfirmationPending = false;
   } catch (e) {
     holdAgentConfirmation(row);
   }
 }
 
 async function discardAgentChange(target) {
-  if (agentConfirmationHold || target.closest('.confirm-row')?.dataset?.confirmationState) return;
+  if (agentConfirmationHold || agentConfirmationPending || target.closest('.confirm-row')?.dataset?.confirmationState) return;
   const changeId = target.getAttribute('data-change-id');
   const draftId = target.getAttribute('data-draft-id');
   if (!changeId && !draftId) return;
@@ -1869,7 +1873,7 @@ async function discardAgentChange(target) {
 }
 
 window.agentSend = async function () {
-  if (agentConfirmationHold) return;
+  if (agentConfirmationHold || agentConfirmationPending) return;
   const input = document.getElementById('chatInput');
   const body = document.getElementById('chatBody');
   const text = (input?.value || '').trim();
