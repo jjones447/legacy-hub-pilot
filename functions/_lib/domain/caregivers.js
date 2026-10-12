@@ -103,7 +103,7 @@ export async function validate(db, { id, operation, payload = {} }) {
 }
 
 // Additional statements are supplied only by trusted server callers (not request payloads).
-export async function apply(db, { id, operation, payload = {} }, actor, additionalStatements = []) {
+export async function apply(db, { id, operation, payload = {} }, actor, additionalStatements = [], preconditions = []) {
   const v = await validate(db, { id, operation, payload });
   if (!v.ok) {
     return v;
@@ -137,6 +137,7 @@ export async function apply(db, { id, operation, payload = {} }, actor, addition
   setParams.push(id);
 
   await db.batch([
+    ...preconditions,
     db.prepare(updateSql).bind(...setParams),
     db
     .prepare(`

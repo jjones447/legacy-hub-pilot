@@ -117,7 +117,7 @@ export async function validate(db, { id, operation, payload = {} }) {
 }
 
 // Additional statements are supplied only by trusted server callers (not request payloads).
-export async function apply(db, { id, operation, payload = {} }, actor, additionalStatements = []) {
+export async function apply(db, { id, operation, payload = {} }, actor, additionalStatements = [], preconditions = []) {
   const v = await validate(db, { id, operation, payload });
   if (!v.ok) {
     return v;
@@ -129,6 +129,7 @@ export async function apply(db, { id, operation, payload = {} }, actor, addition
   if (normalizedOp === 'review') {
     const { review_notes } = v.payload;
     await db.batch([
+      ...preconditions,
       db
       .prepare("UPDATE grant_application SET status = 'in_review', review_notes = ?, updated_at = datetime('now') WHERE id = ?")
         .bind(review_notes, grantId),
@@ -169,13 +170,14 @@ export async function apply(db, { id, operation, payload = {} }, actor, addition
         VALUES (?, 'grant_application.decision', 'grant_application', ?, ?, ?)
       `)
       .bind(actor, grantId.toString(), JSON.stringify(v.before), JSON.stringify(v.after)));
-    await db.batch([...statements, ...additionalStatements]);
+    await db.batch([...preconditions, ...statements, ...additionalStatements]);
 
     return { ok: true, grant: v.projected };
   }
 
   if (normalizedOp === 'course_complete') {
     await db.batch([
+      ...preconditions,
       db
       .prepare("UPDATE grant_application SET status = 'course_complete', updated_at = datetime('now') WHERE id = ?")
         .bind(grantId),
@@ -210,7 +212,7 @@ export async function apply(db, { id, operation, payload = {} }, actor, addition
         VALUES (?, 'grant_application.close', 'grant_application', ?, ?, ?)
       `)
       .bind(actor, grantId.toString(), JSON.stringify(v.before), JSON.stringify(v.after)));
-    await db.batch([...statements, ...additionalStatements]);
+    await db.batch([...preconditions, ...statements, ...additionalStatements]);
 
     return { ok: true, grant: v.projected };
   }

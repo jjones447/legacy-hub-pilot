@@ -1,6 +1,7 @@
 import { maybeRewriteMedia } from './_media.mjs';
 import { maybeRewriteContent } from './_content.mjs';
-import { recordStaffSignIn } from './_lib/staff.js';
+import { recordStaffSignIn, getStaffMember, normalizeEmail } from './_lib/staff.js';
+import { setVerifiedAccessStaffActor } from './_lib/agent-confirmation.mjs';
 
 // Root middleware: (1) baseline security headers on every response, and
 // (2) fail-closed auth on the staff/agent console surfaces via real Cloudflare
@@ -201,6 +202,9 @@ export async function staffGate(env, payload, now = Date.now()) {
 
 export async function onRequest(context) {
   const { request, next, env } = context;
+  // Server-only capability seam: wire fields and dev headers never establish this.
+  context.data ||= {};
+  setVerifiedAccessStaffActor(context.data, null);
   const url = new URL(request.url);
   const path = url.pathname;
   const isConsole =
@@ -221,6 +225,14 @@ export async function onRequest(context) {
     if (!payload) return withSecurityHeaders(forbidden(), url.hostname);
     const refused = await staffGate(env, payload);
     if (refused) return withSecurityHeaders(refused, url.hostname);
+    if (typeof payload.email === 'string' && !payload.common_name) {
+      try {
+        const member = await getStaffMember(env.LEGACY_DB, payload.email);
+        if (member?.status === 'active' && member.email === normalizeEmail(payload.email)) {
+          setVerifiedAccessStaffActor(context.data, normalizeEmail(payload.email));
+        }
+      } catch { /* Unknown staff cannot confirm; other existing console behavior remains. */ }
+    }
     // Verified. Endpoints may now safely decode the (verified) JWT for the actor email.
   }
 

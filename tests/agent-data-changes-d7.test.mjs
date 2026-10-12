@@ -5,7 +5,8 @@ import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
-import { onRequestGet as getAgent, onRequestPost as postAgent } from '../functions/api/agent/[[path]].js';
+import { onRequestGet as getAgent } from '../functions/api/agent/[[path]].js';
+import { postAgentFixture as postAgent, captureSeededPreview } from './helpers/confirmed-agent.mjs';
 import * as caregiversDomain from '../functions/_lib/domain/caregivers.js';
 import * as grantsDomain from '../functions/_lib/domain/grants.js';
 import * as eventsDomain from '../functions/_lib/domain/events.js';
@@ -179,7 +180,7 @@ test('Grant: draft stores a preview and writes nothing to domain tables', async 
   assert.ok(change);
   assert.equal(change.status, 'draft');
   assert.equal(change.area, 'grant');
-  assert.equal(change.requested_by, 'staff@example.org');
+  assert.equal(change.requested_by, 'access_staff:staff@example.org');
 
   // Verify NOTHING written to domain table grant_application
   const grant = raw.prepare('SELECT status, review_notes FROM grant_application WHERE id = 1').get();
@@ -209,7 +210,7 @@ test('Grant: confirm applies change and writes both audit rows with verified act
   // Confirm with confirming actor and verify body-supplied actor is ignored
   const reqConfirm = new Request('http://localhost/api/agent/change/confirm', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-dev-actor': 'staff_confirmer@example.org' },
+    headers: { 'Content-Type': 'application/json', 'x-dev-actor': 'staff_drafter@example.org' },
     body: JSON.stringify({
       change_id: changeId,
       actor: 'attacker_spoof',
@@ -230,17 +231,17 @@ test('Grant: confirm applies change and writes both audit rows with verified act
   // agent_change status published with confirmed_by
   const change = raw.prepare('SELECT status, confirmed_by FROM agent_change WHERE id = ?').get(changeId);
   assert.equal(change.status, 'published');
-  assert.equal(change.confirmed_by, 'staff_confirmer@example.org');
+  assert.equal(change.confirmed_by, 'staff_drafter@example.org');
 
   // Both audit rows exist with verified actor
   const domainAudit = raw.prepare("SELECT * FROM audit_log WHERE action = 'grant_application.review'").get();
   assert.ok(domainAudit);
-  assert.equal(domainAudit.actor, 'staff_confirmer@example.org');
+  assert.equal(domainAudit.actor, 'staff_drafter@example.org');
   assert.equal(domainAudit.entity_id, '1');
 
   const changeAudit = raw.prepare("SELECT * FROM audit_log WHERE action = 'agent_change.confirm'").get();
   assert.ok(changeAudit);
-  assert.equal(changeAudit.actor, 'staff_confirmer@example.org');
+  assert.equal(changeAudit.actor, 'staff_drafter@example.org');
   assert.equal(changeAudit.entity_id, changeId);
 });
 
@@ -409,7 +410,7 @@ test('Caregiver: confirm applies update and writes both audit rows with verified
 
   const reqConfirm = new Request('http://localhost/api/agent/change/confirm', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-dev-actor': 'staff_confirmer@example.org' },
+    headers: { 'Content-Type': 'application/json', 'x-dev-actor': 'staff_drafter@example.org' },
     body: JSON.stringify({ change_id, actor: 'attacker_spoof' })
   });
 
@@ -425,12 +426,12 @@ test('Caregiver: confirm applies update and writes both audit rows with verified
   // Audit logs recorded with verified actor
   const domainAudit = raw.prepare("SELECT * FROM audit_log WHERE action = 'caregiver.update'").get();
   assert.ok(domainAudit);
-  assert.equal(domainAudit.actor, 'staff_confirmer@example.org');
+  assert.equal(domainAudit.actor, 'staff_drafter@example.org');
   assert.equal(domainAudit.entity_id, 'cg_test_1');
 
   const changeAudit = raw.prepare("SELECT * FROM audit_log WHERE action = 'agent_change.confirm'").get();
   assert.ok(changeAudit);
-  assert.equal(changeAudit.actor, 'staff_confirmer@example.org');
+  assert.equal(changeAudit.actor, 'staff_drafter@example.org');
 });
 
 test('Caregiver: draft then record changes underneath returns 409 on confirm', async () => {
@@ -566,6 +567,8 @@ async function atomicFixture(c, governed) {
     assert.equal(body.ok, true);
     changeId = body.change_id;
     db.prepare("UPDATE agent_change SET created_at=?,updated_at=? WHERE id=?").run(oldTime, oldTime, changeId);
+    // Fixture preparation ends here; retain this prepared preview version before any test fault.
+    await captureSeededPreview(env, 'workflow', changeId);
   }
   return { db, adapter, env, change, expected, changeId, stats };
 }
@@ -593,7 +596,7 @@ function atomicAssertSuccess(f, c, before, governed) {
   assert.deepEqual(after.audit_log.slice(0, before.audit_log.length), before.audit_log);
   const newAudits = after.audit_log.slice(before.audit_log.length);
   assert.equal(newAudits.length, governed ? 2 : 1);
-  const domain = newAudits[0];
+  const domain = newAudits.find(row => row.action !== 'agent_change.confirm');
   assert.equal(domain.actor, atomicActor);
   assert.equal(domain.entity, c.area === 'grant' ? 'grant_application' : c.area);
   assert.equal(domain.action, domain.entity + '.' + c.operation);
@@ -607,11 +610,11 @@ function atomicAssertSuccess(f, c, before, governed) {
     assert.equal(row.confirmed_by, atomicActor);
     for (const key of ['area', 'operation', 'target_id', 'payload_json', 'before_json', 'after_json', 'requested_by', 'created_at', 'error']) assert.equal(row[key], old[key]);
     assert.notEqual(row.updated_at, oldTime);
-    assert.equal(newAudits[1].action, 'agent_change.confirm');
-    assert.equal(newAudits[1].actor, atomicActor);
-    assert.equal(newAudits[1].entity_id, f.changeId);
-    assert.deepEqual(JSON.parse(newAudits[1].before_json), { status: 'draft' });
-    assert.deepEqual(JSON.parse(newAudits[1].after_json), { status: 'published', confirmed_by: atomicActor });
+    const confirmationAudit = newAudits.find(row => row.action === 'agent_change.confirm');
+    assert.equal(confirmationAudit.actor, atomicActor);
+    assert.equal(confirmationAudit.entity_id, f.changeId);
+    assert.deepEqual(JSON.parse(confirmationAudit.before_json), { status: 'draft' });
+    assert.deepEqual(JSON.parse(confirmationAudit.after_json), { status: 'published', confirmed_by: atomicActor });
   } else assert.deepEqual(after.agent_change, before.agent_change);
   if (c.area === 'caregiver') {
     const row = after.caregiver.find(r => r.id === c.id);

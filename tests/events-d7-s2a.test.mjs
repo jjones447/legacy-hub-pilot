@@ -11,7 +11,8 @@ import { DatabaseSync } from 'node:sqlite';
 import * as eventsDomain from '../functions/_lib/domain/events.js';
 import { onRequestGet as getStaff, onRequestPost as postStaff, onRequestPatch as patchStaff } from '../functions/api/staff/[[path]].js';
 import { onRequestGet as getEvents } from '../functions/api/events.js';
-import { onRequestGet as getAgent, onRequestPost as postAgent } from '../functions/api/agent/[[path]].js';
+import { onRequestGet as getAgent } from '../functions/api/agent/[[path]].js';
+import { postAgentFixture as postAgent } from './helpers/confirmed-agent.mjs';
 import { mapRequestToWorkflowChange } from '../functions/api/agent/_mapper.mjs';
 
 const SCHEMA_1 = readFileSync(new URL('../schema/0001_init.sql', import.meta.url), 'utf8');
@@ -705,7 +706,7 @@ test('Agent pipeline: drift refusal if event is modified before confirm', async 
   assert.equal(confirmRes.status, 409);
   const confirmData = await confirmRes.json();
   assert.equal(confirmData.ok, false);
-  assert.match(confirmData.error, /record changed underneath/i);
+  assert.match(confirmData.error, /preview version|record changed underneath/i);
 });
 
 // --------------------------------------------------------------------------
