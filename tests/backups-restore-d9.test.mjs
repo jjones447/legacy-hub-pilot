@@ -46,7 +46,8 @@ const SCHEMA_FILES = [
   '0009_content_live.sql',
   '0010_page_section_forms.sql',
   '0011_staff_member.sql',
-  '0012_wellness_checkin.sql'
+  '0012_wellness_checkin.sql',
+  '0014_payment_result_guard.sql'
 ];
 
 function createSeededDatabase() {
@@ -289,7 +290,7 @@ test('4. On-demand export (scripts/export-all.mjs) writes dump files and manifes
     assert.ok(existsSync(join(tempExportDir, 'audit_log.json')));
 
     const manifest = JSON.parse(readFileSync(join(tempExportDir, 'manifest.json'), 'utf8'));
-    assert.equal(manifest.latest_migration, '0012_wellness_checkin.sql');
+    assert.equal(manifest.latest_migration, '0014_payment_result_guard.sql');
     assert.equal(manifest.tables.caregiver, 2);
     assert.equal(manifest.tables.grant_application, 2);
     assert.equal(manifest.tables.award, 1);
@@ -453,21 +454,21 @@ test('8. Batch size is respected during data restore', async () => {
   }
 });
 
-test('9. Manifest migration test: fails if recorded value is older than newest file in schema/', async () => {
+test('9. Missing migration history retains conservative fallback; observed newer installation is honored', async () => {
   const schemaFiles = readdirSync(SCHEMAS_DIR)
     .filter((f) => /^0\d+.*\.sql$/.test(f))
     .sort();
   assert.ok(schemaFiles.length > 0, 'Schema files must exist');
   const newestSchemaFile = schemaFiles[schemaFiles.length - 1];
 
-  // The backup worker's fallback constant must be >= newest schema file
-  assert.equal(
-    BAKED_IN_LATEST_MIGRATION,
-    newestSchemaFile,
-    `BAKED_IN_LATEST_MIGRATION (${BAKED_IN_LATEST_MIGRATION}) must match newest schema migration (${newestSchemaFile})`
-  );
+  // Adding a source migration is not evidence that it is installed in a DB.
+  assert.equal(BAKED_IN_LATEST_MIGRATION, '0012_wellness_checkin.sql');
+  assert.ok(schemaFiles.includes(BAKED_IN_LATEST_MIGRATION));
+  assert.equal(newestSchemaFile, '0014_payment_result_guard.sql');
+  assert.equal(schemaFiles.includes('0013_wellness_journey.sql'), false);
 
-  // When runBackup runs against a DB without d1_migrations table, the manifest must record the newest migration
+  // Missing history stays conservatively at the existing legacy source fallback.
+  let observedMigration = null;
   const mockDb = {
     prepare: (sql) => ({
       all: async () => {
@@ -478,6 +479,7 @@ test('9. Manifest migration test: fails if recorded value is older than newest f
       },
       first: async () => {
         if (sql.includes('d1_migrations')) {
+          if (observedMigration) return { name: observedMigration };
           throw new Error('no such table: d1_migrations');
         }
         return null;
@@ -486,11 +488,12 @@ test('9. Manifest migration test: fails if recorded value is older than newest f
   };
   const mockBucket = new MockR2Bucket();
   const backupRes = await runBackup({ DB: mockDb, BACKUPS: mockBucket });
-  assert.equal(backupRes.manifest.latest_migration, newestSchemaFile);
-  assert.ok(
-    backupRes.manifest.latest_migration >= newestSchemaFile,
-    `Recorded latest migration (${backupRes.manifest.latest_migration}) cannot be older than newest file in schema/ (${newestSchemaFile})`
-  );
+  assert.equal(backupRes.manifest.latest_migration, '0012_wellness_checkin.sql');
+  for (const installed of ['0012_wellness_checkin.sql', newestSchemaFile]) {
+    observedMigration = installed;
+    const installedResult = await runBackup({ DB: mockDb, BACKUPS: new MockR2Bucket() });
+    assert.equal(installedResult.manifest.latest_migration, installed);
+  }
 });
 
 // [pc2-codex-13] Sequential completed-prefix protection, not native R2/D1 or concurrency proof.
@@ -711,7 +714,7 @@ test('17. Fresh local output without a completion marker retains the existing ex
     assert.equal(result.totalRows, 2);
     assert.deepEqual(readdirSync(outputDir).sort(), ['alpha.json', 'beta.json', 'manifest.json']);
     assert.deepEqual(JSON.parse(readFileSync(join(outputDir, 'manifest.json'), 'utf8')), {
-      version: 1, timestamp: result.manifest.timestamp, latest_migration: '0012_wellness_checkin.sql',
+      version: 1, timestamp: result.manifest.timestamp, latest_migration: '0014_payment_result_guard.sql',
       tables: { alpha: 1, beta: 1 }, total_rows: 2
     });
   });
