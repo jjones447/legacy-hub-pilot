@@ -3,22 +3,38 @@ import { readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { UNIT_TEST_FILES } from './unit-test-files.mjs';
 
 export const RUNTIME_TEST = 'edge-rewrite-roundtrip-workerd.test.mjs';
 export const ROOT = fileURLToPath(new URL('..', import.meta.url));
 
-export function testPlan(mode, names) {
+export function testPlan(mode, names, approvedUnits = UNIT_TEST_FILES) {
   if (!['unit', 'runtime'].includes(mode)) throw new Error('Choose unit or runtime explicitly.');
   if (!names.includes(RUNTIME_TEST)) throw new Error('Required runtime test is missing.');
   const tests = names.filter((name) => name.endsWith('.test.mjs')).sort();
+  if (!Array.isArray(approvedUnits) || new Set(approvedUnits).size !== approvedUnits.length) {
+    throw new Error('Invalid unit allowlist: expected unique filenames.');
+  }
+  for (const name of approvedUnits) {
+    if (typeof name !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]*\.test\.mjs$/.test(name)
+      || /(?:workerd|runtime)/i.test(name)) {
+      throw new Error('Invalid unit allowlist filename.');
+    }
+  }
   for (const name of tests) {
     if (name !== RUNTIME_TEST && /(?:workerd|runtime)/i.test(name)) {
       throw new Error(`Unclassified runtime test: ${name}`);
     }
     if (/[\\/]/.test(name)) throw new Error(`Expected a top-level test filename: ${name}`);
+    if (name !== RUNTIME_TEST && !approvedUnits.includes(name)) {
+      throw new Error(`Unclassified test: ${name}; review the explicit unit allowlist before execution.`);
+    }
   }
   const selected = mode === 'runtime' ? [RUNTIME_TEST] : tests.filter((name) => name !== RUNTIME_TEST);
   if (!selected.length) throw new Error('Refusing an empty test selection.');
+  for (const name of approvedUnits) {
+    if (!tests.includes(name)) throw new Error(`Allowlisted unit test is missing: ${name}`);
+  }
   return {
     files: selected.map((name) => `tests/${name}`),
     message: mode === 'unit'
@@ -27,8 +43,8 @@ export function testPlan(mode, names) {
   };
 }
 
-export function runTests(mode, { names, launch = spawnSync, report = console.log, env = process.env } = {}) {
-  const plan = testPlan(mode, names ?? readdirSync(resolve(ROOT, 'tests')));
+export function runTests(mode, { names, approvedUnits = UNIT_TEST_FILES, launch = spawnSync, report = console.log, env = process.env } = {}) {
+  const plan = testPlan(mode, names ?? readdirSync(resolve(ROOT, 'tests')), approvedUnits);
   report(plan.message);
   const child = launch(process.execPath, ['--test', ...plan.files], {
     cwd: ROOT,
