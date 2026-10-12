@@ -1,7 +1,8 @@
 // Slice SEC (console) — CF Access JWT verification unit tests.
 import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
-import { verifyAccessJwt } from '../functions/_middleware.js';
+import { verifyAccessJwt, onRequest } from '../functions/_middleware.js';
+import { confirmationActor } from '../functions/_lib/agent-confirmation.mjs';
 
 const enc = new TextEncoder();
 const TEAM = 'legacy.cloudflareaccess.com';
@@ -18,9 +19,9 @@ const b64urlJson = (o) => b64url(enc.encode(JSON.stringify(o)));
 
 let keyPair, jwk, fetchImpl;
 
-async function makeJwt({ kid = 'k1', aud = AUD, iss = ISS, exp = Math.floor(Date.now() / 1000) + 3600, email = 'jane@legacy.org', signKey } = {}) {
+async function makeJwt({ kid = 'k1', aud = AUD, iss = ISS, exp = Math.floor(Date.now() / 1000) + 3600, email = 'jane@legacy.org', common_name, signKey } = {}) {
   const header = { alg: 'RS256', kid, typ: 'JWT' };
-  const payload = { aud, iss, exp, email };
+  const payload = { aud, iss, exp, email, ...(common_name ? { common_name } : {}) };
   const input = `${b64urlJson(header)}.${b64urlJson(payload)}`;
   const sig = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', (signKey || keyPair).privateKey, enc.encode(input));
   return `${input}.${b64url(new Uint8Array(sig))}`;
@@ -86,3 +87,32 @@ test('garbage / missing token is rejected', async () => {
   assert.equal(await verifyAccessJwt('not.a.jwt', opts()), null);
   assert.equal(await verifyAccessJwt(null, opts()), null);
 });
+
+for (const scenario of ['active-human', 'service', 'dev', 'missing-staff', 'staff-error', 'deactivated', 'mismatched-staff']) {
+  test(`middleware ${scenario} establishes human proof only from verified active staff`, async () => {
+    const previousFetch = globalThis.fetch;
+    const previousError = console.error;
+    globalThis.fetch = fetchImpl; console.error = () => {};
+    try {
+      const member = { email: scenario === 'mismatched-staff' ? 'other@example.invalid' : 'jane@legacy.org', display_name: 'Synthetic', role: 'staff',
+        status: scenario === 'deactivated' ? 'deactivated' : 'active', last_seen_at: new Date().toISOString() };
+      const db = { prepare() { return { bind() { return { async first() {
+        if (scenario === 'staff-error') throw new Error('synthetic unavailable staff');
+        return scenario === 'missing-staff' ? null : member;
+      }, async run() { return { success: true }; } }; } }; } };
+      const token = await makeJwt(scenario === 'service' ? { email: null, common_name: 'synthetic-service' } : {});
+      const context = {
+        request: new Request('https://synthetic.invalid/api/agent/draft', { headers: {
+          'Cf-Access-Jwt-Assertion': token, 'x-dev-actor': 'forged@example.invalid',
+        } }),
+        env: { CF_ACCESS_TEAM_DOMAIN: TEAM, CF_ACCESS_AUD: AUD, LEGACY_DB: db,
+          ...(scenario === 'dev' ? { ALLOW_DEV_CONSOLE: '1' } : {}) },
+        data: { agentStaffActor: 'forged@example.invalid' },
+        next: async () => new Response('{"ok":true}', { headers: { 'content-type': 'application/json' } }),
+      };
+      const response = await onRequest(context);
+      assert.equal(response.status, scenario === 'deactivated' ? 403 : 200);
+      assert.equal(confirmationActor(context.data), scenario === 'active-human' ? 'jane@legacy.org' : null);
+    } finally { globalThis.fetch = previousFetch; console.error = previousError; }
+  });
+}

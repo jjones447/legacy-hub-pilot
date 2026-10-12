@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mapRequestToWorkflowChange } from '../functions/api/agent/_mapper.mjs';
 import { validate } from '../functions/_lib/domain/events.js';
-import { onRequestPost } from '../functions/api/agent/[[path]].js';
+import { postAgentFixture as onRequestPost } from './helpers/confirmed-agent.mjs';
 
 const event = { id: 'ev_synthetic', title: 'Before', type: 'wellness',
   starts_at: '2026-10-15T18:00:00Z', ends_at: null, location: null,
@@ -198,9 +198,9 @@ test('Event draft only writes durable draft; confirmation applies selected recor
   assert.equal(db.state.event.title, 'After');
   assert.equal(db.state.change.status, 'published');
   assert.equal(db.state.audits.length, 2);
-  assert.ok(db.state.audits.every(a => a.values[0] === 'synthetic@example.invalid'));
+  assert.ok(db.state.audits.every(a => (a.sql.includes('CASE WHEN') ? a.values.at(-6) : a.values[0]) === 'synthetic@example.invalid'));
   assert.ok(db.state.audits.some(a => a.sql.includes("'event.update'")));
-  assert.ok(db.state.audits.some(a => a.sql.includes("'agent_change.confirm'")));
+  assert.ok(db.state.audits.some(a => a.values.includes('agent_change.confirm')));
 });
 test('Event discard leaves domain unchanged; drift refuses confirmation before any apply', async () => {
   const db = workflowDb();

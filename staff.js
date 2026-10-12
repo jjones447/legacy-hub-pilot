@@ -1790,25 +1790,44 @@ function refreshStaffChatTargets() {
   if (chatContentItems(area).some(item => item.id === previous)) select.value = previous;
 }
 
+let agentConfirmationHold = false;
+try { agentConfirmationHold = window.sessionStorage?.getItem('agent-confirmation-hold') === '1'; }
+catch { agentConfirmationHold = true; }
+function holdAgentConfirmation(row) {
+  agentConfirmationHold = true;
+  try { window.sessionStorage?.setItem('agent-confirmation-hold', '1'); } catch { /* In-memory HOLD remains. */ }
+  if (row) {
+    row.dataset ||= {};
+    row.dataset.confirmationState = 'hold';
+    row.innerHTML = '<span class="chat-confirm-discarded">Confirmation on hold. Do not retry, discard or replace the draft until an operator checks the website result.</span>';
+  }
+}
 async function confirmAgentChange(target) {
   const changeId = target.getAttribute('data-change-id');
   const draftId = target.getAttribute('data-draft-id');
   if (!changeId && !draftId) return;
+  const row = target.closest('.confirm-row');
+  if (agentConfirmationHold || row?.dataset?.confirmationState) return;
+  const previewVersion = target.getAttribute('data-preview-version');
+  if (!previewVersion) { holdAgentConfirmation(row); return; }
+  if (row) {
+    row.dataset ||= {};
+    row.dataset.confirmationState = 'confirming';
+    row.querySelectorAll?.('button').forEach(button => { button.disabled = true; });
+  }
   try {
     const res = await fetch(draftId ? '/api/agent/confirm' : '/api/agent/change/confirm', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(draftId ? { draft_id: draftId } : { change_id: changeId })
+      body: JSON.stringify({ ...(draftId ? { draft_id: draftId } : { change_id: changeId }), preview_version: previewVersion })
     });
     const data = await res.json();
-    const row = target.closest('.confirm-row');
     if (!res.ok || !data.ok) {
-      if (row) {
-        row.innerHTML = `<span class="chat-confirm-discarded">Failed: ${escapeHtml(data.error || 'Could not confirm')}</span>`;
-      }
+      holdAgentConfirmation(row);
       return;
     }
     if (row) {
+      row.dataset.confirmationState = 'published';
       row.innerHTML = '<span class="chat-confirm-published">✓ Published — logged to the audit trail.</span>';
     }
     await loadStaffConsole();
@@ -1817,14 +1836,12 @@ async function confirmAgentChange(target) {
       await viewCaregiver(panel.dataset.caregiverId);
     }
   } catch (e) {
-    const row = target.closest('.confirm-row');
-    if (row) {
-      row.innerHTML = `<span class="chat-confirm-discarded">Error: ${escapeHtml(e.message)}</span>`;
-    }
+    holdAgentConfirmation(row);
   }
 }
 
 async function discardAgentChange(target) {
+  if (agentConfirmationHold || target.closest('.confirm-row')?.dataset?.confirmationState) return;
   const changeId = target.getAttribute('data-change-id');
   const draftId = target.getAttribute('data-draft-id');
   if (!changeId && !draftId) return;
@@ -1852,6 +1869,7 @@ async function discardAgentChange(target) {
 }
 
 window.agentSend = async function () {
+  if (agentConfirmationHold) return;
   const input = document.getElementById('chatInput');
   const body = document.getElementById('chatBody');
   const text = (input?.value || '').trim();
@@ -1941,10 +1959,10 @@ window.agentSend = async function () {
       return;
     }
 
-    const before = isContent ? (typeof contentItem.data === 'string' ? JSON.parse(contentItem.data) : contentItem.data) : data.preview?.before;
+    const before = isContent ? data.confirmation_preview?.before : data.preview?.before;
     const after = isContent ? data.draft?.data : data.preview?.after;
     const isPreviewObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
-    if (!isPreviewObject(before) || !isPreviewObject(after)) {
+    if (!isPreviewObject(before) || !isPreviewObject(after) || !/^[a-f0-9]{64}$/.test(data.preview_version || '')) {
       // The server may have saved a draft already; do not turn a missing preview into {} or replay it.
       botDiv.textContent = 'Preview unavailable — nothing has been confirmed. A draft may already exist. Do not retry; have an administrator inspect the saved draft.';
       body.appendChild(botDiv);
@@ -1954,13 +1972,13 @@ window.agentSend = async function () {
     const beforeJson = escapeHtml(JSON.stringify(before || {}, null, 2));
     const afterJson = escapeHtml(JSON.stringify(after || {}, null, 2));
     const areaLabel = { content: '📚 Content Update', form: '📝 Form Copy Update', grant: '🎁 Grant Transition', caregiver: '👤 Caregiver Update', event: '📅 Event Update' }[selectedArea];
-    const idAttribute = isContent ? `data-draft-id="${escapeHtml(data.draft_id)}"` : `data-change-id="${escapeHtml(data.change_id)}"`;
+    const idAttribute = (isContent ? `data-draft-id="${escapeHtml(data.draft_id)}"` : `data-change-id="${escapeHtml(data.change_id)}"`) + ` data-preview-version="${escapeHtml(data.preview_version)}"`;
 
     botDiv.innerHTML = `
       Here's what will change:
       <div class="preview">
         <div class="p-title">${areaLabel} (${escapeHtml(contentItem?.id || data.change?.operation || 'change')})</div>
-        ${isContent ? '<p class="small">Before: last loaded published copy. After: server draft. Review before confirming.</p>' : ''}
+        ${isContent ? '<p class="small">Before and after: website preview. Review before confirming.</p>' : ''}
         <div class="diff-container">
           <div class="diff-box">
             <div class="diff-header">Before</div>

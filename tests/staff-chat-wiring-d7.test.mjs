@@ -17,7 +17,7 @@ const items = [
   { id: 'ps_form.draft', type_id: 'page_section', status: 'draft', data: '{}' },
 ];
 
-function harness({ area = 'content', target = 'resource_one', event = 'event_one', reply, httpOK = true } = {}) {
+function harness({ area = 'content', target = 'resource_one', event = 'event_one', reply, httpOK = true, failFetch = false, storage = new Map() } = {}) {
   const calls = [], messages = [], nodes = {};
   const create = () => ({ dataset: {}, children: [], innerHTML: '', value: '', options: [],
     appendChild(child) { this.children.push(child); if (child.id) nodes[child.id] = child; if (child.value) this.options.push(child); },
@@ -28,11 +28,11 @@ function harness({ area = 'content', target = 'resource_one', event = 'event_one
   nodes.chatAreaSelect = { value: area, options: ['content', 'grant', 'caregiver', 'event'].map(value => ({ value })),
     parentElement: create(), appendChild(child) { this.options.push(child); }, addEventListener(name, fn) { this[name] = fn; } };
   nodes.chatContentTarget = { value: target, dataset: { area } };
-  const context = vm.createContext({ window: {}, document: { getElementById: id => nodes[id], createElement: create, querySelector: () => null },
+  const context = vm.createContext({ window: { sessionStorage: { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value) } }, document: { getElementById: id => nodes[id], createElement: create, querySelector: () => null },
     escapeHtml: value => String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('"', '&quot;'),
     currentEventId: event, currentCaregiverId: 'caregiver_one', currentGrantId: 7,
     loadStaffConsole: async () => {}, viewCaregiver: async () => {}, setTimeout: callback => callback(),
-    fetch: async (url, options) => { calls.push({ url, body: JSON.parse(options.body) }); return { ok: httpOK, json: async () => reply || { ok: true, draft_id: 'draft_one', draft: { data: { title: '<After>' } }, change_id: 'change_one', preview: { before: {}, after: {} } } }; },
+    fetch: async (url, options) => { calls.push({ url, body: JSON.parse(options.body) }); if (failFetch) throw new Error('synthetic timeout'); return { ok: httpOK, json: async () => reply || { ok: true, draft_id: 'draft_one', draft: { data: { title: '<After>' } }, change_id: 'change_one', preview: { before: {}, after: {} }, confirmation_preview: { before: { title: 'Before' }, after: { title: '<After>' } }, preview_version: 'a'.repeat(64) } }; },
   });
   vm.runInContext(`let siteContentItems = ${JSON.stringify(items)};\n${code}`, context);
   return { context, calls, nodes, messages, send: () => context.window.agentSend(), html: () => messages.map(m => m.innerHTML || m.textContent || '').join('') };
@@ -137,13 +137,36 @@ for (const kind of ['draft', 'change']) {
   for (const action of ['confirm', 'discard']) {
     test(`${kind} ${action} uses the corresponding durable ID and endpoint`, async () => {
       const h = harness(), row = {};
-      const button = { getAttribute: name => name === `data-${kind}-id` ? 'saved_id' : null, closest: () => row };
+      const button = { getAttribute: name => name === `data-${kind}-id` ? 'saved_id' : name === 'data-preview-version' ? 'a'.repeat(64) : null, closest: () => row };
       await h.context[action === 'confirm' ? 'confirmAgentChange' : 'discardAgentChange'](button);
-      assert.deepEqual(h.calls, [{ url: `/api/agent/${kind === 'change' ? 'change/' : ''}${action}`, body: { [`${kind}_id`]: 'saved_id' } }]);
+      assert.deepEqual(h.calls, [{ url: `/api/agent/${kind === 'change' ? 'change/' : ''}${action}`, body: { [`${kind}_id`]: 'saved_id', ...(action === 'confirm' ? { preview_version: 'a'.repeat(64) } : {}) } }]);
       assert.match(row.innerHTML, action === 'confirm' ? /Published/ : /Draft discarded/);
     });
   }
 }
+
+test('uncertain confirmation blocks repeat, discard, replacement and tab reload', async () => {
+  const storage = new Map();
+  const h = harness({ failFetch: true, storage });
+  const row = {};
+  const button = { getAttribute: key => key === 'data-draft-id' ? 'saved_id' : key === 'data-preview-version' ? 'a'.repeat(64) : null, closest: () => row };
+  await h.context.confirmAgentChange(button);
+  assert.match(row.innerHTML, /Confirmation on hold/);
+  await h.context.confirmAgentChange(button);
+  await h.context.discardAgentChange(button);
+  await h.send();
+  assert.equal(h.calls.length, 1);
+  const resumed = harness({ storage });
+  await resumed.send();
+  assert.equal(resumed.calls.length, 0);
+});
+
+test('missing server preview version cannot offer a confirming control', async () => {
+  const h = harness({ reply: { ok: true, draft_id: 'saved_id', draft: { data: {} }, confirmation_preview: { before: {}, after: {} } } });
+  await h.send();
+  assert.doesNotMatch(h.html(), /Confirm &amp; publish/);
+  assert.match(h.html(), /Do not retry/);
+});
 for (const kind of ['draft', 'change']) {
   test(`failed ${kind} discard is not presented as successful`, async () => {
     const h = harness({ httpOK: false, reply: { ok: false, error: 'Conflict' } }), row = {};

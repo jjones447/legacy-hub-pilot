@@ -8,6 +8,7 @@ import { getActor } from '../../_lib/actor.js';
 import { internalError } from '../../_lib/errors.js';
 import { _resetContentCache, findDisallowedHtml } from '../../_content.mjs';
 import { onRequestPost as postTranscribe } from './transcribe.js';
+import { confirmationActor, draftOwner, ownsDraft, confirmationBinding, confirmationAudit, matchesPersistedPreview } from '../../_lib/agent-confirmation.mjs';
 
 export async function onRequestGet({ request, env }) {
   try {
@@ -66,7 +67,7 @@ export async function onRequestGet({ request, env }) {
   }
 }
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env, data }) {
   try {
     const url = new URL(request.url);
     const pathSegments = url.pathname.split('/').filter(Boolean); // ['api', 'agent', ...]
@@ -182,7 +183,7 @@ export async function onRequestPost({ request, env }) {
         }
 
         const change_id = 'ac_' + crypto.randomUUID();
-        const actor = getActor(request, env);
+        const actor = draftOwner(confirmationActor(data)) || getActor(request, env);
         const resolvedTargetId = (val.projected && val.projected.id) ? val.projected.id : body.target_id.toString();
 
         await env.LEGACY_DB
@@ -202,9 +203,12 @@ export async function onRequestPost({ request, env }) {
           )
           .run();
 
+        const savedChange = await env.LEGACY_DB.prepare('SELECT * FROM agent_change WHERE id = ?').bind(change_id).first();
+        const binding = await confirmationBinding(env.LEGACY_DB, 'workflow', savedChange, url.origin, val.current || currentRecord || null);
         return json({
           ok: true,
           change_id,
+          preview_version: ownsDraft(actor, confirmationActor(data)) ? binding.version : null,
           change: {
             id: change_id,
             area: body.area,
@@ -227,7 +231,8 @@ export async function onRequestPost({ request, env }) {
           return json({ ok: false, error: 'change_id is required' }, 400);
         }
 
-        const actor = getActor(request, env);
+        const actor = confirmationActor(data);
+        if (!actor || Object.hasOwn(body, 'thread_id') || Object.hasOwn(body, 'conversation_id')) return json({ ok: false, error: 'human confirmation context not qualified' }, 403);
 
         const change = await env.LEGACY_DB
           .prepare('SELECT * FROM agent_change WHERE id = ?')
@@ -240,6 +245,11 @@ export async function onRequestPost({ request, env }) {
 
         if (change.status !== 'draft') {
           return json({ ok: false, error: `cannot confirm change in status ${change.status}` }, 409);
+        }
+        if (!ownsDraft(change.requested_by, actor)) return json({ ok: false, error: 'only the verified initiating staff member can confirm' }, 403);
+        const binding = await confirmationBinding(env.LEGACY_DB, 'workflow', change, url.origin);
+        if (typeof body.preview_version !== 'string' || body.preview_version !== binding.version) {
+          return json({ ok: false, error: 'preview version missing or changed; confirmation refused' }, 409);
         }
 
         const payload = JSON.parse(change.payload_json);
@@ -270,32 +280,18 @@ export async function onRequestPost({ request, env }) {
           return json({ ok: false, error: `re-validation failed: ${reval?.error || 'state changed'}` }, 409);
         }
 
-        // Verify record has not changed underneath since draft was created
-        if (change.before_json && reval.current) {
-          try {
-            const expectedBefore = JSON.parse(change.before_json);
-            for (const [k, v] of Object.entries(expectedBefore)) {
-              if (k in reval.current && JSON.stringify(reval.current[k]) !== JSON.stringify(v)) {
-                return json({ ok: false, error: `record changed underneath: ${k} was modified since draft` }, 409);
-              }
-            }
-          } catch (e) {
-            // fall through
-          }
-        }
+        // Compare the entire domain preview, including secondary state represented
+        // by the existing contract. Malformed metadata never falls through.
+        if (!matchesPersistedPreview(change, reval)) return json({ ok: false, error: 'record changed underneath: server preview no longer matches' }, 409);
 
         // Trusted server-side statements join the domain mutations and original audit.
         const additionalStatements = [
           env.LEGACY_DB
             .prepare("UPDATE agent_change SET status = 'published', confirmed_by = ?, updated_at = datetime('now') WHERE id = ?")
             .bind(actor, change.id),
-          env.LEGACY_DB
-            .prepare(`
-              INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
-              VALUES (?, 'agent_change.confirm', 'agent_change', ?, ?, ?)
-            `)
-            .bind(actor, change.id, JSON.stringify({ status: 'draft' }), JSON.stringify({ status: 'published', confirmed_by: actor }))
         ];
+        const preconditions = [confirmationAudit(env.LEGACY_DB, binding, actor, 'agent_change.confirm', 'agent_change', change.id,
+          { status: 'draft' }, { status: 'published', confirmed_by: actor })];
         // Domain apply commits its mutation(s), original audit and these statements together.
         let applyRes;
         if (change.area === 'grant') {
@@ -303,26 +299,24 @@ export async function onRequestPost({ request, env }) {
             id: change.target_id,
             operation: change.operation,
             payload
-          }, actor, additionalStatements);
+          }, actor, additionalStatements, preconditions);
         } else if (change.area === 'caregiver') {
           applyRes = await caregiversDomain.apply(env.LEGACY_DB, {
             id: change.target_id,
             operation: change.operation,
             payload
-          }, actor, additionalStatements);
+          }, actor, additionalStatements, preconditions);
         } else if (change.area === 'event') {
           applyRes = await eventsDomain.apply(env.LEGACY_DB, {
             id: change.target_id,
             operation: change.operation,
             payload
-          }, actor, additionalStatements);
+          }, actor, additionalStatements, preconditions);
         }
 
         if (!applyRes || !applyRes.ok) {
-          await env.LEGACY_DB
-            .prepare("UPDATE agent_change SET status = 'failed', error = ?, updated_at = datetime('now') WHERE id = ?")
-            .bind(applyRes?.error || 'apply failed', change.id)
-            .run();
+          // A changed target can refuse in domain re-validation. Do not mutate
+          // the draft merely to label an unconfirmed operation as failed.
           return json({ ok: false, error: applyRes?.error || 'apply failed' }, applyRes?.status || 500);
         }
 
@@ -476,9 +470,10 @@ export async function onRequestPost({ request, env }) {
       }
 
       let currentData = null;
+      let currentItem = null;
       if (body.target_id) {
         const item = await env.LEGACY_DB
-          .prepare(`SELECT data FROM content_item WHERE id = ? AND type_id = ?`)
+          .prepare(`SELECT * FROM content_item WHERE id = ? AND type_id = ?`)
           .bind(body.target_id, body.type_id)
           .first();
 
@@ -486,6 +481,7 @@ export async function onRequestPost({ request, env }) {
           return json({ ok: false, error: `content item ${body.target_id} not found` }, 404);
         }
         currentData = JSON.parse(item.data);
+        currentItem = item;
       }
 
       const backend = env.AGENT_MAPPER_BACKEND || null;
@@ -540,14 +536,18 @@ export async function onRequestPost({ request, env }) {
       await env.LEGACY_DB
         .prepare(`
           INSERT INTO content_item (id, type_id, data, status, draft_of, updated_by, updated_at)
-          VALUES (?, ?, ?, 'draft', ?, 'agent', datetime('now'))
+          VALUES (?, ?, ?, 'draft', ?, ?, datetime('now'))
         `)
-        .bind(draft_id, body.type_id, dataStr, draft_of)
+        .bind(draft_id, body.type_id, dataStr, draft_of, draftOwner(confirmationActor(data)) || 'agent')
         .run();
 
+      const savedDraft = await env.LEGACY_DB.prepare('SELECT * FROM content_item WHERE id = ?').bind(draft_id).first();
+      const binding = await confirmationBinding(env.LEGACY_DB, 'content', savedDraft, url.origin, currentItem);
       return json({
         ok: true,
         draft_id,
+        preview_version: confirmationActor(data) ? binding.version : null,
+        confirmation_preview: { before: currentData || {}, after: draftData },
         draft: {
           id: draft_id,
           type_id: body.type_id,
@@ -564,12 +564,13 @@ export async function onRequestPost({ request, env }) {
         return json({ ok: false, error: 'draft_id is required' }, 400);
       }
       // SEC-2: actor comes from the verified identity, never the request body.
-      const actor = getActor(request, env);
+      const actor = confirmationActor(data);
+      if (!actor || Object.hasOwn(body, 'thread_id') || Object.hasOwn(body, 'conversation_id')) return json({ ok: false, error: 'human confirmation context not qualified' }, 403);
 
       let item;
       try {
         item = await env.LEGACY_DB
-          .prepare(`SELECT id, type_id, status, data, draft_of FROM content_item WHERE id = ?`)
+          .prepare(`SELECT * FROM content_item WHERE id = ?`)
           .bind(body.draft_id)
           .first();
       } catch (err) {
@@ -586,6 +587,11 @@ export async function onRequestPost({ request, env }) {
       if (item.status !== 'draft') {
         return json({ ok: false, error: `cannot confirm from status ${item.status}` }, 409);
       }
+      if (!ownsDraft(item.updated_by, actor)) return json({ ok: false, error: 'only the verified initiating staff member can confirm' }, 403);
+      const binding = await confirmationBinding(env.LEGACY_DB, 'content', item, url.origin);
+      if (typeof body.preview_version !== 'string' || body.preview_version !== binding.version) {
+        return json({ ok: false, error: 'preview version missing or changed; confirmation refused' }, 409);
+      }
 
       if (item.draft_of) {
         const target = await env.LEGACY_DB
@@ -599,37 +605,21 @@ export async function onRequestPost({ request, env }) {
 
         // Include draft archival: a failed archive or audit must leave the target unchanged.
         await env.LEGACY_DB.batch([
+          confirmationAudit(env.LEGACY_DB, binding, actor, 'content_item.publish', 'content_item', item.draft_of,
+            { status: target.status, data: JSON.parse(target.data) }, { status: 'published', data: JSON.parse(item.data) }),
           env.LEGACY_DB.prepare(`UPDATE content_item SET data = ?, status = 'published', updated_by = ?, updated_at = datetime('now') WHERE id = ?`)
             .bind(item.data, 'staff_' + actor, item.draft_of),
           env.LEGACY_DB.prepare(`UPDATE content_item SET status = 'archived', updated_at = datetime('now') WHERE id = ?`)
             .bind(body.draft_id),
-          env.LEGACY_DB.prepare(`
-            INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
-            VALUES (?, 'content_item.publish', 'content_item', ?, ?, ?)
-          `)
-          .bind(
-            actor,
-            item.draft_of,
-            JSON.stringify({ status: target.status, data: JSON.parse(target.data) }),
-            JSON.stringify({ status: 'published', data: JSON.parse(item.data) })
-          ),
         ]);
 
         return json({ ok: true });
       } else {
         await env.LEGACY_DB.batch([
+          confirmationAudit(env.LEGACY_DB, binding, actor, 'content_item.publish', 'content_item', body.draft_id,
+            { status: 'draft', data: JSON.parse(item.data) }, { status: 'published', data: JSON.parse(item.data) }),
           env.LEGACY_DB.prepare(`UPDATE content_item SET status = 'published', updated_by = ?, updated_at = datetime('now') WHERE id = ?`)
             .bind('staff_' + actor, body.draft_id),
-          env.LEGACY_DB.prepare(`
-            INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
-            VALUES (?, 'content_item.publish', 'content_item', ?, ?, ?)
-          `)
-          .bind(
-            actor,
-            body.draft_id,
-            JSON.stringify({ status: 'draft', data: JSON.parse(item.data) }),
-            JSON.stringify({ status: 'published', data: JSON.parse(item.data) })
-          ),
         ]);
 
         return json({ ok: true });

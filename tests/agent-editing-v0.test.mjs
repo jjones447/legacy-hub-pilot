@@ -3,7 +3,8 @@ import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
-import { onRequestGet as getAgent, onRequestPost as postAgent } from '../functions/api/agent/[[path]].js';
+import { onRequestGet as getAgent } from '../functions/api/agent/[[path]].js';
+import { postAgentFixture as postAgent } from './helpers/confirmed-agent.mjs';
 import { getPublishedSections, _resetContentCache } from '../functions/_content.mjs';
 
 const SCHEMA_1 = readFileSync(new URL('../schema/0001_init.sql', import.meta.url), 'utf8');
@@ -158,7 +159,7 @@ test('POST /api/agent/confirm requires staff identity and publishes + audits', a
   const draftId = 'ci_test_draft';
   raw.prepare(`
     INSERT INTO content_item (id, type_id, data, status, updated_by)
-    VALUES ('ci_test_draft', 'resource', '{"title":"Helpline","description":"988","category":"crisis"}', 'draft', 'agent')
+    VALUES ('ci_test_draft', 'resource', '{"title":"Helpline","description":"988","category":"crisis"}', 'draft', 'access_staff:staff@example.org')
   `).run();
 
   // Missing draft_id -> 400 (staff_id is no longer required — actor comes from identity)
@@ -417,7 +418,7 @@ function atomicContentFixture(area, kind, fault = null) {
     VALUES (?, 'page_section', ?, ?, ?, ?, '2000-01-01 00:00:00')
   `).run(id, JSON.stringify(data), status, draftOf, by);
   insert(target, beforeData, 'published', null, 'staff_original');
-  if (kind !== 'direct') insert(draft, afterData, 'draft', kind === 'new' ? null : target, 'agent');
+  if (kind !== 'direct') insert(draft, afterData, 'draft', kind === 'new' ? null : target, `access_staff:${actor}`);
   db.prepare(`INSERT INTO audit_log (actor, action, entity, entity_id, at)
     VALUES ('fixture', 'fixture', 'fixture', 'unrelated', '2000-01-01 00:00:00')`).run();
   if (fault === 'audit') db.exec(`CREATE TRIGGER synthetic_content_audit_fault BEFORE INSERT ON audit_log
@@ -469,7 +470,7 @@ function verifyAtomicContentSuccess(f, before, after) {
   if (f.kind === 'targeted') {
     const draftRow = after.content.find(item => item.id === f.draft);
     assert.equal(draftRow.status, 'archived');
-    assert.equal(draftRow.updated_by, 'agent');
+    assert.equal(draftRow.updated_by, `access_staff:${f.actor}`);
     assert.equal(draftRow.data, before.content.find(item => item.id === f.draft).data);
   }
   if (f.kind === 'new' || f.kind === 'discard') {

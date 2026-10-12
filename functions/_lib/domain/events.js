@@ -295,7 +295,7 @@ export async function validate(db, { id, operation, payload = {} }) {
 }
 
 // Additional statements are supplied only by trusted server callers (not request payloads).
-export async function apply(db, { id, operation, payload = {} }, actor, additionalStatements = []) {
+export async function apply(db, { id, operation, payload = {} }, actor, additionalStatements = [], preconditions = []) {
   const v = await validate(db, { id, operation, payload });
   if (!v.ok) {
     return v;
@@ -305,6 +305,7 @@ export async function apply(db, { id, operation, payload = {} }, actor, addition
 
   if (operation === 'create') {
     await db.batch([
+      ...preconditions,
       db
       .prepare(`
         INSERT INTO event (id, title, type, starts_at, ends_at, location, capacity, recurring, publish_state)
@@ -355,6 +356,7 @@ export async function apply(db, { id, operation, payload = {} }, actor, addition
     setParams.push(targetId);
 
     await db.batch([
+      ...preconditions,
       db.prepare(sql).bind(...setParams),
       db
       .prepare(`
@@ -378,6 +380,7 @@ export async function apply(db, { id, operation, payload = {} }, actor, addition
 
   if (operation === 'publish') {
     await db.batch([
+      ...preconditions,
       db
       .prepare("UPDATE event SET publish_state = 'published', updated_at = datetime('now') WHERE id = ?")
         .bind(targetId),
@@ -403,6 +406,7 @@ export async function apply(db, { id, operation, payload = {} }, actor, addition
 
   if (operation === 'archive') {
     await db.batch([
+      ...preconditions,
       db
       .prepare("UPDATE event SET publish_state = 'archived', updated_at = datetime('now') WHERE id = ?")
         .bind(targetId),
