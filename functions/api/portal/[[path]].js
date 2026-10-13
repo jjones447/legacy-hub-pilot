@@ -54,6 +54,20 @@ function json(obj, status = 200) {
   });
 }
 
+// Shared preview data is not an identity-proof boundary. Disable ALL caregiver
+// portal access there, including redemption of old dev links and old sessions.
+// Public pages and the separate staff Access routes are unaffected. This is not
+// production session revocation, and the retired dev-link flag cannot bypass it.
+function previewPortalDisabled(env) {
+  return env.ENVIRONMENT === 'preview' || env.ENVIRONMENT === 'development';
+}
+
+function previewUnavailable() {
+  return json({ ok: false, error: 'preview_portal_disabled' }, 503);
+}
+
+const CLEARED_SESSION_COOKIE = 'portal_session=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT';
+
 function htmlErrorPage(message) {
   return new Response(`<!DOCTYPE html>
 <html lang="en">
@@ -99,6 +113,10 @@ export async function onRequestGet({ request, env }) {
     const url = new URL(request.url);
     const pathSegments = url.pathname.split('/').filter(Boolean);
     const action = pathSegments[pathSegments.length - 1];
+
+    // Before secret, token, cookie or database access: existing preview bearer
+    // credentials must not unlock caregiver records after this containment.
+    if (previewPortalDisabled(env)) return previewUnavailable();
 
     const secret = env.PORTAL_TOKEN_SECRET;
     if (!secret) {
@@ -233,6 +251,17 @@ export async function onRequestPost({ request, env }) {
     const pathSegments = url.pathname.split('/').filter(Boolean);
     const action = pathSegments[pathSegments.length - 1];
 
+    if (previewPortalDisabled(env)) {
+      // Allow local cookie clearing without resolving the old preview identity,
+      // consulting the database or relying on a configured signing secret.
+      if (action === 'logout') {
+        const response = json({ ok: true });
+        response.headers.set('Set-Cookie', CLEARED_SESSION_COOKIE);
+        return response;
+      }
+      return previewUnavailable();
+    }
+
     const secret = env.PORTAL_TOKEN_SECRET;
     if (!secret) {
       return json({ ok: false, error: 'auth_not_configured' }, 503);
@@ -250,14 +279,11 @@ export async function onRequestPost({ request, env }) {
         return json({ ok: false, error: 'invalid_email' }, 400);
       }
 
-      const devReturnLink = (env.PORTAL_DEV_RETURN_LINK === '1' || env.PORTAL_DEV_RETURN_LINK === 1)
-        && (env.ENVIRONMENT === 'preview' || env.ENVIRONMENT === 'development');
       const emailEnabled = canSendEmail(env);
       // Deployment-wide readiness is checked before membership lookup, so the
       // unavailable response cannot reveal whether this address is registered.
-      if (!emailEnabled && !devReturnLink) {
-        const reason = env.ENVIRONMENT === 'preview' || env.ENVIRONMENT === 'development'
-          ? 'email_disabled_in_environment' : 'email_not_configured';
+      if (!emailEnabled) {
+        const reason = 'email_not_configured';
         try {
           await env.LEGACY_DB.prepare(`
             INSERT INTO audit_log (actor, action, entity, entity_id, after_json)
@@ -309,13 +335,6 @@ export async function onRequestPost({ request, env }) {
           .prepare(`INSERT INTO portal_token (token_hash, caregiver_id, expires_at, used) VALUES (?, ?, ?, 0)`)
           .bind(tokenHash, caregiver.id, expiresAtIso)
           .run();
-
-        // If dev return link mode is enabled, provide the link in response
-        // SEC-4: dev-return-link only in an explicitly non-prod environment (positive
-        // allowlist — never leaks when ENVIRONMENT is unset, i.e. production default).
-        if (devReturnLink) {
-          responseObj.dev_link = `/api/portal/verify?token=${encodeURIComponent(tokenValue)}`;
-        }
 
         // Production: email the link. The response stays the same generic { ok: true } whether or
         // not the email went, so the page never reveals who is a Legacy client.
@@ -381,12 +400,11 @@ export async function onRequestPost({ request, env }) {
           .run();
       }
 
-      const cookieHeader = 'portal_session=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT';
       return new Response(JSON.stringify({ ok: true }), {
         status: 200,
         headers: {
           'content-type': 'application/json',
-          'Set-Cookie': cookieHeader
+          'Set-Cookie': CLEARED_SESSION_COOKIE
         }
       });
     }

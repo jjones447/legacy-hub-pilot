@@ -68,12 +68,14 @@ test('production: a non-member gets the same response and no email', async () =>
   assert.equal(calls.length, 0);
 });
 
-test('staging never sends, even if a key were present', async () => {
+test('staging refuses caregiver authentication and never sends, even with old flag and key', async () => {
   const env = { ...PROD(), ENVIRONMENT: 'preview', PORTAL_DEV_RETURN_LINK: '1' };
   const res = await postPortal({ request: request('https://staging.caregiversanctuary.org/api/portal/login', { email: 'jane.doe@example.com' }), env });
   const data = await res.json();
-  assert.ok(data.dev_link, 'staging keeps the on-screen link');
+  assert.equal(res.status, 503);
+  assert.deepEqual(data, { ok: false, error: 'preview_portal_disabled' });
   assert.equal(calls.length, 0);
+  assert.equal(raw.prepare('SELECT COUNT(*) AS n FROM portal_token').get().n, 0);
 });
 
 test('a failed send is audited, and the caregiver still sees the generic response', async () => {
@@ -123,17 +125,17 @@ test('production disabled delivery is a uniform 503 before caregiver lookup, wit
   }
 });
 
-test('preview requires explicit dev-link mode; disabled mail never becomes a silent email success', async () => {
+test('preview fails closed uniformly without consulting membership or creating audit state', async () => {
   for (const email of ['jane.doe@example.com', 'stranger@example.invalid']) {
     const res = await postPortal({ request: request('https://synthetic.invalid/api/portal/login', { email }),
       env: { ...PROD(), ENVIRONMENT: 'preview' } });
     assert.equal(res.status, 503);
-    assert.deepEqual(await res.json(), { ok: false, error: 'signin_unavailable' });
+    assert.deepEqual(await res.json(), { ok: false, error: 'preview_portal_disabled' });
   }
   assert.equal(calls.length, 0);
   assert.equal(raw.prepare('SELECT COUNT(*) AS n FROM portal_token').get().n, 0);
   const rows = raw.prepare("SELECT after_json FROM audit_log WHERE action='portal.login_unavailable'").all();
-  assert.ok(rows.every(row => JSON.parse(row.after_json).reason === 'email_disabled_in_environment'));
+  assert.deepEqual(rows, []);
 });
 
 test('legacy padded recipient is matched and normalized before a mocked send', async () => {

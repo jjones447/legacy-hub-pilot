@@ -1,5 +1,26 @@
 # Caregiver Portal — what "done" means
 
+## Shared-preview containment — October 13, 2026
+
+[pc2-codex-42] Current source disables caregiver API access when `ENVIRONMENT` is
+`preview` or `development`, before reading credentials, identity or data. Login
+and verification fail with `503 preview_portal_disabled`; `/me` and wellness
+reads/writes also refuse old signed sessions. POST logout only clears the browser
+cookie, without looking up the old identity. Public staging pages and staff
+Access routes are unchanged; preview email stays OFF. Production emailed login
+is unchanged and never returns a usable sign-in link in its API response.
+
+The retired `PORTAL_DEV_RETURN_LINK` setting no longer enables access, even if
+it remains in an old provider configuration. The tradeoff is that shared-preview
+caregiver dashboards and check-ins are unavailable until a separately reviewed,
+identity-protected, noncustomer test arrangement exists. Do not restore the bypass
+to complete a walkthrough. This source change is **not installed containment**,
+global token deletion, production session revocation or client acceptance.
+Installation must qualify the correct preview environment marker/bindings and
+all supported aliases under the existing release/technical disposition. Removing
+the containment later could reactivate unexpired old bearer credentials: do not
+roll it back without a reviewed credential/data-isolation recovery plan.
+
 ## Historical proposal — not the current closeout checklist
 
 Status clarification, October 10, 2026 [pc2-codex-13]: the September 6 text below is
