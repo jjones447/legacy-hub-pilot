@@ -52,14 +52,26 @@ beforeEach(() => {
   raw.exec(SCHEMA_12);
   raw.exec("INSERT INTO caregiver (id, first_name, last_name, email, source) VALUES ('cg1','Jane','Doe','jane.doe@example.com','seed'), ('cg2','Sam','Lee','sam@example.com','seed')");
   db = d1(raw);
-  env = { LEGACY_DB: db, PORTAL_TOKEN_SECRET: 'test-secret', ENVIRONMENT: 'development', PORTAL_DEV_RETURN_LINK: '1', ALLOW_DEV_CONSOLE: '1' };
+  env = { LEGACY_DB: db, PORTAL_TOKEN_SECRET: 'test-secret', EMAIL_API_KEY: 'synthetic-email-key', ALLOW_DEV_CONSOLE: '1' };
 });
 
 async function signIn(email = 'jane.doe@example.com') {
-  const res = await postPortal({ request: request('http://localhost/api/portal/login', { method: 'POST', body: { email } }), env });
-  const link = (await res.json()).dev_link;
-  const v = await getPortal({ request: request('http://localhost' + link), env });
-  return decodeURIComponent(v.headers.get('Set-Cookie').split(';')[0]);
+  // Production contract with a synthetic captured email; never rely on preview
+  // identity bypass and never call a real email provider from this fixture.
+  const realFetch = globalThis.fetch;
+  let link;
+  globalThis.fetch = async (_url, init) => {
+    link = JSON.parse(init.body).text.match(/https?:\/\/[^\s]+\/api\/portal\/verify\?token=[A-Za-z0-9_-]+/)[0];
+    return { ok: true, status: 200 };
+  };
+  try {
+    const res = await postPortal({ request: request('http://localhost/api/portal/login', { method: 'POST', body: { email } }), env });
+    assert.deepEqual(await res.json(), { ok: true });
+    const v = await getPortal({ request: request(link), env });
+    return decodeURIComponent(v.headers.get('Set-Cookie').split(';')[0]);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 }
 
 test('four questions, each 1 to 5, scored 0 to 100 where 100 is doing well', () => {

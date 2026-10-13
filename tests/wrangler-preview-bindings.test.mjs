@@ -85,17 +85,14 @@ test('MEDIA bound in production only is rejected', () => {
   assert.throws(() => assertMediaParity(planted), /both environments/);
 });
 
-test('portal dev-link vars are set for preview only, never at top level', () => {
-  // LEGACY-STAGING-PORTAL-DEVLINK-R1: POST /api/portal/login returns dev_link only when
-  // BOTH PORTAL_DEV_RETURN_LINK and ENVIRONMENT are set — both must live under
-  // [env.preview.vars] so production (top-level) can never carry them.
+test('preview keeps its environment marker but never configures a dev-link bypass', () => {
   const previewVars = valuesUnder(TOML, 'env.preview.vars', 'ENVIRONMENT');
   assert.deepEqual(previewVars, ['preview']);
-  assert.deepEqual(valuesUnder(TOML, 'env.preview.vars', 'PORTAL_DEV_RETURN_LINK'), ['1']);
+  assert.deepEqual(valuesUnder(TOML, 'env.preview.vars', 'PORTAL_DEV_RETURN_LINK'), []);
   assert.deepEqual(
     valuesUnder(TOML, 'vars', 'PORTAL_DEV_RETURN_LINK'),
     [],
-    'PORTAL_DEV_RETURN_LINK must never be a top-level var — that would arm production'
+    'the retired PORTAL_DEV_RETURN_LINK must not be configured'
   );
   assert.deepEqual(valuesUnder(TOML, 'vars', 'ENVIRONMENT'), []);
 });

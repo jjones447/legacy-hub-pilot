@@ -1,5 +1,5 @@
 // Slice 09 integration tests — Portal login v0 (magic-link).
-import { test, beforeEach } from 'node:test';
+import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
@@ -61,6 +61,8 @@ function mockRequest(urlStr, method = 'GET', body = null, cookie = null) {
 
 let raw;
 let env;
+let emailedLink;
+const realFetch = globalThis.fetch;
 
 beforeEach(() => {
   raw = new DatabaseSync(':memory:');
@@ -70,10 +72,15 @@ beforeEach(() => {
   env = {
     LEGACY_DB: d1(raw),
     PORTAL_TOKEN_SECRET: 'my_test_secret_key',
-    PORTAL_DEV_RETURN_LINK: 1,
-    ENVIRONMENT: 'development'
+    EMAIL_API_KEY: 'synthetic-email-key'
+  };
+  emailedLink = null;
+  globalThis.fetch = async (_url, init) => {
+    emailedLink = JSON.parse(init.body).text.match(/https?:\/\/[^\s]+\/api\/portal\/verify\?token=[A-Za-z0-9_-]+/)[0];
+    return { ok: true, status: 200 };
   };
 });
+afterEach(() => { globalThis.fetch = realFetch; });
 
 test('non-member email returns generic response and does not mint token', async () => {
   const req = mockRequest('http://localhost/api/portal/login', 'POST', { email: 'unknown@example.com' });
@@ -93,7 +100,7 @@ test('non-member email returns generic response and does not mint token', async 
   assert.equal(auditRow.n, 1);
 });
 
-test('member email returns dev_link and inserts hashed token into D1', async () => {
+test('member email is mocked as mailed, never returned, and inserts hashed token into D1', async () => {
   // cg_seed_fictional has email jane.doe@example.com in schema 3
   const req = mockRequest('http://localhost/api/portal/login', 'POST', { email: 'jane.doe@example.com' });
   const res = await postPortal({ request: req, env });
@@ -101,11 +108,11 @@ test('member email returns dev_link and inserts hashed token into D1', async () 
   assert.equal(res.status, 200);
   const data = await res.json();
   assert.equal(data.ok, true);
-  assert.ok(data.dev_link);
-  assert.ok(data.dev_link.includes('/api/portal/verify?token='));
+  assert.equal(data.dev_link, undefined);
+  assert.ok(emailedLink.includes('/api/portal/verify?token='));
 
   // The link token is opaque: no caregiver id, no ':' payload separators
-  const token = new URL('http://localhost' + data.dev_link).searchParams.get('token');
+  const token = new URL(emailedLink).searchParams.get('token');
   assert.ok(token);
   assert.ok(!token.includes(':'));
   assert.ok(!token.includes('cg_seed_fictional'));
@@ -125,7 +132,7 @@ test('verify endpoint validates good token, sets session cookie, redirects, and 
   const req1 = mockRequest('http://localhost/api/portal/login', 'POST', { email: 'jane.doe@example.com' });
   const res1 = await postPortal({ request: req1, env });
   const data1 = await res1.json();
-  const verifyUrl = new URL('http://localhost' + data1.dev_link);
+  const verifyUrl = new URL(emailedLink);
   const token = verifyUrl.searchParams.get('token');
 
   // 2. Verify token
@@ -161,7 +168,7 @@ test('gated me API returns caregiver-scoped data and rejects unauthorized reques
   const res1 = await postPortal({ request: req1, env });
   const data1 = await res1.json();
   
-  const req2 = mockRequest('http://localhost' + data1.dev_link, 'GET');
+  const req2 = mockRequest(emailedLink, 'GET');
   const res2 = await getPortal({ request: req2, env });
   const cookie = res2.headers.get('Set-Cookie');
 
@@ -198,7 +205,8 @@ test('account grants are newest-first with a stable ID tie-break and exclude ano
   insert.run(2004, 'other', 'Private other grant', 'submitted', 'seed', '2100-01-01 12:00:00');
   const login = await postPortal({ request: mockRequest('http://localhost/api/portal/login', 'POST', { email: 'jane.doe@example.com' }), env });
   const token = await login.json();
-  const verify = await getPortal({ request: mockRequest('http://localhost' + token.dev_link), env });
+  assert.deepEqual(token, { ok: true });
+  const verify = await getPortal({ request: mockRequest(emailedLink), env });
   const response = await getPortal({ request: mockRequest('http://localhost/api/portal/me', 'GET', null, verify.headers.get('Set-Cookie')), env });
   assert.equal(response.status, 200);
   const data = await response.json();
@@ -213,7 +221,7 @@ test('SEC-3: a magic-link token cannot be pasted directly as a session cookie', 
   const req1 = mockRequest('http://localhost/api/portal/login', 'POST', { email: 'jane.doe@example.com' });
   const res1 = await postPortal({ request: req1, env });
   const data1 = await res1.json();
-  const token = new URL('http://localhost' + data1.dev_link).searchParams.get('token');
+  const token = new URL(emailedLink).searchParams.get('token');
 
   // ...and pastes it straight into portal_session, skipping /verify (and its single-use check)
   const forgedCookie = `portal_session=${encodeURIComponent(token)}`;
@@ -228,7 +236,8 @@ test('SEC-3: a magic-link token cannot be pasted directly as a session cookie', 
 
 test('two simultaneous clicks on one link: exactly one signs in', async () => {
   const res1 = await postPortal({ request: mockRequest('http://localhost/api/portal/login', 'POST', { email: 'jane.doe@example.com' }), env });
-  const link = 'http://localhost' + (await res1.json()).dev_link;
+  assert.deepEqual(await res1.json(), { ok: true });
+  const link = emailedLink;
   // Hold both token lookups until both have read the row, so both see used = 0 and then race to claim it.
   let arrived = 0;
   let release;
@@ -284,7 +293,7 @@ test('logout api clears the session cookie and logs logout audit', async () => {
   const res1 = await postPortal({ request: req1, env });
   const data1 = await res1.json();
   
-  const req2 = mockRequest('http://localhost' + data1.dev_link, 'GET');
+  const req2 = mockRequest(emailedLink, 'GET');
   const res2 = await getPortal({ request: req2, env });
   const cookie = res2.headers.get('Set-Cookie');
 
