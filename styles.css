@@ -672,6 +672,11 @@ footer a:hover { color: #fff; }
   border-bottom: none; min-height: 44px;
 }
 .nav-v2 .drop a:hover { background: var(--sand); color: var(--plum); }
+/* The combined Sanctuary menu stays scrollable on shorter desktop viewports. */
+.nav-v2 .drop { max-height: 70vh; overflow-y: auto; }
+.nav-v2 .nav-drop-group { border-top: 1px solid #e5ddd4; margin-top: 6px; padding-top: 6px; }
+.nav-v2 .nav-drop-group > a:first-child { font-weight: 700; }
+.nav-v2 .nav-drop-group > a:not(:first-child) { padding-left: 26px; }
 
 /* Landing-page card grids reuse .card-grid/.card. Phase-2 stub badge: */
 .badge-phase2 {
@@ -729,6 +734,7 @@ footer a:hover { color: #fff; }
     padding: 0 0 8px 16px; min-width: 0; background: transparent; flex-basis: 100%;
   }
   .nav-v2 .drop a { font-size: 17px; padding: 11px 12px; }
+  .nav-v2 .drop { max-height: none; overflow-y: visible; }
 }
 
 /* ---------- Photo carousel ---------- */
