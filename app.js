@@ -520,14 +520,18 @@ function renderPortalData(data) {
   if (socialsCount && socialsLast && socialsNext) {
     const socials = (data.events || []).filter(function (e) { return e.type === 'memory_social'; });
     const attended = socials.filter(function (e) { return e.registration_status === 'attended'; });
-    const registered = socials.filter(function (e) { return e.registration_status === 'registered'; });
+    const registered = socials.filter(function (e) {
+      const starts = Date.parse(e.starts_at);
+      return e.registration_status === 'registered' && Number.isFinite(starts) && starts >= Date.now();
+    });
 
     socialsCount.textContent = attended.length + ' socials';
 
-    const last = attended.sort(function (a, b) { return new Date(b.starts_at) - new Date(a.starts_at); })[0];
+    const last = attended.filter(function (e) { return Number.isFinite(Date.parse(e.starts_at)); })
+      .sort(function (a, b) { return Date.parse(b.starts_at) - Date.parse(a.starts_at); })[0];
     socialsLast.textContent = last ? last.starts_at.slice(0, 10) : '—';
 
-    const next = registered.sort(function (a, b) { return new Date(a.starts_at) - new Date(b.starts_at); })[0];
+    const next = registered.sort(function (a, b) { return Date.parse(a.starts_at) - Date.parse(b.starts_at); })[0];
     socialsNext.textContent = next ? next.title + ' · ' + next.starts_at.slice(0, 10) : '—';
   }
 }
@@ -949,7 +953,11 @@ document.addEventListener('submit', function (e) {
 let wellnessQuestions = [];
 
 async function loadWellness() {
+  renderSampleWellness();
   const summary = document.getElementById('portalWellnessSummary');
+  if (summary) summary.textContent = 'Loading your saved check-ins…';
+  drawWellnessTrend(document.getElementById('portalWellnessTrend'), []);
+  renderWellnessHistory(document.getElementById('portalWellnessHistoryRows'), [], 'Loading your saved history…');
   try {
     const res = await fetch('/api/portal/wellness', { credentials: 'same-origin' });
     const data = await res.json();
@@ -958,6 +966,7 @@ async function loadWellness() {
     renderWellness(data);
   } catch (e) {
     if (summary) summary.textContent = 'Your wellness check-ins are not available right now.';
+    renderWellnessHistory(document.getElementById('portalWellnessHistoryRows'), [], 'Your saved history is not available right now.');
   }
 }
 
@@ -980,9 +989,39 @@ function renderWellness(data) {
   if (trendHint) trendHint.textContent = history.length < 2
     ? 'A trend appears after two check-ins.' : 'Scores shown oldest to newest.';
   drawWellnessTrend(document.getElementById('portalWellnessTrend'), history.map(function (h) { return h.score; }));
+  renderWellnessHistory(document.getElementById('portalWellnessHistoryRows'), history, 'No saved check-ins yet.');
 }
 
-function drawWellnessTrend(container, scores) {
+function renderWellnessHistory(container, history, emptyText) {
+  if (!container) return;
+  container.textContent = '';
+  if (!history.length) { container.textContent = emptyText; return; }
+  const list = document.createElement('ol');
+  history.forEach(function (entry) {
+    const row = document.createElement('li');
+    row.textContent = String(entry.created_at || '').slice(0, 10) + ' — ' + entry.score + ' out of 100';
+    list.appendChild(row);
+  });
+  container.appendChild(list);
+}
+
+function renderSampleWellness() {
+  const container = document.getElementById('portalWellnessSampleTrend');
+  if (!container) return;
+  // Display-only examples: never merged with API history or passed to the check-in form.
+  const sample = [
+    { created_at: '2026-06-01', score: 42 },
+    { created_at: '2026-07-01', score: 56 },
+    { created_at: '2026-08-01', score: 50 },
+    { created_at: '2026-09-01', score: 68 },
+    { created_at: '2026-10-01', score: 72 }
+  ];
+  drawWellnessTrend(container, sample.map(function (entry) { return entry.score; }),
+    'SAMPLE DATA, not your saved check-ins. Scores oldest to newest: ');
+  renderWellnessHistory(document.getElementById('portalWellnessSampleRows'), sample, '');
+}
+
+function drawWellnessTrend(container, scores, accessibleLabel) {
   if (!container) return;
   container.textContent = '';
   if (!scores || scores.length < 2) return;
@@ -991,7 +1030,7 @@ function drawWellnessTrend(container, scores) {
   const svg = document.createElementNS(ns, 'svg');
   svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
   svg.setAttribute('role', 'img');
-  svg.setAttribute('aria-label', 'Recent check-in scores, oldest to newest: ' + scores.join(', '));
+  svg.setAttribute('aria-label', (accessibleLabel || 'Recent check-in scores, oldest to newest: ') + scores.join(', '));
   const step = (w - pad * 2) / (scores.length - 1);
   const pts = scores.map(function (s, i) {
     return (pad + i * step).toFixed(1) + ',' + (h - pad - (s / 100) * (h - pad * 2)).toFixed(1);

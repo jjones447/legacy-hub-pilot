@@ -165,6 +165,17 @@
         <p class="small mt-16 mb-8"><strong>Recent check-in scores</strong></p>
         <p class="small muted m-0" id="portalWellnessTrendHint">A trend appears after two check-ins.</p>
         <div id="portalWellnessTrend" class="wellness-trend"></div>
+        <details class="mt-16" id="portalWellnessHistory">
+          <summary>View my saved check-in history</summary>
+          <p class="small muted">Your latest 24 saved check-ins, oldest to newest.</p>
+          <div id="portalWellnessHistoryRows">Your saved history will appear here.</div>
+        </details>
+        <details class="mt-16" id="portalWellnessSample">
+          <summary>Preview sample wellness history</summary>
+          <p class="small"><strong>SAMPLE DATA</strong> — fictional scores to show how the chart and history work. These are not your check-ins and are never saved to your health record.</p>
+          <div id="portalWellnessSampleTrend" class="wellness-trend"></div>
+          <div id="portalWellnessSampleRows"></div>
+        </details>
         <button type="button" class="btn btn-plum btn-sm mt-16" data-action="wellness-open" id="portalWellnessBtn">Take a 1-minute check-in</button>
         <div id="portalWellnessForm" class="d-none mt-16"></div>
         <p class="small mt-8 m-0" id="portalWellnessMsg" role="status"></p>
@@ -181,6 +192,7 @@
 
       <div class="panel m-0">
         <h4>📅 My Events</h4>
+        <p class="small muted">Your registrations are listed here. Browse all events opens the public calendar.</p>
         <div id="portalEventsList">
           <p class="small muted m-0">No registered events yet.</p>
         </div>
@@ -189,14 +201,14 @@
 
       <div class="panel m-0">
         <h4>🏡 My Memory Socials</h4>
-        <div class="kv-row"><span class="k">Attended (2026)</span><span class="v" id="portalSocialsCount">0 socials</span></div>
+        <div class="kv-row"><span class="k">Attended (all time)</span><span class="v" id="portalSocialsCount">0 socials</span></div>
         <div class="kv-row"><span class="k">Last visit</span><span class="v" id="portalSocialsLastVisit">—</span></div>
         <div class="kv-row"><span class="k">Next up</span><span class="v" id="portalSocialsNext">—</span></div>
       </div>
 
       <div class="panel m-0">
-        <h4>📚 Resources for you</h4>
-        <p class="small muted m-0">Guides, tools and trusted local help, picked for caregivers.</p>
+        <h4>📚 Resource library</h4>
+        <p class="small muted m-0">Shared guides, tools and trusted local help for caregivers. This library is public, not a personalized saved list.</p>
         <a href="resources.html" class="btn btn-outline btn-sm mt-16 d-inline-block">Open Resource Hub</a>
       </div>
 
