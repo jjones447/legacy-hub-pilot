@@ -20,7 +20,8 @@ test('no demo actions or sample-caregiver shortcut in the portal', () => {
 test('no invented saved resources and no sales copy on the dashboard', () => {
   assert.doesNotMatch(PORTAL, /saved Jun/);
   assert.doesNotMatch(PORTAL, /Why this matters/);
-  assert.match(PORTAL, /Resources for you/);
+  assert.match(PORTAL, /Resource library/);
+  assert.match(PORTAL, /library is public, not a personalized saved list/);
 });
 
 

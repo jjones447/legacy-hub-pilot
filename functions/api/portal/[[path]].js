@@ -187,7 +187,7 @@ export async function onRequestGet({ request, env }) {
         .prepare(`SELECT ga.id, ga.requested_for, ga.status, ga.created_at, aw.amount, aw.care_package, aw.outcome 
                   FROM grant_application ga 
                   LEFT JOIN award aw ON ga.id = aw.grant_application_id 
-                  WHERE ga.caregiver_id = ?`)
+                  WHERE ga.caregiver_id = ? ORDER BY ga.created_at DESC, ga.id DESC`)
         .bind(caregiverId)
         .all();
 
