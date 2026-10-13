@@ -196,6 +196,25 @@ test('gated me API returns caregiver-scoped data and rejects unauthorized reques
   assert.equal(res5.status, 401);
 });
 
+test('account grants are newest-first with a stable ID tie-break and exclude another caregiver', async () => {
+  raw.exec("INSERT INTO caregiver (id, first_name, last_name, email, source) VALUES ('other','Other','Person','other@example.invalid','seed')");
+  const insert = raw.prepare('INSERT INTO grant_application (id, caregiver_id, requested_for, status, source, created_at) VALUES (?, ?, ?, ?, ?, ?)');
+  insert.run(2001, 'cg_seed_fictional', 'Older', 'submitted', 'seed', '2025-01-01 12:00:00');
+  insert.run(2002, 'cg_seed_fictional', 'Newer', 'in_review', 'seed', '2099-10-13 12:00:00');
+  insert.run(2003, 'cg_seed_fictional', 'Same-date newest ID', 'submitted', 'seed', '2099-10-13 12:00:00');
+  insert.run(2004, 'other', 'Private other grant', 'submitted', 'seed', '2100-01-01 12:00:00');
+  const login = await postPortal({ request: mockRequest('http://localhost/api/portal/login', 'POST', { email: 'jane.doe@example.com' }), env });
+  const token = await login.json();
+  const verify = await getPortal({ request: mockRequest('http://localhost' + token.dev_link), env });
+  const response = await getPortal({ request: mockRequest('http://localhost/api/portal/me', 'GET', null, verify.headers.get('Set-Cookie')), env });
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.deepEqual(data.grants.slice(0, 2).map(grant => grant.id), [2003, 2002]);
+  assert.equal(data.grants.at(-1).id, 2001);
+  assert.ok(data.grants.every(grant => grant.id !== 2004));
+  assert.equal(data.grants[0].requested_for, 'Same-date newest ID');
+});
+
 test('SEC-3: a magic-link token cannot be pasted directly as a session cookie', async () => {
   // Attacker obtains a raw magic-link token (leaked link, referrer, etc.)
   const req1 = mockRequest('http://localhost/api/portal/login', 'POST', { email: 'jane.doe@example.com' });
