@@ -9,12 +9,13 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
 </head>
-<body>
+<body class="home-page">
 
 
 {% set active_page = 'index' %}
 {% include '_header.html.j2' %}
 
+<main id="main">
 <section class="hero has-video">
   <video class="hero-video" autoplay muted loop playsinline preload="metadata"
          poster="media/hero-poster.jpg" aria-hidden="true" tabindex="-1">
@@ -169,6 +170,7 @@
   </div>
 </section>
 
+</main>
 {% include '_footer.html.j2' %}
 
 <script src="app.js"></script>
