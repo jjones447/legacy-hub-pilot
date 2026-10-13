@@ -25,6 +25,7 @@
   --shadow-lg: 0 8px 30px rgba(30, 11, 9, 0.14);
   --font-display: 'Fraunces', Georgia, serif;
   --font-body: 'Inter', -apple-system, 'Segoe UI', sans-serif;
+  --site-shell-width: 1200px;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -131,13 +132,13 @@ header.site-header {
   transform: translateY(6px);
 }
 /* brand row shares the nav row's width and left edge so the lockup reads as one unit */
-.site-header:has(+ .nav-bar) .header-inner { max-width: 1200px; padding: 10px 24px 12px; justify-content: center; }
+.site-header:has(+ .nav-bar) .header-inner { max-width: var(--site-shell-width); padding: 10px 24px 12px; justify-content: center; }
 .site-header:has(+ .nav-bar) .brand { gap: 16px; }
 .nav-bar {
   position: sticky; top: 0; z-index: 50;
   background: var(--white); border-bottom: 1px solid #eee5da; box-shadow: 0 1px 8px rgba(30,11,9,0.05);
 }
-.nav-bar > .nav-v2 { max-width: 1200px; margin: 0 auto; padding: 0 24px; justify-content: space-between; }
+.nav-bar > .nav-v2 { max-width: var(--site-shell-width); margin: 0 auto; padding: 0 24px; justify-content: space-between; }
 /* the brand row scrolls away; only the nav bar follows you down the page */
 .site-header:has(+ .nav-bar) { position: static; }
 .footer-brand { margin-bottom: 34px; max-width: 520px; }
@@ -369,6 +370,45 @@ section { padding: 64px 0; }
 @media (max-width: 760px) {
   .home-support .card-grid { grid-template-columns: 1fr; }
   .home-support-card { min-height: 0; }
+}
+/* Homepage sections share the navigation's outer edges. Headings use the full
+   content width; only paragraphs retain a readable line length. Scope these
+   rules to the homepage so portal, staff, forms and other pages keep their layout. */
+.home-page main > section > .container { max-width: var(--site-shell-width); }
+.home-page main .section-head {
+  max-width: none;
+  width: 100%;
+  text-align: center;
+}
+.home-page main .section-head h2,
+.home-page main > section > .container > h2 {
+  font-size: clamp(28px, 3vw, 40px);
+  line-height: 1.25;
+  letter-spacing: normal;
+  text-wrap: balance;
+  text-align: center;
+  margin-bottom: 12px;
+}
+.home-page main .section-head h2::after { margin-left: auto; margin-right: auto; }
+.home-page main .section-head p,
+.home-page main > section > .container > p {
+  max-width: 80ch;
+  margin-left: auto;
+  margin-right: auto;
+  text-align: center;
+  line-height: 1.7;
+}
+.home-page main > section > .container > .eyebrow {
+  display: table;
+  margin-left: auto;
+  margin-right: auto;
+}
+.home-page .hero h1 { max-width: none; text-align: center; text-wrap: balance; }
+.home-page .hero p.lede { max-width: 80ch; }
+.home-page .hero .btn-row { justify-content: center; }
+.home-page .quote-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); }
+@media (max-width: 1150px) {
+  .home-page .site-header:has(+ .nav-bar) .nav-toggle { display: block; }
 }
 .eyebrow {
   display: inline-block; font-size: 12px; font-weight: 700; letter-spacing: 0.12em;
