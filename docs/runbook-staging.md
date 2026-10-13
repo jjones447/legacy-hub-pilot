@@ -1,6 +1,28 @@
 # Staging surface — historical preview runbook
 
-## Current-use guard — October 5, 2026
+## Current-use guard — October 13, 2026
+
+[pc2-codex-41] This remains a historical preview runbook. The current private
+caregiver guide names `https://legacy-hub-5qo.pages.dev/portal` as the production
+email sign-in entry. `legacy-hub.pages.dev` and its preview examples below are the
+old pilot, not current login instructions. A failure to receive email on that old
+address does not establish a failure on the current entry.
+
+The October6 private DNS/binding inspection superseded the October5 alias
+interpretation below: `staging.caregiversanctuary.org` was identified as preview,
+with `ENVIRONMENT=preview`. Preview email is intentionally disabled; it is not the
+real-person email route. No current installed routing, mailbox delivery or staff
+authentication is proved by this source correction. The existing admin/operator
+owns today's diagnosis; do not enable preview email, seed users or repeat login
+requests from this document.
+
+Use the SAME private setup record and current caregiver guide for the actual
+environment and permitted identity. Public site portal links are relative; they
+retain the origin of the page being visited. Legacy helper defaults and the dated
+commands below are not current release targets or permission to execute them.
+Full Functions/native/served/Pages holds and original release custody remain.
+
+## Historical October5 guard — alias interpretation superseded
 
 This document preserves the August preview design and examples; it is not the current
 release runbook. The September 29 Legacy account move is already recorded in the SAME
