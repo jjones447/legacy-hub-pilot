@@ -64,6 +64,16 @@ async function productionCredentials() {
     assert.equal(verify.status, 302);
     const cookie = verify.headers.get('Set-Cookie').split(';')[0];
     assert.match(cookie, /^portal_session=/);
+    const reused = await onRequestGet({ env, request: new Request(mailedLink) });
+    assert.equal(reused.status, 400, 'production still refuses a redeemed bearer token');
+    // Leave a second valid, unredeemed token alongside the valid cookie, so
+    // preview refusal proves containment of both kinds of retained credential.
+    const another = await onRequestPost({ env, request: new Request(`${ORIGIN}/api/portal/login`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'caregiver@example.invalid' }),
+    }) });
+    assert.deepEqual(await another.json(), { ok: true });
+    assert.equal(rows.at(-1).used, 0);
     return { mailedLink, cookie };
   } finally {
     globalThis.fetch = originalFetch;

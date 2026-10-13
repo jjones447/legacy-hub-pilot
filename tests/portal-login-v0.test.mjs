@@ -205,7 +205,8 @@ test('account grants are newest-first with a stable ID tie-break and exclude ano
   insert.run(2004, 'other', 'Private other grant', 'submitted', 'seed', '2100-01-01 12:00:00');
   const login = await postPortal({ request: mockRequest('http://localhost/api/portal/login', 'POST', { email: 'jane.doe@example.com' }), env });
   const token = await login.json();
-  const verify = await getPortal({ request: mockRequest('http://localhost' + token.dev_link), env });
+  assert.deepEqual(token, { ok: true });
+  const verify = await getPortal({ request: mockRequest(emailedLink), env });
   const response = await getPortal({ request: mockRequest('http://localhost/api/portal/me', 'GET', null, verify.headers.get('Set-Cookie')), env });
   assert.equal(response.status, 200);
   const data = await response.json();
