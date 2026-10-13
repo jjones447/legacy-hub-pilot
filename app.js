@@ -520,19 +520,21 @@ function renderPortalData(data) {
   if (socialsCount && socialsLast && socialsNext) {
     const socials = (data.events || []).filter(function (e) { return e.type === 'memory_social'; });
     const attended = socials.filter(function (e) { return e.registration_status === 'attended'; });
-    const registered = socials.filter(function (e) {
-      const starts = Date.parse(e.starts_at);
-      return e.registration_status === 'registered' && Number.isFinite(starts) && starts >= Date.now();
-    });
+    const now = new Date();
+    const dated = socials.map(function (event) {
+      return { event: event, time: publicEventTime(event.starts_at, now, 'America/Chicago') };
+    }).filter(function (entry) { return entry.time; });
 
     socialsCount.textContent = attended.length + ' socials';
 
-    const last = attended.filter(function (e) { return Number.isFinite(Date.parse(e.starts_at)); })
-      .sort(function (a, b) { return Date.parse(b.starts_at) - Date.parse(a.starts_at); })[0];
-    socialsLast.textContent = last ? last.starts_at.slice(0, 10) : '—';
+    const last = dated.filter(function (entry) { return entry.event.registration_status === 'attended'; })
+      .sort(function (a, b) { return b.time.instant - a.time.instant; })[0];
+    socialsLast.textContent = last ? last.event.starts_at.slice(0, 10) : '—';
 
-    const next = registered.sort(function (a, b) { return Date.parse(a.starts_at) - Date.parse(b.starts_at); })[0];
-    socialsNext.textContent = next ? next.title + ' · ' + next.starts_at.slice(0, 10) : '—';
+    const next = dated.filter(function (entry) {
+      return entry.event.registration_status === 'registered' && entry.time.future;
+    }).sort(function (a, b) { return a.time.instant - b.time.instant; })[0];
+    socialsNext.textContent = next ? next.event.title + ' · ' + next.event.starts_at.slice(0, 10) : '—';
   }
 }
 

@@ -8,6 +8,7 @@ const app = readFileSync(new URL('../app.js', import.meta.url), 'utf8');
 const html = readFileSync(new URL('../portal.html', import.meta.url), 'utf8');
 const wellness = app.slice(app.indexOf('let wellnessQuestions ='), app.indexOf('function openWellnessForm('));
 const dashboard = app.slice(app.indexOf('function renderPortalData('), app.indexOf('/* ---------- Staff console:'));
+const eventTime = app.slice(app.indexOf('function publicEventTime('), app.indexOf('function renderPublicEvents('));
 const now = Date.parse('2026-10-13T14:00:00Z');
 
 function ui(reply = { ok: true, history: [], questions: [], due: false }) {
@@ -26,13 +27,13 @@ function ui(reply = { ok: true, history: [], questions: [], due: false }) {
     'portalGrantStatus', 'portalGrantRequestedFor', 'portalGrantAward'];
   const elements = Object.fromEntries(ids.map(id => [id, new Element()]));
   const calls = [];
-  const context = vm.createContext({ Date: class extends Date { static now() { return now; } },
+  const context = vm.createContext({ Date: class extends Date { constructor(...args) { super(...(args.length ? args : [now])); } static now() { return now; } },
     document: { getElementById: id => elements[id], createElement: tag => new Element(tag),
       createElementNS: (_ns, tag) => new Element(tag) },
     fetch: async (...args) => { calls.push(args); return { ok: reply.ok, json: async () => reply }; },
     localStorage: { setItem() { throw new Error('must not store sample health data'); } }
   });
-  vm.runInContext(wellness + '\n' + dashboard, context);
+  vm.runInContext(eventTime + '\n' + wellness + '\n' + dashboard, context);
   return { context, elements, calls };
 }
 const rows = element => element.children[0]?.children.map(row => row.textContent) || [];
@@ -128,6 +129,16 @@ test('next social is empty when none of the account registrations has a valid fu
   ] });
   assert.equal(h.elements.portalSocialsNext.textContent, '—');
   assert.equal(h.elements.portalSocialsLastVisit.textContent, '—');
+});
+
+test('next social shares public calendar timezone/invalid-date handling rather than rolling impossible dates', () => {
+  const h = ui();
+  h.context.renderPortalData({ profile: {}, grants: [], events: [
+    { type: 'memory_social', registration_status: 'registered', starts_at: '2027-02-31T14:00:00Z', title: 'Impossible calendar date' },
+    { type: 'memory_social', registration_status: 'registered', starts_at: '2027-03-14 02:30:00', title: 'DST gap' },
+    { type: 'memory_social', registration_status: 'registered', starts_at: '2026-10-13 09:30:00', title: 'Chicago future' }
+  ] });
+  assert.equal(h.elements.portalSocialsNext.textContent, 'Chicago future · 2026-10-13');
 });
 
 test('tile copy distinguishes account registrations, public calendar/library and all-time attendance', () => {
