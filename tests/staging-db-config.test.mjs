@@ -87,7 +87,12 @@ test('docs/runbook-staging.md documents staging seed shortcut', () => {
 
 test('staging runbook leads with current identity qualification and labels August procedures historical', () => {
   const runbook = readFileSync(resolve(ROOT_DIR, 'docs', 'runbook-staging.md'), 'utf8');
-  assert.match(runbook, /Current-use guard.*October 5, 2026/);
+  const currentGuard = runbook.split('## Historical October5 guard')[0];
+  assert.match(currentGuard, /Current-use guard.*October 13, 2026/);
+  assert.match(currentGuard, /legacy-hub-5qo\.pages\.dev\/portal/);
+  assert.match(currentGuard, /ENVIRONMENT=preview/);
+  assert.match(currentGuard, /Preview email is intentionally disabled/);
+  assert.doesNotMatch(currentGuard, /staging\.caregiversanctuary\.org.*production alias/);
   assert.match(runbook, /September 29.*account move.*already recorded/);
   assert.match(runbook, /staging\.caregiversanctuary\.org.*production alias/);
   assert.match(runbook, /not proof of an isolated preview/);
