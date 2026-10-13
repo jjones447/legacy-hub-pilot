@@ -1,9 +1,10 @@
-// Tests for LEGACY-CR4-SANCTUARY-PROGRAMS-R1: Caregiver Sanctuary & Programs restructure.
+// Sanctuary structure, including the October 13 program/event and Network navigation.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { runInNewContext } from 'node:vm';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -11,6 +12,24 @@ const rootDir = path.resolve(__dirname, '..');
 
 function loadFile(relPath) {
   return fs.readFileSync(path.join(rootDir, relPath), 'utf8');
+}
+
+const programDestinations = [
+  'programs-events.html#support-group', 'community-series.html', 'drop-in-respite.html',
+  'wellness-passport.html', 'programs-events.html#event-respite',
+  'programs-events.html#family-ed', 'events.html', 'programs-events.html#calendar', 'gallery.html',
+];
+
+function sanctuaryDrop(header) {
+  const match = header.match(/<a href="sanctuary\.html"[^>]*>The Sanctuary<\/a><button[^>]*>&#9662;<\/button>\s*<div class="drop">([\s\S]*?)\n    <\/div>/);
+  assert.ok(match, 'Sanctuary dropdown must exist');
+  return match[1];
+}
+
+function assertDestination(href) {
+  const [file, fragment] = href.split('#');
+  assert.ok(fs.existsSync(path.join(rootDir, file)), `missing destination ${file}`);
+  if (fragment) assert.ok(loadFile(file).includes(`id="${fragment}"`), `missing destination ${href}`);
 }
 
 test('(a) each of the three new pages renders and is reachable from the nav', () => {
@@ -42,38 +61,28 @@ test('(a) each of the three new pages renders and is reachable from the nav', ()
   }
 });
 
-test('(b) the Sanctuary dropdown has exactly the three items and no Passport link', () => {
+test('(b) one Sanctuary overview retains every program/event destination and obvious join/contact paths', () => {
   const header = loadFile('templates/_header.html.j2');
-  // Match the Sanctuary dropdown block
-  const match = header.match(/<a href="sanctuary\.html"[^>]*>The Sanctuary<\/a><button[^>]*>&#9662;<\/button>\s*<div class="drop">([\s\S]*?)<\/div>/);
-  assert.ok(match, 'Sanctuary dropdown must exist in _header.html.j2');
-  const dropContent = match[1];
-
-  // Extract all links inside this drop
-  const linkMatches = [...dropContent.matchAll(/<a href="([^"]+)">([^<]+)<\/a>/g)];
-  assert.equal(linkMatches.length, 3, `Sanctuary dropdown must have exactly 3 links, found: ${linkMatches.length}`);
-
-  const expected = [
-    { href: 'sanctuary.html', text: 'Overview' },
-    { href: 'community-wellness-partners.html', text: 'Community Wellness Partners' },
-    { href: 'dementia-friendly-training.html', text: 'Dementia-Friendly Training' },
-  ];
-
-  for (let i = 0; i < 3; i++) {
-    assert.equal(linkMatches[i][1], expected[i].href);
-    assert.equal(linkMatches[i][2], expected[i].text);
+  const drop = sanctuaryDrop(header);
+  assert.equal([...drop.matchAll(/>Overview<\/a>/g)].length, 1);
+  assert.match(drop, /href="sanctuary.html">Overview/);
+  assert.match(drop, /href="programs.html">Join Caregiver Sanctuary/);
+  assert.match(drop, /href="request-support.html">Contact \/ Request Support/);
+  assert.doesNotMatch(header, /aria-label="Programs &amp; Events menu"/);
+  assert.equal([...header.matchAll(/aria-label="The Sanctuary menu"/g)].length, 1);
+  for (const href of programDestinations) {
+    assert.ok(drop.includes(`href="${href}"`), `lost program/event link ${href}`);
+    assertDestination(href);
   }
-
-  // Ensure no passport link in Sanctuary dropdown
-  assert.doesNotMatch(dropContent, /passport/i, 'Sanctuary dropdown must not contain any Passport link');
+  assertDestination('programs.html');
+  assert.match(loadFile('programs.html'), /data-action="open-membership"/);
+  assert.match(loadFile('programs.html'), /id="membershipForm"/);
+  assertDestination('request-support.html');
 });
 
-test('(c) the Programs dropdown lists the Passport and not Wellness Grants', () => {
+test('(c) the combined Sanctuary menu keeps Passport as a program and not a separate Wellness Grants link', () => {
   const header = loadFile('templates/_header.html.j2');
-  // Match the Programs & Events dropdown block
-  const match = header.match(/<a href="programs-events\.html"[^>]*>Programs &amp; Events<\/a><button[^>]*>&#9662;<\/button>\s*<div class="drop">([\s\S]*?)<\/div>/);
-  assert.ok(match, 'Programs & Events dropdown must exist in _header.html.j2');
-  const dropContent = match[1];
+  const dropContent = sanctuaryDrop(header);
 
   // Must list Caregiver Wellness Passport
   assert.match(
@@ -95,18 +104,89 @@ test('(c) the Programs dropdown lists the Passport and not Wellness Grants', () 
   );
 });
 
-test('(d) no page contains "Sanctuary Network"', () => {
+test('(d) Network groups partners and training without a second dropdown or new page', () => {
+  const drop = sanctuaryDrop(loadFile('templates/_header.html.j2'));
+  const group = drop.match(/<div class="nav-drop-group" role="group" aria-label="Caregiver Sanctuary Network">([\s\S]*?)<\/div>/);
+  assert.ok(group, 'Network needs a named navigation group');
+  assert.deepEqual([...group[1].matchAll(/href="([^"]+)"/g)].map(m => m[1]), [
+    'sanctuary.html#network', 'community-wellness-partners.html', 'dementia-friendly-training.html',
+  ]);
+  assert.doesNotMatch(group[1], /<button|class="drop"/);
+  for (const href of ['sanctuary.html#network', 'community-wellness-partners.html', 'dementia-friendly-training.html']) {
+    assertDestination(href);
+  }
+});
+
+test('every generated public header shares the new hierarchy, first-focus skip link and native dropdown buttons', () => {
   const htmlFiles = fs.readdirSync(rootDir).filter(f => f.endsWith('.html'));
-  for (const f of htmlFiles) {
-    const content = loadFile(f);
-    assert.doesNotMatch(content, /sanctuary network/i, `${f} still contains "Sanctuary Network"`);
+  let checked = 0;
+  for (const file of htmlFiles) {
+    const html = loadFile(file);
+    if (!html.includes('main-nav nav-v2')) continue;
+    checked++;
+    const nav = html.match(/<nav class="main-nav nav-v2">([\s\S]*?)<\/nav>/)[1];
+    const drop = sanctuaryDrop(nav);
+    for (const href of programDestinations) assert.ok(drop.includes(`href="${href}"`), `${file}: missing ${href}`);
+    assert.equal([...nav.matchAll(/>The Sanctuary<\/a>/g)].length, 1, file);
+    assert.match(nav, /<button class="drop-toggle" aria-expanded="false" aria-label="The Sanctuary menu">/);
+    assert.equal(html.indexOf('<a ', html.indexOf('<body>')), html.indexOf('<a class="skip-link"'), file);
+    assert.match(html, /<main id="main">/);
   }
-  const templatesDir = path.join(rootDir, 'templates');
-  const templateFiles = fs.readdirSync(templatesDir).filter(f => f.endsWith('.j2'));
-  for (const f of templateFiles) {
-    const content = fs.readFileSync(path.join(templatesDir, f), 'utf8');
-    assert.doesNotMatch(content, /sanctuary network/i, `templates/${f} still contains "Sanctuary Network"`);
+  assert.equal(checked, 23, 'all current public headers must be checked');
+});
+
+test('Sanctuary merges the overview and exposes join/contact before the program and Network sections', () => {
+  const html = loadFile('sanctuary.html');
+  const main = html.match(/<main id="main">([\s\S]*?)<\/main>/)[1];
+  const programsAt = main.indexOf('id="programs-events"');
+  assert.ok(programsAt > 0);
+  for (const href of ['programs.html', 'request-support.html']) {
+    assert.ok(main.indexOf(`href="${href}"`) < programsAt, `early entry required for ${href}`);
   }
+  assert.match(main, /<h2>Programs &amp; Events<\/h2>/);
+  for (const href of programDestinations) assert.ok(main.includes(`href="${href}"`), href);
+  const network = main.slice(main.indexOf('<section id="components">'));
+  assert.match(network, /<h2 id="network">Caregiver Sanctuary Network<\/h2>/);
+  assert.match(network, /href="community-wellness-partners.html"/);
+  assert.match(network, /href="dementia-friendly-training.html"/);
+  assert.doesNotMatch(network, /href="wellness-passport.html"/);
+  for (const fragment of ['what', 'components', 'partners', 'passport', 'training', 'become']) {
+    assertDestination(`sanctuary.html#${fragment}`);
+  }
+  const footer = loadFile('templates/_footer.html.j2');
+  assert.match(footer, /href="staff.html">Staff Console/);
+  assert.match(footer, /href="sanctuary.html#network"/);
+  assert.match(footer, /href="programs-events.html#community-series"/);
+  assert.match(footer, /href="programs-events.html#drop-in"/);
+});
+
+test('existing click/touch expansion, one-open-menu rule and Escape dismissal still work with the combined menu', () => {
+  const handlers = {};
+  const items = Array.from({ length: 3 }, () => {
+    const classes = new Set();
+    const button = { expanded: 'false', addEventListener(type, fn) { this[type] = fn; }, setAttribute(name, value) { if (name === 'aria-expanded') this.expanded = value; } };
+    return {
+      button, querySelector() { return button; },
+      classList: { contains: c => classes.has(c), remove: c => classes.delete(c), toggle(c, on) { if (on) classes.add(c); else classes.delete(c); } },
+    };
+  });
+  runInNewContext(loadFile('nav-v2.js'), { document: {
+    querySelectorAll: () => items, addEventListener(type, fn) { handlers[type] = fn; },
+  } });
+  const click = { stopPropagation() {} };
+  items[0].button.click(click);
+  assert.equal(items[0].button.expanded, 'true');
+  items[1].button.click(click);
+  assert.equal(items[0].button.expanded, 'false');
+  assert.equal(items[1].button.expanded, 'true');
+  handlers.keydown({ key: 'Escape' });
+  assert.ok(items.every(it => it.button.expanded === 'false'));
+  items[0].button.click(click);
+  items[0].button.click(click);
+  assert.equal(items[0].button.expanded, 'false');
+  items[0].button.click(click);
+  handlers.click();
+  assert.ok(items.every(it => it.button.expanded === 'false'));
 });
 
 test('(e) the Passport page contains all five structure points and names the Wellness Grant as a benefit', () => {

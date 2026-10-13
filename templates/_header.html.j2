@@ -37,9 +37,11 @@
       </div>
     </div>
     <div class="nav-item has-drop">
-      <a href="programs-events.html"{% if active_page|default('') in ['programs', 'events', 'programs-events', 'gallery', 'community-series', 'drop-in-respite', 'wellness-passport'] %} class="active"{% endif %}>Programs &amp; Events</a><button class="drop-toggle" aria-expanded="false" aria-label="Programs &amp; Events menu">&#9662;</button>
+      <a href="sanctuary.html"{% if active_page|default('') in ['sanctuary', 'programs', 'events', 'programs-events', 'gallery', 'community-series', 'drop-in-respite', 'wellness-passport', 'community-wellness-partners', 'dementia-friendly-training'] %} class="active"{% endif %}>The Sanctuary</a><button class="drop-toggle" aria-expanded="false" aria-label="The Sanctuary menu">&#9662;</button>
       <div class="drop">
-        <a href="programs-events.html">Overview</a>
+        <a href="sanctuary.html">Overview</a>
+        <a href="programs.html">Join Caregiver Sanctuary</a>
+        <a href="request-support.html">Contact / Request Support</a>
         <a href="programs-events.html#support-group">Virtual Support Group</a>
         <a href="community-series.html">Caregiver Sanctuary Community Series</a>
         <a href="drop-in-respite.html">Drop-In Respite</a>
@@ -49,6 +51,11 @@
         <a href="events.html">Upcoming Events</a>
         <a href="programs-events.html#calendar">Calendar</a>
         <a href="gallery.html">Photo Gallery</a>
+        <div class="nav-drop-group" role="group" aria-label="Caregiver Sanctuary Network">
+          <a href="sanctuary.html#network">Caregiver Sanctuary Network</a>
+          <a href="community-wellness-partners.html">Community Wellness Partners</a>
+          <a href="dementia-friendly-training.html">Dementia-Friendly Training</a>
+        </div>
       </div>
     </div>
     <div class="nav-item has-drop">
@@ -72,14 +79,6 @@
         <a href="caregiver-tools.html">Caregiver Tools &amp; Guides</a>
         <a href="faq.html">FAQ</a>
         <a href="crisis-help.html">Crisis &amp; Emergency Help</a>
-      </div>
-    </div>
-    <div class="nav-item has-drop">
-      <a href="sanctuary.html"{% if active_page|default('') in ['sanctuary', 'community-wellness-partners', 'dementia-friendly-training'] %} class="active"{% endif %}>The Sanctuary</a><button class="drop-toggle" aria-expanded="false" aria-label="The Sanctuary menu">&#9662;</button>
-      <div class="drop">
-        <a href="sanctuary.html">Overview</a>
-        <a href="community-wellness-partners.html">Community Wellness Partners</a>
-        <a href="dementia-friendly-training.html">Dementia-Friendly Training</a>
       </div>
     </div>
     <a href="portal.html" class="nav-portal">Caregiver Portal</a>
