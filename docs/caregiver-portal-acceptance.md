@@ -1,5 +1,30 @@
 # Caregiver Portal — what "done" means
 
+## Nonarchived-caregiver guard — October 14, 2026
+
+[pc2-codex-42] Source now checks the existing `status != 'archived'` caregiver
+contract before redeeming a fresh token or accessing wellness GET/POST. Identities
+found missing or archived at these checks cannot receive a session or successful-login audit, read
+wellness history, or reach POST body parsing/writes. Identity checks fetch only
+the bounded ID, not profile fields. Store failures fail closed with a generic
+error. `inactive` remains eligible under the existing contract; no lifecycle,
+schema, email, configuration or staff/agent change is introduced.
+
+The single-use token UPDATE additionally requires a matching nonarchived
+caregiver in an `EXISTS` predicate, and accepts only numeric `meta.changes === 1`
+without a reported failure. This closes an archive/delete **before that claim**;
+it is not a transaction with the subsequent audit/session issuance. An archive
+after the claim can race issuance. Wellness lookup and later history/write are
+also separate operations, so archiving between them is not atomically excluded.
+Ambiguous claim metadata fails closed but may leave an already-committed token
+consumed; no compensating reuse is attempted. This is not global session
+revocation: copied-cookie expiry/logout, cache/origin and limiter work remain
+separate. Preview containment still executes before any identity/data access.
+
+Named tests use synthetic in-memory SQLite and fake bindings, not Cloudflare D1
+or a real caregiver. Source, independent review, CI, installed runtime and client
+acceptance remain separate; this section claims no deployment or live test.
+
 ## Shared-preview containment — October 13, 2026
 
 [pc2-codex-42] Current source disables caregiver API access when `ENVIRONMENT` is

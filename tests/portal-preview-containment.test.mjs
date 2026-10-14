@@ -20,6 +20,9 @@ async function productionCredentials() {
             if (sql.includes('SELECT id, email FROM caregiver')) {
               return { id: 'synthetic-caregiver', email: 'caregiver@example.invalid' };
             }
+            if (sql.includes('SELECT id FROM caregiver')) {
+              return values[0] === 'synthetic-caregiver' ? { id: values[0] } : null;
+            }
             if (sql.includes('FROM portal_token')) {
               return rows.find(row => row.token_hash === values[0]) ?? null;
             }
@@ -31,7 +34,8 @@ async function productionCredentials() {
               return { meta: { changes: 1 } };
             }
             if (sql.includes('UPDATE portal_token')) {
-              const row = rows.find(row => row.token_hash === values[0] && row.used === 0);
+              const row = rows.find(row => row.token_hash === values[0] && row.used === 0
+                && row.caregiver_id === values[1] && row.caregiver_id === 'synthetic-caregiver');
               if (row) row.used = 1;
               return { meta: { changes: row ? 1 : 0 } };
             }

@@ -39,6 +39,7 @@ export const UNIT_TEST_FILES = Object.freeze([
   'intake.test.mjs',
   'payment-write-atomicity.test.mjs',
   'portal-banner.test.mjs',
+  'portal-caregiver-status.test.mjs',
   'portal-dashboard-history.test.mjs',
   'portal-login-v0.test.mjs',
   'portal-logout-ui.test.mjs',
