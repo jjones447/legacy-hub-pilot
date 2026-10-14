@@ -284,6 +284,16 @@ export async function onRequestPost({ request, env }) {
       return previewUnavailable();
     }
 
+    // Incremental browser-origin defense for known production POST actions.
+    // Compare the literal serialized value, never parse/refine a supplied origin.
+    // Actual header absence preserves transport compatibility, NOT CSRF closure.
+    if (action === 'login' || action === 'wellness' || action === 'logout') {
+      const origin = request.headers.get('Origin');
+      if (origin !== null && (origin === 'null' || origin !== url.origin)) {
+        return json({ ok: false, error: 'forbidden' }, 403);
+      }
+    }
+
     const secret = env.PORTAL_TOKEN_SECRET;
     if (!secret) {
       return json({ ok: false, error: 'auth_not_configured' }, 503);

@@ -1,5 +1,26 @@
 # Caregiver Portal — what "done" means
 
+## Present-Origin POST refusal — October 14, 2026
+
+[pc2-codex-42] After the existing preview/development branch, production POST
+`login`, `wellness` and `logout` reject a present Origin unless its literal value
+exactly matches the request URL's serialized origin. Empty, opaque `null`, paths,
+credentials, multiple values and scheme/host/port mismatches fail with generic
+403/no-store before credentials, cookies, bodies, limiter, database or mail.
+No supplied Origin is parsed, normalized, reflected or trusted as a Host header.
+GET and unknown actions are unchanged; preview refusal/logout still precede even
+the Origin read, with no identity or database access.
+
+Actual header absence (`Headers.get` returns null) retains existing transport
+compatibility. It does **not** establish same-origin or close CSRF: missing-Origin
+fallback/token defense, native-client spoofing, XSS and session/archiving races
+remain separate. [OWASP's guidance](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html)
+recommends validated origin evidence or another CSRF defense; this deliberately
+bounded change implements only explicit present-Origin mismatch refusal.
+New fake tests make no real database/mail/network requests. Source acceptance is
+not installed behavior or proof of exploitation; full original Functions and
+staging-first qualification remain separate from this header guard.
+
 ## Portal response cache policy — October 14, 2026
 
 [pc2-codex-42] Source sets only `Cache-Control: no-store` on every response
