@@ -1,5 +1,21 @@
 # Caregiver Portal — what "done" means
 
+## Portal response cache policy — October 14, 2026
+
+[pc2-codex-42] Source sets only `Cache-Control: no-store` on every response
+constructed by the portal GET/POST handler: JSON successes and refusals, preview
+and configuration errors, unknown routes, generic failures, verification HTML
+errors and session redirects, and production/preview logout. Existing status,
+body, content type, Location and cookie fields are unchanged. Referrer policy
+already lives in the global middleware and is not duplicated here.
+
+New fake-binding response-metadata tests do not access a real database, send mail
+or make network requests. This source policy is not evidence of live leakage or
+installed behavior. It does not purge earlier copies, override every edge policy,
+revoke copied sessions, or close the separate archive races. The changed handler
+needs a separately qualified full Functions package and staging-first installed
+checks; an older compiled worker or static-only upload is not source parity.
+
 ## Nonarchived-caregiver guard — October 14, 2026
 
 [pc2-codex-42] Source now checks the existing `status != 'archived'` caregiver
