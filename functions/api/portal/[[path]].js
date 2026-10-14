@@ -66,6 +66,18 @@ function previewUnavailable() {
   return json({ ok: false, error: 'preview_portal_disabled' }, 503);
 }
 
+// Match login/me's existing lifecycle contract, without fetching profile fields.
+// This is a current-request check, not a revocation table or a transaction across
+// subsequent history reads/writes. Binding failures propagate to the generic 500.
+async function hasNonarchivedCaregiver(db, caregiverId) {
+  if (typeof caregiverId !== 'string' || !caregiverId || caregiverId.length > 256) return false;
+  const caregiver = await db
+    .prepare(`SELECT id FROM caregiver WHERE id = ? AND status != 'archived'`)
+    .bind(caregiverId)
+    .first();
+  return caregiver?.id === caregiverId;
+}
+
 const CLEARED_SESSION_COOKIE = 'portal_session=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT';
 
 function htmlErrorPage(message) {
@@ -151,15 +163,21 @@ export async function onRequestGet({ request, env }) {
       }
 
       const caregiverId = tokenRow.caregiver_id;
+      if (!await hasNonarchivedCaregiver(env.LEGACY_DB, caregiverId)) {
+        return htmlErrorPage('This access link is unrecognized or has been revoked.');
+      }
 
       // Claim the token atomically: only one request can flip used 0 -> 1, so two simultaneous
-      // clicks on the same link cannot both sign in.
+      // clicks on the same link cannot both sign in. Recheck caregiver eligibility
+      // inside this statement too; the preliminary lookup alone is not atomic
+      // with an archive. An archive AFTER this claim can still race session issuance.
       const claim = await env.LEGACY_DB
-        .prepare(`UPDATE portal_token SET used = 1 WHERE token_hash = ? AND used = 0`)
-        .bind(tokenHash)
+        .prepare(`UPDATE portal_token SET used = 1 WHERE token_hash = ? AND used = 0 AND caregiver_id = ?
+                  AND EXISTS (SELECT 1 FROM caregiver WHERE id = portal_token.caregiver_id AND status != 'archived')`)
+        .bind(tokenHash, caregiverId)
         .run();
-      if (!claim || !claim.meta || claim.meta.changes !== 1) {
-        return htmlErrorPage('This access link has already been used.');
+      if (!claim || claim.success === false || !claim.meta || claim.meta.changes !== 1) {
+        return htmlErrorPage('This access link is unavailable or has already been used.');
       }
 
       // Audit log portal.login_success
@@ -231,6 +249,9 @@ export async function onRequestGet({ request, env }) {
       // and the questions to ask.
       const caregiverId = await parseSessionCookie(request.headers.get('Cookie'), secret);
       if (!caregiverId) {
+        return json({ ok: false, error: 'unauthorized' }, 401);
+      }
+      if (!await hasNonarchivedCaregiver(env.LEGACY_DB, caregiverId)) {
         return json({ ok: false, error: 'unauthorized' }, 401);
       }
       const history = await caregiverHistory(env.LEGACY_DB, caregiverId);
@@ -366,6 +387,9 @@ export async function onRequestPost({ request, env }) {
       // POST /api/portal/wellness -- record a check-in for the signed-in caregiver (one a day at most).
       const caregiverId = await parseSessionCookie(request.headers.get('Cookie'), secret);
       if (!caregiverId) {
+        return json({ ok: false, error: 'unauthorized' }, 401);
+      }
+      if (!await hasNonarchivedCaregiver(env.LEGACY_DB, caregiverId)) {
         return json({ ok: false, error: 'unauthorized' }, 401);
       }
       let body;
