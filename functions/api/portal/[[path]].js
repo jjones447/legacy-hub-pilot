@@ -50,7 +50,7 @@ function constantTimeEqual(a, b) {
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), {
     status,
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'Cache-Control': 'no-store' },
   });
 }
 
@@ -97,7 +97,7 @@ function htmlErrorPage(message) {
   </div>
 </body>
 </html>`, {
-    headers: { 'content-type': 'text/html; charset=utf-8' },
+    headers: { 'content-type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
     status: 400
   });
 }
@@ -196,6 +196,7 @@ export async function onRequestGet({ request, env }) {
       return new Response(null, {
         status: 302,
         headers: {
+          'Cache-Control': 'no-store',
           'Location': '/portal.html',
           'Set-Cookie': cookieHeader
         }
@@ -427,6 +428,7 @@ export async function onRequestPost({ request, env }) {
       return new Response(JSON.stringify({ ok: true }), {
         status: 200,
         headers: {
+          'Cache-Control': 'no-store',
           'content-type': 'application/json',
           'Set-Cookie': CLEARED_SESSION_COOKIE
         }
