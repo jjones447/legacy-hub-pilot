@@ -60,11 +60,13 @@ not app-original results/audits or evidence that a change is live.
 
 ## Separate staff confirmation remains unavailable
 
-Current application confirmation accepts an ID behind Access. It does not establish
+The original PR203 application contract accepted an ID behind Access. It did not establish
 the required same-requester, same-Slack-thread, exact-preview human capability.
 Access service-token admission is not a human's confirmation. Every attempt to call
 confirm/direct through this adapter is refused; there is no injected confirm transport
 route and no `staff_id` or fake audit field to bypass that decision.
+Source204's separate console caller now binds the initiating human and server
+preview version; it still does not establish the Slack-to-staff capability here.
 
 Before a separately qualified staff confirmer sends anything, trusted host code must
 call `holdForReconciliation()`. This one-way latch blocks all adapter operations,
@@ -72,8 +74,13 @@ including discard, replacement and repeat delivery. It also blocks a write whose
 authorization is still awaiting a response. No model tool can clear it. Reconciliation
 and any later session require an operator to establish actual app outcome, not simply
 construct another adapter. The module never reports a confirmed/live result or writes
-an audit. Content discard's current app audit actor is the literal `staff`; this
-adapter does not upgrade it to named-human audit proof.
+an audit. The October15 discard successor requires the original application
+`preview_version` and initiating verified human on both discard routes. The
+adapter retains that version privately from the original draft response and
+sends it on discard, not as a model argument or independent human-intent proof.
+New Content discard audits use the verified actor; historical literal `staff`
+audits remain unchanged. No deployed or named-human runtime acceptance follows
+from this source correction.
 
 ## Delivery identity and uncertain outcomes
 

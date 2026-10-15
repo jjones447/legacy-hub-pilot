@@ -93,7 +93,7 @@ export function createGovernedAgentTools({ scope, targets, authorize, transport 
   }
 
   function previewFrom(body, target) {
-    if (!plain(body) || body.ok !== true) return null;
+    if (!plain(body) || body.ok !== true || typeof body.preview_version !== 'string' || !/^[a-f0-9]{64}$/.test(body.preview_version)) return null;
     if (content(target.area)) {
       if (!text(body.draft_id) || !plain(body.draft) || body.draft.id !== body.draft_id
           || body.draft.status !== 'draft' || body.draft.type_id !== target.typeId
@@ -135,7 +135,7 @@ export function createGovernedAgentTools({ scope, targets, authorize, transport 
       const body = name === 'app_draft'
         ? { ...(content(target.area) ? { type_id: target.typeId } : { area: target.area }),
           target_id: target.targetId, request: args.request }
-        : { [content(target.area) ? 'draft_id' : 'change_id']: draft.id };
+        : { [content(target.area) ? 'draft_id' : 'change_id']: draft.id, preview_version: draft.previewVersion };
       let response;
       try { response = await transport(cap, { method: 'POST', path, body }); }
       catch { hold = true; return held(); }
@@ -158,7 +158,7 @@ export function createGovernedAgentTools({ scope, targets, authorize, transport 
         hold = true; return held(); // Draft may exist: no replacement or automatic discard.
       }
       const evidence = { draft_id: preview.id, preview: { before: preview.before, after: preview.after }, application: original };
-      draft = clone({ id: preview.id, target, request: args.request, preview: evidence.preview, state: 'draft', evidence });
+      draft = clone({ id: preview.id, target, request: args.request, preview: evidence.preview, previewVersion: original.preview_version, state: 'draft', evidence });
       seenDraftIds.add(preview.id);
       return clone({ ok: true, state: 'draft', ...evidence });
     } catch {

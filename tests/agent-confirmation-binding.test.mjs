@@ -171,3 +171,117 @@ for (const timing of ['before-read', 'after-read']) {
     } finally { console.error = previousError; f.db.close(); }
   });
 }
+
+// Governed discard uses the SAME original staff/preview fence, not general Access.
+for (const area of ['content', 'forms', 'caregiver', 'event', 'grant']) {
+  test(`${area}: initiating human discards exact preview once with named original audit and no domain mutation`, async () => {
+    const f = fixture(area);
+    try {
+      const receipt = await f.draft(), before = f.snapshot();
+      assert.equal((await f.call('discard', f.confirmBody(receipt))).status, 200);
+      const after = f.snapshot();
+      for (const table of ['caregiver', 'event', 'grant_application']) assert.deepEqual(after[table], before[table]);
+      if (f.content) {
+        assert.deepEqual(after.content_item.find(row => row.id === f.id), before.content_item.find(row => row.id === f.id));
+        const draft = after.content_item.find(row => row.id === receipt.draft_id);
+        assert.equal(draft.status, 'archived');
+        assert.equal(draft.updated_by, `staff_${actor}`);
+      } else assert.equal(after.agent_change[0].status, 'discarded');
+      assert.equal(after.audit_log.length, before.audit_log.length + 1);
+      assert.deepEqual(after.audit_log.slice(0, -1), before.audit_log);
+      const audit = after.audit_log.at(-1);
+      assert.equal(audit.actor, actor);
+      assert.equal(audit.action, f.content ? 'content_item.discard' : 'agent_change.discard');
+      assert.equal(audit.entity_id, receipt.draft_id || receipt.change_id);
+      assert.equal((await f.call('discard', f.confirmBody(receipt))).status, 409);
+      assert.equal((await f.call('confirm', f.confirmBody(receipt))).status, 409);
+      assert.deepEqual(f.snapshot(), after);
+    } finally { f.db.close(); }
+  });
+  for (const refusal of ['other-actor', 'no-human-proof', 'service-proof', 'missing-version', 'wrong-version', 'origin-change', 'slack-context', 'proposal-change', 'target-change', 'legacy-owner']) {
+    test(`${area}: discard ${refusal} refuses with no status/domain/audit mutation`, async () => {
+      const f = fixture(area);
+      try {
+        const receipt = await f.draft(), body = f.confirmBody(receipt);
+        if (refusal === 'missing-version') delete body.preview_version;
+        if (refusal === 'wrong-version') body.preview_version = '0'.repeat(64);
+        if (refusal === 'slack-context') body.conversation_id = 'model-asserted';
+        if (refusal === 'legacy-owner') {
+          f.db.prepare(`UPDATE ${f.content ? 'content_item' : 'agent_change'} SET ${f.content ? 'updated_by' : 'requested_by'}='agent' WHERE id=?`).run(receipt.draft_id || receipt.change_id);
+        }
+        if (refusal === 'proposal-change') {
+          f.db.prepare(`UPDATE ${f.content ? 'content_item' : 'agent_change'} SET ${f.content ? 'data' : 'payload_json'}='{}' WHERE id=?`).run(receipt.draft_id || receipt.change_id);
+        }
+        if (refusal === 'target-change') {
+          const table = f.content ? 'content_item' : area === 'grant' ? 'grant_application' : area;
+          const field = f.content ? 'updated_by' : area === 'grant' ? 'review_notes' : area === 'event' ? 'title' : 'first_name';
+          f.db.prepare(`UPDATE ${table} SET ${field}='Concurrent' WHERE id=?`).run(f.id);
+        }
+        const before = f.snapshot();
+        const response = await f.call('discard', body, refusal === 'other-actor' ? 'other@example.invalid' : refusal === 'no-human-proof' ? null : refusal === 'service-proof' ? 'service:fixture@example.invalid' : actor,
+          refusal === 'origin-change' ? 'https://other.invalid' : undefined);
+        assert.ok([403, 409].includes(response.status));
+        assert.deepEqual(f.snapshot(), before);
+      } finally { f.db.close(); }
+    });
+  }
+  for (const [first, second] of [['discard', 'confirm'], ['confirm', 'discard'], ['discard', 'discard']]) {
+    test(`${area}: racing ${first} cannot overwrite winning ${second} or its original audits`, async () => {
+      const f = fixture(area), previousError = console.error; console.error = () => {};
+      try {
+        const receipt = await f.draft();
+        let winner, expected;
+        f.race(async () => { winner = await f.call(second, f.confirmBody(receipt)); expected = f.snapshot(); });
+        const loser = await f.call(first, f.confirmBody(receipt));
+        assert.equal(winner.status, 200);
+        assert.equal(loser.status, 500, 'original audit precondition aborts losing batch');
+        assert.deepEqual(f.snapshot(), expected);
+      } finally { console.error = previousError; f.db.close(); }
+    });
+  }
+  for (const fault of ['audit', 'status']) {
+    test(`${area}: discard ${fault} failure rolls back the complete original audit/status batch`, async () => {
+      const f = fixture(area), previousError = console.error; console.error = () => {};
+      try {
+        const receipt = await f.draft(), before = f.snapshot();
+        const trigger = fault === 'audit' ? `BEFORE INSERT ON audit_log WHEN NEW.action='${f.content ? 'content_item' : 'agent_change'}.discard'`
+          : `BEFORE UPDATE ON ${f.content ? 'content_item' : 'agent_change'}`;
+        f.db.exec(`CREATE TRIGGER discard_fault ${trigger} BEGIN SELECT RAISE(ABORT, 'SYNTHETIC_DISCARD_FAILURE'); END`);
+        const response = await f.call('discard', f.confirmBody(receipt));
+        assert.equal(response.status, 500);
+        assert.deepEqual(await response.json(), { ok: false, error: 'internal_error' });
+        assert.deepEqual(f.snapshot(), before);
+      } finally { console.error = previousError; f.db.close(); }
+    });
+  }
+  test(`${area}: post-read target drift aborts discard before its original audit/status writes`, async () => {
+    const f = fixture(area), previousError = console.error; console.error = () => {};
+    try {
+      const receipt = await f.draft();
+      let expected;
+      f.race(() => {
+        const table = f.content ? 'content_item' : area === 'grant' ? 'grant_application' : area;
+        const field = f.content ? 'updated_by' : area === 'grant' ? 'review_notes' : area === 'event' ? 'title' : 'first_name';
+        f.db.prepare(`UPDATE ${table} SET ${field}='Concurrent' WHERE id=?`).run(f.id);
+        expected = f.snapshot();
+      });
+      assert.equal((await f.call('discard', f.confirmBody(receipt))).status, 500);
+      assert.deepEqual(f.snapshot(), expected);
+    } finally { console.error = previousError; f.db.close(); }
+  });
+}
+
+for (const timing of ['before-read', 'after-read']) {
+  test(`Grant discard secondary award ${timing} drift retains the draft and original audits`, async () => {
+    const f = fixture('grant'), previousError = console.error; console.error = () => {};
+    try {
+      const receipt = await f.draft();
+      const change = () => f.db.exec("INSERT INTO award(grant_application_id,outcome) VALUES(1,'Fictional concurrent outcome')");
+      let expected;
+      if (timing === 'before-read') { change(); expected = f.snapshot(); }
+      else f.race(() => { change(); expected = f.snapshot(); });
+      assert.equal((await f.call('discard', f.confirmBody(receipt))).status, timing === 'before-read' ? 409 : 500);
+      assert.deepEqual(f.snapshot(), expected);
+    } finally { console.error = previousError; f.db.close(); }
+  });
+}

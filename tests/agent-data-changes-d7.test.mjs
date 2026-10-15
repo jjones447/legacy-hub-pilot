@@ -260,7 +260,7 @@ test('Grant: discard marks change discarded and writes audit row', async () => {
 
   const reqDiscard = new Request('http://localhost/api/agent/change/discard', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-dev-actor': 'staff_discarder@example.org' },
+    headers: { 'Content-Type': 'application/json', 'x-dev-actor': 'staff@example.org' },
     body: JSON.stringify({ change_id })
   });
 
@@ -272,7 +272,7 @@ test('Grant: discard marks change discarded and writes audit row', async () => {
 
   const audit = raw.prepare("SELECT * FROM audit_log WHERE action = 'agent_change.discard'").get();
   assert.ok(audit);
-  assert.equal(audit.actor, 'staff_discarder@example.org');
+  assert.equal(audit.actor, 'staff@example.org');
 });
 
 test('Confirm twice returns 409', async () => {

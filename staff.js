@@ -1849,26 +1849,34 @@ async function discardAgentChange(target) {
   const changeId = target.getAttribute('data-change-id');
   const draftId = target.getAttribute('data-draft-id');
   if (!changeId && !draftId) return;
+  const row = target.closest('.confirm-row');
+  const previewVersion = target.getAttribute('data-preview-version');
+  if (!previewVersion) { holdAgentConfirmation(row); return; }
+  // Discard competes with confirmation: reserve all previews before the first await.
+  agentConfirmationPending = true;
+  if (row) {
+    row.dataset ||= {};
+    row.dataset.confirmationState = 'discarding';
+    row.querySelectorAll?.('button').forEach(button => { button.disabled = true; });
+  }
   try {
     const res = await fetch(draftId ? '/api/agent/discard' : '/api/agent/change/discard', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(draftId ? { draft_id: draftId } : { change_id: changeId })
+      body: JSON.stringify({ ...(draftId ? { draft_id: draftId } : { change_id: changeId }), preview_version: previewVersion })
     });
     const data = await res.json();
-    const row = target.closest('.confirm-row');
     if (!res.ok || !data.ok) {
-      if (row) row.innerHTML = `<span class="chat-confirm-discarded">Failed: ${escapeHtml(data.error || 'Could not discard')}</span>`;
+      holdAgentConfirmation(row);
       return;
     }
     if (row) {
+      row.dataset.confirmationState = 'discarded';
       row.innerHTML = '<span class="chat-confirm-discarded">Draft discarded — nothing changed.</span>';
     }
+    agentConfirmationPending = false;
   } catch (e) {
-    const row = target.closest('.confirm-row');
-    if (row) {
-      row.innerHTML = `<span class="chat-confirm-discarded">Error: ${escapeHtml(e.message)}</span>`;
-    }
+    holdAgentConfirmation(row);
   }
 }
 

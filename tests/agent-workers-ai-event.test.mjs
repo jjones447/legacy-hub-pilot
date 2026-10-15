@@ -202,7 +202,7 @@ test('Event draft only writes durable draft; confirmation applies selected recor
   assert.ok(db.state.audits.some(a => a.sql.includes("'event.update'")));
   assert.ok(db.state.audits.some(a => a.values.includes('agent_change.confirm')));
 });
-test('Event discard leaves domain unchanged; drift refuses confirmation before any apply', async () => {
+test('Event drift refuses both confirmation and stale-preview discard before any apply', async () => {
   const db = workflowDb();
   const drafted = await post(db, 'draft', { area: 'event', target_id: event.id, request: 'Update title' });
   db.state.event.title = 'Changed by another staff member';
@@ -211,9 +211,11 @@ test('Event discard leaves domain unchanged; drift refuses confirmation before a
   assert.equal(db.state.audits.length, 0);
   assert.equal(db.state.change.status, 'draft');
   const discarded = await post(db, 'discard', { change_id: drafted.data.change_id });
-  assert.equal(discarded.data.ok, true);
+  assert.equal(discarded.status, 409);
+  assert.equal(discarded.data.ok, false);
   assert.equal(db.state.event.title, 'Changed by another staff member');
-  assert.equal(db.state.change.status, 'discarded');
+  assert.equal(db.state.change.status, 'draft');
+  assert.equal(db.state.audits.length, 0);
 });
 test('Event domain validation refusal creates no durable draft or writes', async () => {
   const db = workflowDb();
