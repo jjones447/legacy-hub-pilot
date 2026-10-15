@@ -187,6 +187,43 @@ test('Sanctuary merges the overview and exposes join/contact before the program 
   assert.match(footer, /href="programs-events.html#drop-in"/);
 });
 
+test('hero secondary CTA has an opaque high-contrast surface in default, hover and keyboard-focus states', () => {
+  const css = loadFile('styles.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  function declarations(selector) {
+    const matches = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+      .filter(match => match[1].split(',').some(part => part.trim() === selector));
+    assert.ok(matches.length, `missing ${selector} rule`);
+    return Object.fromEntries(matches.flatMap(match => [...match[2].matchAll(/([\w-]+)\s*:\s*([^;]+);/g)]
+      .map(([, name, value]) => [name, value.trim()])));
+  }
+  const palette = declarations(':root');
+  function rgb(value) {
+    const variable = value.match(/^var\((--[\w-]+)\)$/);
+    const hex = variable ? palette[variable[1]] : value;
+    assert.match(hex, /^#[\da-f]{6}$/i, 'CTA colors must be opaque, independently of the hero image');
+    return [1, 3, 5].map(offset => parseInt(hex.slice(offset, offset + 2), 16));
+  }
+  function luminance(color) {
+    const linear = rgb(color).map(channel => {
+      const srgb = channel / 255;
+      return srgb <= 0.04045 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4;
+    });
+    return linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722;
+  }
+  const base = declarations('.hero .btn-outline');
+  for (const state of ['', ':hover', ':focus', ':focus-visible']) {
+    const style = { ...base, ...(state ? declarations(`.hero .btn-outline${state}`) : {}) };
+    const foreground = luminance(style.color);
+    const background = luminance(style.background);
+    const contrast = (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05);
+    assert.ok(contrast >= 4.5, `${state || 'default'} contrast ${contrast.toFixed(2)} must reach 4.5:1`);
+  }
+  const focus = declarations('.btn:focus-visible');
+  assert.match(focus.outline, /solid/);
+  assert.equal(focus['outline-offset'], '2px');
+  assert.match(loadFile('sanctuary.html'), /class="btn btn-outline" href="request-support.html">Contact \/ Request Support/);
+});
+
 test('existing click/touch expansion, one-open-menu rule and Escape dismissal still work with the combined menu', () => {
   const { handlers, items, click } = navigationFixture();
   items[0].button.click(click);
