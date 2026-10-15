@@ -2558,6 +2558,75 @@ function drawWellnessChart(container, data) {
   container.appendChild(legend);
 }
 
+// A locator only: request text, actor, challenge and preview never enter the URL.
+async function initAssistantHandoff() {
+  const match = /^#handoff=(ah_[a-f0-9]{32})$/.exec(window.location.hash || '');
+  if (!match) return;
+  const handoffId = match[1];
+  window.history.replaceState(null, '', window.location.pathname + window.location.search);
+  const panel = document.createElement('section');
+  panel.className = 'panel';
+  panel.setAttribute('aria-label', 'Assistant request handoff');
+  document.getElementById('chatBody')?.parentElement?.prepend(panel);
+  let busy = false;
+  const addText = value => { const p = document.createElement('p'); p.textContent = value; panel.appendChild(p); };
+  const button = (label, action, version) => {
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = label;
+    b.addEventListener('click', () => { void send(action, version); }); panel.appendChild(b);
+  };
+  async function send(action, version) {
+    if (busy || agentConfirmationHold || agentConfirmationPending) return;
+    busy = true;
+    const mutating = action !== 'view';
+    let uncertainState = false;
+    if (mutating) agentConfirmationPending = true;
+    panel.querySelectorAll('button').forEach(b => { b.disabled = true; });
+    try {
+      const res = await fetch('/api/agent/handoff', { method: 'POST', headers: {'content-type':'application/json'},
+        body: JSON.stringify({action,handoff_id:handoffId,...(version ? {preview_version:version} : {})}) });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error('handoff');
+      panel.replaceChildren();
+      addText('Assistant request: ' + data.state);
+      if (data.challenge) {
+        addText('Post this one-use code yourself in the ORIGINAL Slack request thread. Do not forward it to an assistant or another person. It expires in three minutes.');
+        const code = document.createElement('pre'); code.textContent = data.challenge; panel.appendChild(code);
+        addText('Original channel: ' + data.channel + '; thread: ' + data.thread);
+        button('Check pairing', 'view');
+      } else if (data.state === 'pending') button('Begin identity pairing', 'begin');
+      else if (data.state === 'challenged') {
+        addText('Pairing is pending. Use the original protected page code; do not generate another code or retry the claim.');
+        button('Check pairing', 'view');
+      } else if (data.state === 'paired') {
+        addText(data.area + ' / ' + data.target_id); addText(data.request);
+        button('Create my draft', 'draft');
+      } else if (data.state === 'drafted') {
+        addText(data.area + ' / ' + data.target_id); addText(data.request);
+        const pre = document.createElement('pre'); pre.textContent = JSON.stringify(data.preview,null,2); panel.appendChild(pre);
+        if (!/^[a-f0-9]{64}$/.test(data.preview_version || '')) throw new Error('preview');
+        addText('Review the exact before/after. Only you may confirm or discard this proposal.');
+        button('Confirm this exact preview', 'confirm', data.preview_version);
+        button('Discard this exact preview', 'discard', data.preview_version);
+      } else if (!['published','discarded','refused'].includes(data.state)) {
+        uncertainState = true;
+        throw new Error('unknown outcome');
+      }
+      if (mutating) agentConfirmationPending = false;
+    } catch {
+      panel.replaceChildren();
+      if (mutating || uncertainState) {
+        addText('Handoff on HOLD. Do not retry, replace or discard. An operator must reconcile the original application outcome.');
+        holdAgentConfirmation();
+      } else addText('Could not read this handoff. No action was sent from this page; have an operator verify it.');
+    } finally { busy = false; }
+  }
+  await send('view');
+}
+
+if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+  document.addEventListener('DOMContentLoaded', () => { void initAssistantHandoff(); });
+}
+
 if (typeof window !== 'undefined') {
   window.formatStatusLine = formatStatusLine;
   window.updateStatusLine = updateStatusLine;
