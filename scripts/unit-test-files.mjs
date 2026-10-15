@@ -4,6 +4,9 @@
 export const UNIT_TEST_FILES = Object.freeze([
   'assistant-handoff.test.mjs',
   'assistant-handoff-ui.test.mjs',
+  'assistant-web-jobs.test.mjs',
+  'web-job-protocol.test.mjs',
+  'web-job-ui.test.mjs',
   'agent-confirmation-binding.test.mjs',
   'governed-agent-tools.test.mjs',
   'payment-concurrent-routing.test.mjs',

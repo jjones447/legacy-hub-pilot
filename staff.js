@@ -1403,6 +1403,7 @@ async function updateAttendance(id, status, event) {
 
 document.addEventListener('DOMContentLoaded', function () {
   initStaffAssistantDisclosure();
+  void initWebJobFeature();
   initStaffChatTargets();
   loadStaffConsole();
   const chatInput = document.getElementById('chatInput');
@@ -1918,8 +1919,52 @@ async function discardAgentChange(target) {
   }
 }
 
+let agentWebJobPending = false;
+let agentWebJobsEnabled = false;
+async function initWebJobFeature() {
+  try {
+    const response = await fetch('/api/agent/web-jobs');
+    const result = await response.json();
+    agentWebJobsEnabled = response.ok && result.ok === true && result.enabled === true;
+  } catch { agentWebJobsEnabled = false; } // Unknown feature state never broadens the legacy request.
+}
+async function awaitCurrentWebJob(initial, pendingNode) {
+  // This refresh exists only for this newly-created job and has a hard one-minute budget.
+  // No standing timer, restart recovery, model retry or invisible re-post is installed.
+  const jobId = initial.job_id;
+  if (!/^[a-f0-9]{32}$/.test(jobId || '')) throw new Error('Invalid job receipt; do not retry.');
+  agentWebJobPending = true;
+  try {
+    let status = initial;
+    const until = Date.now() + 60000;
+    for (let refresh = 0; refresh < 30; refresh++) {
+      if (document.hidden || Date.now() >= until) break;
+      if (status.state === 'result') {
+        const response = await fetch('/api/agent/web-jobs', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'materialize', job_id: jobId })
+        });
+        const draft = await response.json();
+        if (!response.ok || !draft.ok) throw new Error('Job needs review; no change confirmed. Do not retry.');
+        return draft; // Existing exact preview/confirm/discard UI below, never auto-confirm.
+      }
+      if (!['pending', 'claimed'].includes(status.state)) throw new Error('Job held or refused; nothing confirmed. Do not retry.');
+      pendingNode.textContent = 'Waiting for the existing container assistant. Nothing has been confirmed.';
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      if (document.hidden || Date.now() >= until) break;
+      const response = await fetch('/api/agent/web-jobs', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'status', job_id: jobId })
+      });
+      status = await response.json();
+      if (!response.ok || !status.ok || status.job_id !== jobId) throw new Error('Job status unknown; do not retry.');
+    }
+    throw new Error('Job refresh stopped. Nothing confirmed; have an administrator inspect it before another request.');
+  } finally { agentWebJobPending = false; }
+}
+
 window.agentSend = async function () {
-  if (agentConfirmationHold || agentConfirmationPending) return;
+  if (agentConfirmationHold || agentConfirmationPending || agentWebJobPending) return;
   const input = document.getElementById('chatInput');
   const body = document.getElementById('chatBody');
   const text = (input?.value || '').trim();
@@ -1994,13 +2039,21 @@ window.agentSend = async function () {
       body: JSON.stringify({
         ...(isContent ? { type_id: contentItem.type_id } : { area: selectedArea }),
         target_id: targetId,
-        request: text
+        request: text,
+        ...(agentWebJobsEnabled ? { idempotency_key: crypto.randomUUID().replaceAll('-', '') } : {})
       })
     });
 
-    const data = await res.json();
+    let data = await res.json();
     const botDiv = document.createElement('div');
     botDiv.className = 'msg bot';
+
+    if (res.ok && data.ok && data.job_id) {
+      botDiv.textContent = 'Request saved privately; waiting for the existing container assistant.';
+      body.appendChild(botDiv);
+      body.scrollTop = body.scrollHeight;
+      data = await awaitCurrentWebJob(data, botDiv);
+    }
 
     if (!res.ok || !data.ok || !(isContent ? data.draft_id : data.change_id)) {
       botDiv.innerHTML = `⚠️ Refusal: ${escapeHtml(data.refusal || data.error || 'Request refused')}`;
