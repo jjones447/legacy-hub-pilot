@@ -49,3 +49,38 @@ Primary contract: [Cloudflare D1 batch transaction rollback](https://developers.
 Existing validation, pre-confirm drift checks, registration refusals/explicit overrides, normalization, actors, transitions, response shapes and historical rows are retained. No schema, component, retry/backfill or historical repair is added. A failed statement within the write batch rolls back all of its mutations and audits; a healthy retry then uses the original draft and before/after provenance. Pre-read validation is still outside the transaction, so this does not establish concurrency/CAS safety. Caregiver/Event result SELECTs remain after the successful write batch: a post-commit read or response failure can still produce HTTP500 after a fully committed, correctly audited operation. Therefore HTTP500 alone is not proof of no commit; this change does not redesign uncertain-ack retry semantics.
 
 The existing `agent-data-changes-d7` synthetic fixture exercises all nine apply branches through governed confirmation, standalone apply and REST, including awarded/declined decisions, close with/without an award, each write-stage fault, complete domain/change/audit snapshot rollback, healthy retry, original audit provenance, historical refusal, outcome timestamps and registration preservation. Existing consumer assertions remain. Tests use installed Node26/in-memory SQLite, not real workerd/D1, provider inference, verified authentication, installed five-area or client acceptance. PR176 Content/Form regions and fixtures remain preserved; runtime-preparation STOP and existing operator custody remain unchanged.
+# Compact staff assistant presentation · October 15
+
+[pc2-codex-42] The browser assistant is now an optional, collapsed-by-default
+panel near the top of the staff console. Its open/close button announces state
+with aria-expanded/aria-controls; opening focuses the composer, closing or
+Escape returns focus, and loading the page does not steal focus. Closing keeps
+the current input, selected target, draft preview and confirmation HOLD state.
+It does not submit, discard, confirm, reset or invoke an API. The main staff
+workspace has no reserved right chat column. On phones the composer, area/target
+controls and preview actions wrap, with visible focus and 44px controls; tables
+can scroll within their existing panels instead of widening the page.
+
+The existing microphone button and transcription path remain. Recording cannot
+be hidden by closing the panel; stop it with the microphone button first. A
+delayed microphone permission response makes the panel visible before recording
+starts. The content selector is labeled “Existing content to change”. Browser
+edits retain the existing selected-area/target → draft → exact preview → human
+confirm/discard flow. Slack is a separate entry point, not this panel's transport
+or shared conversation. The separate human assistant-handoff panel is mounted
+outside the collapsible browser chat so pairing/preview controls remain visible.
+No staff agent receives new API, code, security, infrastructure or Cloudflare
+administration permissions from this presentation change.
+
+Source verification: 7 new disclosure/layout synthetic tests plus the existing
+chat, human handoff and microphone tests pass (92 focused tests); all 1,593 unit
+tests pass, zero failures/skips. Template parity via python build.py --verify
+passes: staff.html is hand-authored by the existing build contract, and generated
+public templates/HTML remain untouched. Tests cover keyboard/focus, responsive
+CSS rules, preserving input/draft/HOLD, recording visibility and the independent
+handoff mount. They are not visual browser, real microphone, workerd, live
+workflow, deployed or client-acceptance evidence. This source-only change is
+submitted for normal independent review/hosted CI, not author self-merge or
+production deployment. Existing API/auth/schema, signing keys, Docker/runtime
+custody, schedules and disabled Coming Soon/reminders are unchanged.
+

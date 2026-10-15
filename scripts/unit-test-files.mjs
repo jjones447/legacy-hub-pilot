@@ -64,6 +64,7 @@ export const UNIT_TEST_FILES = Object.freeze([
   'square-payment-identity.test.mjs',
   'square-webhook.test.mjs',
   'staff-chat-wiring-d7.test.mjs',
+  'staff-assistant-disclosure.test.mjs',
   'staff-console-d2-d5-ui.test.mjs',
   'staff-console-escaping.test.mjs',
   'staff-console-plain-mic.test.mjs',
