@@ -1402,6 +1402,7 @@ async function updateAttendance(id, status, event) {
 }
 
 document.addEventListener('DOMContentLoaded', function () {
+  initStaffAssistantDisclosure();
   initStaffChatTargets();
   loadStaffConsole();
   const chatInput = document.getElementById('chatInput');
@@ -1596,6 +1597,8 @@ async function startRecording() {
       }
     };
 
+    // A delayed microphone permission response must not start hidden recording.
+    setStaffAssistantExpanded(true, false);
     mediaRecorder.start();
     isRecording = true;
     updateMicUi(true);
@@ -1741,7 +1744,42 @@ document.addEventListener('click', function (e) {
   }
 });
 
-// Extend the existing shell without rewriting owner-held staff.html.
+// Presentation only: hiding the panel never resets drafts, selection or HOLD.
+function setStaffAssistantExpanded(expanded, moveFocus = true) {
+  const toggle = document.getElementById('staffAssistantToggle');
+  const panel = document.getElementById('staffAssistantPanel');
+  if (!toggle || !panel) return;
+  if (!expanded && isRecording) {
+    setMicStatus('Stop recording with the microphone button before closing the assistant.');
+    document.getElementById('micBtn')?.focus();
+    return;
+  }
+  const focusWasInside = panel.contains(document.activeElement);
+  panel.hidden = !expanded;
+  toggle.setAttribute('aria-expanded', String(expanded));
+  toggle.textContent = expanded ? 'Close Legacy Assistant' : 'Open Legacy Assistant';
+  if (expanded && moveFocus) document.getElementById('chatInput')?.focus();
+  else if (!expanded && (moveFocus || focusWasInside)) toggle.focus();
+}
+
+function initStaffAssistantDisclosure() {
+  const toggle = document.getElementById('staffAssistantToggle');
+  const panel = document.getElementById('staffAssistantPanel');
+  const close = document.getElementById('staffAssistantClose');
+  if (!toggle || !panel || !close) return;
+  // Do not steal focus on load or persist another person's open conversation.
+  panel.hidden = true;
+  toggle.setAttribute('aria-expanded', 'false');
+  toggle.addEventListener('click', () => setStaffAssistantExpanded(panel.hidden));
+  close.addEventListener('click', () => setStaffAssistantExpanded(false));
+  panel.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape' || event.isComposing || event.defaultPrevented) return;
+    event.preventDefault();
+    setStaffAssistantExpanded(false);
+  });
+}
+
+// Extend the browser chat controls without changing the approval transport.
 function initStaffChatTargets() {
   const area = document.getElementById('chatAreaSelect');
   if (!area) return;
@@ -1754,7 +1792,7 @@ function initStaffChatTargets() {
   if (!document.getElementById('chatContentTarget')) {
     const label = document.createElement('label');
     label.htmlFor = 'chatContentTarget';
-    label.textContent = 'Published item:';
+    label.textContent = 'Existing content to change:';
     label.id = 'chatContentTargetLabel';
     label.className = 'chat-area-label';
     const select = document.createElement('select');
@@ -1784,7 +1822,7 @@ function refreshStaffChatTargets() {
   if (label) label.hidden = !active;
   const previous = select.dataset.area === area ? select.value : '';
   select.dataset.area = area;
-  select.innerHTML = '<option value="">Select a published item…</option>' +
+  select.innerHTML = '<option value="">Choose existing content to edit…</option>' +
     chatContentItems(area).map(item =>
       `<option value="${escapeHtml(item.id)}">${escapeHtml(item.id)}</option>`).join('');
   if (chatContentItems(area).some(item => item.id === previous)) select.value = previous;
@@ -2567,7 +2605,7 @@ async function initAssistantHandoff() {
   const panel = document.createElement('section');
   panel.className = 'panel';
   panel.setAttribute('aria-label', 'Assistant request handoff');
-  document.getElementById('chatBody')?.parentElement?.prepend(panel);
+  (document.getElementById('assistantHandoffRegion') || document.getElementById('chatBody')?.parentElement)?.prepend(panel);
   let busy = false;
   const addText = value => { const p = document.createElement('p'); p.textContent = value; panel.appendChild(p); };
   const button = (label, action, version) => {

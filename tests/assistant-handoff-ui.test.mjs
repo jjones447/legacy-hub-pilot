@@ -8,9 +8,11 @@ const code=source.slice(source.indexOf('// A locator only:'),source.indexOf("if 
 const id='ah_'+'a'.repeat(32),version='b'.repeat(64);
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 function harness(replies,hash='#handoff='+id){
-  const calls=[],panels=[],history=[];
+  const calls=[],panels=[],history=[],mounts=[];
   const element=()=>({children:[],textContent:'',listeners:{},appendChild(child){this.children.push(child);},prepend(child){this.children.unshift(child);},replaceChildren(){this.children=[];},setAttribute(){},addEventListener(name,fn){this.listeners[name]=fn;},querySelectorAll(tag){return this.children.filter(x=>x.tag===tag);}});
-  const document={createElement(tag){return {...element(),tag};},getElementById:()=>({parentElement:{prepend:panel=>panels.push(panel)}})};
+  const document={createElement(tag){return {...element(),tag};},getElementById:id=>id==='assistantHandoffRegion'
+    ? {prepend:panel=>{mounts.push(id);panels.push(panel);}}
+    : id==='chatBody' ? {parentElement:{prepend:panel=>{mounts.push('chatBody');panels.push(panel);}}} : null};
   const context=vm.createContext({window:{location:{hash,pathname:'/staff',search:''},history:{replaceState:(_state,_title,url)=>history.push(url)}},document,
     fetch:async(url,options)=>{
       calls.push({url,body:JSON.parse(options.body)});
@@ -21,7 +23,7 @@ function harness(replies,hash='#handoff='+id){
   vm.runInContext('let agentConfirmationHold=false, agentConfirmationPending=false; function holdAgentConfirmation(){agentConfirmationHold=true;}\n'+code,context);
   const text=()=>panels.flatMap(p=>p.children.map(c=>c.textContent)).join('\n');
   async function click(label){const b=panels[0].children.find(c=>c.tag==='button'&&c.textContent===label);assert.ok(b,'missing '+label);b.listeners.click();await tick();}
-  return {context,calls,panels,history,text,click,start:()=>context.initAssistantHandoff()};
+  return {context,calls,panels,history,mounts,text,click,start:()=>context.initAssistantHandoff()};
 }
 test('opaque handoff only, separate human pairing/initiation/preview approval, no raw text URL or HTML',async()=>{
   const h=harness([
@@ -31,6 +33,7 @@ test('opaque handoff only, separate human pairing/initiation/preview approval, n
     {ok:true,state:'published'}
   ]);
   await h.start();assert.deepEqual(h.history,['/staff']);assert.equal(h.calls.length,1);
+  assert.deepEqual(h.mounts,['assistantHandoffRegion'],'human handoff stays outside collapsed browser chat');
   await h.click('Begin identity pairing');assert.match(h.text(),/Post this one-use code yourself/);
   assert.equal(h.calls.length,2,'no automated Slack post');
   await h.click('Check pairing');assert.match(h.text(),/<script>fictional request<\/script>/);
