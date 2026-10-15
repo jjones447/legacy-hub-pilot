@@ -2,6 +2,8 @@
 // requires an explicit source/review change here; filenames alone do not prove
 // absence of runtime effects. The separately gated workerd harness is excluded.
 export const UNIT_TEST_FILES = Object.freeze([
+  'assistant-handoff.test.mjs',
+  'assistant-handoff-ui.test.mjs',
   'agent-confirmation-binding.test.mjs',
   'governed-agent-tools.test.mjs',
   'payment-concurrent-routing.test.mjs',

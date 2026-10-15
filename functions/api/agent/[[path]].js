@@ -67,7 +67,7 @@ export async function onRequestGet({ request, env }) {
   }
 }
 
-export async function onRequestPost({ request, env, data }) {
+export async function onRequestPost({ request, env, data, redactErrors = false }) {
   try {
     const url = new URL(request.url);
     const pathSegments = url.pathname.split('/').filter(Boolean); // ['api', 'agent', ...]
@@ -184,7 +184,7 @@ export async function onRequestPost({ request, env, data }) {
 
         const change_id = 'ac_' + crypto.randomUUID();
         const actor = draftOwner(confirmationActor(data)) || getActor(request, env);
-        const resolvedTargetId = (val.projected && val.projected.id) ? val.projected.id : body.target_id.toString();
+        const resolvedTargetId = String((val.projected && val.projected.id) ? val.projected.id : body.target_id);
 
         await env.LEGACY_DB
           .prepare(`
@@ -657,6 +657,9 @@ export async function onRequestPost({ request, env, data }) {
 
     return json({ ok: false, error: 'unsupported action' }, 400);
   } catch (e) {
+    // Trusted internal handoff calls suppress raw provider/DB error details.
+    // This option is server context, never accepted from request JSON.
+    if (redactErrors) return json({ ok: false, error: 'internal_error' }, 500);
     return internalError('/api/agent POST', e);
   }
 }
