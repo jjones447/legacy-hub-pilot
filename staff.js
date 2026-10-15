@@ -1847,7 +1847,7 @@ async function confirmAgentChange(target) {
   const draftId = target.getAttribute('data-draft-id');
   if (!changeId && !draftId) return;
   const row = target.closest('.confirm-row');
-  if (agentConfirmationHold || agentConfirmationPending || row?.dataset?.confirmationState) return;
+  if (agentConfirmationHold || agentConfirmationPending || agentWebJobPending || row?.dataset?.confirmationState) return;
   const previewVersion = target.getAttribute('data-preview-version');
   if (!previewVersion) { holdAgentConfirmation(row); return; }
   // Reserve every chat mutation before yielding, including controls on other previews.
@@ -1884,7 +1884,7 @@ async function confirmAgentChange(target) {
 }
 
 async function discardAgentChange(target) {
-  if (agentConfirmationHold || agentConfirmationPending || target.closest('.confirm-row')?.dataset?.confirmationState) return;
+  if (agentConfirmationHold || agentConfirmationPending || agentWebJobPending || target.closest('.confirm-row')?.dataset?.confirmationState) return;
   const changeId = target.getAttribute('data-change-id');
   const draftId = target.getAttribute('data-draft-id');
   if (!changeId && !draftId) return;
@@ -1928,39 +1928,60 @@ async function initWebJobFeature() {
     agentWebJobsEnabled = response.ok && result.ok === true && result.enabled === true;
   } catch { agentWebJobsEnabled = false; } // Unknown feature state never broadens the legacy request.
 }
-async function awaitCurrentWebJob(initial, pendingNode) {
+async function webJobJson(path, body, until) {
+  const remaining = until - Date.now();
+  if (remaining <= 0 || document.hidden) throw new Error('Job request stopped; do not retry.');
+  const controller = new AbortController();
+  let timer, stopForHidden;
+  const stopped = new Promise((resolve, reject) => {
+    const stop = () => {
+      controller.abort();
+      reject(new Error('Job response unknown or deadline reached; do not retry.'));
+    };
+    timer = setTimeout(stop, remaining);
+    stopForHidden = () => { if (document.hidden) stop(); };
+    document.addEventListener?.('visibilitychange', stopForHidden);
+  });
+  try {
+    // Abort controls the real response stream; race also bounds body parsing and
+    // transports that fail to reject on abort. Late completion has no UI effect.
+    return await Promise.race([stopped, (async () => {
+      const response = await fetch(path, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body), signal: controller.signal
+      });
+      const data = await response.json();
+      if (controller.signal.aborted || Date.now() >= until || document.hidden) throw new Error('Job response arrived after its deadline; do not retry.');
+      return { response, data };
+    })()]);
+  } finally {
+    clearTimeout(timer);
+    document.removeEventListener?.('visibilitychange', stopForHidden);
+  }
+}
+async function awaitCurrentWebJob(initial, pendingNode, until = Date.now() + 60000) {
   // This refresh exists only for this newly-created job and has a hard one-minute budget.
   // No standing timer, restart recovery, model retry or invisible re-post is installed.
   const jobId = initial.job_id;
   if (!/^[a-f0-9]{32}$/.test(jobId || '')) throw new Error('Invalid job receipt; do not retry.');
-  agentWebJobPending = true;
-  try {
-    let status = initial;
-    const until = Date.now() + 60000;
-    for (let refresh = 0; refresh < 30; refresh++) {
-      if (document.hidden || Date.now() >= until) break;
-      if (status.state === 'result') {
-        const response = await fetch('/api/agent/web-jobs', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'materialize', job_id: jobId })
-        });
-        const draft = await response.json();
-        if (!response.ok || !draft.ok) throw new Error('Job needs review; no change confirmed. Do not retry.');
-        return draft; // Existing exact preview/confirm/discard UI below, never auto-confirm.
-      }
-      if (!['pending', 'claimed'].includes(status.state)) throw new Error('Job held or refused; nothing confirmed. Do not retry.');
-      pendingNode.textContent = 'Waiting for the existing container assistant. Nothing has been confirmed.';
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      if (document.hidden || Date.now() >= until) break;
-      const response = await fetch('/api/agent/web-jobs', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'status', job_id: jobId })
-      });
-      status = await response.json();
-      if (!response.ok || !status.ok || status.job_id !== jobId) throw new Error('Job status unknown; do not retry.');
+  let status = initial;
+  for (let refresh = 0; refresh < 30; refresh++) {
+    if (document.hidden || Date.now() >= until) break;
+    if (status.state === 'result') {
+      const { response, data: draft } = await webJobJson('/api/agent/web-jobs', { action: 'materialize', job_id: jobId }, until);
+      if (!response.ok || !draft.ok) throw new Error('Job needs review; no change confirmed. Do not retry.');
+      return draft; // Existing exact preview/confirm/discard UI below, never auto-confirm.
     }
-    throw new Error('Job refresh stopped. Nothing confirmed; have an administrator inspect it before another request.');
-  } finally { agentWebJobPending = false; }
+    if (status.state === 'refused') return { ok: false, refusal: 'The container assistant refused this request. Nothing has been drafted or confirmed.' };
+    if (!['pending', 'claimed'].includes(status.state)) throw new Error('Job held or unknown; nothing confirmed. Do not retry.');
+    pendingNode.textContent = 'Waiting for the existing container assistant. Nothing has been confirmed.';
+    await new Promise(resolve => setTimeout(resolve, Math.min(2000, until - Date.now())));
+    if (document.hidden || Date.now() >= until) break;
+    const { response, data } = await webJobJson('/api/agent/web-jobs', { action: 'status', job_id: jobId }, until);
+    status = data;
+    if (!response.ok || !status.ok || status.job_id !== jobId) throw new Error('Job status unknown; do not retry.');
+  }
+  throw new Error('Job refresh stopped. Nothing confirmed; have an administrator inspect it before another request.');
 }
 
 window.agentSend = async function () {
@@ -2032,19 +2053,27 @@ window.agentSend = async function () {
     }
   }
 
+  // Reserve synchronously before the FIRST await. A second Enter returns at the
+  // entry guard without clearing its text, generating another ID, or posting.
+  const webJobLifecycle = agentWebJobsEnabled;
+  if (webJobLifecycle) agentWebJobPending = true;
+  const jobDeadline = webJobLifecycle ? Date.now() + 60000 : null;
   try {
-    const res = await fetch(isContent ? '/api/agent/draft' : '/api/agent/change/draft', {
+    const draftPath = isContent ? '/api/agent/draft' : '/api/agent/change/draft';
+    const draftRequest = {
+      ...(isContent ? { type_id: contentItem.type_id } : { area: selectedArea }),
+      target_id: targetId,
+      request: text,
+      ...(webJobLifecycle ? { idempotency_key: crypto.randomUUID().replaceAll('-', '') } : {})
+    };
+    const created = webJobLifecycle ? await webJobJson(draftPath, draftRequest, jobDeadline) : null;
+    const res = created ? created.response : await fetch(draftPath, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...(isContent ? { type_id: contentItem.type_id } : { area: selectedArea }),
-        target_id: targetId,
-        request: text,
-        ...(agentWebJobsEnabled ? { idempotency_key: crypto.randomUUID().replaceAll('-', '') } : {})
-      })
+      body: JSON.stringify(draftRequest)
     });
 
-    let data = await res.json();
+    let data = created ? created.data : await res.json();
     const botDiv = document.createElement('div');
     botDiv.className = 'msg bot';
 
@@ -2052,10 +2081,11 @@ window.agentSend = async function () {
       botDiv.textContent = 'Request saved privately; waiting for the existing container assistant.';
       body.appendChild(botDiv);
       body.scrollTop = body.scrollHeight;
-      data = await awaitCurrentWebJob(data, botDiv);
+      data = await awaitCurrentWebJob(data, botDiv, jobDeadline || undefined);
     }
 
     if (!res.ok || !data.ok || !(isContent ? data.draft_id : data.change_id)) {
+      if (webJobLifecycle && data.state === 'hold') holdAgentConfirmation(null);
       botDiv.innerHTML = `⚠️ Refusal: ${escapeHtml(data.refusal || data.error || 'Request refused')}`;
       body.appendChild(botDiv);
       body.scrollTop = body.scrollHeight;
@@ -2066,6 +2096,7 @@ window.agentSend = async function () {
     const after = isContent ? data.draft?.data : data.preview?.after;
     const isPreviewObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
     if (!isPreviewObject(before) || !isPreviewObject(after) || !/^[a-f0-9]{64}$/.test(data.preview_version || '')) {
+      if (webJobLifecycle) holdAgentConfirmation(null);
       // The server may have saved a draft already; do not turn a missing preview into {} or replay it.
       botDiv.textContent = 'Preview unavailable — nothing has been confirmed. A draft may already exist. Do not retry; have an administrator inspect the saved draft.';
       body.appendChild(botDiv);
@@ -2101,11 +2132,14 @@ window.agentSend = async function () {
     body.appendChild(botDiv);
     body.scrollTop = body.scrollHeight;
   } catch (e) {
+    if (webJobLifecycle) holdAgentConfirmation(null); // Unknown create/materialize acknowledgement persists across reload.
     const botDiv = document.createElement('div');
     botDiv.className = 'msg bot';
     botDiv.innerHTML = `Error drafting change: ${escapeHtml(e.message)}`;
     body.appendChild(botDiv);
     body.scrollTop = body.scrollHeight;
+  } finally {
+    if (webJobLifecycle) agentWebJobPending = false; // Persistent HOLD, if set, still blocks every later mutation.
   }
 };
 
