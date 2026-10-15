@@ -1,6 +1,7 @@
 // Intake core — pure logic over a D1-shaped binding (prepare/bind/run/first).
 // No handler exports, so Pages creates no route for this file. Tested directly
 // in tests/intake.test.mjs against the real schema via node:sqlite.
+import { SUPPORT_SOURCE } from '../_lib/portal-support.js';
 
 export const INTAKE_KINDS = ['support_request', 'membership', 'event_registration', 'grant_application'];
 
@@ -10,6 +11,9 @@ export function validateIntake(body) {
   if (!body.first_name || typeof body.first_name !== 'string') return 'first_name is required';
   if (!body.email && !body.phone) return 'email or phone is required';
   if (!body.external_ref || typeof body.external_ref !== 'string') return 'external_ref is required';
+  // This keyspace belongs only to the signed-session fixed-purpose producer.
+  // Reject before duplicate lookup, caregiver upsert, or any workflow mutation.
+  if (body.source === SUPPORT_SOURCE) return 'source is reserved';
   if (body.kind === 'event_registration' && !body.event_id) return 'event_id is required for event_registration';
   return null;
 }
