@@ -9,6 +9,7 @@ import { internalError } from '../../_lib/errors.js';
 import { _resetContentCache, findDisallowedHtml } from '../../_content.mjs';
 import { onRequestPost as postTranscribe } from './transcribe.js';
 import { confirmationActor, draftOwner, ownsDraft, confirmationBinding, confirmationAudit, matchesPersistedPreview } from '../../_lib/agent-confirmation.mjs';
+import { createWebJob, enabled as webJobsEnabled } from '../../_lib/assistant-web-jobs.mjs';
 
 export async function onRequestGet({ request, env }) {
   try {
@@ -67,10 +68,14 @@ export async function onRequestGet({ request, env }) {
   }
 }
 
-export async function onRequestPost({ request, env, data, redactErrors = false }) {
+export async function onRequestPost({ request, env, data, redactErrors = false, draftGuards = [] }) {
   try {
     const url = new URL(request.url);
     const pathSegments = url.pathname.split('/').filter(Boolean); // ['api', 'agent', ...]
+
+    if (webJobsEnabled(env) && ['/api/agent/draft','/api/agent/change/draft'].includes(url.pathname)) {
+      return createWebJob({ request, env, data });
+    }
 
     if (pathSegments[2] === 'transcribe') {
       return postTranscribe({ request, env });
@@ -186,7 +191,7 @@ export async function onRequestPost({ request, env, data, redactErrors = false }
         const actor = draftOwner(confirmationActor(data)) || getActor(request, env);
         const resolvedTargetId = String((val.projected && val.projected.id) ? val.projected.id : body.target_id);
 
-        await env.LEGACY_DB
+        const draftInsert = env.LEGACY_DB
           .prepare(`
             INSERT INTO agent_change (id, area, operation, target_id, payload_json, before_json, after_json, status, requested_by)
             VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', ?)
@@ -200,8 +205,10 @@ export async function onRequestPost({ request, env, data, redactErrors = false }
             JSON.stringify(val.before || val.current || {}),
             JSON.stringify(val.after || val.projected || {}),
             actor
-          )
-          .run();
+          );
+        // Optional statements originate ONLY in a trusted internal job materializer, never request JSON.
+        if (draftGuards.length) await env.LEGACY_DB.batch([...draftGuards, draftInsert]);
+        else await draftInsert.run();
 
         const savedChange = await env.LEGACY_DB.prepare('SELECT * FROM agent_change WHERE id = ?').bind(change_id).first();
         const binding = await confirmationBinding(env.LEGACY_DB, 'workflow', savedChange, url.origin, val.current || currentRecord || null);
@@ -530,13 +537,14 @@ export async function onRequestPost({ request, env, data, redactErrors = false }
       const draft_of = isTargeted ? body.target_id : null;
       const dataStr = JSON.stringify(draftData);
 
-      await env.LEGACY_DB
+      const draftInsert = env.LEGACY_DB
         .prepare(`
           INSERT INTO content_item (id, type_id, data, status, draft_of, updated_by, updated_at)
           VALUES (?, ?, ?, 'draft', ?, ?, datetime('now'))
         `)
-        .bind(draft_id, body.type_id, dataStr, draft_of, draftOwner(confirmationActor(data)) || 'agent')
-        .run();
+        .bind(draft_id, body.type_id, dataStr, draft_of, draftOwner(confirmationActor(data)) || 'agent');
+      if (draftGuards.length) await env.LEGACY_DB.batch([...draftGuards, draftInsert]);
+      else await draftInsert.run();
 
       const savedDraft = await env.LEGACY_DB.prepare('SELECT * FROM content_item WHERE id = ?').bind(draft_id).first();
       const binding = await confirmationBinding(env.LEGACY_DB, 'content', savedDraft, url.origin, currentItem);
