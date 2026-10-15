@@ -328,7 +328,8 @@ export async function onRequestPost({ request, env, data }) {
           return json({ ok: false, error: 'change_id is required' }, 400);
         }
 
-        const actor = getActor(request, env);
+        const actor = confirmationActor(data);
+        if (!actor || Object.hasOwn(body, 'thread_id') || Object.hasOwn(body, 'conversation_id')) return json({ ok: false, error: 'human discard context not qualified' }, 403);
 
         const change = await env.LEGACY_DB
           .prepare('SELECT * FROM agent_change WHERE id = ?')
@@ -342,22 +343,18 @@ export async function onRequestPost({ request, env, data }) {
         if (change.status !== 'draft') {
           return json({ ok: false, error: `cannot discard change in status ${change.status}` }, 409);
         }
+        if (!ownsDraft(change.requested_by, actor)) return json({ ok: false, error: 'only the verified initiating staff member can discard' }, 403);
+        const binding = await confirmationBinding(env.LEGACY_DB, 'workflow', change, url.origin);
+        if (typeof body.preview_version !== 'string' || body.preview_version !== binding.version) {
+          return json({ ok: false, error: 'preview version missing or changed; discard refused' }, 409);
+        }
 
         await env.LEGACY_DB.batch([
+          confirmationAudit(env.LEGACY_DB, binding, actor, 'agent_change.discard', 'agent_change', change.id,
+            { status: 'draft' }, { status: 'discarded' }),
           env.LEGACY_DB
             .prepare("UPDATE agent_change SET status = 'discarded', updated_at = datetime('now') WHERE id = ?")
             .bind(change.id),
-          env.LEGACY_DB
-          .prepare(`
-            INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
-            VALUES (?, 'agent_change.discard', 'agent_change', ?, ?, ?)
-          `)
-          .bind(
-            actor,
-            change.id,
-            JSON.stringify({ status: 'draft' }),
-            JSON.stringify({ status: 'discarded' })
-          )
         ]);
 
         return json({ ok: true });
@@ -631,18 +628,9 @@ export async function onRequestPost({ request, env, data }) {
         return json({ ok: false, error: 'draft_id is required' }, 400);
       }
 
-      let item;
-      try {
-        item = await env.LEGACY_DB
-          .prepare(`SELECT status, data, draft_of FROM content_item WHERE id = ?`)
-          .bind(body.draft_id)
-          .first();
-      } catch (err) {
-        item = await env.LEGACY_DB
-          .prepare(`SELECT status, data FROM content_item WHERE id = ?`)
-          .bind(body.draft_id)
-          .first();
-      }
+      const actor = confirmationActor(data);
+      if (!actor || Object.hasOwn(body, 'thread_id') || Object.hasOwn(body, 'conversation_id')) return json({ ok: false, error: 'human discard context not qualified' }, 403);
+      const item = await env.LEGACY_DB.prepare('SELECT * FROM content_item WHERE id = ?').bind(body.draft_id).first();
 
       if (!item) {
         return json({ ok: false, error: 'draft not found' }, 404);
@@ -651,19 +639,17 @@ export async function onRequestPost({ request, env, data }) {
       if (item.status !== 'draft') {
         return json({ ok: false, error: `cannot discard from status ${item.status}` }, 409);
       }
+      if (!ownsDraft(item.updated_by, actor)) return json({ ok: false, error: 'only the verified initiating staff member can discard' }, 403);
+      const binding = await confirmationBinding(env.LEGACY_DB, 'content', item, url.origin);
+      if (typeof body.preview_version !== 'string' || body.preview_version !== binding.version) {
+        return json({ ok: false, error: 'preview version missing or changed; discard refused' }, 409);
+      }
 
       await env.LEGACY_DB.batch([
-        env.LEGACY_DB.prepare(`UPDATE content_item SET status = 'archived', updated_by = 'staff', updated_at = datetime('now') WHERE id = ?`)
-          .bind(body.draft_id),
-        env.LEGACY_DB.prepare(`
-          INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
-          VALUES ('staff', 'content_item.discard', 'content_item', ?, ?, ?)
-        `)
-        .bind(
-          body.draft_id,
-          JSON.stringify({ status: 'draft', data: JSON.parse(item.data) }),
-          JSON.stringify({ status: 'archived', data: JSON.parse(item.data) })
-        ),
+        confirmationAudit(env.LEGACY_DB, binding, actor, 'content_item.discard', 'content_item', body.draft_id,
+          { status: 'draft', data: JSON.parse(item.data) }, { status: 'archived', data: JSON.parse(item.data) }),
+        env.LEGACY_DB.prepare(`UPDATE content_item SET status = 'archived', updated_by = ?, updated_at = datetime('now') WHERE id = ?`)
+          .bind('staff_' + actor, body.draft_id),
       ]);
 
       return json({ ok: true });

@@ -17,7 +17,7 @@ export async function postAgentFixture({ request, env }) {
   let actor = request.headers.get('x-dev-actor') || 'staff@example.org';
   const jwt = request.headers.get('Cf-Access-Jwt-Assertion');
   if (jwt) actor = JSON.parse(Buffer.from(jwt.split('.')[1], 'base64url').toString()).email || null;
-  if (url.pathname.endsWith('/confirm')) {
+  if (url.pathname.endsWith('/confirm') || url.pathname.endsWith('/discard')) {
     const id = body.draft_id || body.change_id;
     if (id && body.preview_version === undefined) {
       body.preview_version = receiptMap(env.LEGACY_DB).get(id)
