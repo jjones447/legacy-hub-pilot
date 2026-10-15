@@ -23,6 +23,15 @@
   });
   document.addEventListener('click', function () { closeAll(null); });
   document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') closeAll(null);
+    if (e.key === 'Escape') {
+      var activeToggle = null;
+      items.forEach(function (it) {
+        if (it.classList.contains('open') && it.contains(e.target)) {
+          activeToggle = it.querySelector('.drop-toggle');
+        }
+      });
+      closeAll(null);
+      if (activeToggle) activeToggle.focus();
+    }
   });
 })();

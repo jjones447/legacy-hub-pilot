@@ -32,6 +32,33 @@ function assertDestination(href) {
   if (fragment) assert.ok(loadFile(file).includes(`id="${fragment}"`), `missing destination ${href}`);
 }
 
+function navigationFixture() {
+  const handlers = {};
+  const document = {
+    activeElement: null,
+    querySelectorAll: () => items,
+    addEventListener(type, fn) { handlers[type] = fn; },
+  };
+  const items = Array.from({ length: 3 }, () => {
+    const classes = new Set();
+    const child = {};
+    const button = {
+      expanded: 'false', focusCalls: 0,
+      addEventListener(type, fn) { this[type] = fn; },
+      setAttribute(name, value) { if (name === 'aria-expanded') this.expanded = value; },
+      focus() { this.focusCalls++; document.activeElement = this; },
+    };
+    return {
+      button, child, querySelector: () => button,
+      contains: target => target === child || target === button,
+      classList: { contains: c => classes.has(c), remove: c => classes.delete(c), toggle(c, on) { if (on) classes.add(c); else classes.delete(c); } },
+    };
+  });
+  runInNewContext(loadFile('nav-v2.js'), { document });
+  const click = { stopPropagation() {} };
+  return { document, handlers, items, click };
+}
+
 test('(a) each of the three new pages renders and is reachable from the nav', () => {
   const pages = [
     {
@@ -161,19 +188,7 @@ test('Sanctuary merges the overview and exposes join/contact before the program 
 });
 
 test('existing click/touch expansion, one-open-menu rule and Escape dismissal still work with the combined menu', () => {
-  const handlers = {};
-  const items = Array.from({ length: 3 }, () => {
-    const classes = new Set();
-    const button = { expanded: 'false', addEventListener(type, fn) { this[type] = fn; }, setAttribute(name, value) { if (name === 'aria-expanded') this.expanded = value; } };
-    return {
-      button, querySelector() { return button; },
-      classList: { contains: c => classes.has(c), remove: c => classes.delete(c), toggle(c, on) { if (on) classes.add(c); else classes.delete(c); } },
-    };
-  });
-  runInNewContext(loadFile('nav-v2.js'), { document: {
-    querySelectorAll: () => items, addEventListener(type, fn) { handlers[type] = fn; },
-  } });
-  const click = { stopPropagation() {} };
+  const { handlers, items, click } = navigationFixture();
   items[0].button.click(click);
   assert.equal(items[0].button.expanded, 'true');
   items[1].button.click(click);
@@ -187,6 +202,44 @@ test('existing click/touch expansion, one-open-menu rule and Escape dismissal st
   items[0].button.click(click);
   handlers.click();
   assert.ok(items.every(it => it.button.expanded === 'false'));
+});
+
+test('Escape from an open dropdown descendant closes it and restores its own toggle focus', () => {
+  const { document, handlers, items, click } = navigationFixture();
+  for (const item of items) {
+    item.button.click(click);
+    document.activeElement = item.child;
+    handlers.keydown({ key: 'Escape', target: item.child });
+    assert.equal(item.button.expanded, 'false');
+    assert.equal(document.activeElement, item.button);
+    assert.equal(item.button.focusCalls, 1);
+    assert.ok(items.every(it => it.button.expanded === 'false'));
+  }
+});
+
+test('Escape outside the open dropdown or in a closed dropdown does not steal focus', () => {
+  for (const targetKind of ['outside', 'closed-child', 'closed-toggle']) {
+    const { document, handlers, items, click } = navigationFixture();
+    items[0].button.click(click);
+    const target = targetKind === 'outside' ? {} : targetKind === 'closed-child' ? items[1].child : items[1].button;
+    document.activeElement = target;
+    handlers.keydown({ key: 'Escape', target });
+    assert.equal(document.activeElement, target, targetKind);
+    assert.ok(items.every(it => it.button.expanded === 'false'));
+    assert.ok(items.every(it => it.button.focusCalls === 0));
+  }
+});
+
+test('other keys and outside clicks preserve existing dismissal behavior without restoring toggle focus', () => {
+  const { document, handlers, items, click } = navigationFixture();
+  items[0].button.click(click);
+  document.activeElement = items[0].child;
+  handlers.keydown({ key: 'Tab', target: items[0].child });
+  assert.equal(items[0].button.expanded, 'true');
+  assert.equal(document.activeElement, items[0].child);
+  handlers.click();
+  assert.ok(items.every(it => it.button.expanded === 'false'));
+  assert.ok(items.every(it => it.button.focusCalls === 0));
 });
 
 test('(e) the Passport page contains all five structure points and names the Wellness Grant as a benefit', () => {
