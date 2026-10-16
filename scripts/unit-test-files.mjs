@@ -20,6 +20,7 @@ export const UNIT_TEST_FILES = Object.freeze([
   'agent-workers-ai-event.test.mjs',
   'agent-workers-ai.test.mjs',
   'backup-object-integrity.test.mjs',
+  'backup-pre-return-bounds.test.mjs',
   'backups-restore-d9.test.mjs',
   'break-glass-d10.test.mjs',
   'caregiver-record-d2.test.mjs',
