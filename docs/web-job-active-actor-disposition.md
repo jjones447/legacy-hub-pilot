@@ -26,7 +26,9 @@ No possible second same-actor INSERT can satisfy all three conditions simultaneo
 
 This correction stops an avoidable failed INSERT and provides an accurate operator message. It is **not** recovery, operational release or completion of five live workflows. Automatic expiry, treating missing acknowledgement as no send, weakening the index, changing actor identity, deleting a row, reusing a new idempotency key or resubmitting cannot legitimately resolve the incompatibility.
 
-## Smallest prospective lifecycle successor — proposal, NOT implemented
+## Smallest prospective lifecycle successor — original proposal
+
+Historical proposal below is preserved. The explicitly requested SOURCE successor is now documented in [web-job-terminal-close.md](web-job-terminal-close.md); its candidate migration/helper remain uninstalled until separate release qualification. Source implementation is not proof of an actual old-job close.
 
 The release owner needs a separately reviewed, explicit terminal-disposition mechanism before releasing an actor whose job remains active. Do not repurpose `refused` (a machine result) or `materialized` (a real saved draft) to mean operator cancellation. The present CHECK constraint has no truthful terminal cancellation state. A successor would need a distinctly named terminal state such as `closed_unmaterialized`, an explicit migration, a separately recorded operator disposition, and narrow atomic compare-and-swap conditions. The active-state index need not be weakened, but the old row would have to transition truthfully out of its active set. **That necessarily changes the old record and is incompatible with the current no-old-record-mutation boundary. None of it is shipped here.**
 

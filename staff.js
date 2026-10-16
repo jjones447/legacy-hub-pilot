@@ -1704,6 +1704,12 @@ document.addEventListener('click', function (e) {
   } else if (action === 'agent-change-discard') {
     e.stopPropagation();
     discardAgentChange(target);
+  } else if (action === 'agent-web-job-recover') {
+    e.stopPropagation();
+    void recoverAgentWebJobHold();
+  } else if (action === 'agent-web-job-legacy-reconcile') {
+    e.stopPropagation();
+    void recoverAgentWebJobHold(document.getElementById('agentLegacyJobId')?.value?.trim());
   } else if (action === 'edit-content-item') {
     e.stopPropagation();
     const id = target.getAttribute('data-content-id');
@@ -1831,16 +1837,35 @@ function refreshStaffChatTargets() {
 
 let agentConfirmationHold = false;
 let agentConfirmationPending = false;
+let agentBusinessConfirmationHold = false;
+let agentHoldGeneration = 0;
 try { agentConfirmationHold = window.sessionStorage?.getItem('agent-confirmation-hold') === '1'; }
 catch { agentConfirmationHold = true; }
 function holdAgentConfirmation(row) {
+  agentBusinessConfirmationHold = true;
+  agentHoldGeneration++;
   agentConfirmationHold = true;
-  try { window.sessionStorage?.setItem('agent-confirmation-hold', '1'); } catch { /* In-memory HOLD remains. */ }
+  try {
+    window.sessionStorage?.setItem('agent-business-confirmation-hold-v1', '1');
+    window.sessionStorage?.setItem('agent-confirmation-hold', '1');
+  } catch { /* In-memory HOLD remains. */ }
   if (row) {
     row.dataset ||= {};
     row.dataset.confirmationState = 'hold';
     row.innerHTML = '<span class="chat-confirm-discarded">Confirmation on hold. Do not retry, discard or replace the draft until an operator checks the website result.</span>';
   }
+}
+function reserveBusinessConfirmation() {
+  agentHoldGeneration++;
+  try {
+    window.sessionStorage?.setItem('agent-business-confirmation-pending-v1', '1');
+    if (window.sessionStorage && window.sessionStorage.getItem('agent-business-confirmation-pending-v1') !== '1') throw new Error('storage');
+    return true;
+  } catch { holdAgentConfirmation(null); return false; }
+}
+function finishBusinessConfirmation() {
+  window.sessionStorage?.setItem('agent-business-confirmation-pending-v1', '');
+  if (window.sessionStorage?.getItem('agent-business-confirmation-pending-v1')) throw new Error('storage');
 }
 async function confirmAgentChange(target) {
   const changeId = target.getAttribute('data-change-id');
@@ -1852,6 +1877,7 @@ async function confirmAgentChange(target) {
   if (!previewVersion) { holdAgentConfirmation(row); return; }
   // Reserve every chat mutation before yielding, including controls on other previews.
   agentConfirmationPending = true;
+  if (!reserveBusinessConfirmation()) return;
   if (row) {
     row.dataset ||= {};
     row.dataset.confirmationState = 'confirming';
@@ -1868,6 +1894,7 @@ async function confirmAgentChange(target) {
       holdAgentConfirmation(row);
       return;
     }
+    finishBusinessConfirmation();
     if (row) {
       row.dataset.confirmationState = 'published';
       row.innerHTML = '<span class="chat-confirm-published">✓ Published — logged to the audit trail.</span>';
@@ -1893,6 +1920,7 @@ async function discardAgentChange(target) {
   if (!previewVersion) { holdAgentConfirmation(row); return; }
   // Discard competes with confirmation: reserve all previews before the first await.
   agentConfirmationPending = true;
+  if (!reserveBusinessConfirmation()) return;
   if (row) {
     row.dataset ||= {};
     row.dataset.confirmationState = 'discarding';
@@ -1909,6 +1937,7 @@ async function discardAgentChange(target) {
       holdAgentConfirmation(row);
       return;
     }
+    finishBusinessConfirmation();
     if (row) {
       row.dataset.confirmationState = 'discarded';
       row.innerHTML = '<span class="chat-confirm-discarded">Draft discarded — nothing changed.</span>';
@@ -1921,12 +1950,127 @@ async function discardAgentChange(target) {
 
 let agentWebJobPending = false;
 let agentWebJobsEnabled = false;
+let agentWebJobActor = null;
+let agentWebJobIdentityUnavailable = false;
+let agentWebJobRecord = null;
+let agentWebJobRecoveryPending = false;
+let agentWebJobStorageFault = false;
+let agentWebJobRecoveryNode = null;
+const AGENT_WEB_JOB_RECORD = 'agent-web-job-record-v1';
+const AGENT_WEB_JOB_SESSION = 'agent-web-job-session-v1';
+const webJobId = value => typeof value === 'string' && /^[a-f0-9]{32}$/.test(value);
+function validWebJobRecord(record) {
+  return record && Object.keys(record).sort().join('|') === ['v','kind','actor','origin','session_id','job_id','idempotency_key','phase'].sort().join('|')
+    && record.v === 1 && record.kind === 'web_job' && typeof record.actor === 'string' && record.actor.includes('@') && record.actor.length <= 254
+    && record.origin === window.location?.origin && webJobId(record.session_id) && webJobId(record.idempotency_key)
+    && (record.job_id === null || webJobId(record.job_id)) && ['create','waiting','materialize'].includes(record.phase);
+}
+try {
+  for (const key of ['agent-confirmation-hold','agent-business-confirmation-hold-v1','agent-business-confirmation-pending-v1']) {
+    const value = window.sessionStorage?.getItem(key);
+    if (value && value !== '1') throw new Error('hold storage');
+  }
+  agentBusinessConfirmationHold = window.sessionStorage?.getItem('agent-business-confirmation-hold-v1') === '1'
+    || window.sessionStorage?.getItem('agent-business-confirmation-pending-v1') === '1';
+  const saved = window.sessionStorage?.getItem(AGENT_WEB_JOB_RECORD);
+  if (saved) {
+    agentWebJobRecord = JSON.parse(saved);
+    if (!validWebJobRecord(agentWebJobRecord)) throw new Error('correlation');
+    agentConfirmationHold = true; // Reload of an interrupted attempt never resends.
+  }
+  if (agentBusinessConfirmationHold) agentConfirmationHold = true;
+} catch { agentWebJobStorageFault = true; agentConfirmationHold = true; }
+function webJobSession() {
+  let session = window.sessionStorage?.getItem(AGENT_WEB_JOB_SESSION);
+  if (!session) {
+    session = crypto.randomUUID().replaceAll('-', '');
+    window.sessionStorage.setItem(AGENT_WEB_JOB_SESSION, session);
+  }
+  if (!webJobId(session) || window.sessionStorage.getItem(AGENT_WEB_JOB_SESSION) !== session) throw new Error('session');
+  return session;
+}
+function saveWebJobRecord(record) {
+  if (!validWebJobRecord(record)) throw new Error('correlation');
+  const raw = JSON.stringify(record);
+  window.sessionStorage.setItem(AGENT_WEB_JOB_RECORD, raw);
+  if (window.sessionStorage.getItem(AGENT_WEB_JOB_RECORD) !== raw) throw new Error('storage');
+  agentWebJobRecord = record;
+}
+function forgetFinishedWebJob() {
+  if (!agentWebJobRecord) return;
+  window.sessionStorage.setItem(AGENT_WEB_JOB_RECORD, '');
+  if (window.sessionStorage.getItem(AGENT_WEB_JOB_RECORD)) throw new Error('storage');
+  agentWebJobRecord = null;
+}
+function holdWebJob() {
+  if (!agentWebJobRecord) { holdAgentConfirmation(null); return; } // Old uncorrelated surfaces remain fail-closed.
+  agentConfirmationHold = true;
+  agentHoldGeneration++;
+  renderWebJobRecovery();
+}
+function renderWebJobRecovery() {
+  if (!agentConfirmationHold || !agentWebJobActor || !window.location?.origin) return;
+  const body = document.getElementById('chatBody');
+  if (!body) return;
+  let session;
+  try { session = webJobSession(); } catch { agentWebJobStorageFault = true; return; }
+  agentWebJobRecoveryNode ||= document.createElement('div');
+  agentWebJobRecoveryNode.className = 'msg bot';
+  const typed = validWebJobRecord(agentWebJobRecord);
+  agentWebJobRecoveryNode.innerHTML = `<p>Request on hold. Nothing is being retried. Check recovery only after the operator has closed the exact request.</p>
+    <p class="small">Exact-tab recovery reference: <code>${escapeHtml(session)}</code></p>
+    ${agentBusinessConfirmationHold ? '<p>An uncertain business confirmation is separately held. Closing a web job cannot release it.</p>' : ''}
+    ${agentWebJobStorageFault ? '<p>Saved correlation is invalid or storage is unavailable. Preserve this tab for exact operator reconciliation; no recovery reset is available.</p>' : ''}
+    ${typed ? '<button class="chip-btn" data-action="agent-web-job-recover">Check closed request</button>' : '<p>Legacy hold has no saved job correlation. The operator must reconcile this exact tab and any uncertain confirmation first.</p><input id="agentLegacyJobId" maxlength="32" aria-label="Operator-reconciled closed job ID"><button class="chip-btn" data-action="agent-web-job-legacy-reconcile">Check exact-session reconciliation</button>'}`;
+  body.appendChild(agentWebJobRecoveryNode);
+}
+async function recoverAgentWebJobHold(legacyJobId = null) {
+  if (!agentConfirmationHold || agentConfirmationPending || agentWebJobPending || agentWebJobRecoveryPending || agentBusinessConfirmationHold || agentWebJobStorageFault || !agentWebJobActor) return false;
+  agentWebJobRecoveryPending = true;
+  const generation = agentHoldGeneration;
+  try {
+    const storage = window.sessionStorage, origin = window.location?.origin;
+    if (storage.getItem('agent-business-confirmation-hold-v1') === '1' || storage.getItem('agent-business-confirmation-pending-v1') === '1') return false;
+    const raw = storage.getItem(AGENT_WEB_JOB_RECORD) || '';
+    const generic = storage.getItem('agent-confirmation-hold') || '';
+    const typed = validWebJobRecord(agentWebJobRecord) && raw === JSON.stringify(agentWebJobRecord);
+    if (!typed && (raw || generic !== '1' || !webJobId(legacyJobId))) return false;
+    if (typed && generic === '1') return false; // Never reinterpret an unrelated generic confirmation HOLD.
+    const session = webJobSession(), record = typed ? { ...agentWebJobRecord } : null;
+    if (record && (record.actor !== agentWebJobActor || record.origin !== origin || record.session_id !== session)) return false;
+    const body = { action:'recover', kind:typed?'web_job':'legacy', job_id:record?.job_id || legacyJobId || null, idempotency_key:record?.idempotency_key || null, session_id:session };
+    const { response, data } = await webJobJson('/api/agent/web-jobs', body, Date.now() + 10000);
+    if (!response.ok || response.redirected || !data || data.ok !== true || data.kind !== body.kind || data.state !== 'closed_unmaterialized'
+      || data.actor !== agentWebJobActor || data.origin !== origin || data.session_id !== session || !webJobId(data.job_id) || !webJobId(data.idempotency_key)
+      || body.job_id && data.job_id !== body.job_id || record && data.idempotency_key !== record.idempotency_key
+      || !webJobId(data.disposition_id) || data.delivery !== 'unknown' || data.legacy_authorized !== !typed) return false;
+    if (generation !== agentHoldGeneration || agentBusinessConfirmationHold || agentConfirmationPending || agentWebJobPending
+      || storage.getItem('agent-business-confirmation-hold-v1') === '1' || storage.getItem('agent-business-confirmation-pending-v1') === '1' || (storage.getItem('agent-confirmation-hold') || '') !== generic
+      || (storage.getItem(AGENT_WEB_JOB_RECORD) || '') !== raw || storage.getItem(AGENT_WEB_JOB_SESSION) !== session) return false;
+    // Persist an exact local receipt first. A crash/error at any intermediate step remains held.
+    storage.setItem('agent-web-job-recovery-receipt-v1', JSON.stringify({ v:1,kind:body.kind,actor:data.actor,origin,session_id:session,job_id:data.job_id,idempotency_key:data.idempotency_key,disposition_id:data.disposition_id }));
+    if (!typed) {
+      saveWebJobRecord({ v:1,kind:'web_job',actor:data.actor,origin,session_id:session,job_id:data.job_id,idempotency_key:data.idempotency_key,phase:'waiting' });
+      storage.setItem('agent-confirmation-hold', '');
+      if (storage.getItem('agent-confirmation-hold')) throw new Error('storage');
+    }
+    forgetFinishedWebJob();
+    if (storage.getItem('agent-business-confirmation-hold-v1') === '1' || storage.getItem('agent-business-confirmation-pending-v1') === '1' || storage.getItem('agent-confirmation-hold')) return false;
+    agentConfirmationHold = false;
+    if (agentWebJobRecoveryNode) agentWebJobRecoveryNode.textContent = 'The exact request is closed without materialization; its delivery remains unknown. You may enter a new request. The old request will not be sent again.';
+    return true;
+  } catch { agentConfirmationHold = true; return false; }
+  finally { agentWebJobRecoveryPending = false; }
+}
 async function initWebJobFeature() {
   try {
     const response = await fetch('/api/agent/web-jobs');
     const result = await response.json();
     agentWebJobsEnabled = response.ok && result.ok === true && result.enabled === true;
-  } catch { agentWebJobsEnabled = false; } // Unknown feature state never broadens the legacy request.
+    agentWebJobActor = agentWebJobsEnabled && !response.redirected && result.origin === window.location?.origin && typeof result.actor === 'string' && result.actor.includes('@') && result.actor.length <= 254 ? result.actor : null;
+    agentWebJobIdentityUnavailable = agentWebJobsEnabled && !agentWebJobActor;
+    renderWebJobRecovery();
+  } catch { agentWebJobsEnabled = false; agentWebJobActor = null; agentWebJobIdentityUnavailable = true; } // Unknown bootstrap never admits an uncorrelated send.
 }
 async function webJobJson(path, body, until) {
   const remaining = until - Date.now();
@@ -1948,7 +2092,7 @@ async function webJobJson(path, body, until) {
     return await Promise.race([stopped, (async () => {
       const response = await fetch(path, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body), signal: controller.signal
+        body: JSON.stringify(body), signal: controller.signal, redirect:'error', credentials:'same-origin', cache:'no-store'
       });
       const data = await response.json();
       if (controller.signal.aborted || Date.now() >= until || document.hidden) throw new Error('Job response arrived after its deadline; do not retry.');
@@ -1968,11 +2112,12 @@ async function awaitCurrentWebJob(initial, pendingNode, until = Date.now() + 600
   for (let refresh = 0; refresh < 30; refresh++) {
     if (document.hidden || Date.now() >= until) break;
     if (status.state === 'result') {
+      if (agentWebJobRecord) saveWebJobRecord({ ...agentWebJobRecord, phase:'materialize' });
       const { response, data: draft } = await webJobJson('/api/agent/web-jobs', { action: 'materialize', job_id: jobId }, until);
       if (!response.ok || !draft.ok) throw new Error('Job needs review; no change confirmed. Do not retry.');
       return draft; // Existing exact preview/confirm/discard UI below, never auto-confirm.
     }
-    if (status.state === 'refused') return { ok: false, refusal: 'The container assistant refused this request. Nothing has been drafted or confirmed.' };
+    if (status.state === 'refused') return { ok: false, terminal_refused:true, refusal: 'The container assistant refused this request. Nothing has been drafted or confirmed.' };
     if (!['pending', 'claimed'].includes(status.state)) throw new Error('Job held or unknown; nothing confirmed. Do not retry.');
     pendingNode.textContent = 'Waiting for the existing container assistant. Nothing has been confirmed.';
     await new Promise(resolve => setTimeout(resolve, Math.min(2000, until - Date.now())));
@@ -1985,7 +2130,7 @@ async function awaitCurrentWebJob(initial, pendingNode, until = Date.now() + 600
 }
 
 window.agentSend = async function () {
-  if (agentConfirmationHold || agentConfirmationPending || agentWebJobPending) return;
+  if (agentConfirmationHold || agentConfirmationPending || agentWebJobPending || agentWebJobRecoveryPending || agentWebJobIdentityUnavailable) return;
   const input = document.getElementById('chatInput');
   const body = document.getElementById('chatBody');
   const text = (input?.value || '').trim();
@@ -2066,6 +2211,9 @@ window.agentSend = async function () {
       request: text,
       ...(webJobLifecycle ? { idempotency_key: crypto.randomUUID().replaceAll('-', '') } : {})
     };
+    if (webJobLifecycle && agentWebJobActor) {
+      saveWebJobRecord({ v:1,kind:'web_job',actor:agentWebJobActor,origin:window.location.origin,session_id:webJobSession(),job_id:null,idempotency_key:draftRequest.idempotency_key,phase:'create' });
+    }
     const created = webJobLifecycle ? await webJobJson(draftPath, draftRequest, jobDeadline) : null;
     const res = created ? created.response : await fetch(draftPath, {
       method: 'POST',
@@ -2078,6 +2226,7 @@ window.agentSend = async function () {
     botDiv.className = 'msg bot';
 
     if (res.ok && data.ok && data.job_id) {
+      if (agentWebJobRecord) saveWebJobRecord({ ...agentWebJobRecord, job_id:data.job_id, phase:'waiting' });
       botDiv.textContent = 'Request saved privately; waiting for the existing container assistant.';
       body.appendChild(botDiv);
       body.scrollTop = body.scrollHeight;
@@ -2085,7 +2234,10 @@ window.agentSend = async function () {
     }
 
     if (!res.ok || !data.ok || !(isContent ? data.draft_id : data.change_id)) {
-      if (webJobLifecycle && data.state === 'hold') holdAgentConfirmation(null);
+      if (webJobLifecycle) {
+        if (data.terminal_refused === true) forgetFinishedWebJob();
+        else holdWebJob();
+      }
       botDiv.innerHTML = `⚠️ Refusal: ${escapeHtml(data.refusal || data.error || 'Request refused')}`;
       body.appendChild(botDiv);
       body.scrollTop = body.scrollHeight;
@@ -2096,7 +2248,7 @@ window.agentSend = async function () {
     const after = isContent ? data.draft?.data : data.preview?.after;
     const isPreviewObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
     if (!isPreviewObject(before) || !isPreviewObject(after) || !/^[a-f0-9]{64}$/.test(data.preview_version || '')) {
-      if (webJobLifecycle) holdAgentConfirmation(null);
+      if (webJobLifecycle) holdWebJob();
       // The server may have saved a draft already; do not turn a missing preview into {} or replay it.
       botDiv.textContent = 'Preview unavailable — nothing has been confirmed. A draft may already exist. Do not retry; have an administrator inspect the saved draft.';
       body.appendChild(botDiv);
@@ -2131,8 +2283,9 @@ window.agentSend = async function () {
     `;
     body.appendChild(botDiv);
     body.scrollTop = body.scrollHeight;
+    if (webJobLifecycle) forgetFinishedWebJob();
   } catch (e) {
-    if (webJobLifecycle) holdAgentConfirmation(null); // Unknown create/materialize acknowledgement persists across reload.
+    if (webJobLifecycle) holdWebJob(); // Typed job HOLD is distinct from uncertain business confirmation.
     const botDiv = document.createElement('div');
     botDiv.className = 'msg bot';
     botDiv.innerHTML = `Error drafting change: ${escapeHtml(e.message)}`;
