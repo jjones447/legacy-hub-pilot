@@ -214,6 +214,7 @@ export async function humanWebJob(context,now=Math.floor(Date.now()/1000)){
     const body=JSON.parse(await boundedBody(request));
     if(!exact(body,['action','job_id'])||!id(body.job_id)||!['status','materialize'].includes(body.action))return refused();
     row=await get(env.LEGACY_DB,body.job_id);if(!row||row.actor!==actor||row.app_origin!==url.origin)return refused(404);
+    if(row.state==='closed_unmaterialized')return body.action==='status'?reply(view(row)):held();
     if(row.state!=='materialized'&&(row.expires_at<=now||row.state==='pending'&&row.pointer_expires_at<=now||row.state==='claimed'&&row.lease_expires_at<=now)){await hold(env.LEGACY_DB,row.id);return held();}
     if(body.action==='status')return reply(view(row));
     if(row.state==='materialized')return reply(JSON.parse(row.materialized_json));
@@ -234,4 +235,69 @@ export async function humanWebJob(context,now=Math.floor(Date.now()/1000)){
     if(!await cas(env.LEGACY_DB,row.id,'materializing','materialized',{materialized_json:JSON.stringify(draft)}))throw Error('state');
     return reply(draft);
   }catch{if(row){try{await hold(env.LEGACY_DB,row.id);}catch{ /* A reserved materialization never retries. */ }}return held();}
+}
+
+/** Trusted operator-only library seam. NOT exposed/called by any HTTP handler.
+ * The caller must independently qualify the exact D1 binding and quiescence evidence.
+ * A wire body/Access staff login is NOT authority to invoke this operation.
+ */
+export async function closeExpiredUnclaimedSyntheticJob(env,permit,now=Math.floor(Date.now()/1000)){
+  const fail=()=>({ok:false,error:'web_job_close_hold'});
+  try{
+    if(env.ASSISTANT_WEB_JOB_CLOSE_ENABLED!=='1'||env.ASSISTANT_DISPOSITION_DATABASE_ID!=='e52bc5aa-aa36-482d-b32b-ff39fdeaa8f0')return fail();
+    const perimeter=configuration(env,ORIGIN);
+    const keys=['job_id','actor','operation_id','operator','before_digest','target_revision','audit_digest','evidence_digest','authority_digest','quiescence_digest'];
+    if(!exact(permit,keys)||!id(permit.job_id)||!id(permit.operation_id)||!identifier(permit.operator)
+      ||typeof permit.actor!=='string'||permit.actor.length>254||!permit.actor.includes('@')
+      ||!keys.filter(k=>k.endsWith('_digest')||k==='target_revision').every(k=>digest(permit[k]))
+      ||!Number.isSafeInteger(now)||now<0)return fail();
+    const db=env.LEGACY_DB,row=await get(db,permit.job_id);
+    if(!row||row.actor!==permit.actor||row.app_origin!==ORIGIN)return fail();
+    const prior=await db.prepare('SELECT * FROM assistant_web_job_disposition WHERE job_id = ?').bind(row.id).first();
+    if(prior){
+      const same=['operation_id','operator','before_digest','target_revision','audit_digest','evidence_digest','authority_digest','quiescence_digest'].every(k=>prior[k]===permit[k]);
+      return same&&row.state==='closed_unmaterialized'&&prior.outcome==='closed_unmaterialized'&&prior.delivery==='unknown'
+        ?{ok:true,state:'closed_unmaterialized',delivery:'unknown'}:fail();
+    }
+    if(row.state!=='hold'||row.dispatch_state!=='reserved'||row.dispatch_ts!==null
+      ||![row.created_at,row.pointer_expires_at,row.expires_at].every(Number.isSafeInteger)
+      ||row.created_at>=now||row.pointer_expires_at>now||row.expires_at>now
+      ||row.pointer_expires_at!==row.created_at+60||row.expires_at!==row.created_at+240
+      ||['claim_json','claim_slack_ts','lease_token','lease_expires_at','result_digest','result_json','materialized_json'].some(k=>row[k]!==null)
+      ||await sha(canonical(row))!==permit.before_digest)return fail();
+    const frozen=await frozenFor(row,perimeter);if(frozen.v!==1||frozen.created_at!==row.created_at)return fail();
+    const fresh=await snapshot(db,frozen.area);
+    if(fresh.revision!==frozen.revision||fresh.revision!==permit.target_revision)return fail();
+    // Bound private audit reads BEFORE fetching content, not just after parsing it.
+    const auditBudget=await db.prepare("SELECT COUNT(*) n,COALESCE(SUM(length(CAST(COALESCE(actor,'') AS BLOB))+length(CAST(COALESCE(action,'') AS BLOB))+length(CAST(COALESCE(entity,'') AS BLOB))+length(CAST(COALESCE(entity_id,'') AS BLOB))+length(CAST(COALESCE(before_json,'') AS BLOB))+length(CAST(COALESCE(after_json,'') AS BLOB))+length(CAST(COALESCE(at,'') AS BLOB))),0) bytes FROM audit_log").first();
+    if(!auditBudget||auditBudget.n>200||auditBudget.bytes>8192)return fail();
+    const audits=(await db.prepare('SELECT * FROM audit_log ORDER BY id LIMIT 201').all()).results;
+    if(!Array.isArray(audits)||audits.length>200||await sha(canonical(audits))!==permit.audit_digest)return fail();
+    const auditColumns=['action','actor','after_json','at','before_json','entity','entity_id','id'];
+    const auditSnapshot=canonical(audits);
+    if(!audits.every(a=>exact(a,auditColumns))||new TextEncoder().encode(auditSnapshot).length>65536)return fail();
+    const params=[],predicates=[];
+    function matches(table,record){
+      const columns=Object.keys(record);if(!columns.length||!columns.every(k=>/^[a-z_][a-z0-9_]*$/.test(k)))throw Error('snapshot');
+      params.push(...columns.map(k=>record[k]));
+      return `EXISTS(SELECT 1 FROM ${table} WHERE ${columns.map(k=>`"${k}" IS ?`).join(' AND ')})`;
+    }
+    predicates.push(matches('assistant_web_job',row),matches(fresh.guard.table,fresh.guard.row));
+    if(fresh.guard.schema)predicates.push(matches('content_type',fresh.guard.schema));
+    if(fresh.guard.table==='grant_application'){
+      if(fresh.guard.linked)predicates.push(matches('award',fresh.guard.linked));
+      else{predicates.push('NOT EXISTS(SELECT 1 FROM award WHERE grant_application_id=?)');params.push('1');}
+    }
+    predicates.push('(SELECT COUNT(*) FROM audit_log)=?');params.push(audits.length);
+    // One exact bounded audit snapshot parameter, not eight parameters per audit row.
+    predicates.push(`(SELECT json_group_array(json_object(${auditColumns.map(k=>`'${k}',"${k}"`).join(',')})) FROM (SELECT * FROM audit_log ORDER BY id))=?`);params.push(auditSnapshot);
+    predicates.push("NOT EXISTS(SELECT 1 FROM assistant_web_job_nonce WHERE nonce=?)");params.push('materialize:'+row.id);
+    predicates.push("NOT EXISTS(SELECT 1 FROM content_item WHERE status='draft' AND updated_by=?)");params.push('access_staff:'+row.actor);
+    predicates.push("NOT EXISTS(SELECT 1 FROM agent_change WHERE status='draft' AND requested_by=?)");params.push('access_staff:'+row.actor);
+    if(params.length+11>100)return fail(); // D1 bind limit; unknown wider catalogs fail closed.
+    // Failed CAS inserts zero rows; a trigger error rolls BOTH evidence and state back.
+    const inserted=await db.prepare(`INSERT INTO assistant_web_job_disposition(job_id,operation_id,before_json,before_digest,target_revision,audit_digest,evidence_digest,authority_digest,quiescence_digest,operator,closed_at,outcome,delivery) SELECT ?,?,?,?,?,?,?,?,?,?,?,'closed_unmaterialized','unknown' WHERE ${predicates.join(' AND ')} RETURNING job_id`)
+      .bind(row.id,permit.operation_id,canonical(row),permit.before_digest,permit.target_revision,permit.audit_digest,permit.evidence_digest,permit.authority_digest,permit.quiescence_digest,permit.operator,now,...params).first();
+    return inserted?{ok:true,state:'closed_unmaterialized',delivery:'unknown'}:fail();
+  }catch{return fail();} // No raw error, actor, prompt, evidence or provider detail escapes.
 }
