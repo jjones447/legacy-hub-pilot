@@ -13,6 +13,25 @@ const identifier=v=>typeof v==='string'&&/^[A-Za-z0-9_.:-]{1,128}$/.test(v);
 const reply=(b,s=200)=>new Response(JSON.stringify(b),{status:s,headers:{'content-type':'application/json','cache-control':'no-store','referrer-policy':'no-referrer'}});
 const refused=(s=403)=>reply({ok:false,error:'web_job_refused'},s);
 const held=()=>reply({ok:false,state:'hold',error:'web_job_hold'},409);
+// Closed response metadata ONLY for the verified active staff create perimeter.
+// No raw exception/provider object is serialized or sent to a logging sink.
+const CREATE_STAGES=new Set(['request','lookup','transport','snapshot','freeze','persist','reserve','send','send_receipt','ack','final_read']);
+const POINTER_STAGES=new Set(['send','response_body','response_rejected','response_receipt']);
+const SLACK_ERRORS=new Set(['not_in_channel','channel_not_found','invalid_auth','not_authed','token_revoked','token_expired','account_inactive','missing_scope','no_permission','is_archived','restricted_action','ratelimited','rate_limited','service_unavailable']);
+const httpStatus=value=>Number.isInteger(value)&&value>=100&&value<=599;
+class PointerFailure extends Error{
+  constructor(stage,status,code){super('web_job_pointer_hold');this.stage=stage;if(httpStatus(status))this.status=status;if(SLACK_ERRORS.has(code))this.code=code;}
+}
+function createHeld(authorized,stage,error){
+  if(!authorized||!CREATE_STAGES.has(stage))return held();
+  const diagnostic={diagnostic_stage:stage};
+  if(error instanceof PointerFailure&&POINTER_STAGES.has(error.stage)){
+    diagnostic.diagnostic_stage=error.stage;
+    if(httpStatus(error.status))diagnostic.diagnostic_http_status=error.status;
+    if(SLACK_ERRORS.has(error.code))diagnostic.diagnostic_slack_error=error.code;
+  }
+  return reply({ok:false,state:'hold',error:'web_job_hold',...diagnostic},409);
+}
 const get=(db,j)=>db.prepare('SELECT * FROM assistant_web_job WHERE id = ?').bind(j).first();
 export const enabled=env=>env.ASSISTANT_WEB_JOBS_ENABLED==='1';
 function configuration(env,origin){
@@ -75,49 +94,56 @@ async function cas(db,j,from,to,values={}){
 export function slackPointerTransport({token,fetchImpl}){
   if(typeof token!=='string'||!token.startsWith('xoxb-')||typeof fetchImpl!=='function')throw Error('transport');
   return async ({channel,text})=>{
-    const response=await fetchImpl('https://slack.com/api/chat.postMessage',{method:'POST',redirect:'error',signal:AbortSignal.timeout(10000),headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify({channel,text,unfurl_links:false,unfurl_media:false})});
-    if(!response.ok)throw Error('send');const body=JSON.parse(await boundedBody(response,4096));
-    if(body.ok!==true||body.channel!==channel||typeof body.ts!=='string'||!/^[0-9]+\.[0-9]+$/.test(body.ts))throw Error('send');
+    let response;
+    try{response=await fetchImpl('https://slack.com/api/chat.postMessage',{method:'POST',redirect:'error',signal:AbortSignal.timeout(10000),headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify({channel,text,unfurl_links:false,unfurl_media:false})});}
+    catch{throw new PointerFailure('send');} // A timeout/unknown post is never retried.
+    let body;
+    try{body=JSON.parse(await boundedBody(response,4096));}
+    catch{throw new PointerFailure('response_body',response.status);}
+    if(!response.ok||body?.ok!==true)throw new PointerFailure('response_rejected',response.status,body?.ok===false?body.error:undefined);
+    if(body.channel!==channel||typeof body.ts!=='string'||!/^[0-9]+\.[0-9]+$/.test(body.ts))throw new PointerFailure('response_receipt',response.status);
     return {channel,ts:body.ts}; // No raw provider errors or message content escape.
   };
 }
 
 export async function createWebJob(context,now=Math.floor(Date.now()/1000)){
-  let jobId;const {request,env}=context;
+  let jobId,diagnosticsAllowed=false,stage='request';const {request,env}=context;
   try{
     const url=new URL(request.url),perimeter=configuration(env,url.origin),actor=await actorFor(context);
     if(!actor||request.method!=='POST'||request.headers.get('origin')!==url.origin||url.search)return refused();
+    diagnosticsAllowed=true; // configuration() already required feature ON; actorFor verified active staff.
     const body=JSON.parse(await boundedBody(request));
     const isContent=url.pathname==='/api/agent/draft',isWorkflow=url.pathname==='/api/agent/change/draft';
     if(!isContent&&!isWorkflow)return refused();
     if(!exact(body,isContent?['type_id','target_id','request','idempotency_key']:['area','target_id','request','idempotency_key'])||!id(body.idempotency_key)||typeof body.request!=='string'||!body.request.trim()||body.request.length>4000)return refused(400);
     const area=isContent?(body.target_id===TARGETS.forms?'forms':'content'):body.area;
     if(!Object.hasOwn(TARGETS,area)||body.target_id!==TARGETS[area]||isContent&&body.type_id!=='page_section'||isWorkflow&&content(area))return refused();
-    const prior=await env.LEGACY_DB.prepare('SELECT * FROM assistant_web_job WHERE actor = ? AND idempotency_key = ?').bind(actor,body.idempotency_key).first();
+    stage='lookup';const prior=await env.LEGACY_DB.prepare('SELECT * FROM assistant_web_job WHERE actor = ? AND idempotency_key = ?').bind(actor,body.idempotency_key).first();
     if(prior){const frozen=JSON.parse(prior.frozen_json);return frozen.request===body.request&&frozen.area===area&&prior.app_origin===url.origin?reply(view(prior)):held();}
     // Default-OFF composition: tests inject transport; a future approved backend may bind
     // the SAME existing bot token here. No secret lookup/mint/placement occurs in this source task.
-    const sendPointer=typeof env.ASSISTANT_WEB_JOB_TRANSPORT==='function'?env.ASSISTANT_WEB_JOB_TRANSPORT:
+    stage='transport';const sendPointer=typeof env.ASSISTANT_WEB_JOB_TRANSPORT==='function'?env.ASSISTANT_WEB_JOB_TRANSPORT:
       typeof env.ASSISTANT_WEB_JOB_SLACK_BOT_TOKEN==='string'?slackPointerTransport({token:env.ASSISTANT_WEB_JOB_SLACK_BOT_TOKEN,fetchImpl:fetch}):null;
     if(!sendPointer)return refused(503); // Unqualified custody/placement never falls back to Cloudflare AI.
-    const key=rawKey(env.ASSISTANT_WEB_JOB_KEY_HEX),target=await snapshot(env.LEGACY_DB,area);
+    stage='snapshot';const key=rawKey(env.ASSISTANT_WEB_JOB_KEY_HEX),target=await snapshot(env.LEGACY_DB,area);
     jobId=random128();const nonce=random128();
     const frozen={v:1,job_id:jobId,nonce,actor,origin:url.origin,perimeter,area,target_id:TARGETS[area],request:body.request,current:target.current,schema:target.schema,revision:target.revision,allowed_fields:FIELDS[area],created_at:now};
-    const raw=canonical(frozen);if(new TextEncoder().encode(raw).length>12000)return refused(413);
+    stage='freeze';const raw=canonical(frozen);if(new TextEncoder().encode(raw).length>12000)return refused(413);
     const inputDigest=await sha(raw);
     const wire=await signPointer({protocol:'legacy_web_job_v1',purpose:'slack_pointer',...perimeter,job_id:jobId,input_digest:inputDigest,nonce,issued_at:now,expires_at:now+60},key,perimeter,now);
-    await env.LEGACY_DB.prepare("INSERT INTO assistant_web_job(id,actor,idempotency_key,input_digest,pointer_nonce,app_origin,frozen_json,state,dispatch_state,pointer_expires_at,expires_at,created_at) VALUES(?,?,?,?,?,?,?,'pending','new',?,?,?)").bind(jobId,actor,body.idempotency_key,inputDigest,nonce,url.origin,raw,now+60,now+240,now).run();
-    const reservation=await env.LEGACY_DB.prepare("UPDATE assistant_web_job SET dispatch_state='reserved' WHERE id=? AND state='pending' AND dispatch_state='new' RETURNING id").bind(jobId).first();
-    if(!reservation)return held();
+    stage='persist';await env.LEGACY_DB.prepare("INSERT INTO assistant_web_job(id,actor,idempotency_key,input_digest,pointer_nonce,app_origin,frozen_json,state,dispatch_state,pointer_expires_at,expires_at,created_at) VALUES(?,?,?,?,?,?,?,'pending','new',?,?,?)").bind(jobId,actor,body.idempotency_key,inputDigest,nonce,url.origin,raw,now+60,now+240,now).run();
+    stage='reserve';const reservation=await env.LEGACY_DB.prepare("UPDATE assistant_web_job SET dispatch_state='reserved' WHERE id=? AND state='pending' AND dispatch_state='new' RETURNING id").bind(jobId).first();
+    if(!reservation)return createHeld(diagnosticsAllowed,stage);
     try{
-      const sent=await sendPointer({channel:perimeter.channel_id,text:wire});
+      stage='send';const sent=await sendPointer({channel:perimeter.channel_id,text:wire});
+      stage='send_receipt';
       if(!exact(sent,['channel','ts'])||sent.channel!==perimeter.channel_id||typeof sent.ts!=='string'||!/^[0-9]+\.[0-9]+$/.test(sent.ts))throw Error('send');
       // A machine may claim/result before this acknowledgement; never reset its job state.
-      const acknowledged=await env.LEGACY_DB.prepare("UPDATE assistant_web_job SET dispatch_state='sent',dispatch_ts=? WHERE id=? AND dispatch_state='reserved' AND (claim_slack_ts IS NULL OR claim_slack_ts=?) RETURNING id").bind(sent.ts,jobId,sent.ts).first();
+      stage='ack';const acknowledged=await env.LEGACY_DB.prepare("UPDATE assistant_web_job SET dispatch_state='sent',dispatch_ts=? WHERE id=? AND dispatch_state='reserved' AND (claim_slack_ts IS NULL OR claim_slack_ts=?) RETURNING id").bind(sent.ts,jobId,sent.ts).first();
       if(!acknowledged)throw Error('receipt');
-    }catch{await hold(env.LEGACY_DB,jobId);return held();}
-    return reply(view(await get(env.LEGACY_DB,jobId)),202);
-  }catch{if(jobId){try{await hold(env.LEGACY_DB,jobId);}catch{ /* Durable intermediate state prevents replay; no provider retry. */ }}return held();}
+    }catch(error){await hold(env.LEGACY_DB,jobId);return createHeld(diagnosticsAllowed,stage,error);}
+    stage='final_read';return reply(view(await get(env.LEGACY_DB,jobId)),202);
+  }catch(error){if(jobId){try{await hold(env.LEGACY_DB,jobId);}catch{ /* Durable intermediate state prevents replay; no provider retry. */ }}return createHeld(diagnosticsAllowed,stage,error);}
 }
 
 const CLAIM=['job_id','input_digest','pointer_nonce','invocation_id','attempt_id','source_id','config_id','generation_id','slack_event_id','slack_ts'];
