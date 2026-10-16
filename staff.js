@@ -1951,6 +1951,7 @@ async function discardAgentChange(target) {
 let agentWebJobPending = false;
 let agentWebJobsEnabled = false;
 let agentWebJobActor = null;
+let agentWebJobIdentityUnavailable = false;
 let agentWebJobRecord = null;
 let agentWebJobRecoveryPending = false;
 let agentWebJobStorageFault = false;
@@ -2066,9 +2067,10 @@ async function initWebJobFeature() {
     const response = await fetch('/api/agent/web-jobs');
     const result = await response.json();
     agentWebJobsEnabled = response.ok && result.ok === true && result.enabled === true;
-    agentWebJobActor = agentWebJobsEnabled && !response.redirected && result.origin === window.location?.origin && typeof result.actor === 'string' && result.actor.includes('@') ? result.actor : null;
+    agentWebJobActor = agentWebJobsEnabled && !response.redirected && result.origin === window.location?.origin && typeof result.actor === 'string' && result.actor.includes('@') && result.actor.length <= 254 ? result.actor : null;
+    agentWebJobIdentityUnavailable = agentWebJobsEnabled && !agentWebJobActor;
     renderWebJobRecovery();
-  } catch { agentWebJobsEnabled = false; agentWebJobActor = null; } // Unknown feature state never supplies recovery identity.
+  } catch { agentWebJobsEnabled = false; agentWebJobActor = null; agentWebJobIdentityUnavailable = true; } // Unknown bootstrap never admits an uncorrelated send.
 }
 async function webJobJson(path, body, until) {
   const remaining = until - Date.now();
@@ -2128,7 +2130,7 @@ async function awaitCurrentWebJob(initial, pendingNode, until = Date.now() + 600
 }
 
 window.agentSend = async function () {
-  if (agentConfirmationHold || agentConfirmationPending || agentWebJobPending || agentWebJobRecoveryPending) return;
+  if (agentConfirmationHold || agentConfirmationPending || agentWebJobPending || agentWebJobRecoveryPending || agentWebJobIdentityUnavailable) return;
   const input = document.getElementById('chatInput');
   const body = document.getElementById('chatBody');
   const text = (input?.value || '').trim();

@@ -180,3 +180,13 @@ test('feature bootstrap exposes only verified own identity; client does not trus
  }finally{f.db.close();}
  const h=harness({actor:null});assert.equal(await h.recover(),false);assert.equal(h.calls.length,0);await h.c.initWebJobFeature();assert.equal(await h.recover(),false);
 });
+
+test('missing, redirected or wrong-origin bootstrap identity blocks a new uncorrelated send without consuming its text',async()=>{
+ for(const kind of ['missing','origin','redirect','throw']){
+  const h=harness({storage:stored(null),fetchImpl:()=>{
+   if(kind==='throw')throw Error('FICTIONAL bootstrap');
+   return {...response({ok:true,enabled:true,...(kind==='missing'?{}:{actor:ACTOR,origin:kind==='origin'?'https://other.invalid':ORIGIN})}),redirected:kind==='redirect'};
+  }});
+  await h.c.initWebJobFeature();const n=h.calls.length;await h.send();assert.equal(h.calls.length,n);assert.equal(h.nodes.chatInput.value,'New fictional intent');assert.equal(h.storage.has(RECORD),false);
+ }
+});
