@@ -209,9 +209,24 @@ export async function humanWebJob(context,now=Math.floor(Date.now()/1000)){
     const url=new URL(request.url);
     if(request.method==='GET'&&url.pathname==='/api/agent/web-jobs'&&!url.search&&!enabled(env))return confirmationActor(context.data)?reply({ok:true,enabled:false}):refused();
     const perimeter=configuration(env,url.origin);const actor=await actorFor(context);
-    if(actor&&request.method==='GET'&&url.pathname==='/api/agent/web-jobs'&&!url.search)return reply({ok:true,enabled:true});
+    if(actor&&request.method==='GET'&&url.pathname==='/api/agent/web-jobs'&&!url.search)return reply({ok:true,enabled:true,actor,origin:url.origin});
     if(!actor||request.method!=='POST'||url.pathname!=='/api/agent/web-jobs'||url.search||request.headers.get('origin')!==url.origin)return refused();
     const body=JSON.parse(await boundedBody(request));
+    if(body?.action==='recover'){
+      if(!exact(body,['action','kind','job_id','idempotency_key','session_id'])||!['web_job','legacy'].includes(body.kind)||!id(body.session_id)
+        ||body.kind==='legacy'&&(!id(body.job_id)||body.idempotency_key!==null)
+        ||body.kind==='web_job'&&(!id(body.idempotency_key)||body.job_id!==null&&!id(body.job_id)))return refused();
+      const closed=body.job_id?await get(env.LEGACY_DB,body.job_id):await env.LEGACY_DB.prepare('SELECT * FROM assistant_web_job WHERE actor = ? AND idempotency_key = ?').bind(actor,body.idempotency_key).first();
+      if(!closed||closed.actor!==actor||closed.app_origin!==url.origin||closed.state!=='closed_unmaterialized'
+        ||body.kind==='web_job'&&closed.idempotency_key!==body.idempotency_key)return held();
+      const disposition=await env.LEGACY_DB.prepare('SELECT job_id,operation_id,outcome,delivery FROM assistant_web_job_disposition WHERE job_id = ?').bind(closed.id).first();
+      if(!disposition||disposition.outcome!=='closed_unmaterialized'||disposition.delivery!=='unknown'||!id(disposition.operation_id))return held();
+      if(await env.LEGACY_DB.prepare("SELECT id FROM content_item WHERE status='draft' AND updated_by=? LIMIT 1").bind('access_staff:'+actor).first()
+        ||await env.LEGACY_DB.prepare("SELECT id FROM agent_change WHERE status='draft' AND requested_by=? LIMIT 1").bind('access_staff:'+actor).first())return held();
+      if(await env.LEGACY_DB.prepare("SELECT id FROM assistant_web_job WHERE actor=? AND state IN ('pending','claimed','result','materializing','hold') LIMIT 1").bind(actor).first())return held();
+      if(body.kind==='legacy'&&!await env.LEGACY_DB.prepare('SELECT session_id FROM assistant_web_job_browser_reconciliation WHERE session_id=? AND job_id=? AND actor=? AND app_origin=?').bind(body.session_id,closed.id,actor,url.origin).first())return held();
+      return reply({ok:true,kind:body.kind,state:'closed_unmaterialized',job_id:closed.id,idempotency_key:closed.idempotency_key,actor,origin:url.origin,session_id:body.session_id,disposition_id:disposition.operation_id,delivery:'unknown',legacy_authorized:body.kind==='legacy'});
+    }
     if(!exact(body,['action','job_id'])||!id(body.job_id)||!['status','materialize'].includes(body.action))return refused();
     row=await get(env.LEGACY_DB,body.job_id);if(!row||row.actor!==actor||row.app_origin!==url.origin)return refused(404);
     if(row.state==='closed_unmaterialized')return body.action==='status'?reply(view(row)):held();
@@ -300,4 +315,22 @@ export async function closeExpiredUnclaimedSyntheticJob(env,permit,now=Math.floo
       .bind(row.id,permit.operation_id,canonical(row),permit.before_digest,permit.target_revision,permit.audit_digest,permit.evidence_digest,permit.authority_digest,permit.quiescence_digest,permit.operator,now,...params).first();
     return inserted?{ok:true,state:'closed_unmaterialized',delivery:'unknown'}:fail();
   }catch{return fail();} // No raw error, actor, prompt, evidence or provider detail escapes.
+}
+
+/** Operator-only attestation AFTER exact-session inspection; never HTTP/body authority. */
+export async function authorizeLegacyWebJobBrowserRecovery(env,permit,now=Math.floor(Date.now()/1000)){
+  const fail=()=>({ok:false,error:'web_job_browser_reconciliation_hold'});
+  try{
+    if(env.ASSISTANT_WEB_JOB_CLOSE_ENABLED!=='1'||env.ASSISTANT_DISPOSITION_DATABASE_ID!=='e52bc5aa-aa36-482d-b32b-ff39fdeaa8f0')return fail();
+    configuration(env,ORIGIN);
+    if(!exact(permit,['job_id','actor','session_id','operator','evidence_digest','authority_digest'])||!id(permit.job_id)||!id(permit.session_id)
+      ||!identifier(permit.operator)||!digest(permit.evidence_digest)||!digest(permit.authority_digest)||typeof permit.actor!=='string'||permit.actor.length>254||!permit.actor.includes('@')
+      ||!Number.isSafeInteger(now)||now<0)return fail();
+    const db=env.LEGACY_DB;
+    const prior=await db.prepare('SELECT * FROM assistant_web_job_browser_reconciliation WHERE session_id=?').bind(permit.session_id).first();
+    if(prior)return ['job_id','actor','session_id','operator','evidence_digest','authority_digest'].every(k=>prior[k]===permit[k])&&prior.app_origin===ORIGIN?{ok:true}:fail();
+    const saved=await db.prepare("INSERT INTO assistant_web_job_browser_reconciliation(session_id,job_id,actor,app_origin,operator,evidence_digest,authority_digest,created_at) SELECT ?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM assistant_web_job j JOIN assistant_web_job_disposition d ON d.job_id=j.id WHERE j.id=? AND j.actor=? AND j.app_origin=? AND j.state='closed_unmaterialized' AND d.outcome='closed_unmaterialized' AND d.delivery='unknown') AND NOT EXISTS(SELECT 1 FROM content_item WHERE status='draft' AND updated_by=?) AND NOT EXISTS(SELECT 1 FROM agent_change WHERE status='draft' AND requested_by=?) AND NOT EXISTS(SELECT 1 FROM assistant_web_job WHERE actor=? AND state IN ('pending','claimed','result','materializing','hold')) RETURNING session_id")
+      .bind(permit.session_id,permit.job_id,permit.actor,ORIGIN,permit.operator,permit.evidence_digest,permit.authority_digest,now,permit.job_id,permit.actor,ORIGIN,'access_staff:'+permit.actor,'access_staff:'+permit.actor,permit.actor).first();
+    return saved?{ok:true}:fail();
+  }catch{return fail();}
 }

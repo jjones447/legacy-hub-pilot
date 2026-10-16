@@ -78,3 +78,23 @@ CREATE TRIGGER assistant_web_job_disposition_no_update BEFORE UPDATE ON assistan
 BEGIN SELECT RAISE(ABORT,'web_job_disposition_immutable'); END;
 CREATE TRIGGER assistant_web_job_disposition_no_delete BEFORE DELETE ON assistant_web_job_disposition
 BEGIN SELECT RAISE(ABORT,'web_job_disposition_immutable'); END;
+
+-- Explicit operator attestation for a legacy browser session that lost job correlation.
+-- This is NOT authority to close a job or blanket-clear other confirmation holds.
+CREATE TABLE assistant_web_job_browser_reconciliation (
+  session_id TEXT PRIMARY KEY NOT NULL, job_id TEXT NOT NULL REFERENCES assistant_web_job(id),
+  actor TEXT NOT NULL, app_origin TEXT NOT NULL, operator TEXT NOT NULL,
+  evidence_digest TEXT NOT NULL, authority_digest TEXT NOT NULL, created_at INTEGER NOT NULL
+);
+CREATE TRIGGER assistant_web_job_browser_guard BEFORE INSERT ON assistant_web_job_browser_reconciliation
+BEGIN
+  SELECT CASE WHEN EXISTS(SELECT 1 FROM assistant_web_job_browser_reconciliation WHERE session_id=NEW.session_id)
+    OR NOT EXISTS(SELECT 1 FROM assistant_web_job j JOIN assistant_web_job_disposition d ON d.job_id=j.id
+      WHERE j.id=NEW.job_id AND j.actor=NEW.actor AND j.app_origin=NEW.app_origin
+        AND j.state='closed_unmaterialized' AND d.outcome='closed_unmaterialized' AND d.delivery='unknown')
+    THEN RAISE(ABORT,'web_job_browser_reconciliation_refused') END;
+END;
+CREATE TRIGGER assistant_web_job_browser_no_update BEFORE UPDATE ON assistant_web_job_browser_reconciliation
+BEGIN SELECT RAISE(ABORT,'web_job_browser_reconciliation_immutable'); END;
+CREATE TRIGGER assistant_web_job_browser_no_delete BEFORE DELETE ON assistant_web_job_browser_reconciliation
+BEGIN SELECT RAISE(ABORT,'web_job_browser_reconciliation_immutable'); END;

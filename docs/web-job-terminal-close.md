@@ -50,6 +50,10 @@ Suggested operational order for Codex13 and existing compiler/runtime custodians
 
 Rollback before a committed close may restore the prior schema only under a separately qualified preserved-state procedure. **After a close, never downgrade a schema/restore an old database in a way that erases the disposition or reopens the old job.** Rolling back executable content may disable new requests, but terminal history/fences remain. No destructive rollback script is supplied here.
 
+## Browser successor implemented in the same source composition
+
+The later [exact browser recovery implementation](web-job-browser-recovery.md) now supplies typed pre-send correlation, separate unknown-business-confirmation markers, authenticated read-only terminal proof and an explicit append-only exact-session legacy operator attestation. The historical gap analysis below explains why generic reset remains prohibited. Source completion still does not establish installation or actual recovery.
+
 ## Lattice boundaries and failed-request journey
 
 | Boundary / owner | Admissible evidence and next transition | Never infer |
