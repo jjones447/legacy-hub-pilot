@@ -15,7 +15,7 @@ const refused=(s=403)=>reply({ok:false,error:'web_job_refused'},s);
 const held=()=>reply({ok:false,state:'hold',error:'web_job_hold'},409);
 // Closed response metadata ONLY for the verified active staff create perimeter.
 // No raw exception/provider object is serialized or sent to a logging sink.
-const CREATE_STAGES=new Set(['request','lookup','transport','snapshot','freeze','persist','reserve','send','send_receipt','ack','final_read']);
+const CREATE_STAGES=new Set(['request','lookup','actor_busy','transport','snapshot','freeze','persist','reserve','send','send_receipt','ack','final_read']);
 const POINTER_STAGES=new Set(['send','response_body','response_rejected','response_receipt']);
 const SLACK_ERRORS=new Set(['not_in_channel','channel_not_found','invalid_auth','not_authed','token_revoked','token_expired','account_inactive','missing_scope','no_permission','is_archived','restricted_action','ratelimited','rate_limited','service_unavailable']);
 const httpStatus=value=>Number.isInteger(value)&&value>=100&&value<=599;
@@ -120,6 +120,11 @@ export async function createWebJob(context,now=Math.floor(Date.now()/1000)){
     if(!Object.hasOwn(TARGETS,area)||body.target_id!==TARGETS[area]||isContent&&body.type_id!=='page_section'||isWorkflow&&content(area))return refused();
     stage='lookup';const prior=await env.LEGACY_DB.prepare('SELECT * FROM assistant_web_job WHERE actor = ? AND idempotency_key = ?').bind(actor,body.idempotency_key).first();
     if(prior){const frozen=JSON.parse(prior.frozen_json);return frozen.request===body.request&&frozen.area===area&&prior.app_origin===url.origin?reply(view(prior)):held();}
+    // Match the unchanged actor-global one-active index, including expired HOLD.
+    // This read is advisory: the index remains the race backstop before any send.
+    stage='actor_busy';
+    const active=await env.LEGACY_DB.prepare("SELECT id FROM assistant_web_job WHERE actor = ? AND state IN ('pending','claimed','result','materializing','hold') LIMIT 1").bind(actor).first();
+    if(active)return reply({ok:false,state:'hold',error:'web_job_hold',diagnostic_stage:'actor_busy',refusal:'A previous assistant request is unresolved. This request was not created or sent. Do not retry; ask the operator to resolve the existing hold.'},409);
     // Default-OFF composition: tests inject transport; a future approved backend may bind
     // the SAME existing bot token here. No secret lookup/mint/placement occurs in this source task.
     stage='transport';const sendPointer=typeof env.ASSISTANT_WEB_JOB_TRANSPORT==='function'?env.ASSISTANT_WEB_JOB_TRANSPORT:

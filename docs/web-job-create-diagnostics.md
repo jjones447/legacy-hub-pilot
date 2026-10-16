@@ -16,6 +16,7 @@ These fields are available only after existing configuration has required web jo
 |---|---|
 | request | bounded create request parsing |
 | lookup | actor/idempotency lookup |
+| actor_busy | actor-global active-job lookup; a found row also returns a fixed operator-facing refusal |
 | transport | approved backend transport construction |
 | snapshot | existing key validation and exact target/schema snapshot |
 | freeze | canonical frozen input, digest and pointer construction |
