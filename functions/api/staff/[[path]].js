@@ -639,6 +639,7 @@ export async function onRequestPost({ request, env }) {
         return json({ ok: false, error: 'malformed before_json in audit log' }, 409);
       }
 
+      let contentUndoStatements = null;
       if (original.action === 'caregiver.note_archived') {
         const noteId = beforeObj.note_id;
         const noteStatus = beforeObj.status || 'active';
@@ -688,6 +689,7 @@ export async function onRequestPost({ request, env }) {
           ).bind(...params).run();
         }
       } else if (original.entity === 'content_item' || original.action.startsWith('content_item.')) {
+        contentUndoStatements = [];
         let targetData = null;
         let targetStatus = null;
 
@@ -702,28 +704,24 @@ export async function onRequestPost({ request, env }) {
         }
 
         if (targetStatus && targetData) {
-          await env.LEGACY_DB.prepare(`
+          contentUndoStatements.push(env.LEGACY_DB.prepare(`
             UPDATE content_item
             SET data = ?, status = ?, updated_by = ?, updated_at = datetime('now')
             WHERE id = ?
-          `).bind(targetData, targetStatus, 'staff_' + actor, original.entity_id).run();
+          `).bind(targetData, targetStatus, 'staff_' + actor, original.entity_id));
         } else if (targetData) {
-          await env.LEGACY_DB.prepare(`
+          contentUndoStatements.push(env.LEGACY_DB.prepare(`
             UPDATE content_item
             SET data = ?, updated_by = ?, updated_at = datetime('now')
             WHERE id = ?
-          `).bind(targetData, 'staff_' + actor, original.entity_id).run();
+          `).bind(targetData, 'staff_' + actor, original.entity_id));
         } else if (targetStatus) {
-          await env.LEGACY_DB.prepare(`
+          contentUndoStatements.push(env.LEGACY_DB.prepare(`
             UPDATE content_item
             SET status = ?, updated_by = ?, updated_at = datetime('now')
             WHERE id = ?
-          `).bind(targetStatus, 'staff_' + actor, original.entity_id).run();
+          `).bind(targetStatus, 'staff_' + actor, original.entity_id));
         }
-
-        try {
-          _resetContentCache();
-        } catch {}
       } else {
         return json({ ok: false, error: `entity ${original.entity} does not support undo` }, 409);
       }
@@ -738,7 +736,7 @@ export async function onRequestPost({ request, env }) {
         entity_id: original.entity_id
       };
 
-      await env.LEGACY_DB.prepare(`
+      const undoAudit = env.LEGACY_DB.prepare(`
         INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
         VALUES (?, 'undo', ?, ?, ?, ?)
       `).bind(
@@ -747,7 +745,17 @@ export async function onRequestPost({ request, env }) {
         original.entity_id,
         original.after_json,
         JSON.stringify(undoMeta)
-      ).run();
+      );
+
+      if (contentUndoStatements) {
+        // Content restoration and its original-reference audit must commit together.
+        await env.LEGACY_DB.batch([...contentUndoStatements, undoAudit]);
+        try {
+          _resetContentCache();
+        } catch {}
+      } else {
+        await undoAudit.run();
+      }
 
       return json({ ok: true, undone_audit_id: original.id });
     }
