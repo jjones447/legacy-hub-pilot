@@ -335,21 +335,21 @@ export async function onRequestPost({ request, env }) {
         return json({ ok: false, error: "status must be 'done' or 'dismissed'" }, 400);
       }
 
-      // Update status
-      await env.LEGACY_DB.prepare(`
-        UPDATE followup SET status = ? WHERE id = ?
-      `).bind(targetStatus, id).run();
-
-      // Audit log followup.resolve
-      await env.LEGACY_DB.prepare(`
-        INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
-        VALUES (?, 'followup.resolve', 'followup', ?, ?, ?)
-      `).bind(
-        actor,
-        id.toString(),
-        JSON.stringify({ status: followup.status }),
-        JSON.stringify({ status: targetStatus })
-      ).run();
+      // Status and its original audit must commit together or not at all.
+      await env.LEGACY_DB.batch([
+        env.LEGACY_DB.prepare(`
+          UPDATE followup SET status = ? WHERE id = ?
+        `).bind(targetStatus, id),
+        env.LEGACY_DB.prepare(`
+          INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
+          VALUES (?, 'followup.resolve', 'followup', ?, ?, ?)
+        `).bind(
+          actor,
+          id.toString(),
+          JSON.stringify({ status: followup.status }),
+          JSON.stringify({ status: targetStatus })
+        )
+      ]);
 
       return json({ ok: true });
     }
