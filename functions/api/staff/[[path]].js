@@ -553,20 +553,21 @@ export async function onRequestPost({ request, env }) {
 
       const actor = getActor(request, env);
 
-      await env.LEGACY_DB.prepare(`
-        UPDATE note SET status = 'archived' WHERE id = ?
-      `).bind(id).run();
-
-      // Audit log caregiver.note_archived
-      await env.LEGACY_DB.prepare(`
-        INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
-        VALUES (?, 'caregiver.note_archived', 'caregiver', ?, ?, ?)
-      `).bind(
-        actor,
-        note.caregiver_id,
-        JSON.stringify({ note_id: id, status: note.status }),
-        JSON.stringify({ note_id: id, status: 'archived' })
-      ).run();
+      // Archival and its original caregiver audit must commit together.
+      await env.LEGACY_DB.batch([
+        env.LEGACY_DB.prepare(`
+          UPDATE note SET status = 'archived' WHERE id = ?
+        `).bind(id),
+        env.LEGACY_DB.prepare(`
+          INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
+          VALUES (?, 'caregiver.note_archived', 'caregiver', ?, ?, ?)
+        `).bind(
+          actor,
+          note.caregiver_id,
+          JSON.stringify({ note_id: id, status: note.status }),
+          JSON.stringify({ note_id: id, status: 'archived' })
+        )
+      ]);
 
       return json({ ok: true });
     }
