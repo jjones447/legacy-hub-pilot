@@ -500,26 +500,21 @@ export async function onRequestPost({ request, env }) {
 
       const actor = getActor(request, env);
 
-      const insertResult = await env.LEGACY_DB.prepare(`
-        INSERT INTO note (caregiver_id, author, body, visibility, status)
-        VALUES (?, ?, ?, 'staff', 'active')
-      `).bind(caregiverId, actor, trimmedBody).run();
+      // Within this ordered transaction, the audit captures the preceding note INSERT's ID.
+      // Do not move last_insert_rowid() to a separate call or use the audit INSERT's result.
+      const [insertResult] = await env.LEGACY_DB.batch([
+        env.LEGACY_DB.prepare(`
+          INSERT INTO note (caregiver_id, author, body, visibility, status)
+          VALUES (?, ?, ?, 'staff', 'active')
+        `).bind(caregiverId, actor, trimmedBody),
+        env.LEGACY_DB.prepare(`
+          INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
+          VALUES (?, 'caregiver.note_added', 'caregiver', ?, NULL,
+            json_object('note_id', last_insert_rowid(), 'author', ?, 'body', ?))
+        `).bind(actor, caregiverId, actor, trimmedBody)
+      ]);
 
       const newId = insertResult?.meta?.last_row_id || insertResult?.lastRowId || null;
-
-      // Audit log caregiver.note_added
-      await env.LEGACY_DB.prepare(`
-        INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
-        VALUES (?, 'caregiver.note_added', 'caregiver', ?, NULL, ?)
-      `).bind(
-        actor,
-        caregiverId,
-        JSON.stringify({
-          note_id: newId,
-          author: actor,
-          body: trimmedBody
-        })
-      ).run();
 
       const createdNote = await env.LEGACY_DB.prepare(`
         SELECT id, caregiver_id, author, body, visibility, status, created_at
