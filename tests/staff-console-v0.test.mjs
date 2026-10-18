@@ -269,3 +269,84 @@ for (const refusal of ['missing before', 'malformed before', 'non-restorable', '
     assert.deepEqual(raw.prepare('SELECT * FROM audit_log ORDER BY id').all(), auditsBefore);
   });
 }
+
+function followupResolveRequest(status, id = '1001') {
+  return mockRequest(`http://localhost/api/staff/followup/${id}/resolve`, 'POST', { status }, {
+    // Fictional handler-unit actor seam, not real Access middleware verification.
+    'Cf-Access-Jwt-Assertion': 'header.eyJlbWFpbCI6InN0YWZmQGV4YW1wbGUub3JnIn0.signature'
+  });
+}
+
+for (const status of ['done', 'dismissed']) {
+  test(`followup resolve rolls back on audit failure (${status})`, async () => {
+    const before = raw.prepare('SELECT * FROM followup WHERE id = 1001').get();
+    const auditsBefore = raw.prepare('SELECT * FROM audit_log ORDER BY id').all();
+    raw.exec(`CREATE TRIGGER fail_followup_resolve_audit BEFORE INSERT ON audit_log
+      WHEN NEW.action = 'followup.resolve'
+      BEGIN SELECT RAISE(ABORT, 'fictional followup audit failure'); END;`);
+
+    const res = await postStaff({ request: followupResolveRequest(status), env });
+    assert.equal(res.status, 500);
+    assert.deepEqual(raw.prepare('SELECT * FROM audit_log ORDER BY id').all(), auditsBefore);
+    assert.deepEqual(raw.prepare('SELECT * FROM followup WHERE id = 1001').get(), before);
+  });
+
+  test(`followup resolve mutation failure leaves no audit (${status})`, async () => {
+    const before = raw.prepare('SELECT * FROM followup WHERE id = 1001').get();
+    const auditsBefore = raw.prepare('SELECT * FROM audit_log ORDER BY id').all();
+    raw.exec(`CREATE TRIGGER fail_followup_resolve_update BEFORE UPDATE OF status ON followup
+      WHEN OLD.id = 1001
+      BEGIN SELECT RAISE(ABORT, 'fictional followup mutation failure'); END;`);
+
+    const res = await postStaff({ request: followupResolveRequest(status), env });
+    assert.equal(res.status, 500);
+    assert.deepEqual(raw.prepare('SELECT * FROM followup WHERE id = 1001').get(), before);
+    assert.deepEqual(raw.prepare('SELECT * FROM audit_log ORDER BY id').all(), auditsBefore);
+  });
+
+  test(`followup resolve commits only status and its original audit (${status})`, async () => {
+    const before = raw.prepare('SELECT * FROM followup WHERE id = 1001').get();
+    const res = await postStaff({ request: followupResolveRequest(status), env });
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), { ok: true });
+    const after = raw.prepare('SELECT * FROM followup WHERE id = 1001').get();
+    assert.equal(after.status, status);
+    assert.deepEqual({ ...after, status: before.status }, { ...before });
+    const audits = raw.prepare("SELECT * FROM audit_log WHERE action = 'followup.resolve'").all();
+    assert.equal(audits.length, 1);
+    assert.equal(audits[0].actor, 'staff@example.org');
+    assert.equal(audits[0].entity, 'followup');
+    assert.equal(audits[0].entity_id, '1001');
+    assert.deepEqual(JSON.parse(audits[0].before_json), { status: 'open' });
+    assert.deepEqual(JSON.parse(audits[0].after_json), { status });
+  });
+}
+
+test('followup resolve preserves default done status', async () => {
+  const res = await postStaff({ request: followupResolveRequest(undefined), env });
+  assert.equal(res.status, 200);
+  assert.equal(raw.prepare('SELECT status FROM followup WHERE id = 1001').get().status, 'done');
+  const audit = raw.prepare("SELECT after_json FROM audit_log WHERE action = 'followup.resolve'").get();
+  assert.deepEqual(JSON.parse(audit.after_json), { status: 'done' });
+});
+
+for (const scenario of [
+  { name: 'invalid ID', id: 'not-an-id', response: 400 },
+  { name: 'missing ID', url: 'http://localhost/api/staff/followup/resolve', response: 400 },
+  { name: 'unknown ID', id: '999999', response: 404 },
+  { name: 'invalid target status', target: 'open', response: 400 },
+  { name: 'already done', initial: 'done', response: 409 },
+  { name: 'already dismissed', initial: 'dismissed', response: 409 }
+]) {
+  test(`followup resolve preserves refusal: ${scenario.name}`, async () => {
+    if (scenario.initial) raw.prepare('UPDATE followup SET status = ? WHERE id = 1001').run(scenario.initial);
+    const before = raw.prepare('SELECT * FROM followup WHERE id = 1001').get();
+    const auditsBefore = raw.prepare('SELECT * FROM audit_log ORDER BY id').all();
+    const request = scenario.url ? mockRequest(scenario.url, 'POST', { status: 'done' })
+      : followupResolveRequest(scenario.target || 'done', scenario.id || '1001');
+    const res = await postStaff({ request, env });
+    assert.equal(res.status, scenario.response);
+    assert.deepEqual(raw.prepare('SELECT * FROM followup WHERE id = 1001').get(), before);
+    assert.deepEqual(raw.prepare('SELECT * FROM audit_log ORDER BY id').all(), auditsBefore);
+  });
+}
