@@ -409,30 +409,22 @@ export async function onRequestPost({ request, env }) {
 
       const actor = getActor(request, env);
 
-      // Insert contact history
-      const insertResult = await env.LEGACY_DB.prepare(`
-        INSERT INTO contact_history (caregiver_id, occurred_at, channel, direction, summary, recorded_by)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `).bind(caregiverId, occurred_at, channel, direction, summary.trim(), actor).run();
+      // The original audit captures the preceding contact INSERT's ID in this transaction.
+      // Keep last_insert_rowid() inside the ordered batch, not in a separate call.
+      const [insertResult] = await env.LEGACY_DB.batch([
+        env.LEGACY_DB.prepare(`
+          INSERT INTO contact_history (caregiver_id, occurred_at, channel, direction, summary, recorded_by)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).bind(caregiverId, occurred_at, channel, direction, summary.trim(), actor),
+        env.LEGACY_DB.prepare(`
+          INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
+          VALUES (?, 'caregiver.contact_added', 'caregiver', ?, NULL,
+            json_object('contact_id', last_insert_rowid(), 'occurred_at', ?, 'channel', ?,
+              'direction', ?, 'summary', ?, 'recorded_by', ?))
+        `).bind(actor, caregiverId, occurred_at, channel, direction, summary.trim(), actor)
+      ]);
 
       const newId = insertResult?.meta?.last_row_id || insertResult?.lastRowId || null;
-
-      // Audit log caregiver.contact_added
-      await env.LEGACY_DB.prepare(`
-        INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
-        VALUES (?, 'caregiver.contact_added', 'caregiver', ?, NULL, ?)
-      `).bind(
-        actor,
-        caregiverId,
-        JSON.stringify({
-          contact_id: newId,
-          occurred_at,
-          channel,
-          direction,
-          summary: summary.trim(),
-          recorded_by: actor
-        })
-      ).run();
 
       return json({
         ok: true,
