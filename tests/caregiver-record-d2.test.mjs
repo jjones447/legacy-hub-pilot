@@ -33,7 +33,7 @@ function d1(db) {
           const statement = db.prepare(sql);
           if (statement.columns().length) return { success: true, results: statement.all(...params), meta: {} };
           const result = statement.run(...params);
-          return { success: true, results: [], meta: { changes: Number(result.changes) } };
+          return { success: true, results: [], meta: { changes: Number(result.changes), last_row_id: Number(result.lastInsertRowid) } };
         });
         db.exec('COMMIT');
         return results;
@@ -489,3 +489,140 @@ test('(h) GET /api/staff/caregiver/:id returns all existing keys plus contact_hi
   assert.equal(data.profile.outcome_notes, 'Doing well');
   assert.equal(data.profile.outcome_updated_at, '2026-09-16 12:00:00');
 });
+
+test('contact create rolls back on original audit insertion failure', async () => {
+  raw.prepare(`INSERT INTO contact_history (caregiver_id, occurred_at, channel, direction, summary, recorded_by)
+    VALUES ('cg_seed_fictional', '2026-01-01T00:00:00Z', 'email', 'inbound', 'Existing fictional contact', 'fixture@example.org')`).run();
+  const contactsBefore = raw.prepare('SELECT * FROM contact_history ORDER BY id').all();
+  const auditsBefore = raw.prepare('SELECT * FROM audit_log ORDER BY id').all();
+  raw.exec(`CREATE TRIGGER fail_contact_create_audit BEFORE INSERT ON audit_log
+    WHEN NEW.action = 'caregiver.contact_added'
+    BEGIN SELECT RAISE(ABORT, 'fictional contact create audit failure'); END;`);
+  const request = mockRequest('https://example.com/api/staff/caregiver/cg_seed_fictional/contact', 'POST', {
+    occurred_at: '2026-09-20T14:30:00Z', channel: 'phone', direction: 'outbound', summary: 'Fictional atomic contact'
+  }, { 'x-dev-actor': 'coordinator@example.org' });
+  const res = await postStaff({ request, env });
+  assert.equal(res.status, 500);
+  assert.deepEqual(raw.prepare('SELECT * FROM audit_log ORDER BY id').all(), auditsBefore);
+  assert.deepEqual(raw.prepare('SELECT * FROM contact_history ORDER BY id').all(), contactsBefore);
+});
+
+test('contact create mutation failure leaves all contacts and audits unchanged', async () => {
+  const contactsBefore = raw.prepare('SELECT * FROM contact_history ORDER BY id').all();
+  const auditsBefore = raw.prepare('SELECT * FROM audit_log ORDER BY id').all();
+  raw.exec(`CREATE TRIGGER fail_contact_create_insert BEFORE INSERT ON contact_history
+    BEGIN SELECT RAISE(ABORT, 'fictional contact mutation failure'); END;`);
+  const request = mockRequest('https://example.com/api/staff/caregiver/cg_seed_fictional/contact', 'POST', {
+    occurred_at: '2026-09-20T14:30:00Z', channel: 'phone', direction: 'outbound', summary: 'Fictional failed contact'
+  }, { 'x-dev-actor': 'coordinator@example.org' });
+  const res = await postStaff({ request, env });
+  assert.equal(res.status, 500);
+  assert.deepEqual(raw.prepare('SELECT * FROM contact_history ORDER BY id').all(), contactsBefore);
+  assert.deepEqual(raw.prepare('SELECT * FROM audit_log ORDER BY id').all(), auditsBefore);
+});
+
+test('contact create correlates database-generated IDs with original audit and 201 payload', async () => {
+  raw.prepare(`INSERT INTO contact_history (id, caregiver_id, occurred_at, channel, direction, summary, recorded_by)
+    VALUES (20, 'cg_seed_fictional', '2026-01-01T00:00:00Z', 'email', 'inbound', 'Existing fictional contact', 'fixture@example.org')`).run();
+  raw.prepare(`INSERT INTO audit_log (id, actor, action, entity, entity_id, after_json)
+    VALUES (700, 'fixture@example.org', 'fixture.existing', 'fixture', 'unrelated', '{}')`).run();
+  const contactsBefore = raw.prepare('SELECT * FROM contact_history ORDER BY id').all();
+  const auditsBefore = raw.prepare('SELECT * FROM audit_log ORDER BY id').all();
+  const ids = [];
+  for (const input of [
+    { occurred_at: '2026-09-20T14:30:00+02:00', channel: 'phone', direction: 'outbound', summary: '  "Quoted" \\ fictional 🦋\ncontact\twith\u0000control  ' },
+    { occurred_at: '2026-09-21T10:00:00.123Z', channel: 'email', direction: 'inbound', summary: '{"nested":true}' }
+  ]) {
+    const actor = 'coordinator@example.org';
+    const request = mockRequest('https://example.com/api/staff/caregiver/cg_seed_fictional/contact', 'POST', input,
+      { 'x-dev-actor': actor });
+    const res = await postStaff({ request, env });
+    assert.equal(res.status, 201);
+    const data = await res.json();
+    const expected = { caregiver_id: 'cg_seed_fictional', ...input, summary: input.summary.trim(), recorded_by: actor };
+    assert.deepEqual(data, { ok: true, contact: { id: data.contact.id, ...expected } });
+    const row = raw.prepare('SELECT * FROM contact_history WHERE id = ?').get(data.contact.id);
+    const { created_at, ...storedContact } = row;
+    assert.deepEqual(storedContact, { id: data.contact.id, ...expected });
+    assert.match(created_at, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+    const audit = raw.prepare("SELECT * FROM audit_log WHERE action = 'caregiver.contact_added' ORDER BY id DESC LIMIT 1").get();
+    assert.notEqual(audit.id, row.id);
+    assert.equal(audit.actor, actor);
+    assert.equal(audit.entity, 'caregiver');
+    assert.equal(audit.entity_id, expected.caregiver_id);
+    assert.equal(audit.before_json, null);
+    assert.deepEqual(JSON.parse(audit.after_json), {
+      contact_id: row.id, occurred_at: input.occurred_at, channel: input.channel, direction: input.direction,
+      summary: input.summary.trim(), recorded_by: actor
+    });
+    ids.push(row.id);
+  }
+  assert.deepEqual(ids, [21, 22]);
+  assert.equal(raw.prepare('SELECT COUNT(*) AS n FROM contact_history').get().n, contactsBefore.length + 2);
+  assert.equal(raw.prepare('SELECT COUNT(*) AS n FROM audit_log').get().n, auditsBefore.length + 2);
+  assert.deepEqual(raw.prepare('SELECT * FROM contact_history WHERE id = 20').get(), contactsBefore[0]);
+  assert.deepEqual(raw.prepare('SELECT * FROM audit_log WHERE id = 700').get(), auditsBefore[0]);
+});
+
+test('contact create uses the current generated ID after an audit rollback', async () => {
+  raw.exec(`CREATE TRIGGER fail_contact_create_once BEFORE INSERT ON audit_log
+    WHEN NEW.action = 'caregiver.contact_added'
+    BEGIN SELECT RAISE(ABORT, 'fictional rolled-back contact'); END;`);
+  const request = () => mockRequest('https://example.com/api/staff/caregiver/cg_seed_fictional/contact', 'POST', {
+    occurred_at: '2026-09-20T14:30:00Z', channel: 'other', direction: 'inbound', summary: 'Fictional contact after failure'
+  }, { 'x-dev-actor': 'coordinator@example.org' });
+  assert.equal((await postStaff({ request: request(), env })).status, 500);
+  assert.equal(raw.prepare('SELECT COUNT(*) AS n FROM contact_history').get().n, 0);
+  raw.exec('DROP TRIGGER fail_contact_create_once');
+  const res = await postStaff({ request: request(), env });
+  assert.equal(res.status, 201);
+  const data = await res.json();
+  const audit = raw.prepare("SELECT * FROM audit_log WHERE action = 'caregiver.contact_added'").get();
+  assert.equal(data.contact.id, 1);
+  assert.equal(JSON.parse(audit.after_json).contact_id, data.contact.id);
+  assert.equal(raw.prepare('SELECT COUNT(*) AS n FROM contact_history').get().n, 1);
+  assert.equal(raw.prepare('SELECT COUNT(*) AS n FROM audit_log').get().n, 1);
+});
+
+test('contact create adapter retains SELECT results and changes alongside accurate insert metadata', async () => {
+  const [inserted, selected, updated] = await env.LEGACY_DB.batch([
+    env.LEGACY_DB.prepare(`INSERT INTO contact_history (caregiver_id, occurred_at, channel, direction, summary, recorded_by)
+      VALUES (?, ?, ?, ?, ?, ?)`)
+      .bind('cg_seed_fictional', '2026-01-01T00:00:00Z', 'event', 'inbound', 'Fictional metadata contact', 'fixture@example.org'),
+    env.LEGACY_DB.prepare('SELECT id, summary FROM contact_history WHERE caregiver_id = ?').bind('cg_seed_fictional'),
+    env.LEGACY_DB.prepare('UPDATE contact_history SET summary = ? WHERE caregiver_id = ?')
+      .bind('Updated fictional metadata contact', 'cg_seed_fictional')
+  ]);
+  assert.deepEqual(inserted, { success: true, results: [], meta: { changes: 1, last_row_id: 1 } });
+  assert.equal(selected.success, true);
+  assert.deepEqual(selected.results.map(row => ({ ...row })), [{ id: 1, summary: 'Fictional metadata contact' }]);
+  assert.deepEqual(selected.meta, {});
+  assert.deepEqual(updated, { success: true, results: [], meta: { changes: 1, last_row_id: 1 } });
+});
+
+for (const scenario of [
+  { name: 'unknown caregiver', caregiver: 'missing', status: 404 },
+  { name: 'forbidden actor', patch: { actor: 'spoofed' }, status: 400 },
+  { name: 'forbidden recorded_by', patch: { recorded_by: 'spoofed' }, status: 400 },
+  { name: 'invalid timestamp', patch: { occurred_at: 'not-a-time' }, status: 400 },
+  { name: 'invalid channel', patch: { channel: 'telepathy' }, status: 400 },
+  { name: 'invalid direction', patch: { direction: 'sideways' }, status: 400 },
+  { name: 'empty summary', patch: { summary: '  ' }, status: 400 },
+  { name: 'non-object JSON', body: [], status: 400 },
+  { name: 'invalid JSON', body: null, status: 400 }
+]) {
+  test(`contact create preserves refusal without writes: ${scenario.name}`, async () => {
+    const contactsBefore = raw.prepare('SELECT * FROM contact_history ORDER BY id').all();
+    const auditsBefore = raw.prepare('SELECT * FROM audit_log ORDER BY id').all();
+    const body = Object.hasOwn(scenario, 'body') ? scenario.body : {
+      occurred_at: '2026-09-20T14:30:00Z', channel: 'phone', direction: 'outbound', summary: 'Fictional contact',
+      ...scenario.patch
+    };
+    const request = mockRequest(`https://example.com/api/staff/caregiver/${scenario.caregiver || 'cg_seed_fictional'}/contact`,
+      'POST', body, { 'x-dev-actor': 'coordinator@example.org' });
+    const res = await postStaff({ request, env });
+    assert.equal(res.status, scenario.status);
+    assert.deepEqual(raw.prepare('SELECT * FROM contact_history ORDER BY id').all(), contactsBefore);
+    assert.deepEqual(raw.prepare('SELECT * FROM audit_log ORDER BY id').all(), auditsBefore);
+  });
+}

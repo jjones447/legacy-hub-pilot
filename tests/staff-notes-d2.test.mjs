@@ -19,6 +19,18 @@ const STYLES_CSS = readFileSync(new URL('../styles.css', import.meta.url), 'utf8
 
 function d1(db) {
   return {
+    async batch(statements) {
+      db.exec('BEGIN');
+      try {
+        const results = [];
+        for (const statement of statements) results.push(await statement.run());
+        db.exec('COMMIT');
+        return results;
+      } catch (error) {
+        db.exec('ROLLBACK');
+        throw error;
+      }
+    },
     prepare(sql) {
       return {
         bind(...params) {
@@ -366,3 +378,191 @@ test('10. UI wiring: staff.js contains Add Note form, Archive button, and zero i
   assert.ok(noteRowMatch, 'note-row template must be present in staff.js');
   assert.ok(!noteRowMatch[0].includes('style="'), 'note-row must not contain inline style attributes');
 });
+
+function seedArchiveNote() {
+  const inserted = raw.prepare(`
+    INSERT INTO note (caregiver_id, author, body, visibility, status, created_at)
+    VALUES ('cg_note_test', 'author@example.org', 'Fictional archive regression note', 'staff', 'active', '2026-01-01 00:00:00')
+  `).run();
+  const noteId = Number(inserted.lastInsertRowid);
+  return { noteId, before: raw.prepare('SELECT * FROM note WHERE id = ?').get(noteId) };
+}
+
+test('note create rolls back on original audit insertion failure', async () => {
+  seedArchiveNote();
+  const notesBefore = raw.prepare('SELECT * FROM note ORDER BY id').all();
+  const auditsBefore = raw.prepare('SELECT * FROM audit_log ORDER BY id').all();
+  raw.exec(`CREATE TRIGGER fail_note_create_audit BEFORE INSERT ON audit_log
+    WHEN NEW.action = 'caregiver.note_added'
+    BEGIN SELECT RAISE(ABORT, 'fictional note create audit failure'); END;`);
+
+  const request = mockRequest('https://example.com/api/staff/caregiver/cg_note_test/note', 'POST',
+    { body: 'Fictional atomic creation regression' }, { 'x-dev-actor': 'creator@example.org' });
+  const res = await postStaff({ request, env });
+  assert.equal(res.status, 500);
+  assert.deepEqual(raw.prepare('SELECT * FROM audit_log ORDER BY id').all(), auditsBefore);
+  assert.deepEqual(raw.prepare('SELECT * FROM note ORDER BY id').all(), notesBefore);
+});
+
+test('note create mutation failure leaves all notes and audits unchanged', async () => {
+  seedArchiveNote();
+  const notesBefore = raw.prepare('SELECT * FROM note ORDER BY id').all();
+  const auditsBefore = raw.prepare('SELECT * FROM audit_log ORDER BY id').all();
+  raw.exec(`CREATE TRIGGER fail_note_create_insert BEFORE INSERT ON note
+    BEGIN SELECT RAISE(ABORT, 'fictional note create mutation failure'); END;`);
+  const request = mockRequest('https://example.com/api/staff/caregiver/cg_note_test/note', 'POST',
+    { body: 'Fictional mutation regression' }, { 'x-dev-actor': 'creator@example.org' });
+  const res = await postStaff({ request, env });
+  assert.equal(res.status, 500);
+  assert.deepEqual(raw.prepare('SELECT * FROM note ORDER BY id').all(), notesBefore);
+  assert.deepEqual(raw.prepare('SELECT * FROM audit_log ORDER BY id').all(), auditsBefore);
+});
+
+test('note create uses the current generated ID after a rolled-back creation', async () => {
+  seedArchiveNote();
+  raw.exec(`CREATE TRIGGER fail_note_create_once BEFORE INSERT ON audit_log
+    WHEN NEW.action = 'caregiver.note_added'
+    BEGIN SELECT RAISE(ABORT, 'fictional rolled-back creation'); END;`);
+  const request = () => mockRequest('https://example.com/api/staff/caregiver/cg_note_test/note', 'POST',
+    { body: 'Fictional creation after rejected transaction' }, { 'x-dev-actor': 'creator@example.org' });
+  assert.equal((await postStaff({ request: request(), env })).status, 500);
+  assert.equal(raw.prepare('SELECT COUNT(*) AS n FROM note').get().n, 1);
+  raw.exec('DROP TRIGGER fail_note_create_once');
+  const res = await postStaff({ request: request(), env });
+  assert.equal(res.status, 201);
+  const data = await res.json();
+  const audit = raw.prepare("SELECT * FROM audit_log WHERE action = 'caregiver.note_added'").get();
+  assert.equal(data.note.id, 2);
+  assert.equal(JSON.parse(audit.after_json).note_id, data.note.id);
+  assert.equal(raw.prepare('SELECT COUNT(*) AS n FROM note').get().n, 2);
+  assert.equal(raw.prepare('SELECT COUNT(*) AS n FROM audit_log').get().n, 1);
+});
+
+test('note create correlates generated IDs across distinct note and audit sequences', async () => {
+  seedArchiveNote();
+  raw.prepare(`INSERT INTO audit_log (id, actor, action, entity, entity_id, after_json)
+    VALUES (700, 'fixture@example.org', 'fixture.existing', 'fixture', 'unrelated', '{}')`).run();
+  const notesBefore = raw.prepare('SELECT * FROM note ORDER BY id').all();
+  const auditsBefore = raw.prepare('SELECT * FROM audit_log ORDER BY id').all();
+  const ids = [];
+  // JSON-looking text, quotes, backslashes, Unicode and embedded controls stay strings.
+  for (const body of ['  Fictional "quoted" \\ note 🦋\nnext\tline\u0000end  ', '{"nested":true}']) {
+    const actor = 'creator@example.org';
+    const request = mockRequest('https://example.com/api/staff/caregiver/cg_note_test/note', 'POST',
+      { body }, { 'x-dev-actor': actor });
+    const res = await postStaff({ request, env });
+    assert.equal(res.status, 201);
+    const data = await res.json();
+    assert.equal(data.ok, true);
+    const row = raw.prepare('SELECT * FROM note WHERE id = ?').get(data.note.id);
+    assert.deepEqual(data.note, { ...row });
+    assert.equal(row.caregiver_id, 'cg_note_test');
+    assert.equal(row.author, actor);
+    assert.equal(row.body, body.trim());
+    assert.equal(row.visibility, 'staff');
+    assert.equal(row.status, 'active');
+    assert.match(row.created_at, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+    const audit = raw.prepare("SELECT * FROM audit_log WHERE action = 'caregiver.note_added' ORDER BY id DESC LIMIT 1").get();
+    assert.notEqual(audit.id, row.id);
+    assert.equal(audit.actor, actor);
+    assert.equal(audit.entity, 'caregiver');
+    assert.equal(audit.entity_id, row.caregiver_id);
+    assert.equal(audit.before_json, null);
+    assert.deepEqual(JSON.parse(audit.after_json), { note_id: row.id, author: actor, body: body.trim() });
+    ids.push(row.id);
+  }
+  assert.deepEqual(ids, [2, 3]);
+  assert.equal(raw.prepare('SELECT COUNT(*) AS n FROM note').get().n, notesBefore.length + 2);
+  assert.equal(raw.prepare('SELECT COUNT(*) AS n FROM audit_log').get().n, auditsBefore.length + 2);
+  assert.deepEqual(raw.prepare('SELECT * FROM note WHERE id = 1').get(), notesBefore[0]);
+  assert.deepEqual(raw.prepare('SELECT * FROM audit_log WHERE id = 700').get(), auditsBefore[0]);
+});
+
+for (const scenario of [
+  { name: 'unknown caregiver', caregiver: 'missing', body: { body: 'Fictional note' }, status: 404 },
+  { name: 'forbidden actor field', body: { body: 'Fictional note', author: 'spoofed' }, status: 400 },
+  { name: 'empty body', body: { body: '  ' }, status: 400 },
+  { name: 'over-length body', body: { body: 'a'.repeat(2001) }, status: 400 },
+  { name: 'non-object body', body: [], status: 400 },
+  { name: 'invalid JSON', body: null, status: 400 }
+]) {
+  test(`note create preserves refusal without writes: ${scenario.name}`, async () => {
+    seedArchiveNote();
+    const notesBefore = raw.prepare('SELECT * FROM note ORDER BY id').all();
+    const auditsBefore = raw.prepare('SELECT * FROM audit_log ORDER BY id').all();
+    const request = mockRequest(`https://example.com/api/staff/caregiver/${scenario.caregiver || 'cg_note_test'}/note`,
+      'POST', scenario.body, { 'x-dev-actor': 'creator@example.org' });
+    const res = await postStaff({ request, env });
+    assert.equal(res.status, scenario.status);
+    assert.deepEqual(raw.prepare('SELECT * FROM note ORDER BY id').all(), notesBefore);
+    assert.deepEqual(raw.prepare('SELECT * FROM audit_log ORDER BY id').all(), auditsBefore);
+  });
+}
+
+function archiveRequest(noteId) {
+  // Existing development-mode actor seam only; not Access middleware verification.
+  return mockRequest(`https://example.com/api/staff/note/${noteId}/archive`, 'POST', {}, {
+    'x-dev-actor': 'archiver@example.org'
+  });
+}
+
+test('note archive rolls back on original audit insertion failure', async () => {
+  const { noteId, before } = seedArchiveNote();
+  const auditsBefore = raw.prepare('SELECT * FROM audit_log ORDER BY id').all();
+  raw.exec(`CREATE TRIGGER fail_note_archive_audit BEFORE INSERT ON audit_log
+    WHEN NEW.action = 'caregiver.note_archived'
+    BEGIN SELECT RAISE(ABORT, 'fictional note archive audit failure'); END;`);
+
+  const res = await postStaff({ request: archiveRequest(noteId), env });
+  assert.equal(res.status, 500);
+  assert.deepEqual(raw.prepare('SELECT * FROM audit_log ORDER BY id').all(), auditsBefore);
+  assert.deepEqual(raw.prepare('SELECT * FROM note WHERE id = ?').get(noteId), before);
+});
+
+test('note archive mutation failure leaves original row and audits unchanged', async () => {
+  const { noteId, before } = seedArchiveNote();
+  const auditsBefore = raw.prepare('SELECT * FROM audit_log ORDER BY id').all();
+  raw.exec(`CREATE TRIGGER fail_note_archive_update BEFORE UPDATE OF status ON note
+    BEGIN SELECT RAISE(ABORT, 'fictional note archive mutation failure'); END;`);
+
+  const res = await postStaff({ request: archiveRequest(noteId), env });
+  assert.equal(res.status, 500);
+  assert.deepEqual(raw.prepare('SELECT * FROM note WHERE id = ?').get(noteId), before);
+  assert.deepEqual(raw.prepare('SELECT * FROM audit_log ORDER BY id').all(), auditsBefore);
+});
+
+test('note archive commits only status and original caregiver audit with actor', async () => {
+  const { noteId, before } = seedArchiveNote();
+  const res = await postStaff({ request: archiveRequest(noteId), env });
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), { ok: true });
+  const after = raw.prepare('SELECT * FROM note WHERE id = ?').get(noteId);
+  assert.equal(after.status, 'archived');
+  assert.deepEqual({ ...after, status: before.status }, { ...before });
+  const audits = raw.prepare("SELECT * FROM audit_log WHERE action = 'caregiver.note_archived'").all();
+  assert.equal(audits.length, 1);
+  assert.equal(audits[0].actor, 'archiver@example.org');
+  assert.equal(audits[0].entity, 'caregiver');
+  assert.equal(audits[0].entity_id, before.caregiver_id);
+  assert.deepEqual(JSON.parse(audits[0].before_json), { note_id: noteId, status: 'active' });
+  assert.deepEqual(JSON.parse(audits[0].after_json), { note_id: noteId, status: 'archived' });
+});
+
+for (const scenario of [
+  { name: 'invalid ID', id: 'not-an-id', response: 400 },
+  { name: 'missing ID', url: 'https://example.com/api/staff/note/archive', response: 400 },
+  { name: 'unknown ID', id: '999999', response: 404 },
+  { name: 'already archived', initial: 'archived', response: 409 }
+]) {
+  test(`note archive preserves refusal: ${scenario.name}`, async () => {
+    const { noteId } = seedArchiveNote();
+    if (scenario.initial) raw.prepare('UPDATE note SET status = ? WHERE id = ?').run(scenario.initial, noteId);
+    const before = raw.prepare('SELECT * FROM note WHERE id = ?').get(noteId);
+    const auditsBefore = raw.prepare('SELECT * FROM audit_log ORDER BY id').all();
+    const request = scenario.url ? mockRequest(scenario.url, 'POST', {}) : archiveRequest(scenario.id || noteId);
+    const res = await postStaff({ request, env });
+    assert.equal(res.status, scenario.response);
+    assert.deepEqual(raw.prepare('SELECT * FROM note WHERE id = ?').get(noteId), before);
+    assert.deepEqual(raw.prepare('SELECT * FROM audit_log ORDER BY id').all(), auditsBefore);
+  });
+}

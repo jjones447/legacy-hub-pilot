@@ -335,21 +335,21 @@ export async function onRequestPost({ request, env }) {
         return json({ ok: false, error: "status must be 'done' or 'dismissed'" }, 400);
       }
 
-      // Update status
-      await env.LEGACY_DB.prepare(`
-        UPDATE followup SET status = ? WHERE id = ?
-      `).bind(targetStatus, id).run();
-
-      // Audit log followup.resolve
-      await env.LEGACY_DB.prepare(`
-        INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
-        VALUES (?, 'followup.resolve', 'followup', ?, ?, ?)
-      `).bind(
-        actor,
-        id.toString(),
-        JSON.stringify({ status: followup.status }),
-        JSON.stringify({ status: targetStatus })
-      ).run();
+      // Status and its original audit must commit together or not at all.
+      await env.LEGACY_DB.batch([
+        env.LEGACY_DB.prepare(`
+          UPDATE followup SET status = ? WHERE id = ?
+        `).bind(targetStatus, id),
+        env.LEGACY_DB.prepare(`
+          INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
+          VALUES (?, 'followup.resolve', 'followup', ?, ?, ?)
+        `).bind(
+          actor,
+          id.toString(),
+          JSON.stringify({ status: followup.status }),
+          JSON.stringify({ status: targetStatus })
+        )
+      ]);
 
       return json({ ok: true });
     }
@@ -409,30 +409,22 @@ export async function onRequestPost({ request, env }) {
 
       const actor = getActor(request, env);
 
-      // Insert contact history
-      const insertResult = await env.LEGACY_DB.prepare(`
-        INSERT INTO contact_history (caregiver_id, occurred_at, channel, direction, summary, recorded_by)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `).bind(caregiverId, occurred_at, channel, direction, summary.trim(), actor).run();
+      // The original audit captures the preceding contact INSERT's ID in this transaction.
+      // Keep last_insert_rowid() inside the ordered batch, not in a separate call.
+      const [insertResult] = await env.LEGACY_DB.batch([
+        env.LEGACY_DB.prepare(`
+          INSERT INTO contact_history (caregiver_id, occurred_at, channel, direction, summary, recorded_by)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).bind(caregiverId, occurred_at, channel, direction, summary.trim(), actor),
+        env.LEGACY_DB.prepare(`
+          INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
+          VALUES (?, 'caregiver.contact_added', 'caregiver', ?, NULL,
+            json_object('contact_id', last_insert_rowid(), 'occurred_at', ?, 'channel', ?,
+              'direction', ?, 'summary', ?, 'recorded_by', ?))
+        `).bind(actor, caregiverId, occurred_at, channel, direction, summary.trim(), actor)
+      ]);
 
       const newId = insertResult?.meta?.last_row_id || insertResult?.lastRowId || null;
-
-      // Audit log caregiver.contact_added
-      await env.LEGACY_DB.prepare(`
-        INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
-        VALUES (?, 'caregiver.contact_added', 'caregiver', ?, NULL, ?)
-      `).bind(
-        actor,
-        caregiverId,
-        JSON.stringify({
-          contact_id: newId,
-          occurred_at,
-          channel,
-          direction,
-          summary: summary.trim(),
-          recorded_by: actor
-        })
-      ).run();
 
       return json({
         ok: true,
@@ -500,26 +492,21 @@ export async function onRequestPost({ request, env }) {
 
       const actor = getActor(request, env);
 
-      const insertResult = await env.LEGACY_DB.prepare(`
-        INSERT INTO note (caregiver_id, author, body, visibility, status)
-        VALUES (?, ?, ?, 'staff', 'active')
-      `).bind(caregiverId, actor, trimmedBody).run();
+      // Within this ordered transaction, the audit captures the preceding note INSERT's ID.
+      // Do not move last_insert_rowid() to a separate call or use the audit INSERT's result.
+      const [insertResult] = await env.LEGACY_DB.batch([
+        env.LEGACY_DB.prepare(`
+          INSERT INTO note (caregiver_id, author, body, visibility, status)
+          VALUES (?, ?, ?, 'staff', 'active')
+        `).bind(caregiverId, actor, trimmedBody),
+        env.LEGACY_DB.prepare(`
+          INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
+          VALUES (?, 'caregiver.note_added', 'caregiver', ?, NULL,
+            json_object('note_id', last_insert_rowid(), 'author', ?, 'body', ?))
+        `).bind(actor, caregiverId, actor, trimmedBody)
+      ]);
 
       const newId = insertResult?.meta?.last_row_id || insertResult?.lastRowId || null;
-
-      // Audit log caregiver.note_added
-      await env.LEGACY_DB.prepare(`
-        INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
-        VALUES (?, 'caregiver.note_added', 'caregiver', ?, NULL, ?)
-      `).bind(
-        actor,
-        caregiverId,
-        JSON.stringify({
-          note_id: newId,
-          author: actor,
-          body: trimmedBody
-        })
-      ).run();
 
       const createdNote = await env.LEGACY_DB.prepare(`
         SELECT id, caregiver_id, author, body, visibility, status, created_at
@@ -553,20 +540,21 @@ export async function onRequestPost({ request, env }) {
 
       const actor = getActor(request, env);
 
-      await env.LEGACY_DB.prepare(`
-        UPDATE note SET status = 'archived' WHERE id = ?
-      `).bind(id).run();
-
-      // Audit log caregiver.note_archived
-      await env.LEGACY_DB.prepare(`
-        INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
-        VALUES (?, 'caregiver.note_archived', 'caregiver', ?, ?, ?)
-      `).bind(
-        actor,
-        note.caregiver_id,
-        JSON.stringify({ note_id: id, status: note.status }),
-        JSON.stringify({ note_id: id, status: 'archived' })
-      ).run();
+      // Archival and its original caregiver audit must commit together.
+      await env.LEGACY_DB.batch([
+        env.LEGACY_DB.prepare(`
+          UPDATE note SET status = 'archived' WHERE id = ?
+        `).bind(id),
+        env.LEGACY_DB.prepare(`
+          INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
+          VALUES (?, 'caregiver.note_archived', 'caregiver', ?, ?, ?)
+        `).bind(
+          actor,
+          note.caregiver_id,
+          JSON.stringify({ note_id: id, status: note.status }),
+          JSON.stringify({ note_id: id, status: 'archived' })
+        )
+      ]);
 
       return json({ ok: true });
     }
@@ -639,6 +627,7 @@ export async function onRequestPost({ request, env }) {
         return json({ ok: false, error: 'malformed before_json in audit log' }, 409);
       }
 
+      let contentUndoStatements = null;
       if (original.action === 'caregiver.note_archived') {
         const noteId = beforeObj.note_id;
         const noteStatus = beforeObj.status || 'active';
@@ -688,6 +677,7 @@ export async function onRequestPost({ request, env }) {
           ).bind(...params).run();
         }
       } else if (original.entity === 'content_item' || original.action.startsWith('content_item.')) {
+        contentUndoStatements = [];
         let targetData = null;
         let targetStatus = null;
 
@@ -702,28 +692,24 @@ export async function onRequestPost({ request, env }) {
         }
 
         if (targetStatus && targetData) {
-          await env.LEGACY_DB.prepare(`
+          contentUndoStatements.push(env.LEGACY_DB.prepare(`
             UPDATE content_item
             SET data = ?, status = ?, updated_by = ?, updated_at = datetime('now')
             WHERE id = ?
-          `).bind(targetData, targetStatus, 'staff_' + actor, original.entity_id).run();
+          `).bind(targetData, targetStatus, 'staff_' + actor, original.entity_id));
         } else if (targetData) {
-          await env.LEGACY_DB.prepare(`
+          contentUndoStatements.push(env.LEGACY_DB.prepare(`
             UPDATE content_item
             SET data = ?, updated_by = ?, updated_at = datetime('now')
             WHERE id = ?
-          `).bind(targetData, 'staff_' + actor, original.entity_id).run();
+          `).bind(targetData, 'staff_' + actor, original.entity_id));
         } else if (targetStatus) {
-          await env.LEGACY_DB.prepare(`
+          contentUndoStatements.push(env.LEGACY_DB.prepare(`
             UPDATE content_item
             SET status = ?, updated_by = ?, updated_at = datetime('now')
             WHERE id = ?
-          `).bind(targetStatus, 'staff_' + actor, original.entity_id).run();
+          `).bind(targetStatus, 'staff_' + actor, original.entity_id));
         }
-
-        try {
-          _resetContentCache();
-        } catch {}
       } else {
         return json({ ok: false, error: `entity ${original.entity} does not support undo` }, 409);
       }
@@ -738,7 +724,7 @@ export async function onRequestPost({ request, env }) {
         entity_id: original.entity_id
       };
 
-      await env.LEGACY_DB.prepare(`
+      const undoAudit = env.LEGACY_DB.prepare(`
         INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
         VALUES (?, 'undo', ?, ?, ?, ?)
       `).bind(
@@ -747,7 +733,17 @@ export async function onRequestPost({ request, env }) {
         original.entity_id,
         original.after_json,
         JSON.stringify(undoMeta)
-      ).run();
+      );
+
+      if (contentUndoStatements) {
+        // Content restoration and its original-reference audit must commit together.
+        await env.LEGACY_DB.batch([...contentUndoStatements, undoAudit]);
+        try {
+          _resetContentCache();
+        } catch {}
+      } else {
+        await undoAudit.run();
+      }
 
       return json({ ok: true, undone_audit_id: original.id });
     }
