@@ -27,18 +27,33 @@
       "cta_href": "sanctuary.html"
     },
     "about.hero": {
-      "title": "Born from the journey we lived",
-      "lede": "Legacy exists to be the support we wish our own family had."
+      "title": "Born from the journey we lived.",
+      "lede": "Our family's experience with dementia became the foundation for something greater: a community where caregivers feel seen, supported, and never alone."
     },
     "about.story": {
-      "eyebrow": "Our story",
-      "heading": "From one family's journey to a community's sanctuary",
+      "eyebrow": "Our Story",
+      "heading": "From One Family's Journey to a Community's Sanctuary",
       "paragraphs": [
-        "Legacy began as a home health agency. When the pandemic made it impossible to keep nurses on staff, we faced a choice — and chose to follow the deeper calling behind the work.",
-        "Our founder cared for her mother through younger-onset dementia while still a teenager. She lived the gaps firsthand — the exhaustion, the isolation, the support that never came. After her mother passed, that experience became a mission: <strong>be the support we didn't have.</strong>",
-        "In 2023 we became a nonprofit devoted entirely to the caregivers of loved ones living with dementia — their wellness, their rest, and their community."
-      ],
-      "note": "Draft copy for Legacy's review — we'll refine this story together in your words."
+        "Legacy's story began long before our organization existed.",
+        "When our founder, Shanelle Snowden, was just 16 years old, her mother was diagnosed with younger-onset dementia. What followed was a journey that would forever change her family. Like so many families navigating dementia, they experienced the challenges of caregiving firsthand, including the emotional toll, isolation, and difficulty finding meaningful support.",
+        "After her mother's passing in 2016, those experiences remained with her, shaping a desire to create something different for families walking a similar path.",
+        "Legacy originally began as a home health care agency. But when the COVID-19 pandemic brought unexpected challenges, it also became a turning point, creating an opportunity to rethink how Legacy could best serve families and communities.",
+        "In 2023, Legacy transitioned into a nonprofit organization with a renewed focus on family caregivers of individuals living with dementia. What began as a deeply personal experience grew into a mission centered on providing respite, promoting caregiver wellness, and creating opportunities for education, connection, and community.",
+        "Today, Legacy is more than an organization providing services. We're building a community where caregivers feel seen, supported, and valued, and where caring for someone else doesn't have to mean losing sight of yourself.",
+        "Our purpose is simple: to be the support our family once needed and help ensure no caregiver has to navigate this journey alone."
+      ]
+    },
+    "about.founder": {
+      "eyebrow": "Our Founder",
+      "heading": "Meet Shanelle Snowden, MBA",
+      "role": "Founder &amp; Executive Director | Legacy Home &amp; Respite Care Foundation",
+      "paragraphs": [
+        "For Shanelle Snowden, supporting dementia caregivers is more than a profession. It's personal.",
+        "Her journey began at just 16 years old when her mother was diagnosed with younger-onset dementia. Witnessing the impact of the disease on her family shaped her understanding of the challenges caregivers face and inspired her commitment to creating the support and community she wishes her own family had experienced.",
+        "Today, Shanelle brings years of experience in dementia care, a background in healthcare administration, and a passion for caregiver advocacy to her role as Founder and Executive Director of Legacy Home &amp; Respite Care Foundation.",
+        "Through her leadership, Legacy is redefining what caregiver support can look like by creating opportunities for rest, wellness, education, and meaningful connection. She believes caregivers deserve more than resources to help them care for someone else. They deserve spaces where their own needs, identities, and well-being are recognized and valued.",
+        "Her vision is simple: a world where caregivers are supported not just in their caregiving role, but as whole people with lives, dreams, and needs of their own."
+      ]
     },
     "about.values": {
       "heading": "What guides us",

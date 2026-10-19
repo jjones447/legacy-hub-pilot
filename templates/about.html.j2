@@ -52,7 +52,6 @@
         <p class="muted mb-16">{{ p }}</p>
 {%- endfor %}
         </div>
-        <p class="small muted"><em data-cs="about.story.note">{{ sections["about.story"].note }}</em></p>
       </div>
       <div class="visual" id="mission">
         <h3 class="fs-18-mb-14" data-cs="about.values.heading">{{ sections["about.values"].heading }}</h3>
@@ -66,9 +65,13 @@
 
 <section id="shanelle">
   <div class="container">
-    <div class="section-head"><span class="eyebrow">Our founder</span><h2>Meet Shanelle</h2></div>
-    <p class="muted measure-620">Legacy's founder cared for her mother through younger-onset dementia — the lived experience the whole organization is built on. Her full story, in her own words, is coming here.</p>
-    <span class="badge-phase2">Content coming</span>
+    <div class="section-head"><span class="eyebrow" data-cs="about.founder.eyebrow">{{ sections["about.founder"].eyebrow }}</span><h2 data-cs="about.founder.heading">{{ sections["about.founder"].heading }}</h2></div>
+    <p class="muted measure-620" data-cs="about.founder.role">{{ sections["about.founder"].role }}</p>
+    <div data-cs-list="about.founder.paragraphs" data-cs-item="p.muted.measure-620">
+{%- for p in sections["about.founder"].paragraphs %}
+    <p class="muted measure-620">{{ p }}</p>
+{%- endfor %}
+    </div>
   </div>
 </section>
 
@@ -98,11 +101,12 @@
   <div class="container">
     <div class="section-head"><span class="eyebrow">Our impact</span><h2>Together, we're making a difference.</h2></div>
     <div class="stats-grid text-center-aligned">
-      <div class="stat"><div class="num hero-title">70+</div><div class="label">Family Caregivers Supported</div></div>
-      <div class="stat"><div class="num hero-title">1,000+</div><div class="label">Hours of Respite Provided</div></div>
-      <div class="stat"><div class="num hero-title">100,000+</div><div class="label">Community Members Reached</div></div>
-      <div class="stat"><div class="num hero-title">30</div><div class="label">Individuals Living with Dementia</div></div>
+      <div class="stat"><div class="num hero-title">100+</div><div class="label">Family Caregivers Supported</div></div>
+      <div class="stat"><div class="num hero-title">1500+</div><div class="label">Hours of Respite Care Provided</div></div>
+      <div class="stat"><div class="num hero-title">40+</div><div class="label">Individuals Living with Dementia Supported</div></div>
+      <div class="stat"><div class="num hero-title">100,000+</div><div class="label">People Reached Through Community Outreach</div></div>
     </div>
+    <p class="small muted text-center"><em>Cumulative Impact Since Founding</em></p>
     <div class="section-head mt-40" id="voices"><span class="eyebrow">Caregiver voices</span><h2>In their words</h2></div>
     <p class="measure-620-italic">"Legacy reminded me that I mattered too."</p>
     <p class="measure-620-italic">"Before Legacy, I felt completely alone. Now I have a community that understands what I'm going through."</p>
