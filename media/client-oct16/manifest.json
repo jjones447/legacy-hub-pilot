@@ -7,9 +7,10 @@
     "A1",
     "A5",
     "S1",
-    "G1"
+    "G1",
+    "S2"
   ],
-  "effects": "Original byte copies and source image references only; no image conversion/edit/transcode, deployment or runtime acceptance.",
+  "effects": "Original images preserved byte-for-byte; one local Video 1 H.264/AAC stream-copy container remux to faststart MP4. Source changes only, no deployment or runtime acceptance.",
   "files": [
     {
       "original_name": "IMG_1846.JPG",
@@ -179,6 +180,66 @@
       "width": 3199,
       "height": 778,
       "visual_review": "Original local raster visually reviewed by [pc2-codex-42]."
+    },
+    {
+      "original_name": "Video 1.mov",
+      "drive_id": "1pTO3pkBwB-5wUCjlpOOTpODANple649U",
+      "source_mime_type": "video/quicktime",
+      "mime_type": "video/mp4",
+      "source_bytes": 17073736,
+      "source_sha256": "d6e8e750ad8ad35bbc54e1499a11ad77119923f72158c33dcc26f307792c374e",
+      "bytes": 17091474,
+      "sha256": "c89ad85131b74d6190b7c8bb5a99a7ad46c8bca1c2562778c51c4ead008e0c11",
+      "target_path": "media/client-oct16/sanctuary-video-1.mp4",
+      "purpose": "Sanctuary header video with native controls and user-initiated playback",
+      "width": 720,
+      "height": 1280,
+      "duration_seconds": 61.533333,
+      "container_remux": {
+        "operation": "One local ffmpeg -map 0:v:0 -map 0:a:0 -c copy -movflags +faststart, no transcoding",
+        "raw_original_unchanged": true,
+        "video_codec": "H.264 Main",
+        "pixel_format": "yuv420p",
+        "frame_rate": "30/1",
+        "audio_codec": "AAC LC",
+        "sample_rate": 44100,
+        "channels": 2,
+        "encoded_stream_sha256_before": [
+          "0,v,SHA256=046b24bf314e492cc21bba7077865802d3ed84f4ac8cc1ebab44914142b7ed3f",
+          "1,a,SHA256=26310375d83d9ca105b11a7976858e54996531da216404513a8f1982dc5e851b"
+        ],
+        "encoded_stream_sha256_after": [
+          "0,v,SHA256=046b24bf314e492cc21bba7077865802d3ed84f4ac8cc1ebab44914142b7ed3f",
+          "1,a,SHA256=26310375d83d9ca105b11a7976858e54996531da216404513a8f1982dc5e851b"
+        ],
+        "video_duration_seconds_before": 61.533333,
+        "video_duration_seconds_after": 61.533333,
+        "audio_duration_seconds_before": 61.508345,
+        "audio_duration_seconds_after": 61.509002,
+        "audio_container_duration_delta_seconds": 0.000657,
+        "faststart_top_level_boxes": [
+          {
+            "type": "ftyp",
+            "offset": 0,
+            "bytes": 32
+          },
+          {
+            "type": "moov",
+            "offset": 32,
+            "bytes": 57779
+          },
+          {
+            "type": "free",
+            "offset": 57811,
+            "bytes": 8
+          },
+          {
+            "type": "mdat",
+            "offset": 57819,
+            "bytes": 17033655
+          }
+        ]
+      }
     }
   ],
   "svg_review": {
@@ -196,9 +257,23 @@
     "inspection_derivative_in_site": false
   },
   "exclusions": [
-    "S2 Video 1 not copied, converted, embedded or accepted",
     "No new logo links, certifications or organizations",
     "Source-only fitting; installed responsive/visual/performance QA remains open",
     "Existing published media manifests may override source headers at runtime; no provider/DB changes"
-  ]
+  ],
+  "video_source_parent": "1199888655ab6de448de86cc108695667d0c0191",
+  "video_accessibility": {
+    "meaningful_audio": "UNQUALIFIED: audio track exists; content/listening review not performed",
+    "captions": "NOT VERIFIED; no invented caption track",
+    "transcript": "NOT VERIFIED; no fabricated text",
+    "browser_playback": "NOT TESTED",
+    "default_motion": "None: no autoplay or loop, preload none",
+    "audio_start": "Only after user initiates native playback; no forced audio"
+  },
+  "video_runtime_integration": {
+    "static_copy_eligibility": "Read-only inspection: scripts/build-site.mjs recursively includes media; build.py renders shared HTML only. Neither executed.",
+    "existing_rewriter": "functions/_media.mjs matches img.hero-media only and can generate autoplay video for image banners. This native video is not matched; no runtime code changed. Installed banner editing/manifest behavior remains unqualified.",
+    "installed_stream_delivery_range_codec_playback": "NOT VERIFIED",
+    "provider_db_change": "NONE"
+  }
 }

@@ -1,5 +1,5 @@
 {
-  "_note": "About and Get Involved now use exact client-selected October 16 originals; see media/client-oct16/manifest.json. Other area header entries retain their existing configuration. The Sanctuary logo is a page wordmark, not a replacement header or approval to embed Video 1.",
+  "_note": "About and Get Involved use exact client-selected October 16 images. Sanctuary uses a user-controlled MP4 container remux of exact client Video 1, with the original page wordmark preserved. Other area entries retain their existing configuration. See media/client-oct16/manifest.json for source/delivery hashes and explicit runtime, playback and accessibility gaps.",
   "areas": {
     "home": {
       "folder": "Home",
@@ -42,9 +42,13 @@
     "sanctuary": {
       "folder": "The Sanctuary",
       "folder_id": "1ywwqtz0M-JgaO2QXWKR5nEcbWcf0SSOb",
-      "media": "media/headers/sanctuary.jpg",
-      "kind": "photo",
-      "source_name": "header-sample-img_8281.jpg"
+      "media": "media/client-oct16/sanctuary-video-1.mp4",
+      "kind": "video",
+      "source_name": "Video 1.mov",
+      "source_file_id": "1pTO3pkBwB-5wUCjlpOOTpODANple649U",
+      "source_sha256": "d6e8e750ad8ad35bbc54e1499a11ad77119923f72158c33dcc26f307792c374e",
+      "delivery_sha256": "c89ad85131b74d6190b7c8bb5a99a7ad46c8bca1c2562778c51c4ead008e0c11",
+      "container_operation": "H.264/AAC stream copy to MP4 with faststart; encoded payload hashes unchanged"
     },
     "donate": {
       "folder": "Donate",
