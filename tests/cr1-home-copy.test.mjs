@@ -64,16 +64,24 @@ test('home support preserves client copy with sentence-case presentation and use
   );
 });
 
-test('home page renders Community Wellness Partners block with verbatim copy and sanctuary link', () => {
+test('home page and template omit the client-removed Community Wellness Partners band', () => {
+  for (const path of ['index.html', 'templates/index.html.j2']) {
+    const source = file(path);
+    assert.doesNotMatch(source, /home\.community_wellness_partners/, `${path}: no removed-band content hooks or template fields`);
+    assert.doesNotMatch(source, /<span class="eyebrow"[^>]*>Community Wellness Partners<\/span>/);
+    assert.doesNotMatch(source, /Building a Caregiver-Supportive Community/);
+    assert.doesNotMatch(source, /Caregiver support shouldn't stop at home or within traditional care settings/);
+    assert.doesNotMatch(source, /Learn About Community Wellness Partners/);
+    assert.match(source, /<section class="stats-band">/, `${path}: following impact section remains`);
+    assert.match(source, /<h2>Building stronger communities together\.<\/h2>/, `${path}: separate partners section remains`);
+  }
+
+  // Removing this one band must not remove the existing partner/network navigation.
   const html = file('index.html');
-  assert.match(html, /<span class="eyebrow"[^>]*>Community Wellness Partners<\/span>/);
-  assert.match(html, /<h2 class="mb-14"[^>]*>Building a Caregiver-Supportive Community<\/h2>/);
-  assert.match(
-    html,
-    /<p class="mb-28"[^>]*>Caregiver support shouldn't stop at home or within traditional care settings\. Through our Community Wellness Partners, we work with local businesses and organizations to create welcoming spaces where caregivers can connect, prioritize their well-being, and feel supported in their community\.<\/p>/
-  );
-  assert.match(
-    html,
-    /<a href="sanctuary\.html" class="btn btn-coral"[^>]*>Learn About Community Wellness Partners<\/a>/
-  );
+  assert.match(html, /href="community-wellness-partners\.html"/);
+  assert.match(html, /href="sanctuary\.html#network"/);
+  assert.match(file('templates/index.html.j2'), /{% include '_header\.html\.j2' %}/);
+  const header = file('templates/_header.html.j2');
+  assert.match(header, /href="community-wellness-partners\.html"/);
+  assert.match(header, /href="sanctuary\.html#network"/);
 });
