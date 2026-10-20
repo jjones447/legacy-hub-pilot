@@ -170,7 +170,7 @@ test('Sanctuary merges the overview and exposes join/contact before the program 
   for (const href of ['programs.html', 'request-support.html']) {
     assert.ok(main.indexOf(`href="${href}"`) < programsAt, `early entry required for ${href}`);
   }
-  assert.match(main, /<h2>Programs &amp; Events<\/h2>/);
+  assert.match(main, /<h2>Caregiver Sanctuary Programs &amp; Resources<\/h2>/);
   for (const href of programDestinations) assert.ok(main.includes(`href="${href}"`), href);
   const network = main.slice(main.indexOf('<section id="components">'));
   assert.match(network, /<h2 id="network">Caregiver Sanctuary Network<\/h2>/);

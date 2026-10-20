@@ -1,0 +1,279 @@
+{
+  "attribution": "[pc2-codex-42]",
+  "source": "Client October 16 website updates; exact Drive IDs admitted and raw-materialized by [pc2-codex-41]",
+  "parent_source": "766ede548aa3214c9c61bb5965e98980c3961fd4",
+  "scope": [
+    "H3",
+    "A1",
+    "A5",
+    "S1",
+    "G1",
+    "S2"
+  ],
+  "effects": "Original images preserved byte-for-byte; one local Video 1 H.264/AAC stream-copy container remux to faststart MP4. Source changes only, no deployment or runtime acceptance.",
+  "files": [
+    {
+      "original_name": "IMG_1846.JPG",
+      "drive_id": "1F2GlwJk8aXJ1FKYbhe9Jyc-NECFqqAMl",
+      "mime_type": "image/jpeg",
+      "bytes": 550287,
+      "sha256": "deb089eb85e6971b67969aa10086a7ab43ea2db9a5542cabfb47ed621fc2c98b",
+      "target_path": "media/client-oct16/about-family-img-1846.jpg",
+      "purpose": "About header",
+      "alt": "",
+      "width": 2058,
+      "height": 1474,
+      "visual_review": "Original local raster visually reviewed by [pc2-codex-42]."
+    },
+    {
+      "original_name": "IMG_7045.JPG",
+      "drive_id": "1zIRYcFJLIgcV9yOtgrfvwr7US9M5-Dq0",
+      "mime_type": "image/jpeg",
+      "bytes": 2058542,
+      "sha256": "8cbaef4890f87d14c6474e68770047d9d0df4aa4078844e8ffce5346dfbb04bd",
+      "target_path": "media/client-oct16/founder-img-7045.jpg",
+      "purpose": "Founder portrait",
+      "alt": "Shanelle Snowden, Founder and Executive Director of Legacy",
+      "width": 3024,
+      "height": 4032,
+      "visual_review": "Original local raster visually reviewed by [pc2-codex-42]."
+    },
+    {
+      "original_name": "CS Logo.png",
+      "drive_id": "1x-ktuvOx6ozBuMO_tVwwI5EQD6P6qQAK",
+      "mime_type": "image/png",
+      "bytes": 149849,
+      "sha256": "ae2a9190b767c6351f1ed83cf37dd6471202d49e5a8d38c83211a699ca60e74a",
+      "target_path": "media/client-oct16/caregiver-sanctuary-logo.png",
+      "purpose": "Sanctuary page wordmark",
+      "alt": "Caregiver Sanctuary by Legacy Home and Respite Care Foundation",
+      "width": 2000,
+      "height": 2000,
+      "visual_review": "Original local raster visually reviewed by [pc2-codex-42]."
+    },
+    {
+      "original_name": "Header Photo 1.jpg",
+      "drive_id": "1OA1qtOnwXtFbiu-qsgWRBpaUOqD7SjO6",
+      "mime_type": "image/jpeg",
+      "bytes": 4795088,
+      "sha256": "11e1a2839d0f1cc03b5857e196374b43ffa99cdabb802d420ff946adbf0c04a5",
+      "target_path": "media/client-oct16/get-involved-header-photo-1.jpg",
+      "purpose": "Get Involved header",
+      "alt": "",
+      "width": 4032,
+      "height": 3024,
+      "visual_review": "Original local raster visually reviewed by [pc2-codex-42]."
+    },
+    {
+      "original_name": "molinaLogo-notag.png",
+      "drive_id": "1oM2QjnZv4YMauAOxG2mviq-AytMz7X2b",
+      "mime_type": "image/png",
+      "bytes": 17434,
+      "sha256": "8c36bdaa663a0ccb4d2be8e984077e97915dc8610b91a25ba0a0229bdddc0e1c",
+      "target_path": "media/client-oct16/partners/molina-healthcare.png",
+      "purpose": "Home partner logo",
+      "alt": "Molina Healthcare",
+      "width": 180,
+      "height": 54,
+      "visual_review": "Original local raster visually reviewed by [pc2-codex-42]."
+    },
+    {
+      "original_name": "alz-stacked-purple.svg",
+      "drive_id": "11NPZP1sKavBFRavn0klD9LqUp-zLLGhM",
+      "mime_type": "image/svg+xml",
+      "bytes": 15426,
+      "sha256": "82a39ad73c1c9a81be0a393d92f71b6933a1e7c175d82406d2fd60507d71c84f",
+      "target_path": "media/client-oct16/partners/alzheimers-association.svg",
+      "purpose": "Home partner logo",
+      "alt": "Alzheimer's Association",
+      "width": 713.637,
+      "height": 135.1574,
+      "visual_review": "Original unsupported by image viewer; exact-hash root-screened static inspection PNG visually reviewed by 41 and 42. Original SVG used via img only."
+    },
+    {
+      "original_name": "we-energies-foundation.jpg",
+      "drive_id": "1MbOY271jcyK5R8PXjdZNUJEVHykKKClu",
+      "mime_type": "image/jpeg",
+      "bytes": 17728,
+      "sha256": "055b80d76c72d9ce10b05540c882af2a19f8a9261d572a617937573ea64e402d",
+      "target_path": "media/client-oct16/partners/we-energies-foundation.jpg",
+      "purpose": "Home partner logo",
+      "alt": "We Energies Foundation",
+      "width": 255,
+      "height": 77,
+      "visual_review": "Original local raster visually reviewed by [pc2-codex-42]."
+    },
+    {
+      "original_name": "qrx7bh7nghufvzwwayni.png",
+      "drive_id": "1x9gjK_38QM0hy9sYcbcyDtuidzB9rVL7",
+      "mime_type": "image/png",
+      "bytes": 23621,
+      "sha256": "8ae84df562af2407317a5cc45fce82f571e66490889b319a4505f94384c5e8a5",
+      "target_path": "media/client-oct16/partners/green-bay-packers-foundation.png",
+      "purpose": "Home partner logo",
+      "alt": "Green Bay Packers Foundation",
+      "width": 1280,
+      "height": 720,
+      "visual_review": "Original local raster visually reviewed by [pc2-codex-42]."
+    },
+    {
+      "original_name": "thumbnail_wpp_color-center_-.jpg",
+      "drive_id": "1Pp772WF4vynpuXrScS5vHyeqokIqubs7",
+      "mime_type": "image/jpeg",
+      "bytes": 79880,
+      "sha256": "fa4b82721f03a39c21f84f30a34fb1035fd9d0189a3d45cd606e0a05b8267b6b",
+      "target_path": "media/client-oct16/partners/wisconsin-partnership-program.jpg",
+      "purpose": "Home partner logo",
+      "alt": "Wisconsin Partnership Program, University of Wisconsin School of Medicine and Public Health",
+      "width": 1280,
+      "height": 548,
+      "visual_review": "Original local raster visually reviewed by [pc2-codex-42]."
+    },
+    {
+      "original_name": "62f71f_7bcdf8724d0c4c69b0500b71083f32cd~mv2.png",
+      "drive_id": "1FkA7Bzb-r3XOU8qQl2V_OV7N6_YhbJL6",
+      "mime_type": "image/png",
+      "bytes": 38012,
+      "sha256": "3858c4e0434618248e486efb86d97f28c707b273e2e81cf01b5c3f51d832b539",
+      "target_path": "media/client-oct16/partners/nonprofit-management-fund.png",
+      "purpose": "Home partner logo",
+      "alt": "Nonprofit Management Fund",
+      "width": 1403,
+      "height": 616,
+      "visual_review": "Original local raster visually reviewed by [pc2-codex-42]."
+    },
+    {
+      "original_name": "GMF-Logo-full-color-tagline.webp",
+      "drive_id": "1eJ8b80gaQc9hkEq9UeZdIoLx1Bx26ETx",
+      "mime_type": "image/webp",
+      "bytes": 30846,
+      "sha256": "3606d04cf5c95a5bccea624cab38938616d1d8fe695bc53c45313af0411feb7f",
+      "target_path": "media/client-oct16/partners/greater-milwaukee-foundation.webp",
+      "purpose": "Home partner logo",
+      "alt": "Greater Milwaukee Foundation",
+      "width": 2478,
+      "height": 739,
+      "visual_review": "Original local raster visually reviewed by [pc2-codex-42]."
+    },
+    {
+      "original_name": "Bader_PrimaryLogo_Color_RGB_2025.png",
+      "drive_id": "1LmaUYOOziZE4cNCxXhLvnShBb8t0RCiI",
+      "mime_type": "image/png",
+      "bytes": 443297,
+      "sha256": "589581c2e4b1b653e6cec26a126ffcde4f65ddb5b80bae11a6e07ce7f3533541",
+      "target_path": "media/client-oct16/partners/bader-philanthropies.png",
+      "purpose": "Home partner logo",
+      "alt": "Bader Philanthropies",
+      "width": 11433,
+      "height": 3985,
+      "visual_review": "Original local raster visually reviewed by [pc2-codex-42]."
+    },
+    {
+      "original_name": "Foundation-horizontal-cmyk-c.png",
+      "drive_id": "1cDSEwILXNUpmVWeeTmCfl7BvplFrJsSS",
+      "mime_type": "image/png",
+      "bytes": 91719,
+      "sha256": "aed308a36660df5d243f6f1255f5d01d72b2559b98f0d4a975f85c48413a3ed9",
+      "target_path": "media/client-oct16/partners/veridian-foundation.png",
+      "purpose": "Home partner logo",
+      "alt": "Veridian Foundation",
+      "width": 3199,
+      "height": 778,
+      "visual_review": "Original local raster visually reviewed by [pc2-codex-42]."
+    },
+    {
+      "original_name": "Video 1.mov",
+      "drive_id": "1pTO3pkBwB-5wUCjlpOOTpODANple649U",
+      "source_mime_type": "video/quicktime",
+      "mime_type": "video/mp4",
+      "source_bytes": 17073736,
+      "source_sha256": "d6e8e750ad8ad35bbc54e1499a11ad77119923f72158c33dcc26f307792c374e",
+      "bytes": 17091474,
+      "sha256": "c89ad85131b74d6190b7c8bb5a99a7ad46c8bca1c2562778c51c4ead008e0c11",
+      "target_path": "media/client-oct16/sanctuary-video-1.mp4",
+      "purpose": "Sanctuary header video with native controls and user-initiated playback",
+      "width": 720,
+      "height": 1280,
+      "duration_seconds": 61.533333,
+      "container_remux": {
+        "operation": "One local ffmpeg -map 0:v:0 -map 0:a:0 -c copy -movflags +faststart, no transcoding",
+        "raw_original_unchanged": true,
+        "video_codec": "H.264 Main",
+        "pixel_format": "yuv420p",
+        "frame_rate": "30/1",
+        "audio_codec": "AAC LC",
+        "sample_rate": 44100,
+        "channels": 2,
+        "encoded_stream_sha256_before": [
+          "0,v,SHA256=046b24bf314e492cc21bba7077865802d3ed84f4ac8cc1ebab44914142b7ed3f",
+          "1,a,SHA256=26310375d83d9ca105b11a7976858e54996531da216404513a8f1982dc5e851b"
+        ],
+        "encoded_stream_sha256_after": [
+          "0,v,SHA256=046b24bf314e492cc21bba7077865802d3ed84f4ac8cc1ebab44914142b7ed3f",
+          "1,a,SHA256=26310375d83d9ca105b11a7976858e54996531da216404513a8f1982dc5e851b"
+        ],
+        "video_duration_seconds_before": 61.533333,
+        "video_duration_seconds_after": 61.533333,
+        "audio_duration_seconds_before": 61.508345,
+        "audio_duration_seconds_after": 61.509002,
+        "audio_container_duration_delta_seconds": 0.000657,
+        "faststart_top_level_boxes": [
+          {
+            "type": "ftyp",
+            "offset": 0,
+            "bytes": 32
+          },
+          {
+            "type": "moov",
+            "offset": 32,
+            "bytes": 57779
+          },
+          {
+            "type": "free",
+            "offset": 57811,
+            "bytes": 8
+          },
+          {
+            "type": "mdat",
+            "offset": 57819,
+            "bytes": 17033655
+          }
+        ]
+      }
+    }
+  ],
+  "svg_review": {
+    "source_sha256": "82a39ad73c1c9a81be0a393d92f71b6933a1e7c175d82406d2fd60507d71c84f",
+    "allowed_elements": [
+      "defs",
+      "path",
+      "style",
+      "svg"
+    ],
+    "rejected_nodes": 0,
+    "rejected_attributes": 0,
+    "no_script_event_foreignObject_external_reference": true,
+    "inspection_png_sha256": "83fb0d668e06ae5146efb649fbe8d19c3975abd09486514a2be6e531da1ae354",
+    "inspection_derivative_in_site": false
+  },
+  "exclusions": [
+    "No new logo links, certifications or organizations",
+    "Source-only fitting; installed responsive/visual/performance QA remains open",
+    "Existing published media manifests may override source headers at runtime; no provider/DB changes"
+  ],
+  "video_source_parent": "1199888655ab6de448de86cc108695667d0c0191",
+  "video_accessibility": {
+    "meaningful_audio": "UNQUALIFIED: audio track exists; content/listening review not performed",
+    "captions": "NOT VERIFIED; no invented caption track",
+    "transcript": "NOT VERIFIED; no fabricated text",
+    "browser_playback": "NOT TESTED",
+    "default_motion": "None: no autoplay or loop, preload none",
+    "audio_start": "Only after user initiates native playback; no forced audio"
+  },
+  "video_runtime_integration": {
+    "static_copy_eligibility": "Read-only inspection: scripts/build-site.mjs recursively includes media; build.py renders shared HTML only. Neither executed.",
+    "existing_rewriter": "functions/_media.mjs matches img.hero-media only and can generate autoplay video for image banners. This native video is not matched; no runtime code changed. Installed banner editing/manifest behavior remains unqualified.",
+    "installed_stream_delivery_range_codec_playback": "NOT VERIFIED",
+    "provider_db_change": "NONE"
+  }
+}
