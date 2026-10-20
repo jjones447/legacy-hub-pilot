@@ -1169,3 +1169,41 @@ footer a:hover { color: #fff; }
 .wellness-controls select[multiple] { min-width: 220px; min-height: 88px; }
 .wellness-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 6px; }
 .wellness-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
+
+/* October 16 client originals: scoped, uncropped media presentation. */
+.client-photo-hero .client-hero-layout {
+  position: relative; z-index: 2;
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 32px; align-items: center;
+}
+.hero.has-media.client-photo-hero .hero-media {
+  position: static; inset: auto; width: 100%; height: auto;
+  object-fit: contain; opacity: 1; border-radius: var(--radius);
+}
+.hero.has-media.client-photo-hero .hero-scrim { display: none; }
+.client-founder-layout { grid-template-columns: minmax(0, 1fr) minmax(240px, 360px); }
+.client-founder-photo { margin: 0; }
+.client-founder-photo img {
+  display: block; width: 100%; height: auto; object-fit: contain;
+  border-radius: var(--radius);
+}
+.client-sanctuary-wordmark {
+  display: block; width: min(100%, 360px); height: auto;
+  object-fit: contain; margin-bottom: 24px;
+}
+.client-partner-logos {
+  list-style: none; padding: 0; margin: 0;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr));
+  gap: 24px;
+}
+.client-partner-logos li {
+  display: flex; align-items: center; padding: 20px;
+  background: #fff; border: 1px solid #eee2d4; border-radius: var(--radius);
+}
+.client-partner-logos img {
+  display: block; width: 100%; height: 100px; object-fit: contain;
+}
+@media (max-width: 800px) {
+  .client-photo-hero .client-hero-layout, .client-founder-layout { grid-template-columns: minmax(0, 1fr); }
+  .client-founder-photo { width: min(100%, 360px); margin-inline: auto; }
+}

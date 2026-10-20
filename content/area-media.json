@@ -1,5 +1,5 @@
 {
-  "_note": "Header media per site area, sourced from the matching folder in the client's Drive. A video in the folder wins over a photo; Home carries its video today. Sample photos were copied into each area folder on 2026-09-15 to prove the model; the client replaces them.",
+  "_note": "About and Get Involved now use exact client-selected October 16 originals; see media/client-oct16/manifest.json. Other area header entries retain their existing configuration. The Sanctuary logo is a page wordmark, not a replacement header or approval to embed Video 1.",
   "areas": {
     "home": {
       "folder": "Home",
@@ -10,9 +10,11 @@
     "about": {
       "folder": "About Us",
       "folder_id": "15WlclwmhGM85tmxhjWggFAdWdl0MwQT5",
-      "media": "media/headers/about.jpg",
+      "media": "media/client-oct16/about-family-img-1846.jpg",
       "kind": "photo",
-      "source_name": "header-sample-img_2552.jpeg"
+      "source_name": "IMG_1846.JPG",
+      "source_file_id": "1F2GlwJk8aXJ1FKYbhe9Jyc-NECFqqAMl",
+      "source_sha256": "deb089eb85e6971b67969aa10086a7ab43ea2db9a5542cabfb47ed621fc2c98b"
     },
     "programs-events": {
       "folder": "Programs and Events",
@@ -31,9 +33,11 @@
     "get-involved": {
       "folder": "Get Involved",
       "folder_id": "1CslxUixK4DTHkuZX0_5QZWNUXMPseMAD",
-      "media": "media/headers/get-involved.jpg",
+      "media": "media/client-oct16/get-involved-header-photo-1.jpg",
       "kind": "photo",
-      "source_name": "header-sample-img_6921.jpg"
+      "source_name": "Header Photo 1.jpg",
+      "source_file_id": "1OA1qtOnwXtFbiu-qsgWRBpaUOqD7SjO6",
+      "source_sha256": "11e1a2839d0f1cc03b5857e196374b43ffa99cdabb802d420ff946adbf0c04a5"
     },
     "sanctuary": {
       "folder": "The Sanctuary",
