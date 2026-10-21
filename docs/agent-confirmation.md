@@ -6,6 +6,44 @@ It uses existing Access identity, staff records, draft columns and original audi
 batches. No schema, identity provider, credential, listener or runtime is introduced.
 Source integration is separate from installation and five-workflow acceptance.
 
+## Governed discard — October 15 source successor
+
+[pc2-codex-42] Both discard routes now require the same verified initiating
+human and exact original server `preview_version` as confirmation. Service/dev,
+unowned historical drafts, forged conversation fields, missing versions and
+changed proposals/targets refuse without a discard mutation. No historical draft
+or audit is adopted, repaired or relabeled.
+
+The original named-actor discard audit is first in the existing D1 batch, guarded
+by the persisted draft and target snapshots (including Grant award/absence).
+An intervening confirmation/discard or target change aborts that batch before
+status writes. This extends the existing conditional-audit fence, not a global
+attempt ledger or proof of installed D1 concurrency. A database error/uncertain
+acknowledgement remains HOLD, not evidence of rollback.
+
+`staff.js` sends the retained version for discard and reserves every chat mutation
+before its first await, just as for confirmation. Failed/uncertain discard latches
+the existing tab HOLD across reload; success releases the reservation. The hosted
+adapter retains the original application version privately, refuses malformed or
+missing versions after a possible draft write, and supplies it only on its fixed
+discard transport. It does not accept a model-supplied version or add a confirm
+tool. Trusted host authorization, identity mapping and durable session/HOLD
+remain integration prerequisites.
+
+Content discard now writes the verified actor in the ORIGINAL new discard audit
+and `staff_<actor>` in the archived draft's updater. Earlier literal `staff`
+discard audits remain untouched; they are historical, not named-human proof.
+Focused tests model all five areas in memory, including competing terminal
+actions, before/after-read drift, Grant award drift and full audit/status rollback.
+No native runtime, fixture target, provider or customer write is established by
+these source tests.
+
+Author verification on Node26.2: the affected eight-file set passes 476 tests;
+the explicit unit-only runner passes 1528, with zero failures/skips. The earlier
+Event mock expected stale-preview discard to succeed; it now asserts refusal
+and untouched draft/domain/audits. These are pure/mock/SQLite checks, not hosted
+CI, independent review, native D1/workerd or live acceptance.
+
 ## Identity and draft ownership
 
 The existing root middleware verifies the Access JWT signature, issuer, audience

@@ -45,7 +45,7 @@ function snapshotPredicate(table, record, params) {
   for (const field of fields) params.push(record[field]);
   return `EXISTS (SELECT 1 FROM ${table} WHERE ${fields.map(field => `"${field}" IS ?`).join(' AND ')})`;
 }
-// Put the ORIGINAL confirmation audit first in the same batch. Its NOT NULL actor
+// Put the ORIGINAL confirmation/discard audit first in the same batch. Its NOT NULL actor
 // constraint aborts the entire batch if a proposal/target changed after the read.
 // No synthetic receipt/audit or application schema is introduced.
 export function confirmationAudit(db, binding, actor, action, entity, entityId, before, after) {

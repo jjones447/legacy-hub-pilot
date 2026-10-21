@@ -139,7 +139,7 @@ for (const kind of ['draft', 'change']) {
       const h = harness(), row = {};
       const button = { getAttribute: name => name === `data-${kind}-id` ? 'saved_id' : name === 'data-preview-version' ? 'a'.repeat(64) : null, closest: () => row };
       await h.context[action === 'confirm' ? 'confirmAgentChange' : 'discardAgentChange'](button);
-      assert.deepEqual(h.calls, [{ url: `/api/agent/${kind === 'change' ? 'change/' : ''}${action}`, body: { [`${kind}_id`]: 'saved_id', ...(action === 'confirm' ? { preview_version: 'a'.repeat(64) } : {}) } }]);
+      assert.deepEqual(h.calls, [{ url: `/api/agent/${kind === 'change' ? 'change/' : ''}${action}`, body: { [`${kind}_id`]: 'saved_id', preview_version: 'a'.repeat(64) } }]);
       assert.match(row.innerHTML, action === 'confirm' ? /Published/ : /Draft discarded/);
     });
   }
@@ -169,8 +169,9 @@ test('missing server preview version cannot offer a confirming control', async (
 });
 
 for (const kind of ['draft', 'change']) {
+  for (const action of ['confirm', 'discard']) {
   for (const outcome of ['success', 'refusal', 'timeout']) {
-    test(`pending ${kind} confirmation reserves all caller mutations through ${outcome}`, async () => {
+    test(`pending ${kind} ${action} reserves all caller mutations through ${outcome}`, async () => {
       let resolveFetch, rejectFetch, resolveJSON;
       const pendingFetch = new Promise((resolve, reject) => { resolveFetch = resolve; rejectFetch = reject; });
       const pendingJSON = new Promise(resolve => { resolveJSON = resolve; });
@@ -179,7 +180,7 @@ for (const kind of ['draft', 'change']) {
       const row = {}, otherRow = {};
       const button = (id, ownerRow) => ({ getAttribute: key => key === `data-${kind}-id` ? id : key === 'data-preview-version' ? 'a'.repeat(64) : null, closest: () => ownerRow });
       const first = button('first_saved_id', row), other = button('other_saved_id', otherRow);
-      const confirming = h.context.confirmAgentChange(first);
+      const confirming = h.context[action === 'confirm' ? 'confirmAgentChange' : 'discardAgentChange'](first);
       const assertReserved = async () => {
         const attempts = [h.send(), h.context.discardAgentChange(first),
           h.context.discardAgentChange(other), h.context.confirmAgentChange(other)];
@@ -199,7 +200,7 @@ for (const kind of ['draft', 'change']) {
       }
       await confirming;
       if (outcome === 'success') {
-        assert.match(row.innerHTML, /Published/);
+        assert.match(row.innerHTML, action === 'confirm' ? /Published/ : /Draft discarded/);
         await h.context.discardAgentChange(other);
         assert.equal(h.calls.length, 2, 'qualified success releases the shared reservation');
         assert.equal(storage.get('agent-confirmation-hold'), undefined);
@@ -215,11 +216,21 @@ for (const kind of ['draft', 'change']) {
       }
     });
   }
+  }
 }
 for (const kind of ['draft', 'change']) {
   test(`failed ${kind} discard is not presented as successful`, async () => {
     const h = harness({ httpOK: false, reply: { ok: false, error: 'Conflict' } }), row = {};
-    await h.context.discardAgentChange({ getAttribute: name => name === `data-${kind}-id` ? 'saved_id' : null, closest: () => row });
-    assert.match(row.innerHTML, /Failed: Conflict/); assert.doesNotMatch(row.innerHTML, /Draft discarded/);
+    await h.context.discardAgentChange({ getAttribute: name => name === `data-${kind}-id` ? 'saved_id' : name === 'data-preview-version' ? 'a'.repeat(64) : null, closest: () => row });
+    assert.match(row.innerHTML, /Confirmation on hold/); assert.doesNotMatch(row.innerHTML, /Draft discarded/);
   });
 }
+
+test('discard without retained server version stays on HOLD without sending', async () => {
+  const h = harness(), row = {};
+  await h.context.discardAgentChange({ getAttribute: key => key === 'data-draft-id' ? 'saved_id' : null, closest: () => row });
+  assert.equal(h.calls.length, 0);
+  assert.match(row.innerHTML, /Confirmation on hold/);
+  await h.send();
+  assert.equal(h.calls.length, 0);
+});

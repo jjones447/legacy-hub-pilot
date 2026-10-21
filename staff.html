@@ -35,9 +35,39 @@
     <div class="staff-header-status mb-28">
       <h2>Legacy Hub · Staff console</h2>
       <p id="staffStatusLine" class="staff-status-line">Loading status…</p>
+      <button type="button" class="btn btn-sm btn-outline staff-assistant-toggle" id="staffAssistantToggle" aria-expanded="false" aria-controls="staffAssistantPanel">Open Legacy Assistant</button>
     </div>
 
-    <div class="split split-align-start-12-1">
+    <div id="assistantHandoffRegion"></div>
+    <section id="staffAssistantPanel" class="staff-assistant-panel" aria-labelledby="staffAssistantHeading" hidden>
+      <div class="chat-shell">
+        <div class="chat-head staff-assistant-heading">
+          <h3 id="staffAssistantHeading">Legacy Assistant · browser chat</h3>
+          <button type="button" id="staffAssistantClose" class="staff-assistant-close">Close assistant</button>
+        </div>
+        <p id="staffAssistantHelp" class="small staff-assistant-help">Use this browser chat to preview an edit before you confirm it. Slack is a separate entry point; this panel does not show the Slack conversation.</p>
+        <div class="chat-area-bar">
+          <label for="chatAreaSelect" class="chat-area-label">Area:</label>
+          <select id="chatAreaSelect" class="chat-area-select">
+            <option value="content">Content</option>
+            <option value="grant">Grant</option>
+            <option value="caregiver">Caregiver</option>
+            <option value="event">Event</option>
+          </select>
+        </div>
+        <div class="chat-body" id="chatBody">
+          <div class="chat-empty-state" id="chatEmptyState">Tell me what to change, for example: Add a support group on October 15 at 6 PM on Google Meet.</div>
+        </div>
+        <div class="chat-input-row">
+          <input id="chatInput" type="text" aria-label="Message to Legacy Assistant" aria-describedby="staffAssistantHelp" placeholder='Describe the change you want…'>
+          <button type="button" class="btn-mic" id="micBtn" data-action="agent-mic" aria-label="Record voice note" title="Speak message">🎤</button>
+          <button type="button" data-action="agent-send">Send</button>
+        </div>
+        <div id="micStatus" class="mic-status-msg small muted d-none" role="status"></div>
+      </div>
+    </section>
+
+    <div class="staff-workspace">
       <div>
         <div class="panel" id="caregiverSearchPanel">
           <h4>🔍 Caregiver search</h4>
@@ -190,32 +220,6 @@
         </div>
       </div>
 
-      <div>
-        <div class="chat-shell">
-          <div class="chat-head"><span class="bot-dot"></span> Legacy Assistant — staff chat</div>
-          <div class="chat-area-bar">
-            <label for="chatAreaSelect" class="chat-area-label">Area:</label>
-            <select id="chatAreaSelect" class="chat-area-select">
-              <option value="content">Content</option>
-              <option value="grant">Grant</option>
-              <option value="caregiver">Caregiver</option>
-              <option value="event">Event</option>
-            </select>
-          </div>
-          <div class="chat-body" id="chatBody">
-            <div class="chat-empty-state" id="chatEmptyState">Tell me what to change, for example: Add a support group on October 15 at 6 PM on Google Meet.</div>
-          </div>
-          <div class="chat-input-row">
-            <input id="chatInput" type="text" placeholder='Try: "add Maria as a caregiver…" or "update the resource hub…"'>
-            <button type="button" class="btn-mic" id="micBtn" data-action="agent-mic" aria-label="Record voice note" title="Speak message">🎤</button>
-            <button type="button" data-action="agent-send">Send</button>
-          </div>
-          <div id="micStatus" class="mic-status-msg small muted d-none"></div>
-        </div>
-        <div class="card mt-16 card-sand-dashed">
-          <p class="small m-0"><strong>The governed assistant:</strong> staff make changes by asking. The assistant edits <em>content and data only</em> — never code, design, or security — and every change is previewed, confirmed, and logged. A bad request becomes a draft someone declines; it can't break the site.</p>
-        </div>
-      </div>
     </div>
   </div>
 </section>

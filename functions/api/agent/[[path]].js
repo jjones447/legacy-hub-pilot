@@ -9,6 +9,7 @@ import { internalError } from '../../_lib/errors.js';
 import { _resetContentCache, findDisallowedHtml } from '../../_content.mjs';
 import { onRequestPost as postTranscribe } from './transcribe.js';
 import { confirmationActor, draftOwner, ownsDraft, confirmationBinding, confirmationAudit, matchesPersistedPreview } from '../../_lib/agent-confirmation.mjs';
+import { createWebJob, enabled as webJobsEnabled } from '../../_lib/assistant-web-jobs.mjs';
 
 export async function onRequestGet({ request, env }) {
   try {
@@ -67,10 +68,14 @@ export async function onRequestGet({ request, env }) {
   }
 }
 
-export async function onRequestPost({ request, env, data }) {
+export async function onRequestPost({ request, env, data, redactErrors = false, draftGuards = [] }) {
   try {
     const url = new URL(request.url);
     const pathSegments = url.pathname.split('/').filter(Boolean); // ['api', 'agent', ...]
+
+    if (webJobsEnabled(env) && ['/api/agent/draft','/api/agent/change/draft'].includes(url.pathname)) {
+      return createWebJob({ request, env, data });
+    }
 
     if (pathSegments[2] === 'transcribe') {
       return postTranscribe({ request, env });
@@ -184,9 +189,9 @@ export async function onRequestPost({ request, env, data }) {
 
         const change_id = 'ac_' + crypto.randomUUID();
         const actor = draftOwner(confirmationActor(data)) || getActor(request, env);
-        const resolvedTargetId = (val.projected && val.projected.id) ? val.projected.id : body.target_id.toString();
+        const resolvedTargetId = String((val.projected && val.projected.id) ? val.projected.id : body.target_id);
 
-        await env.LEGACY_DB
+        const draftInsert = env.LEGACY_DB
           .prepare(`
             INSERT INTO agent_change (id, area, operation, target_id, payload_json, before_json, after_json, status, requested_by)
             VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', ?)
@@ -200,8 +205,10 @@ export async function onRequestPost({ request, env, data }) {
             JSON.stringify(val.before || val.current || {}),
             JSON.stringify(val.after || val.projected || {}),
             actor
-          )
-          .run();
+          );
+        // Optional statements originate ONLY in a trusted internal job materializer, never request JSON.
+        if (draftGuards.length) await env.LEGACY_DB.batch([...draftGuards, draftInsert]);
+        else await draftInsert.run();
 
         const savedChange = await env.LEGACY_DB.prepare('SELECT * FROM agent_change WHERE id = ?').bind(change_id).first();
         const binding = await confirmationBinding(env.LEGACY_DB, 'workflow', savedChange, url.origin, val.current || currentRecord || null);
@@ -328,7 +335,8 @@ export async function onRequestPost({ request, env, data }) {
           return json({ ok: false, error: 'change_id is required' }, 400);
         }
 
-        const actor = getActor(request, env);
+        const actor = confirmationActor(data);
+        if (!actor || Object.hasOwn(body, 'thread_id') || Object.hasOwn(body, 'conversation_id')) return json({ ok: false, error: 'human discard context not qualified' }, 403);
 
         const change = await env.LEGACY_DB
           .prepare('SELECT * FROM agent_change WHERE id = ?')
@@ -342,22 +350,18 @@ export async function onRequestPost({ request, env, data }) {
         if (change.status !== 'draft') {
           return json({ ok: false, error: `cannot discard change in status ${change.status}` }, 409);
         }
+        if (!ownsDraft(change.requested_by, actor)) return json({ ok: false, error: 'only the verified initiating staff member can discard' }, 403);
+        const binding = await confirmationBinding(env.LEGACY_DB, 'workflow', change, url.origin);
+        if (typeof body.preview_version !== 'string' || body.preview_version !== binding.version) {
+          return json({ ok: false, error: 'preview version missing or changed; discard refused' }, 409);
+        }
 
         await env.LEGACY_DB.batch([
+          confirmationAudit(env.LEGACY_DB, binding, actor, 'agent_change.discard', 'agent_change', change.id,
+            { status: 'draft' }, { status: 'discarded' }),
           env.LEGACY_DB
             .prepare("UPDATE agent_change SET status = 'discarded', updated_at = datetime('now') WHERE id = ?")
             .bind(change.id),
-          env.LEGACY_DB
-          .prepare(`
-            INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
-            VALUES (?, 'agent_change.discard', 'agent_change', ?, ?, ?)
-          `)
-          .bind(
-            actor,
-            change.id,
-            JSON.stringify({ status: 'draft' }),
-            JSON.stringify({ status: 'discarded' })
-          )
         ]);
 
         return json({ ok: true });
@@ -533,13 +537,14 @@ export async function onRequestPost({ request, env, data }) {
       const draft_of = isTargeted ? body.target_id : null;
       const dataStr = JSON.stringify(draftData);
 
-      await env.LEGACY_DB
+      const draftInsert = env.LEGACY_DB
         .prepare(`
           INSERT INTO content_item (id, type_id, data, status, draft_of, updated_by, updated_at)
           VALUES (?, ?, ?, 'draft', ?, ?, datetime('now'))
         `)
-        .bind(draft_id, body.type_id, dataStr, draft_of, draftOwner(confirmationActor(data)) || 'agent')
-        .run();
+        .bind(draft_id, body.type_id, dataStr, draft_of, draftOwner(confirmationActor(data)) || 'agent');
+      if (draftGuards.length) await env.LEGACY_DB.batch([...draftGuards, draftInsert]);
+      else await draftInsert.run();
 
       const savedDraft = await env.LEGACY_DB.prepare('SELECT * FROM content_item WHERE id = ?').bind(draft_id).first();
       const binding = await confirmationBinding(env.LEGACY_DB, 'content', savedDraft, url.origin, currentItem);
@@ -631,18 +636,9 @@ export async function onRequestPost({ request, env, data }) {
         return json({ ok: false, error: 'draft_id is required' }, 400);
       }
 
-      let item;
-      try {
-        item = await env.LEGACY_DB
-          .prepare(`SELECT status, data, draft_of FROM content_item WHERE id = ?`)
-          .bind(body.draft_id)
-          .first();
-      } catch (err) {
-        item = await env.LEGACY_DB
-          .prepare(`SELECT status, data FROM content_item WHERE id = ?`)
-          .bind(body.draft_id)
-          .first();
-      }
+      const actor = confirmationActor(data);
+      if (!actor || Object.hasOwn(body, 'thread_id') || Object.hasOwn(body, 'conversation_id')) return json({ ok: false, error: 'human discard context not qualified' }, 403);
+      const item = await env.LEGACY_DB.prepare('SELECT * FROM content_item WHERE id = ?').bind(body.draft_id).first();
 
       if (!item) {
         return json({ ok: false, error: 'draft not found' }, 404);
@@ -651,19 +647,17 @@ export async function onRequestPost({ request, env, data }) {
       if (item.status !== 'draft') {
         return json({ ok: false, error: `cannot discard from status ${item.status}` }, 409);
       }
+      if (!ownsDraft(item.updated_by, actor)) return json({ ok: false, error: 'only the verified initiating staff member can discard' }, 403);
+      const binding = await confirmationBinding(env.LEGACY_DB, 'content', item, url.origin);
+      if (typeof body.preview_version !== 'string' || body.preview_version !== binding.version) {
+        return json({ ok: false, error: 'preview version missing or changed; discard refused' }, 409);
+      }
 
       await env.LEGACY_DB.batch([
-        env.LEGACY_DB.prepare(`UPDATE content_item SET status = 'archived', updated_by = 'staff', updated_at = datetime('now') WHERE id = ?`)
-          .bind(body.draft_id),
-        env.LEGACY_DB.prepare(`
-          INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
-          VALUES ('staff', 'content_item.discard', 'content_item', ?, ?, ?)
-        `)
-        .bind(
-          body.draft_id,
-          JSON.stringify({ status: 'draft', data: JSON.parse(item.data) }),
-          JSON.stringify({ status: 'archived', data: JSON.parse(item.data) })
-        ),
+        confirmationAudit(env.LEGACY_DB, binding, actor, 'content_item.discard', 'content_item', body.draft_id,
+          { status: 'draft', data: JSON.parse(item.data) }, { status: 'archived', data: JSON.parse(item.data) }),
+        env.LEGACY_DB.prepare(`UPDATE content_item SET status = 'archived', updated_by = ?, updated_at = datetime('now') WHERE id = ?`)
+          .bind('staff_' + actor, body.draft_id),
       ]);
 
       return json({ ok: true });
@@ -671,6 +665,9 @@ export async function onRequestPost({ request, env, data }) {
 
     return json({ ok: false, error: 'unsupported action' }, 400);
   } catch (e) {
+    // Trusted internal handoff calls suppress raw provider/DB error details.
+    // This option is server context, never accepted from request JSON.
+    if (redactErrors) return json({ ok: false, error: 'internal_error' }, 500);
     return internalError('/api/agent POST', e);
   }
 }

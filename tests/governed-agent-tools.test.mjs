@@ -23,8 +23,8 @@ function responseFor(target) {
     : target.area === 'event' ? { title: 'Synthetic event baseline', publish_state: 'draft' } : { segment_tags: '[]' });
   const after = changes[target.area];
   return { status: 200, body: content(target.area)
-    ? { ok: true, draft_id: id, draft: { id, type_id: 'page_section', status: 'draft', draft_of: target.targetId, data: after }, preview: after }
-    : { ok: true, change_id: id, change: { id, area: target.area, target_id: target.targetId, status: 'draft', before, after }, preview: { before, after } } };
+    ? { ok: true, preview_version: 'a'.repeat(64), draft_id: id, draft: { id, type_id: 'page_section', status: 'draft', draft_of: target.targetId, data: after }, preview: after }
+    : { ok: true, preview_version: 'a'.repeat(64), change_id: id, change: { id, area: target.area, target_id: target.targetId, status: 'draft', before, after }, preview: { before, after } } };
 }
 function setup(overrides = {}) {
   const sent = [];
@@ -65,7 +65,7 @@ for (const target of targets) {
     const discarded = await f.adapter.execute('app_discard', { draft_id: receipt.draft_id }, 'staff-discard');
     assert.equal(discarded.state, 'discarded');
     assert.deepEqual(discarded.application, { ok: true });
-    assert.deepEqual(f.sent[1].body, { [content(target.area) ? 'draft_id' : 'change_id']: receipt.draft_id });
+    assert.deepEqual(f.sent[1].body, { [content(target.area) ? 'draft_id' : 'change_id']: receipt.draft_id, preview_version: 'a'.repeat(64) });
     assert.equal((await f.adapter.execute('app_discard', { draft_id: receipt.draft_id }, 'second-discard')).state, 'refused');
     assert.equal(f.sent.length, 2);
   });
@@ -81,6 +81,16 @@ test('model confirmation, direct edits and forged authority are never tools', as
   }
   assert.deepEqual(GOVERNED_TOOLS.map(t => t.name), ['app_draft', 'app_preview', 'app_discard']);
   assert.equal(f.sent.length, 0);
+});
+
+test('discard retains the ORIGINAL server version privately, not a mutable model result or argument', async () => {
+  const f = setup(), target = targets[0];
+  const receipt = await f.adapter.execute('app_draft', argsFor(target), 'draft');
+  receipt.application.preview_version = 'b'.repeat(64);
+  f.approveDiscard(target, receipt);
+  assert.equal((await f.adapter.execute('app_discard', { draft_id: receipt.draft_id, preview_version: 'b'.repeat(64) }, 'forged-version')).reason, 'invalid_arguments');
+  assert.equal((await f.adapter.execute('app_discard', { draft_id: receipt.draft_id }, 'discard')).state, 'discarded');
+  assert.equal(f.sent.at(-1).body.preview_version, 'a'.repeat(64));
 });
 
 test('unknown target, new target, noncanonical grant and arbitrary drafts refuse', async () => {
@@ -136,7 +146,7 @@ test('different concurrent calls cannot race to create two drafts', async () => 
   assert.equal((await f.adapter.execute('app_draft', argsFor(targets[1]), 'replacement')).state, 'refused');
 });
 
-for (const mode of ['timeout', 'http500', 'missing-preview', 'redirect-target', 'outside-fields']) {
+for (const mode of ['timeout', 'http500', 'missing-preview', 'missing-version', 'invalid-version', 'array-version', 'redirect-target', 'outside-fields']) {
   test(`${mode}: uncertain persisted draft latches HOLD, without retry/replacement/discard`, async () => {
     let count = 0;
     const f = setup({ transport: async () => {
@@ -145,6 +155,9 @@ for (const mode of ['timeout', 'http500', 'missing-preview', 'redirect-target', 
       const response = responseFor(targets[0]);
       if (mode === 'http500') response.status = 500;
       if (mode === 'missing-preview') delete response.body.draft.data;
+      if (mode === 'missing-version') delete response.body.preview_version;
+      if (mode === 'invalid-version') response.body.preview_version = 'model-asserted';
+      if (mode === 'array-version') response.body.preview_version = ['a'.repeat(64)];
       if (mode === 'redirect-target') response.body.draft.draft_of = 'other-customer';
       if (mode === 'outside-fields') response.body.draft.data = { ...response.body.draft.data, contact: 'forbidden' };
       return response;

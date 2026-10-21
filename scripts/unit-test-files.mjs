@@ -2,6 +2,15 @@
 // requires an explicit source/review change here; filenames alone do not prove
 // absence of runtime effects. The separately gated workerd harness is excluded.
 export const UNIT_TEST_FILES = Object.freeze([
+  'assistant-handoff.test.mjs',
+  'assistant-handoff-ui.test.mjs',
+  'assistant-web-jobs.test.mjs',
+  'web-job-create-diagnostics.test.mjs',
+  'web-job-actor-busy.test.mjs',
+  'web-job-terminal-close.test.mjs',
+  'web-job-browser-recovery.test.mjs',
+  'web-job-protocol.test.mjs',
+  'web-job-ui.test.mjs',
   'agent-confirmation-binding.test.mjs',
   'governed-agent-tools.test.mjs',
   'payment-concurrent-routing.test.mjs',
@@ -11,6 +20,8 @@ export const UNIT_TEST_FILES = Object.freeze([
   'agent-workers-ai-event.test.mjs',
   'agent-workers-ai.test.mjs',
   'backup-object-integrity.test.mjs',
+  'backup-pre-return-bounds.test.mjs',
+  'backup-candidate-restore-roundtrip.test.mjs',
   'backups-restore-d9.test.mjs',
   'break-glass-d10.test.mjs',
   'caregiver-record-d2.test.mjs',
@@ -62,6 +73,7 @@ export const UNIT_TEST_FILES = Object.freeze([
   'square-payment-identity.test.mjs',
   'square-webhook.test.mjs',
   'staff-chat-wiring-d7.test.mjs',
+  'staff-assistant-disclosure.test.mjs',
   'staff-console-d2-d5-ui.test.mjs',
   'staff-console-escaping.test.mjs',
   'staff-console-plain-mic.test.mjs',

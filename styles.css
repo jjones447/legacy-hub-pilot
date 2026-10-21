@@ -598,6 +598,32 @@ section { padding: 64px 0; }
 .chat-input-row input:focus { outline: none; background: #fcf7f3; }
 .chat-input-row button { background: var(--coral); border: none; color: #fff; padding: 0 22px; font-weight: 700; cursor: pointer; }
 
+/* Staff workspace stays full-width; chat is an optional top disclosure. */
+.staff-workspace, .staff-workspace > div { min-width: 0; width: 100%; }
+.staff-workspace .panel { overflow-x: auto; }
+.staff-assistant-toggle { margin-top: 12px; min-height: 44px; }
+.staff-assistant-panel { margin-bottom: 24px; min-width: 0; }
+.staff-assistant-panel[hidden] { display: none; }
+.staff-assistant-heading { justify-content: space-between; flex-wrap: wrap; }
+.staff-assistant-heading h3 { margin: 0; color: inherit; font: inherit; }
+.staff-assistant-close { background: transparent; color: inherit; border: 1px solid currentColor; border-radius: 6px; padding: 8px 12px; min-height: 44px; font: inherit; cursor: pointer; }
+.staff-assistant-help { margin: 0; padding: 12px 14px; background: #fbf5ef; }
+.staff-assistant-panel .chat-area-bar { flex-wrap: wrap; }
+.staff-assistant-panel .chat-area-select { min-width: 0; max-width: 100%; min-height: 44px; }
+.staff-assistant-panel .chat-body { max-height: min(40vh, 360px); overflow-wrap: anywhere; }
+.staff-assistant-panel .chat-input-row input { min-width: 0; }
+.staff-assistant-toggle:focus-visible, .staff-assistant-close:focus-visible,
+.staff-assistant-panel .chat-input-row input:focus-visible,
+.staff-assistant-panel .chat-input-row button:focus-visible { outline: 3px solid var(--plum-light); outline-offset: 3px; }
+@media (max-width: 600px) {
+  .staff-assistant-panel .chat-input-row { flex-wrap: wrap; }
+  .staff-assistant-panel .chat-input-row input { flex-basis: 100%; width: 100%; box-sizing: border-box; }
+  .staff-assistant-panel .chat-input-row button { min-height: 44px; padding: 10px 18px; }
+  .staff-assistant-panel .msg { max-width: 100%; min-width: 0; }
+  .staff-assistant-panel .confirm-row { flex-wrap: wrap; }
+  .staff-assistant-panel .preview { overflow-wrap: anywhere; }
+}
+
 /* ---------- Tables (staff console) ---------- */
 table.data { width: 100%; border-collapse: collapse; font-size: 13.8px; background: #fff; }
 table.data th {

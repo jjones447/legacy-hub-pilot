@@ -195,7 +195,7 @@ test('POST /api/agent/discard archives draft + audits', async () => {
   const draftId = 'ci_test_draft';
   raw.prepare(`
     INSERT INTO content_item (id, type_id, data, status, updated_by)
-    VALUES ('ci_test_draft', 'resource', '{"title":"Helpline","description":"988","category":"crisis"}', 'draft', 'agent')
+    VALUES ('ci_test_draft', 'resource', '{"title":"Helpline","description":"988","category":"crisis"}', 'draft', 'access_staff:staff@example.org')
   `).run();
 
   const req = new Request('http://localhost/api/agent/discard', {
@@ -211,6 +211,7 @@ test('POST /api/agent/discard archives draft + audits', async () => {
   const audit = raw.prepare(`SELECT * FROM audit_log WHERE entity = 'content_item' AND entity_id = ?`).get(draftId);
   assert.ok(audit);
   assert.equal(audit.action, 'content_item.discard');
+  assert.equal(audit.actor, 'staff@example.org');
 });
 
 test('workflow rejects illegal transitions with 409', async () => {
@@ -452,13 +453,13 @@ function verifyAtomicContentSuccess(f, before, after) {
   assert.equal(after.audits.length, before.audits.length + 1);
   assert.deepEqual(after.audits.slice(0, -1), before.audits, 'existing append-only audits must be untouched');
   const audit = after.audits.at(-1);
-  assert.equal(audit.actor, f.kind === 'discard' ? 'staff' : f.actor);
+  assert.equal(audit.actor, f.actor);
   assert.equal(audit.entity, 'content_item');
   assert.equal(audit.entity_id, entityId);
   assert.equal(audit.action, f.kind === 'direct' ? 'content_item.direct_edit'
     : f.kind === 'discard' ? 'content_item.discard' : 'content_item.publish');
   assert.equal(row.status, f.kind === 'discard' ? 'archived' : 'published');
-  assert.equal(row.updated_by, f.kind === 'discard' ? 'staff' : `staff_${f.actor}`);
+  assert.equal(row.updated_by, `staff_${f.actor}`);
   assert.notEqual(row.updated_at, prior.updated_at);
   if (f.kind === 'direct') {
     assert.deepEqual(JSON.parse(audit.before_json), JSON.parse(prior.data));

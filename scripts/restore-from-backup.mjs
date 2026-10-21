@@ -250,6 +250,9 @@ export function escapeSqlValue(val) {
   if (typeof val === 'number') return Number.isFinite(val) ? String(val) : 'NULL';
   if (typeof val === 'boolean') return val ? '1' : '0';
   const str = String(val);
+  // SQLite TEXT can contain NUL, but SQL source cannot contain a literal NUL.
+  // Preserve the complete UTF-8 value rather than truncating or dropping it.
+  if (str.includes('\u0000')) return `CAST(X'${Buffer.from(str, 'utf8').toString('hex')}' AS TEXT)`;
   return `'${str.replace(/'/g, "''")}'`;
 }
 
