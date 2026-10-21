@@ -1198,3 +1198,14 @@ footer a:hover { color: #fff; }
 @media (max-width: 800px) {
   .client-video-layout { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* October 21 client formatting polish: paragraph/list spacing and stat contrast. */
+.client-founder-layout .section-head { margin-bottom: 20px; }
+p.measure-620 + p.measure-620, p.measure-660 + p.measure-660 { margin-top: 16px; }
+p.measure-620 + .badge-phase2 { margin-top: 12px; display: inline-block; }
+.section-head p + p { margin-top: 12px; }
+main p.lede.measure-620, main p.lede.measure-660 { margin-bottom: 16px; }
+main ul.measure-620 { margin: 16px 0; padding-left: 24px; }
+.section-sand .stat .label { color: var(--ink-soft); }
+.stats-grid + p { margin-top: 20px; }
+.stats-band .muted { color: #eeddd2; }
