@@ -85,3 +85,37 @@ test('home page and template omit the client-removed Community Wellness Partners
   assert.match(header, /href="community-wellness-partners\.html"/);
   assert.match(header, /href="sanctuary\.html#network"/);
 });
+
+test('homepage partner logos link to official pages with preserved assets and keyboard focus', () => {
+  const expected = [
+    ['https://www.molinahealthcare.com/', 'molina-healthcare.png', 'Molina Healthcare', '180', '54'],
+    ['https://www.alz.org/', 'alzheimers-association.svg', "Alzheimer's Association", '714', '135'],
+    ['https://www.wecenergygroup.com/community/we-energies-community.htm', 'we-energies-foundation.jpg', 'We Energies Foundation', '255', '77'],
+    ['https://www.packers.com/community/packers-foundation', 'green-bay-packers-foundation.png', 'Green Bay Packers Foundation', '1280', '720'],
+    ['https://wpp.med.wisc.edu/', 'wisconsin-partnership-program.jpg', 'Wisconsin Partnership Program, University of Wisconsin School of Medicine and Public Health', '1280', '548'],
+    ['https://www.nonprofitmanagementfund.org/', 'nonprofit-management-fund.png', 'Nonprofit Management Fund', '1403', '616'],
+    ['https://www.greatermilwaukeefoundation.org/', 'greater-milwaukee-foundation.webp', 'Greater Milwaukee Foundation', '2478', '739'],
+    ['https://bader.org/', 'bader-philanthropies.png', 'Bader Philanthropies', '11433', '3985'],
+    ['https://veridianhomes.com/about/veridian-foundation/', 'veridian-foundation.png', 'Veridian Foundation', '3199', '778'],
+  ];
+  for (const path of ['index.html', 'templates/index.html.j2']) {
+    const list = file(path).match(/<ul class="client-partner-logos"[^>]*>([\s\S]*?)<\/ul>/)?.[1];
+    assert.ok(list, `${path}: existing partner list remains`);
+    const items = [...list.matchAll(/<li>([\s\S]*?)<\/li>/g)].map(match => match[1]);
+    assert.equal(items.length, expected.length, `${path}: all nine supplied logos remain`);
+    for (const [index, [href, asset, alt, width, height]] of expected.entries()) {
+      const link = items[index].match(/^<a href="([^"]+)">(<img [^>]+>)<\/a>$/);
+      assert.ok(link, `${path}: logo ${index + 1} is a native same-tab anchor`);
+      assert.equal(link[1], href);
+      const attributes = Object.fromEntries([...link[2].matchAll(/([\w-]+)="([^"]*)"/g)].map(match => [match[1], match[2]]));
+      assert.deepEqual(attributes, {
+        src: `media/client-oct16/partners/${asset}`, alt, width, height,
+        loading: 'lazy', decoding: 'async',
+      }, `${path}: exact supplied image, meaningful accessible name, order and dimensions`);
+    }
+  }
+  const css = file('styles.css');
+  assert.match(css, /\.client-partner-logos a\s*\{[^}]*display:\s*block;[^}]*width:\s*100%/);
+  assert.match(css, /\.client-partner-logos a:focus-visible\s*\{[^}]*outline:\s*3px solid var\(--plum\);[^}]*outline-offset:\s*6px/);
+  assert.match(css, /\.client-partner-logos img\s*\{[^}]*width:\s*100%;[^}]*height:\s*100px;[^}]*object-fit:\s*contain/);
+});
