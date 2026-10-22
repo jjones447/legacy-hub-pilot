@@ -148,17 +148,18 @@ test('Events template provides a configurable API target without changing the ho
   assert.match(renderSource, /b\.dataset\.eventId === e\.id/);
 });
 
-test('staff instructions distinguish new-event drafts, selected-event chat and explicit publication', () => {
+test('public Events copy explains confirmed schedules without staff operating instructions', () => {
   for (const path of ['templates/events.html.j2', 'events.html']) {
     const markup = readFileSync(new URL('../' + path, import.meta.url), 'utf8');
-    const instructions = markup.match(/<strong>How staff manage this page:<\/strong>(.*?)<\/p>/s)?.[1];
-    assert.ok(instructions);
-    assert.match(instructions, /New Event form to create a draft/);
-    assert.match(instructions, /select an existing event to draft a change by chat/);
-    assert.match(instructions, /Review the preview before confirming/);
-    assert.match(instructions, /publishing a draft event is a separate action/);
-    assert.match(instructions, /published events when their schedule and registration details load successfully/);
-    assert.doesNotMatch(instructions, /next Saturday|goes live|reminder|automatic/i);
+    assert.doesNotMatch(markup, /How staff manage this page|New Event form|draft a change by chat|Review the preview before confirming|publishing a draft event is a separate action/);
+    assert.match(markup, /This page lists current published events when their schedule and registration details load successfully\./);
+    assert.match(markup, /Program information marked as schedule pending does not confirm a date or registration\./);
+    assert.match(markup, /Register when a confirmed date and registration details are available\./);
+    assert.match(markup, /id="liveEventsGrid" data-event-time-zone="America\/Chicago" aria-live="polite"/);
+    assert.match(markup, /<form id="regForm" data-action="submit-register">/);
+    assert.match(markup, /<label for="regName">Your name<\/label>/);
+    assert.match(markup, /<label for="regEmail">Email<\/label>/);
+    assert.match(markup, /<label for="regRole">I am a…<\/label>/);
   }
 });
 
