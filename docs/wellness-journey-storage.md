@@ -56,9 +56,31 @@ uses a different preallocation value it fails closed; ordinary D1 auto-ID availa
 unverified until the separate rehearsal. Do not remove the positive stored-ID constraint or
 relax sequence admission to accommodate a runtime without reviewing the ordering contract.
 
+## Read consumers
+
+`functions/_lib/wellness-journey-history.js` supplies read-only, parameter-bound candidate
+queries. Owner history is newest sequence first, with original questionnaire and quarter-policy
+snapshots. A baseline never becomes a quarterly response. Withdrawal preserves earlier history.
+The staff selector uses the latest selection event and includes selected caregivers who have
+never submitted a baseline or response; withdrawn and inactive caregivers are excluded.
+
+Pages default to 25, cap at 50, and use exclusive sequence or caregiver-ID cursors. Reads omit
+contacts, request keys, staff identities and audit records. JSON is capped at 64 KiB per field
+and 256 KiB per page; invalid stored shapes fail closed with sanitized errors. Results are fresh
+detached objects, not a mutable shared cache. Active staff status is checked by the participant
+query, but authentication must occur in the future caller. Never accept an owner or staff identity
+from an unverified body or query parameter. These helpers are not imported by any route and do
+not grant staff access to owner history, enable export, collect answers or apply the schema.
+
+History and selection pages are separate point-in-time reads, not a transactionally consistent
+dashboard snapshot. Cursors do not authorize identities. Later integration must prove verified
+staff/portal sessions, cross-user refusals, safe rendering of stored text, deployed bindings and
+any read-replication consistency policy before enabling a consumer.
+
 ## Validation and rollout
 
-Run `node --test tests/wellness-journey-storage.test.mjs tests/wellness-checkin.test.mjs
+Run `node --test tests/wellness-journey-history.test.mjs
+tests/wellness-journey-storage.test.mjs tests/wellness-checkin.test.mjs
 tests/wellness-reminders.test.mjs` as one command (without the line break). These tests use
 synthetic in-memory Node SQLite only. Serial compare-and-append, cross-owner refusal and rollback
 cases are not real D1 concurrency, workerd, deployed or authenticated endpoint acceptance.
@@ -69,8 +91,9 @@ installed schema sequence and rehearse it on a separately authorized isolated D1
 integrate authenticated producers and history/dashboard consumers with cross-user, validation,
 same-ID retry, real concurrency and failure tests. Promotion must update backup/restore migration
 metadata and integration fixtures together; never report an unapplied candidate as installed.
-The period and questionnaire source
-foundations are separate review candidates; this candidate does not silently integrate them.
+Calendar, questionnaire and storage foundations are already source-integrated on main. This
+read-consumer branch explicitly composes that reviewed main; its helper and tests retain their
+original content. Composition does not enable any existing unused foundation or read consumer.
 
 Disable producers to roll back. Preserve new and legacy rows, assignments, questionnaires and
 audit history; do not drop tables, rewrite old observations or enable reminders during rollback.
