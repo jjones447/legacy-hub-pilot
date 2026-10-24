@@ -8,6 +8,21 @@ function escapeHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
+// datetime-local fields use the browser's wall clock; ISO strings use UTC.
+function localDateTimeValue(date) {
+  if (Number.isNaN(date.getTime())) return '';
+  const pad = value => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function formatContactTime(value) {
+  if (!value) return 'N/A';
+  const normalized = String(value).replace(' ', 'T');
+  // SQLite timestamps without an offset are stored in UTC as well.
+  const instant = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(normalized) ? normalized : normalized + 'Z';
+  return localDateTimeValue(new Date(instant)).replace('T', ' ') || 'N/A';
+}
+
 function formatStatusLine({ needsAttentionCount = 0, eventsThisWeekCount = 0, grantsInReviewCount = 0 }) {
   const attentionText = needsAttentionCount === 0
     ? 'Nothing needs attention'
@@ -793,7 +808,7 @@ async function viewCaregiver(id) {
           </thead>
           <tbody>
             ${data.contact_history.map(ch => {
-              const when = ch.occurred_at ? escapeHtml(ch.occurred_at.replace('T', ' ').slice(0, 16)) : 'N/A';
+              const when = escapeHtml(formatContactTime(ch.occurred_at));
               const dirBadge = ch.direction === 'inbound' ? 'badge-blue' : 'badge-green';
               return `
                 <tr>
@@ -810,7 +825,7 @@ async function viewCaregiver(id) {
       `;
     }
 
-    const nowLocal = new Date().toISOString().slice(0, 16);
+    const nowLocal = localDateTimeValue(new Date());
 
     panel.innerHTML = `
       <h4>👤 Caregiver record — ${name} ${memberBadge} ${statusBadge}</h4>

@@ -12,6 +12,46 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
+
+test('contact form local wall time round-trips to the original instant in winter and summer', async () => {
+  const source = readFileSync(new URL('../staff.js', import.meta.url), 'utf8');
+  const helpers = source.slice(source.indexOf('function localDateTimeValue('), source.indexOf('function formatStatusLine('));
+  const submit = source.slice(source.indexOf('async function submitAddContact('), source.indexOf('async function submitAddNote('));
+  const previousTimezone = process.env.TZ;
+  try {
+    for (const zone of ['America/Chicago', 'Asia/Kolkata', 'UTC']) {
+      process.env.TZ = zone;
+      for (const instant of ['2026-10-24T01:37:00.000Z', '2026-01-24T01:37:00.000Z']) {
+        let payload;
+        const context = vm.createContext({
+          Date, String, Number,
+          document: { getElementById: () => ({ dataset: { caregiverId: 'cg_fictional_timezone' } }) },
+          fetch: async (_url, options) => {
+            payload = JSON.parse(options.body);
+            return { ok: true, json: async () => ({ ok: true }) };
+          },
+          viewCaregiver: async () => {},
+          alert: message => assert.fail(message)
+        });
+        vm.runInContext(helpers + '\n' + submit, context);
+        const local = context.localDateTimeValue(new Date(instant));
+        const values = { occurred_at: local, channel: 'other', direction: 'inbound', summary: 'Fictional timezone test' };
+        await context.submitAddContact({ querySelector(selector) {
+          const name = selector.match(/name="([^"]+)"/)?.[1];
+          return name ? { value: values[name] } : null;
+        } });
+        assert.equal(payload.occurred_at, instant, zone);
+        assert.equal(context.formatContactTime(instant), local.replace('T', ' '), zone);
+        assert.equal(context.formatContactTime(instant.replace('T', ' ').replace('.000Z', '')), local.replace('T', ' '), zone);
+        assert.equal(context.formatContactTime('invalid'), 'N/A');
+      }
+    }
+  } finally {
+    if (previousTimezone === undefined) delete process.env.TZ;
+    else process.env.TZ = previousTimezone;
+  }
+});
 import { DatabaseSync } from 'node:sqlite';
 import {
   onRequestGet as getStaff,
