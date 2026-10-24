@@ -59,7 +59,7 @@ function postIntake(form, payload) {
 
 function submitSupport(e) {
   e.preventDefault();
-  const form = e.currentTarget || document.getElementById('supportForm');
+  const form = document.getElementById('supportForm');
   const name = splitName(document.getElementById('supName').value);
   const contact = contactFields(document.getElementById('supEmail').value);
   const payload = Object.assign({
@@ -106,7 +106,7 @@ function closeGrantApply() {
 
 function submitGrantApply(e) {
   e.preventDefault();
-  const form = e.currentTarget || document.getElementById('grantApplyForm');
+  const form = document.getElementById('grantApplyForm');
   const name = splitName(document.getElementById('grantName').value);
   const payload = {
     kind: 'grant_application',
@@ -140,7 +140,7 @@ function closeCoachingInterest() {
 
 function submitCoachingInterest(e) {
   e.preventDefault();
-  const form = e.currentTarget || document.getElementById('coachingInterestForm');
+  const form = document.getElementById('coachingInterestForm');
   const name = splitName(document.getElementById('coachName').value);
   const note = document.getElementById('coachNote').value.trim();
   const payload = {
@@ -163,7 +163,7 @@ function submitCoachingInterest(e) {
 
 function submitMembership(e) {
   e.preventDefault();
-  const form = e.currentTarget || document.getElementById('membershipForm');
+  const form = document.getElementById('membershipForm');
   const name = splitName(document.getElementById('memName').value);
   const payload = {
     kind: 'membership',
@@ -231,7 +231,7 @@ function closeRegister() {
 }
 function submitRegister(e) {
   e.preventDefault();
-  const form = e.currentTarget || document.getElementById('regForm');
+  const form = document.getElementById('regForm');
   const name = splitName(document.getElementById('regName').value);
   const eventId = form.dataset.eventId;
   const payload = {
