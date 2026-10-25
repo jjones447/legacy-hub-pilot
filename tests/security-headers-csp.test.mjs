@@ -93,3 +93,17 @@ test('security headers on fail-closed 403 response', async () => {
   assert.equal(resp.headers.get('X-Content-Type-Options'), 'nosniff');
   assert.equal(resp.headers.get('Referrer-Policy'), 'no-referrer');
 });
+
+test('js and css responses receive Cache-Control: no-cache, must-revalidate so zone proxy cannot apply 4h TTL', async () => {
+  for (const assetPath of ['/app.js?v=92ea66804e5e', '/staff.js?v=3290cf839c52', '/styles.css?v=c33ec71a18bf']) {
+    const request = new Request(`https://staging.caregiversanctuary.org${assetPath}`);
+    const next = async () =>
+      new Response('/* asset */', {
+        status: 200,
+        headers: { 'Cache-Control': 'public, max-age=0, must-revalidate' },
+      });
+    const resp = await onRequest({ request, next, env: {} });
+    assert.equal(resp.status, 200);
+    assert.equal(resp.headers.get('Cache-Control'), 'no-cache, must-revalidate');
+  }
+});

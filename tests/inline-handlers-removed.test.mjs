@@ -245,11 +245,11 @@ test('staff console script isolation: staff.html has zero inline script blocks w
     `Found inline script blocks with a body in staff.html:\n  ${inlineScriptsWithBody.join('\n  ')}`,
   );
 
-  const appJsIdx = staffHtml.indexOf('<script src="app.js"></script>');
-  const staffJsIdx = staffHtml.indexOf('<script src="staff.js"></script>');
+  const appJsIdx = staffHtml.search(/<script src="app\.js\?v=[0-9a-f]{12}"><\/script>/);
+  const staffJsIdx = staffHtml.search(/<script src="staff\.js\?v=[0-9a-f]{12}"><\/script>/);
 
-  assert.ok(appJsIdx !== -1, 'staff.html must include <script src="app.js"></script>');
-  assert.ok(staffJsIdx !== -1, 'staff.html must include <script src="staff.js"></script>');
+  assert.ok(appJsIdx !== -1, 'staff.html must include versioned <script src="app.js?v=..."></script>');
+  assert.ok(staffJsIdx !== -1, 'staff.html must include versioned <script src="staff.js?v=..."></script>');
   assert.ok(
     staffJsIdx > appJsIdx,
     'staff.html must load staff.js after app.js',

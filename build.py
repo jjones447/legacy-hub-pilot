@@ -10,7 +10,9 @@ content items are data; templates are code; the agent edits items, never templat
 Pages not yet extracted (about/programs/request-support: page_section migration = slice
 02.1; portal/staff: app mocks, hand-authored by design).
 """
+import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -267,7 +269,28 @@ def render_coming_soon_head() -> str:
 <link rel="manifest" href="site.webmanifest">"""
 
 
-def render_shared(env: Environment, ctx: dict) -> dict:
+def asset_versions() -> dict:
+    """Return 12-hex-char SHA-256 prefixes for versioned root stylesheet and script assets."""
+    return {
+        "styles.css": hashlib.sha256((ROOT / "styles.css").read_bytes()).hexdigest()[:12],
+        "app.js": hashlib.sha256((ROOT / "app.js").read_bytes()).hexdigest()[:12],
+        "staff.js": hashlib.sha256((ROOT / "staff.js").read_bytes()).hexdigest()[:12],
+    }
+
+
+def _version_assets(html: str, versions: dict) -> str:
+    """Stamp ?v=<sha256_12> onto root stylesheet and script references so updated assets bypass stale client caches."""
+    for name, ver in versions.items():
+        escaped = re.escape(name)
+        html = re.sub(
+            rf'(\b(?:href|src)="){escaped}(?:\?v=[^"]*)?(")',
+            rf'\g<1>{name}?v={ver}\g<2>',
+            html,
+        )
+    return html
+
+
+def render_shared(env: Environment, ctx: dict, versions: dict) -> dict:
     """Render each hand-authored page with fresh header/footer and shared head spliced in."""
     out = {}
     for page in SHARED_PAGES:
@@ -278,7 +301,7 @@ def render_shared(env: Environment, ctx: dict) -> dict:
         head_content = render_head_for_page(env, page)
         html = _splice_head(html, head_content)
         html = _wrap_main_landmark(html, page)
-        out[page] = html
+        out[page] = _version_assets(html, versions)
     return out
 
 
@@ -287,6 +310,7 @@ def render_all() -> dict:
     ctx = load_content()
     ctx["site_url"] = SITE_URL
     ctx["default_share_image"] = DEFAULT_SHARE_IMAGE
+    versions = asset_versions()
 
     rendered = {}
     for page, tpl in PAGES.items():
@@ -297,9 +321,11 @@ def render_all() -> dict:
             head_content = render_head_for_page(env, page)
             html = _splice_head(html, head_content)
         html = _wrap_main_landmark(html, page)
-        rendered[page] = html
+        rendered[page] = _version_assets(html, versions)
 
-    rendered.update(render_shared(env, ctx))
+    rendered.update(render_shared(env, ctx, versions))
+    staff_html = (ROOT / "staff.html").read_text(encoding="utf-8")
+    rendered["staff.html"] = _version_assets(staff_html, versions)
     return rendered
 
 
