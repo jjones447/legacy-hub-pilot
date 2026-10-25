@@ -5,9 +5,9 @@ import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
-import { recordStaffSignIn, updateStaffMember, listStaff, LAST_SEEN_REFRESH_MS } from '../functions/_lib/staff.js';
+import { recordStaffSignIn, updateStaffMember, createStaffMember, listStaff, LAST_SEEN_REFRESH_MS } from '../functions/_lib/staff.js';
 import { staffGate } from '../functions/_middleware.js';
-import { onRequestGet as getStaff, onRequestPatch as patchStaff } from '../functions/api/staff/[[path]].js';
+import { onRequestGet as getStaff, onRequestPatch as patchStaff, onRequestPost as postStaff } from '../functions/api/staff/[[path]].js';
 
 const SCHEMA_1 = readFileSync(new URL('../schema/0001_init.sql', import.meta.url), 'utf8');
 const SCHEMA_11 = readFileSync(new URL('../schema/0011_staff_member.sql', import.meta.url), 'utf8');
@@ -20,7 +20,18 @@ function d1(db) {
     async run() { const r = db.prepare(sql).run(...params); return { meta: { changes: r.changes, last_row_id: Number(r.lastInsertRowid) } }; },
     async all() { return { results: db.prepare(sql).all(...params) }; },
   });
-  return { prepare(sql) { return { bind: (...p) => wrap(sql, p), ...wrap(sql, []) }; } };
+  return {
+    prepare(sql) { return { bind: (...p) => wrap(sql, p), ...wrap(sql, []) }; },
+    async batch(statements) {
+      db.exec('BEGIN');
+      try {
+        const results = [];
+        for (const statement of statements) results.push(await statement.run());
+        db.exec('COMMIT');
+        return results;
+      } catch (e) { db.exec('ROLLBACK'); throw e; }
+    },
+  };
 }
 
 function request(url, { method = 'GET', body, headers = {} } = {}) {
@@ -43,6 +54,114 @@ beforeEach(() => {
 
 const ADMIN = 'info@legacyhomehealthservices.org';
 const T0 = Date.parse('2026-09-29T18:00:00Z');
+
+test('admin adds staff before first sign-in, preserving the selected name/role at sign-in and auditing once', async () => {
+  const input = { email: '  New@Example.invalid ', display_name: ' Test Person ', role: 'admin' };
+  const result = await createStaffMember(db, ADMIN, input);
+  assert.equal(result.status, 201);
+  assert.equal(result.member.email, 'new@example.invalid');
+  assert.equal(result.member.display_name, 'Test Person');
+  assert.equal(result.member.first_seen_at, null);
+  assert.equal(result.member.last_seen_at, null);
+  const signedIn = await recordStaffSignIn(db, 'new@example.invalid', T0);
+  assert.equal(signedIn.role, 'admin');
+  assert.equal(signedIn.display_name, 'Test Person');
+  const audit = raw.prepare("SELECT actor, entity_id, after_json FROM audit_log WHERE action = 'staff.created'").all();
+  assert.equal(audit.length, 1);
+  assert.equal(audit[0].actor, ADMIN);
+  assert.equal(audit[0].entity_id, 'new@example.invalid');
+  assert.equal(JSON.parse(audit[0].after_json).role, 'admin');
+});
+
+test('duplicate add cannot overwrite or reactivate an existing disabled member and adds no audit', async () => {
+  const input = { email: 'test@example.invalid', display_name: 'Test', role: 'staff' };
+  await createStaffMember(db, ADMIN, input);
+  await updateStaffMember(db, ADMIN, input.email, { status: 'deactivated' });
+  const result = await createStaffMember(db, ADMIN, { ...input, role: 'admin', display_name: 'Replacement' });
+  assert.equal(result.status, 409);
+  const member = raw.prepare('SELECT * FROM staff_member WHERE email = ?').get(input.email);
+  assert.equal(member.status, 'deactivated');
+  assert.equal(member.role, 'staff');
+  assert.equal(member.display_name, 'Test');
+  assert.equal(raw.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'staff.created'").get().n, 1);
+});
+
+test('creation rejects non-admin, disabled admin, anonymous and malformed input without writes', async () => {
+  await recordStaffSignIn(db, 'staff@example.invalid', T0);
+  const input = { email: 'test@example.invalid', display_name: 'Test', role: 'staff' };
+  for (const actor of ['staff@example.invalid', 'anonymous_staff', 'service:qa']) {
+    assert.equal((await createStaffMember(db, actor, input)).status, 403);
+  }
+  raw.prepare("UPDATE staff_member SET status = 'deactivated' WHERE email = ?").run(ADMIN);
+  assert.equal((await createStaffMember(db, ADMIN, input)).status, 403);
+  raw.prepare("UPDATE staff_member SET status = 'active' WHERE email = ?").run(ADMIN);
+  for (const bad of [null, {}, { ...input, email: 'invalid' }, { ...input, email: 'x\ny@example.invalid' }, { ...input, display_name: ' ' }, { ...input, display_name: 'x'.repeat(121) }, { ...input, role: 'owner' }]) {
+    assert.equal((await createStaffMember(db, ADMIN, bad)).status, 400);
+  }
+  assert.equal(raw.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'staff.created'").get().n, 0);
+});
+
+test('creation and audit roll back together when audit storage fails', async () => {
+  raw.exec("CREATE TRIGGER reject_creation_audit BEFORE INSERT ON audit_log WHEN NEW.action = 'staff.created' BEGIN SELECT RAISE(ABORT, 'test audit failure'); END;");
+  await assert.rejects(createStaffMember(db, ADMIN, { email: 'test@example.invalid', display_name: 'Test' }), /test audit failure/);
+  assert.equal(raw.prepare('SELECT * FROM staff_member WHERE email = ?').get('test@example.invalid'), undefined);
+});
+
+test('POST team uses verified actor and body fields; normal staff cannot create or promote', async () => {
+  const env = { LEGACY_DB: db, ALLOW_DEV_CONSOLE: '1' };
+  const body = { email: 'test@example.invalid', display_name: 'Test', role: 'staff' };
+  let response = await postStaff({ request: request('https://x/api/staff/team', { method: 'POST', body, headers: { 'x-dev-actor': ADMIN } }), env });
+  assert.equal(response.status, 201);
+  assert.equal((await response.json()).member.role, 'staff');
+  response = await postStaff({ request: request('https://x/api/staff/team', { method: 'POST', body: { ...body, email: 'other@example.invalid', role: 'admin' }, headers: { 'x-dev-actor': body.email } }), env });
+  assert.equal(response.status, 403);
+  response = await postStaff({ request: request('https://x/api/staff/team', { method: 'POST', headers: { 'x-dev-actor': ADMIN } }), env });
+  assert.equal(response.status, 400);
+});
+
+test('actual team renderer exposes Add only to active admins and escapes member names', () => {
+  const renderSource = STAFF_JS.match(/function renderStaffTeam\(\) \{[\s\S]*?\n\}/)[0];
+  const escapeSource = STAFF_JS.match(/function escapeHtml\([^)]*\) \{[\s\S]*?\n\}/)[0];
+  const member = { email: 'test@example.invalid', display_name: '<script>bad</script>', role: 'staff', status: 'active' };
+  for (const me of [{ role: 'admin', status: 'active' }, { role: 'staff', status: 'active' }, { role: 'admin', status: 'deactivated' }]) {
+    const container = {};
+    new Function('document', 'staffMe', 'staffTeam', `${escapeSource}\n${renderSource}\nrenderStaffTeam();`)({ getElementById: () => container }, me, [member]);
+    assert.equal(container.innerHTML.includes('data-action="submit-add-staff"'), me.role === 'admin' && me.status === 'active');
+    assert.ok(!container.innerHTML.includes('<script>bad</script>'));
+    assert.ok(container.innerHTML.includes('&lt;script&gt;bad&lt;/script&gt;'));
+  }
+});
+
+test('actual Add handler shows failure, permits retry, then refreshes the team on success', async () => {
+  const source = STAFF_JS.match(/async function submitAddStaff\(form\) \{[\s\S]*?\n\}/)[0];
+  const button = { disabled: false };
+  const message = { textContent: '' };
+  const after = { textContent: '' };
+  const fields = { display_name: 'Test', email: 'test@example.invalid', role: 'staff' };
+  const form = { querySelector: (selector) => selector.startsWith('button') ? button : message };
+  let calls = 0;
+  let refreshes = 0;
+  const submit = new Function('fetch', 'FormData', 'loadStaffTeam', 'loadRecentChanges', 'document', `${source}\nreturn submitAddStaff;`)(
+    async (url, options) => {
+      calls++;
+      assert.equal(url, '/api/staff/team');
+      assert.equal(options.method, 'POST');
+      assert.deepEqual(JSON.parse(options.body), fields);
+      return calls === 1 ? { ok: false, json: async () => ({ ok: false, error: 'Test unavailable' }) } : { ok: true, json: async () => ({ ok: true }) };
+    },
+    class { get(name) { return fields[name]; } },
+    async () => { refreshes++; }, () => {}, { getElementById: () => after }
+  );
+  await submit(form);
+  assert.equal(button.disabled, false);
+  assert.equal(message.textContent, 'Test unavailable');
+  assert.equal(refreshes, 0);
+  await submit(form);
+  assert.equal(refreshes, 1);
+  assert.match(after.textContent, /Staff member added/);
+  await submit(form);
+  assert.equal(calls, 2, 'disabled submit does not send again');
+});
 
 test('the migration seeds the allow-listed people as active admins', async () => {
   const team = await listStaff(db);

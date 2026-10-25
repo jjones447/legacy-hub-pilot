@@ -3,7 +3,7 @@ import { getActor } from '../../_lib/actor.js';
 import { internalError } from '../../_lib/errors.js';
 import * as caregiversDomain from '../../_lib/domain/caregivers.js';
 import * as eventsDomain from '../../_lib/domain/events.js';
-import { getStaffMember, listStaff, updateStaffMember } from '../../_lib/staff.js';
+import { getStaffMember, listStaff, updateStaffMember, createStaffMember } from '../../_lib/staff.js';
 import { staffSeries, caregiversWithCheckins } from '../../_lib/wellness.js';
 import { _resetContentCache } from '../../_content.mjs';
 
@@ -306,6 +306,18 @@ export async function onRequestPost({ request, env }) {
   try {
     const url = new URL(request.url);
     const pathSegments = url.pathname.split('/').filter(Boolean);
+
+    if (pathSegments.length === 3 && pathSegments[2] === 'team') {
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return json({ ok: false, error: 'invalid JSON body' }, 400);
+      }
+      const result = await createStaffMember(env.LEGACY_DB, getActor(request, env), body);
+      if (!result.ok) return json({ ok: false, error: result.error }, result.status);
+      return json({ ok: true, member: result.member }, result.status);
+    }
 
     // 1. POST /api/staff/followup/:id/resolve
     if (pathSegments.length === 5 && pathSegments[2] === 'followup' && pathSegments[4] === 'resolve') {
