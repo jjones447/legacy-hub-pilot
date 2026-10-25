@@ -184,12 +184,13 @@ test('1. Staff Console UI contains Site content and Recent changes markup with z
 });
 
 test('2. Schema-driven form generator produces inputs, textareas, selects, and checkboxes', () => {
-  // Extract escapeHtml and generateSchemaFormHtml from staff.js
+  // Extract the real editor and its branch selector, rather than a substitute renderer.
   const escapeMatch = STAFF_JS.match(/function\s+escapeHtml\s*\([^)]*\)\s*\{[\s\S]*?\n\}/);
+  const schemaMatch = STAFF_JS.match(/function\s+contentEditorSchema\s*\([^)]*\)\s*\{[\s\S]*?\n\}/);
   const formGenMatch = STAFF_JS.match(/function\s+generateSchemaFormHtml\s*\([^)]*\)\s*\{[\s\S]*?\n\}/);
-  assert.ok(escapeMatch && formGenMatch, 'helpers found in staff.js');
+  assert.ok(escapeMatch && schemaMatch && formGenMatch, 'helpers found in staff.js');
 
-  const fn = new Function(`${escapeMatch[0]}; ${formGenMatch[0]}; return generateSchemaFormHtml;`)();
+  const fn = new Function(`${escapeMatch[0]}; ${schemaMatch[0]}; ${formGenMatch[0]}; return generateSchemaFormHtml;`)();
 
   const pageSectionSchema = JSON.parse(
     raw.prepare("SELECT json_schema FROM content_type WHERE id = 'page_section'").get().json_schema
@@ -206,7 +207,7 @@ test('2. Schema-driven form generator produces inputs, textareas, selects, and c
   const html = fn(pageSectionSchema, initialData, 'page_section', 'ps_home.hero');
   assert.ok(html.includes('data-action="submit-direct-content"'), 'form has submit-direct-content action');
   assert.ok(html.includes('data-content-id="ps_home.hero"'), 'carries target content id');
-  assert.ok(html.includes('name="section_key"'), 'renders section_key');
+  assert.ok(!html.includes('name="section_key"'), 'section identity is never an editable control');
   assert.ok(html.includes('<select'), 'renders select for enum');
   assert.ok(html.includes('name="heading"'), 'renders heading');
   assert.ok(html.includes('name="body"'), 'renders body');
