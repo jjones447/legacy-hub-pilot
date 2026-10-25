@@ -14,7 +14,7 @@ const SCHEMA_4 = readFileSync(new URL('../schema/0004_content_types.sql', import
 
 // Exercise the real browser editor against the installed page-section schema.
 // No browser/provider I/O: captures the replacement payload before any hosted write.
-function editorFixture(section_key, extra = {}) {
+function editorFixture(section_key, extra = {}, contentId = `ps_${section_key}`) {
   const db = new DatabaseSync(':memory:');
   db.exec(SCHEMA_1);
   db.exec(SCHEMA_4);
@@ -27,7 +27,7 @@ function editorFixture(section_key, extra = {}) {
   const source = readFileSync(new URL('../staff.js', import.meta.url), 'utf8');
   const code = source.slice(source.indexOf('function contentEditorSchema('), source.indexOf('let recentChanges = []'));
   const context = vm.createContext({
-    siteContentItems: [{ id: 'ps_test', type_id: 'page_section', data: JSON.stringify(current) }], siteContentTypes: { page_section: schema },
+    siteContentItems: [{ id: contentId, type_id: 'page_section', data: JSON.stringify(current) }], siteContentTypes: { page_section: schema },
     escapeHtml: value => String(value).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;'),
     document: { getElementById: () => error },
     fetch: async (url, options) => { calls.push({ url, body: JSON.parse(options.body) }); return { ok: true, json: async () => ({ ok: true }) }; },
@@ -35,26 +35,26 @@ function editorFixture(section_key, extra = {}) {
   });
   vm.runInContext(code, context);
   const field = (value, type = 'string') => ({ value, getAttribute: () => type });
-  const form = elements => ({ elements, getAttribute: () => 'ps_test', querySelector: () => ({ disabled: false }) });
-  return { context, schema, current, calls, error, field, form };
+  const form = elements => ({ elements, getAttribute: () => contentId, querySelector: () => ({ disabled: false }) });
+  return { context, schema, current, calls, error, field, form, contentId };
 }
 
 test('page editor selects real branch fields and preserves untouched copy and read-only identity on save', async () => {
   const f = editorFixture('home.hero', { title: 'Original title', lede: 'Keep this text' });
-  const html = f.context.generateSchemaFormHtml(f.schema, f.current, 'page_section', 'ps_test');
+  const html = f.context.generateSchemaFormHtml(f.schema, f.current, 'page_section', f.contentId);
   assert.match(html, /name="title"/);
   assert.match(html, /name="lede"/);
   assert.doesNotMatch(html, /name="section_key"/);
   await f.context.submitDirectContent(f.form({ title: f.field('Updated title'), section_key: f.field('about.hero') }));
   assert.equal(f.calls.length, 1);
   assert.equal(f.calls[0].url, '/api/agent/change/direct');
-  assert.deepEqual(f.calls[0].body, { target_id: 'ps_test', data: { section_key: 'home.hero', title: 'Updated title', lede: 'Keep this text' } });
+  assert.deepEqual(f.calls[0].body, { target_id: 'ps_home.hero', data: { section_key: 'home.hero', title: 'Updated title', lede: 'Keep this text' } });
 });
 
 test('read-only page arrays and destinations are never editable or replaced by injected controls', async () => {
   const tiles = [{ title: 'Keep tile', href: '/programs' }];
   const f = editorFixture('home.support', { heading: 'Original', tiles, secondary: 'Keep paragraph' });
-  const html = f.context.generateSchemaFormHtml(f.schema, f.current, 'page_section', 'ps_test');
+  const html = f.context.generateSchemaFormHtml(f.schema, f.current, 'page_section', f.contentId);
   assert.match(html, /name="heading"/);
   assert.doesNotMatch(html, /name="tiles"/);
   await f.context.submitDirectContent(f.form({ heading: f.field('Updated'), tiles: f.field('[{"href":"javascript:bad"}]', 'json') }));
@@ -64,7 +64,7 @@ test('read-only page arrays and destinations are never editable or replaced by i
 
 test('form copy branch renders and saves its actual labels and option arrays', async () => {
   const f = editorFixture('form.membership', { heading: 'Join', caring_for_options: ['Parent', 'Friend'], privacy_line: 'Keep privacy' });
-  const html = f.context.generateSchemaFormHtml(f.schema, f.current, 'page_section', 'ps_test');
+  const html = f.context.generateSchemaFormHtml(f.schema, f.current, 'page_section', f.contentId);
   assert.match(html, /name="heading"/);
   assert.match(html, /name="caring_for_options"/);
   assert.doesNotMatch(html, /name="lede"/);
@@ -77,12 +77,33 @@ test('unknown or ambiguous section identity refuses rendering/submission without
   for (const ambiguous of [false, true]) {
     const f = editorFixture(ambiguous ? 'home.hero' : 'unknown.section', { title: 'Keep' });
     if (ambiguous) f.schema.oneOf.push(f.schema.oneOf.find(branch => branch.properties.section_key.const === 'home.hero'));
-    const html = f.context.generateSchemaFormHtml(f.schema, f.current, 'page_section', 'ps_test');
+    const html = f.context.generateSchemaFormHtml(f.schema, f.current, 'page_section', f.contentId);
     assert.doesNotMatch(html, /<form/);
     assert.match(html, /Ask X-Centric/);
     await f.context.submitDirectContent(f.form({ title: f.field('Changed') }));
     assert.equal(f.calls.length, 0);
     assert.match(f.error.textContent, /cannot be edited/);
+  }
+});
+
+test('legacy published rows without section_key use their persisted ID and preserve copy on save', async () => {
+  for (const [id, fieldName] of [['ps_home.hero', 'title'], ['ps_form.membership', 'heading']]) {
+    const f = editorFixture(undefined, { [fieldName]: 'Original', untouched: 'Keep' }, id);
+    const html = f.context.generateSchemaFormHtml(f.schema, JSON.parse(JSON.stringify(f.current)), 'page_section', id);
+    assert.ok(html.includes(`name="${fieldName}"`));
+    assert.doesNotMatch(html, /name="section_key"/);
+    await f.context.submitDirectContent(f.form({ [fieldName]: f.field('Updated'), section_key: f.field('about.hero') }));
+    assert.equal(f.calls.length, 1);
+    assert.deepEqual(f.calls[0].body, { target_id: id, data: { [fieldName]: 'Updated', untouched: 'Keep', section_key: id.slice(3) } });
+  }
+});
+
+test('conflicting, unknown or absent persisted page identity cannot select a replacement schema', async () => {
+  for (const [key, id] of [['about.hero', 'ps_home.hero'], [undefined, 'ps_unknown'], [undefined, 'res_test'], [null, 'ps_home.hero']]) {
+    const f = editorFixture(key, { title: 'Keep' }, id);
+    assert.doesNotMatch(f.context.generateSchemaFormHtml(f.schema, f.current, 'page_section', id), /<form/);
+    await f.context.submitDirectContent(f.form({ title: f.field('Changed') }));
+    assert.equal(f.calls.length, 0);
   }
 });
 

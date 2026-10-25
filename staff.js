@@ -2457,11 +2457,16 @@ function closeContentEditor() {
   editorContainer.classList.add('d-none');
 }
 
-function contentEditorSchema(schema, data) {
+function contentEditorSchema(schema, data, contentId) {
   if (!schema || typeof schema !== 'object') return null;
   if (!Array.isArray(schema.oneOf)) return schema;
   // Section identity comes from the selected published item, never an editable selector.
-  const key = data?.section_key;
+  const storedKey = data?.section_key;
+  const idKey = typeof contentId === 'string' && contentId.startsWith('ps_') ? contentId.slice(3) : null;
+  // Older published rows identify their section in the persisted item ID only.
+  // Never use an editable field to choose the schema, or override a conflicting identity.
+  if (storedKey !== undefined && idKey && storedKey !== idKey) return null;
+  const key = storedKey === undefined ? idKey : storedKey;
   const matches = schema.oneOf.filter(branch => {
     const identity = branch?.properties?.section_key;
     return typeof key === 'string' && identity
@@ -2471,7 +2476,7 @@ function contentEditorSchema(schema, data) {
 }
 
 function generateSchemaFormHtml(schema, initialData, typeId, contentId) {
-  const selected = contentEditorSchema(schema, initialData);
+  const selected = contentEditorSchema(schema, initialData, contentId);
   if (!selected) {
     return '<p class="small muted">This section cannot be edited here. Ask X-Centric for help.</p><button type="button" class="btn btn-sm btn-outline" data-action="close-content-editor">Close</button>';
   }
@@ -2549,7 +2554,7 @@ async function submitDirectContent(form) {
   } catch {
     return;
   }
-  const selected = contentEditorSchema(schema, current);
+  const selected = contentEditorSchema(schema, current, item.id);
   const props = selected?.properties || {};
 
   const errorDiv = document.getElementById('contentEditorError');
@@ -2568,6 +2573,9 @@ async function submitDirectContent(form) {
   // Direct saves replace the published object. Keep unedited/read-only values and
   // the original section identity instead of dropping them from that replacement.
   const payload = { ...current };
+  if (Array.isArray(schema.oneOf) && payload.section_key === undefined) {
+    payload.section_key = item.id.slice(3);
+  }
   for (const [key, prop] of Object.entries(props)) {
     if (key === 'section_key' || prop.readOnly) continue;
     const el = form.elements[key];
