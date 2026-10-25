@@ -1503,6 +1503,9 @@ document.addEventListener('submit', function (e) {
   } else if (formAction === 'submit-edit-event') {
     e.preventDefault();
     submitEditEvent(form);
+  } else if (formAction === 'submit-add-staff') {
+    e.preventDefault();
+    submitAddStaff(form);
   }
 });
 
@@ -2683,12 +2686,45 @@ function renderStaffTeam() {
         <td>${actions}</td>
       </tr>`;
   }
-  container.innerHTML = `
+  container.innerHTML = `${isAdmin ? `
+    <form data-action="submit-add-staff" class="mb-12">
+      <h5>Add staff member</h5>
+      <label>Name <input name="display_name" class="form-input-compact" maxlength="120" required></label>
+      <label>Email <input name="email" type="email" class="form-input-compact" maxlength="254" required></label>
+      <label>Role <select name="role" class="form-input-compact"><option value="staff">Staff</option><option value="admin">Admin</option></select></label>
+      <button type="submit" class="btn btn-sm btn-plum">Add staff member</button>
+      <p class="small muted" data-add-staff-message role="status" aria-live="polite"></p>
+    </form>` : ''}
     <table class="data">
       <thead><tr><th>Person</th><th>Role</th><th>Status</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
-    <p class="small muted mt-8" id="staffTeamMessage"></p>`;
+    <p class="small muted mt-8" id="staffTeamMessage" role="status" aria-live="polite"></p>`;
+}
+
+async function submitAddStaff(form) {
+  const button = form.querySelector('button[type="submit"]');
+  const message = form.querySelector('[data-add-staff-message]');
+  if (button.disabled) return;
+  button.disabled = true;
+  message.textContent = '';
+  try {
+    const fields = new FormData(form);
+    const res = await fetch('/api/staff/team', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ display_name: fields.get('display_name'), email: fields.get('email'), role: fields.get('role') }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.error || 'Could not add staff. Try again.');
+    await loadStaffTeam();
+    const after = document.getElementById('staffTeamMessage');
+    if (after) after.textContent = 'Staff member added. They can sign in with their approved email address. No invitation was sent.';
+    loadRecentChanges();
+  } catch (e) {
+    message.textContent = e.message;
+    button.disabled = false;
+  }
 }
 
 async function saveStaffMember(email, changes, button) {

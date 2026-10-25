@@ -76,6 +76,45 @@ export async function listStaff(db) {
   return results || [];
 }
 
+// Adding an application record does not change Cloudflare Access admission or send email.
+export async function createStaffMember(db, actorEmail, input) {
+  const actorKey = normalizeEmail(actorEmail);
+  const actor = await getStaffMember(db, actorKey);
+  if (!actor || actor.role !== 'admin' || actor.status !== 'active') {
+    return { ok: false, status: 403, error: 'Only an admin can add staff.' };
+  }
+  const email = normalizeEmail(input?.email);
+  const name = typeof input?.display_name === 'string' ? input.display_name.trim() : '';
+  const role = input?.role ?? 'staff';
+  if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return { ok: false, status: 400, error: 'Enter a valid email address.' };
+  }
+  if (!name || name.length > 120) {
+    return { ok: false, status: 400, error: 'Enter a name (120 characters at most).' };
+  }
+  if (!STAFF_ROLES.includes(role)) {
+    return { ok: false, status: 400, error: 'Role must be admin or staff.' };
+  }
+  // Atomic creation + audit. Duplicate submissions never replace an existing record or
+  // reactivate a disabled person. Recheck the actor at the write, not only before validation.
+  const results = await db.batch([
+    db.prepare(`INSERT OR IGNORE INTO staff_member (email, display_name, role)
+      SELECT ?, ?, ? WHERE EXISTS (
+        SELECT 1 FROM staff_member WHERE email = ? AND role = 'admin' AND status = 'active'
+      )`).bind(email, name, role, actorKey),
+    db.prepare(`INSERT INTO audit_log (actor, action, entity, entity_id, after_json)
+      SELECT ?, 'staff.created', 'staff_member', ?, ? WHERE changes() = 1`)
+      .bind(actorKey, email, JSON.stringify({ display_name: name, role, status: 'active' })),
+  ]);
+  if (!results[0].meta.changes) {
+    if (await getStaffMember(db, email)) {
+      return { ok: false, status: 409, error: 'This person already has a staff record. Use the existing row.' };
+    }
+    return { ok: false, status: 403, error: 'Only an admin can add staff.' };
+  }
+  return { ok: true, status: 201, member: await getStaffMember(db, email) };
+}
+
 /**
  * Apply an admin's change to one staff record. Returns { ok, status, error?, member? }.
  * Rules: only admins change records; nobody changes their own role or status; the last active
