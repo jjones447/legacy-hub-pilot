@@ -155,10 +155,13 @@ export async function verifyAccessJwt(token, { teamDomain, aud, fetchImpl = fetc
   return ok ? payload : null;
 }
 
-function withSecurityHeaders(resp, hostname) {
+function withSecurityHeaders(resp, hostname, pathname = '') {
   const h = new Headers(resp.headers);
   if (!PRODUCTION_HOSTNAMES.has(hostname)) {
     h.set('X-Robots-Tag', 'noindex, nofollow');
+  }
+  if (/\.(?:js|css)$/i.test(pathname) && !/\bno-store\b/i.test(h.get('Cache-Control') || '')) {
+    h.set('Cache-Control', 'no-cache, must-revalidate');
   }
   h.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   h.set('X-Frame-Options', 'DENY');
@@ -214,17 +217,17 @@ export async function onRequest(context) {
   if (isConsole) {
     // Non-prod escape for preview/demo (never set in production).
     if (env.ALLOW_DEV_CONSOLE === '1') {
-      return withSecurityHeaders(await next(), url.hostname);
+      return withSecurityHeaders(await next(), url.hostname, path);
     }
     // Real verification. Fail closed until Cloudflare Access is configured.
     const teamDomain = env.CF_ACCESS_TEAM_DOMAIN;
     const aud = env.CF_ACCESS_AUD;
-    if (!teamDomain || !aud) return withSecurityHeaders(forbidden(), url.hostname);
+    if (!teamDomain || !aud) return withSecurityHeaders(forbidden(), url.hostname, path);
     const token = request.headers.get('Cf-Access-Jwt-Assertion');
     const payload = await verifyAccessJwt(token, { teamDomain, aud });
-    if (!payload) return withSecurityHeaders(forbidden(), url.hostname);
+    if (!payload) return withSecurityHeaders(forbidden(), url.hostname, path);
     const refused = await staffGate(env, payload);
-    if (refused) return withSecurityHeaders(refused, url.hostname);
+    if (refused) return withSecurityHeaders(refused, url.hostname, path);
     if (typeof payload.email === 'string' && !payload.common_name) {
       try {
         const member = await getStaffMember(env.LEGACY_DB, payload.email);
@@ -238,6 +241,7 @@ export async function onRequest(context) {
 
   return withSecurityHeaders(
     await maybeRewriteContent(context, await maybeRewriteMedia(context, await next())),
-    url.hostname
+    url.hostname,
+    path
   );
 }

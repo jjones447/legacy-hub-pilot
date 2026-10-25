@@ -3,6 +3,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -29,12 +30,39 @@ test('the real site build contains the site and nothing forbidden', () => {
   withTempDir((out) => {
     const files = buildSite(ROOT, out);
     assert.deepEqual(findForbidden(files), []);
-    for (const required of ['index.html', 'staff.html', 'styles.css', 'app.js', 'nav-v2.js', 'staff.js', '_redirects', 'media/hero.mp4']) {
+    for (const required of ['index.html', 'staff.html', 'styles.css', 'app.js', 'nav-v2.js', 'staff.js', '_redirects', '_headers', 'media/hero.mp4']) {
       assert.ok(files.includes(required), `expected ${required} in the build`);
     }
     for (const excluded of ['docs', 'scripts', 'schema', 'tests', 'workers', 'functions', 'content', 'templates', 'wrangler.toml', 'package.json', 'build.py']) {
       assert.ok(!existsSync(join(out, excluded)), `${excluded} must not be in the build`);
     }
+  });
+});
+
+test('built HTML pages stamp exact SHA-256 version query params onto styles.css, app.js, and staff.js', () => {
+  withTempDir((out) => {
+    const files = buildSite(ROOT, out);
+    const stylesVer = createHash('sha256').update(readFileSync(join(out, 'styles.css'))).digest('hex').slice(0, 12);
+    const appVer = createHash('sha256').update(readFileSync(join(out, 'app.js'))).digest('hex').slice(0, 12);
+    const staffVer = createHash('sha256').update(readFileSync(join(out, 'staff.js'))).digest('hex').slice(0, 12);
+
+    for (const page of files.filter((file) => file.endsWith('.html'))) {
+      const html = readFileSync(join(out, page), 'utf8');
+      assert.ok(html.includes(`href="styles.css?v=${stylesVer}"`), `${page} must reference styles.css?v=${stylesVer}`);
+      assert.ok(!html.includes('href="styles.css"'), `${page} must not reference unversioned styles.css`);
+      if (page !== 'coming-soon.html') {
+        assert.ok(html.includes(`src="app.js?v=${appVer}"`), `${page} must reference app.js?v=${appVer}`);
+        assert.ok(!html.includes('src="app.js"'), `${page} must not reference unversioned app.js`);
+      }
+      if (page === 'staff.html') {
+        assert.ok(html.includes(`src="staff.js?v=${staffVer}"`), `staff.html must reference staff.js?v=${staffVer}`);
+        assert.ok(!html.includes('src="staff.js"'), 'staff.html must not reference unversioned staff.js');
+      }
+    }
+
+    const headersText = readFileSync(join(out, '_headers'), 'utf8');
+    assert.match(headersText, /^\/\*\.js\s+Cache-Control:\s*no-cache,\s*must-revalidate/m);
+    assert.match(headersText, /^\/\*\.css\s+Cache-Control:\s*no-cache,\s*must-revalidate/m);
   });
 });
 
