@@ -15,6 +15,8 @@ export const ALLOWED_EVENT_UPDATE_FIELDS = [
   'starts_at',
   'ends_at',
   'location',
+  'description',
+  'registration_url',
   'capacity',
   'recurring'
 ];
@@ -30,8 +32,29 @@ export function slugify(text) {
     .replace(/^_+|_+$/g, '');
 }
 
+function normalizeDetails(payload) {
+  const values = {};
+  for (const [field, limit] of [['description', 5000], ['registration_url', 2048]]) {
+    if (!(field in payload)) continue;
+    const value = payload[field];
+    if (value !== null && typeof value !== 'string') return { error: `${field} must be text or null` };
+    const text = value?.trim() || null;
+    if (text && text.length > limit) return { error: `${field} must be ${limit} characters or fewer` };
+    if (field === 'registration_url' && text) {
+      try {
+        const url = new URL(text);
+        if (url.protocol !== 'https:' || !url.hostname || url.username || url.password || /[\u0000-\u0020\u007f]/.test(text)) throw new Error('unsafe URL');
+      } catch {
+        return { error: 'registration_url must be an absolute HTTPS URL without credentials or spaces' };
+      }
+    }
+    values[field] = text;
+  }
+  return { values };
+}
+
 export async function validate(db, { id, operation, payload = {} }) {
-  if (!['create', 'update', 'publish', 'archive'].includes(operation)) {
+  if (!['create', 'update', 'publish', 'unpublish', 'archive'].includes(operation)) {
     return { ok: false, status: 400, error: `unsupported operation: ${operation}` };
   }
 
@@ -75,6 +98,8 @@ export async function validate(db, { id, operation, payload = {} }) {
 
     const recurring = payload.recurring ? 1 : 0;
     const location = payload.location ? String(payload.location).trim() : null;
+    const details = normalizeDetails(payload);
+    if (details.error) return { ok: false, status: 400, error: details.error };
 
     let eventId = payload.id || (id && id !== 'new' ? id : null);
     if (eventId) {
@@ -104,6 +129,8 @@ export async function validate(db, { id, operation, payload = {} }) {
       starts_at: payload.starts_at,
       ends_at,
       location,
+      description: details.values.description ?? null,
+      registration_url: details.values.registration_url ?? null,
       capacity,
       recurring,
       publish_state: 'draft'
@@ -145,7 +172,7 @@ export async function validate(db, { id, operation, payload = {} }) {
     }
 
     if ('publish_state' in payload) {
-      return { ok: false, status: 400, error: 'publish_state cannot be updated directly; use publish or archive' };
+      return { ok: false, status: 400, error: 'publish_state cannot be updated directly; use publish, unpublish or archive' };
     }
 
     const keys = Object.keys(payload).filter(k => k !== 'id');
@@ -159,7 +186,9 @@ export async function validate(db, { id, operation, payload = {} }) {
       }
     }
 
-    const normalized = {};
+    const details = normalizeDetails(payload);
+    if (details.error) return { ok: false, status: 400, error: details.error };
+    const normalized = { ...details.values };
 
     if ('title' in payload) {
       const t = typeof payload.title === 'string' ? payload.title.trim() : '';
@@ -237,18 +266,20 @@ export async function validate(db, { id, operation, payload = {} }) {
     };
   }
 
-  if (operation === 'publish') {
-    if (current.publish_state !== 'draft') {
-      return { ok: false, status: 409, error: `cannot publish from status ${current.publish_state}` };
+  if (operation === 'publish' || operation === 'unpublish') {
+    const fromState = operation === 'publish' ? 'draft' : 'published';
+    const toState = operation === 'publish' ? 'published' : 'draft';
+    if (current.publish_state !== fromState) {
+      return { ok: false, status: 409, error: `cannot ${operation} from status ${current.publish_state}` };
     }
 
     return {
       ok: true,
       current,
-      projected: { ...current, publish_state: 'published' },
+      projected: { ...current, publish_state: toState },
       before: { publish_state: current.publish_state },
-      after: { publish_state: 'published' },
-      operation: 'publish',
+      after: { publish_state: toState },
+      operation,
       payload: {}
     };
   }
@@ -308,8 +339,8 @@ export async function apply(db, { id, operation, payload = {} }, actor, addition
       ...preconditions,
       db
       .prepare(`
-        INSERT INTO event (id, title, type, starts_at, ends_at, location, capacity, recurring, publish_state)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'draft')
+        INSERT INTO event (id, title, type, starts_at, ends_at, location, capacity, recurring, description, registration_url, publish_state)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft')
       `)
       .bind(
         targetId,
@@ -319,7 +350,9 @@ export async function apply(db, { id, operation, payload = {} }, actor, addition
         v.projected.ends_at,
         v.projected.location,
         v.projected.capacity,
-        v.projected.recurring
+        v.projected.recurring,
+        v.projected.description,
+        v.projected.registration_url
       ),
       db
       .prepare(`
@@ -378,18 +411,18 @@ export async function apply(db, { id, operation, payload = {} }, actor, addition
     };
   }
 
-  if (operation === 'publish') {
+  if (operation === 'publish' || operation === 'unpublish') {
     await db.batch([
       ...preconditions,
       db
-      .prepare("UPDATE event SET publish_state = 'published', updated_at = datetime('now') WHERE id = ?")
-        .bind(targetId),
+      .prepare("UPDATE event SET publish_state = ?, updated_at = datetime('now') WHERE id = ?")
+        .bind(v.projected.publish_state, targetId),
       db
       .prepare(`
         INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
-        VALUES (?, 'event.publish', 'event', ?, ?, ?)
+        VALUES (?, ?, 'event', ?, ?, ?)
       `)
-        .bind(actor, targetId, JSON.stringify(v.before), JSON.stringify(v.after)),
+        .bind(actor, `event.${operation}`, targetId, JSON.stringify(v.before), JSON.stringify(v.after)),
       ...additionalStatements
     ]);
 

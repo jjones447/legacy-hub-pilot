@@ -132,6 +132,7 @@ const mockWorkflowBackend = ({ area, target_id, request, current }) => {
 beforeEach(() => {
   raw = new DatabaseSync(':memory:');
   raw.exec(SCHEMA_1);
+  raw.exec(readFileSync(new URL('../schema/0017_event_details.sql', import.meta.url), 'utf8'));
   raw.exec(SCHEMA_3);
   raw.exec(SCHEMA_4);
   raw.exec(SCHEMA_6);
@@ -545,6 +546,7 @@ async function atomicFixture(c, governed) {
   const db = new DatabaseSync(':memory:');
   db.exec('PRAGMA foreign_keys=ON;');
   for (const schema of [SCHEMA_1, SCHEMA_3, SCHEMA_4, SCHEMA_6, SCHEMA_7, SCHEMA_8]) db.exec(schema);
+  db.exec(readFileSync(new URL('../schema/0017_event_details.sql', import.meta.url), 'utf8'));
   db.prepare("INSERT INTO caregiver(id,first_name,email,created_at,updated_at,outcome_updated_at) VALUES('cg_atomic','Synthetic','old@example.org',?,?,?)").run(oldTime, oldTime, oldTime);
   db.prepare("INSERT INTO grant_application(id,caregiver_id,status,source,external_ref,created_at,updated_at) VALUES(1,'cg_atomic',?,'staff','atomic_grant',?,?)").run(c.status || 'submitted', oldTime, oldTime);
   db.prepare("INSERT INTO event(id,title,type,starts_at,location,capacity,publish_state,created_at,updated_at) VALUES('ev_atomic','Synthetic Event','support_group','2026-10-20 10:00','Old Room',10,'draft',?,?)").run(oldTime, oldTime);

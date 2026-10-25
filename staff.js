@@ -1009,6 +1009,9 @@ async function loadEvents() {
       if (state === 'draft') {
         actions.push(`<button type="button" class="btn btn-sm btn-plum btn-compact" data-action="publish-event" data-event-id="${escapeHtml(ev.id)}">Publish</button>`);
       }
+      if (state === 'published') {
+        actions.push(`<button type="button" class="btn btn-sm btn-outline btn-compact" data-action="unpublish-event" data-event-id="${escapeHtml(ev.id)}">Unpublish</button>`);
+      }
       if (state !== 'archived') {
         actions.push(`<button type="button" class="btn btn-sm btn-outline btn-compact" data-action="archive-event" data-event-id="${escapeHtml(ev.id)}">Archive</button>`);
       }
@@ -1072,6 +1075,15 @@ function renderNewEventForm() {
         <label class="form-label-small" for="newEventLocation">Location</label>
         <input type="text" id="newEventLocation" name="location" class="editor-input" placeholder="e.g. Community Room">
       </div>
+      <div class="field mb-8">
+        <label class="form-label-small" for="newEventDescription">Description</label>
+        <textarea id="newEventDescription" name="description" class="editor-input" rows="3" maxlength="5000"></textarea>
+      </div>
+      <div class="field mb-8">
+        <label class="form-label-small" for="newEventRegistrationUrl">External registration link (optional)</label>
+        <input type="url" id="newEventRegistrationUrl" name="registration_url" class="editor-input" maxlength="2048" placeholder="https://">
+        <p class="small muted">Leave blank to use Hub registration. An external link sends visitors to that registration site.</p>
+      </div>
       <div class="editor-checkbox-row mb-12">
         <input type="checkbox" id="newEventRecurring" name="recurring">
         <label for="newEventRecurring">Recurring event</label>
@@ -1128,6 +1140,8 @@ async function submitCreateEvent(form) {
     starts_at: form.starts_at.value ? form.starts_at.value.replace('T', ' ') : '',
     ends_at: form.ends_at.value ? form.ends_at.value.replace('T', ' ') : null,
     location: form.location.value.trim() || null,
+    description: form.description.value.trim() || null,
+    registration_url: form.registration_url.value.trim() || null,
     capacity: form.capacity.value ? parseInt(form.capacity.value, 10) : null,
     recurring: form.recurring ? form.recurring.checked : false
   };
@@ -1218,6 +1232,15 @@ function openEditEvent(eventId) {
           <label class="editor-label" for="editEventLocation">Location</label>
           <input type="text" id="editEventLocation" name="location" class="editor-input" value="${escapeHtml(ev.location || '')}">
         </div>
+        <div class="editor-field">
+          <label class="editor-label" for="editEventDescription">Description</label>
+          <textarea id="editEventDescription" name="description" class="editor-input" rows="3" maxlength="5000">${escapeHtml(ev.description || '')}</textarea>
+        </div>
+        <div class="editor-field">
+          <label class="editor-label" for="editEventRegistrationUrl">External registration link (optional)</label>
+          <input type="url" id="editEventRegistrationUrl" name="registration_url" class="editor-input" maxlength="2048" value="${escapeHtml(ev.registration_url || '')}" placeholder="https://">
+          <p class="small muted">Leave blank to use Hub registration. An external link sends visitors to that registration site.</p>
+        </div>
         <div class="editor-checkbox-row mb-12">
           <input type="checkbox" id="editEventRecurring" name="recurring"${ev.recurring ? ' checked' : ''}>
           <label for="editEventRecurring">Recurring event</label>
@@ -1254,6 +1277,8 @@ async function submitEditEvent(form) {
     starts_at: form.starts_at.value ? form.starts_at.value.replace('T', ' ') : '',
     ends_at: form.ends_at.value ? form.ends_at.value.replace('T', ' ') : null,
     location: form.location.value.trim() || null,
+    description: form.description.value.trim() || null,
+    registration_url: form.registration_url.value.trim() || null,
     capacity: form.capacity.value ? parseInt(form.capacity.value, 10) : null,
     recurring: form.recurring ? form.recurring.checked : false
   };
@@ -1300,6 +1325,23 @@ async function publishEvent(eventId) {
     await loadRecentChanges();
   } catch (e) {
     alert(`Publish error: ${e.message}`);
+  }
+}
+
+async function unpublishEvent(eventId) {
+  if (!confirm('Hide this event from the public calendar? Its details and registrations will be kept. You can publish it again.')) return;
+  try {
+    const res = await fetch(`/api/staff/event/${encodeURIComponent(eventId)}/unpublish`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to unpublish event');
+    await loadEvents();
+    await loadRecentChanges();
+  } catch (e) {
+    alert(`Unpublish failed: ${e.message}`);
   }
 }
 
@@ -1759,6 +1801,10 @@ document.addEventListener('click', function (e) {
     e.stopPropagation();
     const id = target.getAttribute('data-event-id');
     publishEvent(id);
+  } else if (action === 'unpublish-event') {
+    e.stopPropagation();
+    const id = target.getAttribute('data-event-id');
+    unpublishEvent(id);
   } else if (action === 'archive-event') {
     e.stopPropagation();
     const id = target.getAttribute('data-event-id');

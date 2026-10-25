@@ -17,7 +17,7 @@ function setup(fetchImpl) {
   const grid = new Element('div');
   grid.dataset.eventTimeZone = 'America/Chicago';
   grid.appendChild(Object.assign(new Element('p'), { textContent: 'Schedule pending' }));
-  const context = vm.createContext({ document: { createElement: tag => new Element(tag), getElementById: () => grid, querySelectorAll: () => [] }, fetch: fetchImpl, Date, Intl, console: { error() {} } });
+  const context = vm.createContext({ document: { createElement: tag => new Element(tag), getElementById: () => grid, querySelectorAll: () => [] }, fetch: fetchImpl, Date, Intl, URL, console: { error() {} } });
   vm.runInContext(renderSource, context);
   return { grid, context };
 }
@@ -34,6 +34,32 @@ test('current published API data builds real registration controls using its exa
   assert.equal(button(grid).dataset.action, 'open-register');
   assert.equal(button(grid).dataset.eventTitle, 'Synthetic event');
   assert.equal(button(grid).disabled, false);
+});
+
+test('external registration uses the exact HTTPS link with safe tab isolation and plain description', () => {
+  const { grid, context } = setup();
+  const url = 'https://events.example.org/register?campaign=one&day=2';
+  context.renderPublicEvents([event({ registration_url: url, description: '<img src=x onerror=bad()>', capacity: 3 })], grid, now);
+  const link = descendants(grid).find(item => item.tagName === 'a');
+  assert.equal(link.href, url);
+  assert.equal(link.rel, 'noopener noreferrer');
+  assert.equal(link.target, '_blank');
+  assert.equal(link.dataset.action, undefined);
+  assert.equal(button(grid), undefined);
+  assert.match(text(grid), /<img src=x onerror=bad\(\)>/);
+  assert.equal(descendants(grid).some(item => item.tagName === 'img'), false);
+  assert.doesNotMatch(text(grid), /3 registered|capacity 3/);
+});
+
+test('unsafe external URLs never become links or fall back to Hub registration', () => {
+  for (const registration_url of ['javascript:alert(1)', '//example.org', 'http://example.org', 'https://user:pass@example.org', 'https://example.org/\npath', {}, 'https://example.org/' + 'a'.repeat(2048)]) {
+    const { grid, context } = setup();
+    context.renderPublicEvents([event({ registration_url })], grid, now);
+    assert.equal(descendants(grid).some(item => item.tagName === 'a'), false);
+    assert.equal(button(grid).disabled, true);
+    assert.equal(button(grid).dataset.action, undefined);
+    assert.match(text(grid), /Registration unavailable/);
+  }
 });
 
 test('full and already-started events never expose a registration action', () => {
