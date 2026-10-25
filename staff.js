@@ -2457,13 +2457,31 @@ function closeContentEditor() {
   editorContainer.classList.add('d-none');
 }
 
+function contentEditorSchema(schema, data) {
+  if (!schema || typeof schema !== 'object') return null;
+  if (!Array.isArray(schema.oneOf)) return schema;
+  // Section identity comes from the selected published item, never an editable selector.
+  const key = data?.section_key;
+  const matches = schema.oneOf.filter(branch => {
+    const identity = branch?.properties?.section_key;
+    return typeof key === 'string' && identity
+      && (identity.const === key || (Array.isArray(identity.enum) && identity.enum.length === 1 && identity.enum[0] === key));
+  });
+  return matches.length === 1 ? matches[0] : null;
+}
+
 function generateSchemaFormHtml(schema, initialData, typeId, contentId) {
-  const props = schema.properties || {};
-  const required = schema.required || [];
+  const selected = contentEditorSchema(schema, initialData);
+  if (!selected) {
+    return '<p class="small muted">This section cannot be edited here. Ask X-Centric for help.</p><button type="button" class="btn btn-sm btn-outline" data-action="close-content-editor">Close</button>';
+  }
+  const props = selected.properties || {};
+  const required = selected.required || [];
   const data = initialData || {};
 
   let fieldsHtml = '';
   for (const [key, prop] of Object.entries(props)) {
+    if (key === 'section_key' || prop.readOnly) continue;
     const isReq = required.includes(key);
     const reqMark = isReq ? ' *' : '';
     const val = data[key];
@@ -2525,7 +2543,14 @@ async function submitDirectContent(form) {
   const item = siteContentItems.find(i => i.id === contentId);
   if (!item) return;
   const schema = siteContentTypes[item.type_id];
-  const props = schema?.properties || {};
+  let current;
+  try {
+    current = typeof item.data === 'string' ? JSON.parse(item.data) : item.data;
+  } catch {
+    return;
+  }
+  const selected = contentEditorSchema(schema, current);
+  const props = selected?.properties || {};
 
   const errorDiv = document.getElementById('contentEditorError');
   if (errorDiv) {
@@ -2533,8 +2558,18 @@ async function submitDirectContent(form) {
     errorDiv.classList.add('d-none');
   }
 
-  const payload = {};
+  if (!selected || !current || typeof current !== 'object' || Array.isArray(current)) {
+    if (errorDiv) {
+      errorDiv.textContent = 'This section cannot be edited here. Ask X-Centric for help.';
+      errorDiv.classList.remove('d-none');
+    }
+    return;
+  }
+  // Direct saves replace the published object. Keep unedited/read-only values and
+  // the original section identity instead of dropping them from that replacement.
+  const payload = { ...current };
   for (const [key, prop] of Object.entries(props)) {
+    if (key === 'section_key' || prop.readOnly) continue;
     const el = form.elements[key];
     if (!el) continue;
 

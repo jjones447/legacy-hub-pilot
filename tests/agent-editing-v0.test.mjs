@@ -3,6 +3,7 @@ import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
+import vm from 'node:vm';
 import { onRequestGet as getAgent } from '../functions/api/agent/[[path]].js';
 import { postAgentFixture as postAgent } from './helpers/confirmed-agent.mjs';
 import { getPublishedSections, _resetContentCache } from '../functions/_content.mjs';
@@ -10,6 +11,90 @@ import { getPublishedSections, _resetContentCache } from '../functions/_content.
 const SCHEMA_1 = readFileSync(new URL('../schema/0001_init.sql', import.meta.url), 'utf8');
 const SCHEMA_3 = readFileSync(new URL('../schema/0003_grant_award.sql', import.meta.url), 'utf8');
 const SCHEMA_4 = readFileSync(new URL('../schema/0004_content_types.sql', import.meta.url), 'utf8');
+
+// Exercise the real browser editor against the installed page-section schema.
+// No browser/provider I/O: captures the replacement payload before any hosted write.
+function editorFixture(section_key, extra = {}) {
+  const db = new DatabaseSync(':memory:');
+  db.exec(SCHEMA_1);
+  db.exec(SCHEMA_4);
+  db.exec(readFileSync(new URL('../schema/0010_page_section_forms.sql', import.meta.url), 'utf8'));
+  const schema = JSON.parse(db.prepare("SELECT json_schema FROM content_type WHERE id='page_section'").get().json_schema);
+  db.close();
+  const current = { section_key, ...extra };
+  const calls = [];
+  const error = { textContent: '', classList: { add() {}, remove() {} } };
+  const source = readFileSync(new URL('../staff.js', import.meta.url), 'utf8');
+  const code = source.slice(source.indexOf('function contentEditorSchema('), source.indexOf('let recentChanges = []'));
+  const context = vm.createContext({
+    siteContentItems: [{ id: 'ps_test', type_id: 'page_section', data: JSON.stringify(current) }], siteContentTypes: { page_section: schema },
+    escapeHtml: value => String(value).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;'),
+    document: { getElementById: () => error },
+    fetch: async (url, options) => { calls.push({ url, body: JSON.parse(options.body) }); return { ok: true, json: async () => ({ ok: true }) }; },
+    closeContentEditor() {}, loadSiteContent: async () => {}, loadRecentChanges: async () => {}, alert: message => assert.fail(message)
+  });
+  vm.runInContext(code, context);
+  const field = (value, type = 'string') => ({ value, getAttribute: () => type });
+  const form = elements => ({ elements, getAttribute: () => 'ps_test', querySelector: () => ({ disabled: false }) });
+  return { context, schema, current, calls, error, field, form };
+}
+
+test('page editor selects real branch fields and preserves untouched copy and read-only identity on save', async () => {
+  const f = editorFixture('home.hero', { title: 'Original title', lede: 'Keep this text' });
+  const html = f.context.generateSchemaFormHtml(f.schema, f.current, 'page_section', 'ps_test');
+  assert.match(html, /name="title"/);
+  assert.match(html, /name="lede"/);
+  assert.doesNotMatch(html, /name="section_key"/);
+  await f.context.submitDirectContent(f.form({ title: f.field('Updated title'), section_key: f.field('about.hero') }));
+  assert.equal(f.calls.length, 1);
+  assert.equal(f.calls[0].url, '/api/agent/change/direct');
+  assert.deepEqual(f.calls[0].body, { target_id: 'ps_test', data: { section_key: 'home.hero', title: 'Updated title', lede: 'Keep this text' } });
+});
+
+test('read-only page arrays and destinations are never editable or replaced by injected controls', async () => {
+  const tiles = [{ title: 'Keep tile', href: '/programs' }];
+  const f = editorFixture('home.support', { heading: 'Original', tiles, secondary: 'Keep paragraph' });
+  const html = f.context.generateSchemaFormHtml(f.schema, f.current, 'page_section', 'ps_test');
+  assert.match(html, /name="heading"/);
+  assert.doesNotMatch(html, /name="tiles"/);
+  await f.context.submitDirectContent(f.form({ heading: f.field('Updated'), tiles: f.field('[{"href":"javascript:bad"}]', 'json') }));
+  assert.deepEqual(f.calls[0].body.data.tiles, tiles);
+  assert.equal(f.calls[0].body.data.secondary, 'Keep paragraph');
+});
+
+test('form copy branch renders and saves its actual labels and option arrays', async () => {
+  const f = editorFixture('form.membership', { heading: 'Join', caring_for_options: ['Parent', 'Friend'], privacy_line: 'Keep privacy' });
+  const html = f.context.generateSchemaFormHtml(f.schema, f.current, 'page_section', 'ps_test');
+  assert.match(html, /name="heading"/);
+  assert.match(html, /name="caring_for_options"/);
+  assert.doesNotMatch(html, /name="lede"/);
+  await f.context.submitDirectContent(f.form({ heading: f.field('Join us'), caring_for_options: f.field('Parent\nFriend\nPartner', 'array-string') }));
+  assert.deepEqual(f.calls[0].body.data.caring_for_options, ['Parent','Friend','Partner']);
+  assert.equal(f.calls[0].body.data.privacy_line, 'Keep privacy');
+});
+
+test('unknown or ambiguous section identity refuses rendering/submission without a request', async () => {
+  for (const ambiguous of [false, true]) {
+    const f = editorFixture(ambiguous ? 'home.hero' : 'unknown.section', { title: 'Keep' });
+    if (ambiguous) f.schema.oneOf.push(f.schema.oneOf.find(branch => branch.properties.section_key.const === 'home.hero'));
+    const html = f.context.generateSchemaFormHtml(f.schema, f.current, 'page_section', 'ps_test');
+    assert.doesNotMatch(html, /<form/);
+    assert.match(html, /Ask X-Centric/);
+    await f.context.submitDirectContent(f.form({ title: f.field('Changed') }));
+    assert.equal(f.calls.length, 0);
+    assert.match(f.error.textContent, /cannot be edited/);
+  }
+});
+
+test('flat resource schemas retain their normal controls and escape rendered content', () => {
+  const f = editorFixture('home.hero');
+  const html = f.context.generateSchemaFormHtml({ properties: { title: { type: 'string' }, link: { type: 'string' } } },
+    { title: '<script>bad</script>', link: 'https://example.org' }, 'resource', 'res_test');
+  assert.match(html, /name="title"/);
+  assert.match(html, /name="link"/);
+  assert.doesNotMatch(html, /<script>/);
+  assert.match(html, /&lt;script>/);
+});
 
 function d1(db) {
   return {
