@@ -634,6 +634,14 @@ function publicEventTime(value, now, timeZone) {
   return { display: value, future: instant.getTime() > now.getTime(), instant: instant.getTime() };
 }
 
+function safeEventRegistrationUrl(value) {
+  if (typeof value !== 'string' || !value || value.length > 2048 || /[\u0000-\u0020\u007f]/.test(value)) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && url.hostname && !url.username && !url.password ? value : null;
+  } catch { return null; }
+}
+
 function renderPublicEvents(events, grid, now) {
   if (!Array.isArray(events)) return false;
   const timeZone = grid.dataset.eventTimeZone || 'America/Chicago';
@@ -663,27 +671,38 @@ function renderPublicEvents(events, grid, now) {
     const meta = document.createElement('p');
     meta.className = 'event-meta';
     meta.textContent = start.display + (end ? ' – ' + end.display : '') + (typeof event.location === 'string' && event.location ? ' · ' + event.location : ' · Location pending');
+    const description = document.createElement('p');
+    description.className = 'event-description';
+    description.textContent = typeof event.description === 'string' ? event.description : '';
     const row = document.createElement('div');
     row.className = 'flex-center-gap-12';
-    const button = document.createElement('button');
+    const externalUrl = safeEventRegistrationUrl(event.registration_url);
+    const hasExternal = event.registration_url != null && event.registration_url !== '';
+    const externalOpen = hasExternal && externalUrl && start.future;
+    const button = document.createElement(externalOpen ? 'a' : 'button');
     const full = capacity !== null && count >= capacity;
-    button.className = full || !start.future ? 'btn btn-outline btn-sm' : 'btn btn-plum btn-sm';
-    button.type = 'button';
-    button.textContent = full ? 'Full' : !start.future ? 'Registration closed' : 'Register';
-    button.disabled = full || !start.future;
-    if (!button.disabled) {
+    button.className = (!hasExternal && full) || !start.future || (hasExternal && !externalUrl) ? 'btn btn-outline btn-sm' : 'btn btn-plum btn-sm';
+    if (!externalOpen) button.type = 'button';
+    button.textContent = !start.future ? 'Registration closed' : hasExternal ? (externalUrl ? 'Register on event site' : 'Registration unavailable') : full ? 'Full' : 'Register';
+    button.disabled = !start.future || (hasExternal ? !externalUrl : full);
+    if (externalOpen) {
+      button.href = externalUrl;
+      button.target = '_blank';
+      button.rel = 'noopener noreferrer';
+    } else if (!button.disabled) {
       button.dataset.action = 'open-register';
       button.dataset.eventId = event.id;
       button.dataset.eventTitle = event.title;
     }
     const note = document.createElement('span');
     note.className = 'small muted';
-    note.textContent = count + ' registered' + (capacity !== null ? ' · capacity ' + capacity : '');
+    note.textContent = hasExternal ? 'Registration is handled by the event organizer.' : count + ' registered' + (capacity !== null ? ' · capacity ' + capacity : '');
     row.appendChild(button);
     row.appendChild(note);
     body.appendChild(badge);
     body.appendChild(title);
     body.appendChild(meta);
+    if (description.textContent) body.appendChild(description);
     body.appendChild(row);
     card.appendChild(body);
     cards.push(card);

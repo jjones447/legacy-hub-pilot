@@ -47,6 +47,7 @@ let env;
 beforeEach(() => {
   raw = new DatabaseSync(':memory:');
   raw.exec(SCHEMA);
+  raw.exec(readFileSync(new URL('../schema/0017_event_details.sql', import.meta.url), 'utf8'));
   raw.exec(EVENT_SEED);
   env = { LEGACY_DB: d1(raw) };
 });

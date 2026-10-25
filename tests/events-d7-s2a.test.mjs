@@ -7,6 +7,7 @@ import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
+import vm from 'node:vm';
 
 import * as eventsDomain from '../functions/_lib/domain/events.js';
 import { onRequestGet as getStaff, onRequestPost as postStaff, onRequestPatch as patchStaff } from '../functions/api/staff/[[path]].js';
@@ -136,6 +137,7 @@ beforeEach(() => {
   raw = new DatabaseSync(':memory:');
   raw.exec('PRAGMA foreign_keys = ON;');
   raw.exec(SCHEMA_1);
+  raw.exec(readFileSync(new URL('../schema/0017_event_details.sql', import.meta.url), 'utf8'));
   raw.exec(SCHEMA_2);
   raw.exec(SCHEMA_3);
   raw.exec(SCHEMA_4);
@@ -148,6 +150,110 @@ beforeEach(() => {
     AGENT_MAPPER_BACKEND: mockWorkflowBackend,
     ALLOW_DEV_CONSOLE: '1'
   };
+});
+
+test('event details survive create, staff readback, edit and publication with original audit values', async () => {
+  const registration_url = 'https://events.example.org/register?campaign=one&day=2';
+  const payload = { title: 'Synthetic details', type: 'wellness', starts_at: '2040-10-27 17:00',
+    description: 'Plain text <script> is not markup.', registration_url };
+  const request = (path, body, method = 'POST') => new Request('http://localhost/api/staff/' + path, {
+    method, headers: { 'content-type': 'application/json', 'x-dev-actor': 'synthetic@example.org' }, body: JSON.stringify(body)
+  });
+  const created = await postStaff({ request: request('event', payload), env });
+  assert.equal(created.status, 201);
+  const { event } = await created.json();
+  assert.equal(event.description, payload.description);
+  assert.equal(event.registration_url, registration_url);
+  const listed = await getStaff({ request: new Request('http://localhost/api/staff/events'), env });
+  const staffEvent = (await listed.json()).events.find(row => row.id === event.id);
+  assert.equal(staffEvent.registration_url, registration_url);
+  const edit = await patchStaff({ request: request('event/' + event.id, { description: 'Updated details', registration_url: null }, 'PATCH'), env });
+  assert.equal(edit.status, 200);
+  const audit = raw.prepare("SELECT before_json,after_json FROM audit_log WHERE action='event.update' AND entity_id=?").get(event.id);
+  assert.equal(JSON.parse(audit.before_json).registration_url, registration_url);
+  assert.equal(JSON.parse(audit.after_json).registration_url, null);
+  assert.equal(JSON.parse(audit.after_json).description, 'Updated details');
+  assert.equal((await postStaff({ request: request('event/' + event.id + '/publish', {}), env })).status, 200);
+  const publicEvent = (await (await getEvents({ env })).json()).events.find(row => row.id === event.id);
+  assert.equal(publicEvent.description, 'Updated details');
+  assert.equal(publicEvent.registration_url, null);
+});
+
+test('unsafe URLs and invalid description fields are refused before mutation on both create and edit', async () => {
+  const before = raw.prepare('SELECT COUNT(*) AS n FROM audit_log').get().n;
+  for (const details of [
+    { registration_url: 'javascript:alert(1)' }, { registration_url: 'data:text/html,test' },
+    { registration_url: '//example.org' }, { registration_url: 'http://example.org' },
+    { registration_url: 'https://user:pass@example.org' }, { registration_url: 'https://example.org/has space' },
+    { registration_url: 'https://example.org/\npath' }, { registration_url: [] },
+    { registration_url: 'https://example.org/' + 'a'.repeat(2048) },
+    { description: {} }, { description: 'a'.repeat(5001) }
+  ]) {
+    for (const operation of ['create', 'update']) {
+      const payload = operation === 'create' ? { title: 'Unsafe', type: 'wellness', starts_at: '2040-01-01 10:00', ...details } : details;
+      const result = await eventsDomain.apply(env.LEGACY_DB, { id: 'ev_memory_social_jul18', operation, payload }, 'synthetic');
+      assert.equal(result.status, 400, JSON.stringify(details));
+    }
+  }
+  assert.equal(raw.prepare('SELECT COUNT(*) AS n FROM audit_log').get().n, before);
+});
+
+test('unpublish hides the event and preserves registrations, details and history; republish restores visibility', async () => {
+  const id = 'ev_memory_social_jul18';
+  raw.prepare("INSERT INTO caregiver(id,first_name,email) VALUES('cg_unpublish','Synthetic','unpublish@example.org')").run();
+  raw.prepare("INSERT INTO registration(caregiver_id,event_id,source,external_ref) VALUES('cg_unpublish',?,'staff','unpublish')").run(id);
+  raw.prepare('UPDATE event SET description=?,registration_url=? WHERE id=?').run('Keep details', 'https://example.org/register', id);
+  const before = raw.prepare('SELECT * FROM registration WHERE event_id=?').all(id);
+  const req = new Request('http://localhost/api/staff/event/' + id + '/unpublish', {
+    method: 'POST', headers: { 'content-type': 'application/json', 'x-dev-actor': 'synthetic@example.org' }, body: '{}'
+  });
+  assert.equal((await postStaff({ request: req, env })).status, 200);
+  assert.equal((await (await getEvents({ env })).json()).events.some(row => row.id === id), false);
+  assert.deepEqual(raw.prepare('SELECT * FROM registration WHERE event_id=?').all(id), before);
+  const retained = raw.prepare('SELECT * FROM event WHERE id=?').get(id);
+  assert.equal(retained.publish_state, 'draft');
+  assert.equal(retained.description, 'Keep details');
+  const audit = raw.prepare("SELECT * FROM audit_log WHERE action='event.unpublish' AND entity_id=?").get(id);
+  assert.equal(audit.actor, 'synthetic@example.org');
+  assert.deepEqual(JSON.parse(audit.before_json), { publish_state: 'published' });
+  assert.deepEqual(JSON.parse(audit.after_json), { publish_state: 'draft' });
+  assert.equal((await eventsDomain.apply(env.LEGACY_DB, { id, operation: 'unpublish' }, 'synthetic')).status, 409);
+  assert.equal((await eventsDomain.apply(env.LEGACY_DB, { id, operation: 'publish' }, 'synthetic')).ok, true);
+  assert.equal((await (await getEvents({ env })).json()).events.some(row => row.id === id), true);
+  raw.prepare("UPDATE event SET publish_state='archived' WHERE id=?").run(id);
+  assert.equal((await eventsDomain.validate(env.LEGACY_DB, { id, operation: 'unpublish' })).status, 409);
+});
+
+test('unpublish and audit are rolled back together if audit fails', async () => {
+  raw.exec("CREATE TRIGGER unpublish_audit_fault BEFORE INSERT ON audit_log WHEN NEW.action='event.unpublish' BEGIN SELECT RAISE(ABORT,'synthetic audit fault'); END;");
+  await assert.rejects(eventsDomain.apply(env.LEGACY_DB, { id: 'ev_memory_social_jul18', operation: 'unpublish' }, 'synthetic'), /synthetic audit fault/);
+  assert.equal(raw.prepare("SELECT publish_state FROM event WHERE id='ev_memory_social_jul18'").get().publish_state, 'published');
+});
+
+test('staff event forms retain safe details and submit create/edit fields; cancel unpublish has no request', async () => {
+  const elements = new Map();
+  const element = id => { if (!elements.has(id)) elements.set(id, { innerHTML: '', classList: { add() {}, remove() {} } }); return elements.get(id); };
+  const calls = [];
+  const context = vm.createContext({ document: { getElementById: element }, escapeHtml: value => String(value).replaceAll('<','&lt;').replaceAll('"','&quot;'),
+    staffEvents: [{ id: 'ev_ui', title: 'Safe', type: 'wellness', description: '</textarea><script>bad</script>', registration_url: 'https://example.org/?a="quoted"' }],
+    fetch: async (url, options) => { calls.push({ url, body: JSON.parse(options.body) }); return { ok: true, json: async () => ({ ok: true }) }; }, confirm: () => false, alert: message => assert.fail(message) });
+  vm.runInContext(STAFF_JS.slice(STAFF_JS.indexOf('function renderNewEventForm('), STAFF_JS.indexOf('async function selectEvent(')), context);
+  context.loadEvents = async () => {};
+  context.loadRecentChanges = async () => {};
+  context.renderNewEventForm();
+  assert.match(element('newEventContainer').innerHTML, /name="description"/);
+  assert.match(element('newEventContainer').innerHTML, /name="registration_url"/);
+  context.openEditEvent('ev_ui');
+  assert.doesNotMatch(element('editEventContainer').innerHTML, /<script>/);
+  assert.match(element('editEventContainer').innerHTML, /&lt;\/textarea>/);
+  const form = { title: { value: 'New' }, type: { value: 'wellness' }, starts_at: { value: '2040-10-27T17:00' }, ends_at: { value: '' },
+    location: { value: 'Room' }, description: { value: ' Description ' }, registration_url: { value: ' https://example.org/ ' }, capacity: { value: '' }, recurring: { checked: false }, reset() {}, getAttribute: () => 'ev_ui' };
+  await context.submitCreateEvent(form);
+  await context.submitEditEvent(form);
+  for (const call of calls) { assert.equal(call.body.description, 'Description'); assert.equal(call.body.registration_url, 'https://example.org/'); }
+  assert.equal(calls.length, 2);
+  await context.unpublishEvent('ev_ui');
+  assert.equal(calls.length, 2);
 });
 
 // --------------------------------------------------------------------------

@@ -263,7 +263,7 @@ export async function onRequestGet({ request, env }) {
       // GET /api/staff/events -- all events with registration counts and status
       const { results } = await env.LEGACY_DB.prepare(`
         SELECT e.id, e.title, e.type, e.starts_at, e.ends_at, e.location, e.capacity,
-               e.recurring, e.publish_state, e.created_at, e.updated_at,
+               e.recurring, e.publish_state, e.created_at, e.updated_at, e.description, e.registration_url,
                COUNT(r.id) AS registered_count
         FROM event e
         LEFT JOIN registration r ON e.id = r.event_id AND r.status IN ('registered', 'attended')
@@ -777,11 +777,11 @@ export async function onRequestPost({ request, env }) {
     }
 
     // 7. POST /api/staff/event/:id/publish
-    if (pathSegments.length === 5 && pathSegments[2] === 'event' && pathSegments[4] === 'publish') {
+    if (pathSegments.length === 5 && pathSegments[2] === 'event' && ['publish', 'unpublish'].includes(pathSegments[4])) {
       const eventId = pathSegments[3];
       const body = await request.json().catch(() => ({}));
       const actor = getActor(request, env);
-      const result = await eventsDomain.apply(env.LEGACY_DB, { id: eventId, operation: 'publish', payload: body }, actor);
+      const result = await eventsDomain.apply(env.LEGACY_DB, { id: eventId, operation: pathSegments[4], payload: body }, actor);
       if (!result.ok) {
         return json({ ok: false, error: result.error }, result.status || 400);
       }

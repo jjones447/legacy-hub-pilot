@@ -34,7 +34,7 @@ test('Workers AI maps existing-event update and advertises the constrained Event
   const schema = calls[0].options.response_format.json_schema;
   assert.equal(schema.name, 'agent_event_workflow_change');
   const operations = schema.schema.oneOf[0].properties.change.oneOf;
-  assert.deepEqual(operations.map(b => b.properties.operation.enum[0]), ['create', 'update', 'publish', 'archive']);
+  assert.deepEqual(operations.map(b => b.properties.operation.enum[0]), ['create', 'update', 'publish', 'unpublish', 'archive']);
   assert.equal(operations[1].properties.payload.additionalProperties, false);
   assert.equal('publish_state' in operations[1].properties.payload.properties, false);
   assert.match(calls[0].options.messages[0].content, /Do not invent missing dates or IDs/);
@@ -53,6 +53,20 @@ test('explicit new-event request maps through existing validation as draft witho
   assert.equal(checked.ok, true);
   assert.equal(checked.projected.publish_state, 'draft');
   assert.equal(checked.projected.starts_at, payload.starts_at);
+});
+
+test('new event fields map to authoritative validation and unpublish requires explicit, non-negated intent', async () => {
+  const details = { description: 'Synthetic description', registration_url: 'https://example.org/register' };
+  const result = await map({ operation: 'update', payload: details });
+  assert.equal((await validate(readDb(), { id: event.id, ...result })).ok, true);
+  for (const request of ['Update title', "Don't unpublish", 'Do not unpublish', 'Never unpublish']) {
+    assert.equal((await map({ operation: 'unpublish', payload: {} }, { request })).ok, false);
+  }
+  const unpublish = await map({ operation: 'unpublish', payload: {} }, { request: 'Unpublish this event' });
+  assert.equal(unpublish.ok, true);
+  assert.equal((await validate(readDb({ ...event, publish_state: 'published' }), { id: event.id, ...unpublish })).ok, true);
+  const unsafe = await map({ operation: 'update', payload: { registration_url: 'javascript:alert(1)' } });
+  assert.equal((await validate(readDb(), { id: event.id, ...unsafe })).ok, false);
 });
 test('optional new-event ID must be supplied in the request, not invented by the model', async () => {
   const payload = { title: 'Synthetic meeting', type: 'wellness', starts_at: event.starts_at, id: 'ev_explicit' };
