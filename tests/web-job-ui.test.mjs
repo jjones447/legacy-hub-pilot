@@ -19,10 +19,10 @@ const draft=()=>({ok:true,draft_id:'cid_synthetic',preview_version:VERSION,draft
 function harness({states=['claimed','result'],hidden=false,fetchImpl,storage=new Map()}={}){
   const calls=[],messages=[],timing=clock(),listeners=new Map();let uuids=0;
   const nodes={chatInput:{value:'First intent'},chatBody:{appendChild(n){if(!messages.includes(n))messages.push(n);}},chatAreaSelect:{value:'content'},chatContentTarget:{value:'ps_home.hero'}};
-  const document={hidden,getElementById:id=>nodes[id]||null,querySelector:()=>null,createElement:()=>({dataset:{},innerHTML:'',textContent:''}),
+  const document={hidden,getElementById:id=>nodes[id]||null,querySelector:()=>null,createElement:()=>({dataset:{},innerHTML:'',textContent:'',attributes:{},setAttribute(name,value){this.attributes[name]=value;}}),
     addEventListener:(name,fn)=>{if(!listeners.has(name))listeners.set(name,new Set());listeners.get(name).add(fn);},removeEventListener:(name,fn)=>listeners.get(name)?.delete(fn)};
   const c=vm.createContext({document,AbortController,Date:{now:()=>timing.now},setTimeout:(fn,ms)=>timing.setTimeout(fn,ms),clearTimeout:id=>timing.clearTimeout(id),
-    window:{sessionStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)}},crypto:{randomUUID:()=>{uuids++;return '00000000-0000-4000-8000-'+String(uuids).padStart(12,'0');}},
+    window:{location:{origin:'https://staff.invalid'},sessionStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)}},crypto:{randomUUID:()=>{uuids++;return '00000000-0000-4000-8000-'+String(uuids).padStart(12,'0');}},
     escapeHtml:String,currentEventId:'ev_synthetic',currentCaregiverId:'cg_synthetic',currentGrantId:1,loadStaffConsole:async()=>{},viewCaregiver:async()=>{},
     fetch:async(path,options)=>{
       const body=options?JSON.parse(options.body):null,call={path,body,signal:options?.signal};calls.push(call);
@@ -34,7 +34,7 @@ function harness({states=['claimed','result'],hidden=false,fetchImpl,storage=new
     }});
   vm.runInContext('let siteContentItems=[{id:"ps_home.hero",type_id:"page_section",status:"published",data:"{}"}];\n'+full,c);
   return {c,calls,nodes,messages,timing,storage,document,uuids:()=>uuids,send:()=>c.window.agentSend(),enable:()=>vm.runInContext('agentWebJobsEnabled=true',c),
-    state:()=>vm.runInContext('({pending:agentWebJobPending,hold:agentConfirmationHold})',c),
+    state:()=>vm.runInContext('({pending:agentWebJobPending,hold:agentConfirmationHold,unavailable:agentWebJobIdentityUnavailable,enabled:agentWebJobsEnabled,actor:agentWebJobActor})',c),
     hide(){document.hidden=true;for(const fn of listeners.get('visibilitychange')||[])fn();},listeners:()=>[...listeners.values()].reduce((n,set)=>n+set.size,0)};
 }
 test('FULL agentSend reserves before deferred create HTTP AND body: double Enter posts once, retains second text and UUID',async()=>{
@@ -122,4 +122,86 @@ test('OFF exact legacy body/mapper fetch preserved without signal/new UUID; feat
   assert.equal(h.calls[0].signal,undefined);assert.equal(h.uuids(),0);assert.ok(h.messages.some(n=>n.innerHTML.includes('Confirm &amp; publish')));
   assert.equal(h.state().hold,false);assert.equal(h.timing.size,0);
   const feature=harness();assert.equal(vm.runInContext('agentWebJobsEnabled',feature.c),false);await feature.c.initWebJobFeature();assert.equal(vm.runInContext('agentWebJobsEnabled',feature.c),true);
+});
+
+for(const stage of ['fetch','body'])test(`bootstrap ${stage} failure is visible; Send preserves input and existing holds without retry`,async()=>{
+  const storage=new Map([['agent-confirmation-hold','1'],['agent-business-confirmation-pending-v1','1']]);
+  const initial=[...storage];
+  const h=harness({storage,fetchImpl:()=>{
+    if(stage==='fetch')throw Error('PRIVATE bootstrap transport detail');
+    return {ok:true,json:async()=>{throw Error('PRIVATE bootstrap body detail');}};
+  }});
+  await h.c.initWebJobFeature();
+  const notice=h.messages[0];
+  assert.match(notice.textContent,/Legacy Assistant is unavailable/);
+  assert.match(notice.textContent,/administrator.*sign-in.*connection/);
+  assert.doesNotMatch(notice.textContent,/PRIVATE|nothing.*drafted|nothing.*sent/i);
+  assert.equal(notice.attributes.role,'status');
+  h.nodes.chatInput.value='Keep my unsent text';
+  await h.send();await h.send();
+  assert.equal(h.calls.length,1,'only the original bootstrap GET, no automatic or user-triggered POST');
+  assert.equal(h.messages.length,1,'the unavailable notice is not duplicated');
+  assert.equal(h.nodes.chatInput.value,'Keep my unsent text');
+  assert.deepEqual([...storage],initial);
+  assert.equal(h.state().hold,true);assert.equal(h.state().unavailable,true);
+  assert.equal(h.uuids(),0);assert.equal(h.timing.size,0);
+});
+
+for(const fault of ['actor','origin','redirect'])test(`enabled bootstrap with unavailable ${fault} identity explains the blocked Send`,async()=>{
+  const result={ok:true,enabled:true,actor:fault==='actor'?null:'staff@example.invalid',origin:fault==='origin'?'https://other.invalid':'https://staff.invalid'};
+  const h=harness({fetchImpl:()=>({ok:true,redirected:fault==='redirect',json:async()=>result})});
+  await h.c.initWebJobFeature();await h.send();
+  assert.equal(h.state().enabled,true);assert.equal(h.state().actor,null);assert.equal(h.state().unavailable,true);
+  assert.equal(h.calls.length,1);assert.equal(h.nodes.chatInput.value,'First intent');
+  assert.match(h.messages[0].textContent,/unavailable/);
+  assert.equal(h.storage.size,0,'feedback never creates or clears a saved hold');
+});
+
+test('qualified ON and ordinary OFF bootstrap selection remains unchanged',async()=>{
+  for(const enabled of [false,true]){
+    const h=harness({fetchImpl:()=>response({ok:true,enabled,actor:'staff@example.invalid',origin:'https://staff.invalid'})});
+    await h.c.initWebJobFeature();
+    assert.equal(h.state().enabled,enabled);assert.equal(h.state().unavailable,false);
+    assert.equal(h.state().actor,enabled?'staff@example.invalid':null);
+    assert.equal(h.messages.length,0);assert.equal(h.calls.length,1);assert.equal(h.storage.size,0);
+  }
+});
+
+for(const stage of ['fetch','body'])test(`ordinary ${stage} wait stays visible until its exact preview arrives, without new transport behavior`,async()=>{
+  const pending=deferred();
+  const h=harness({fetchImpl:()=>stage==='fetch'?pending.promise:{ok:true,json:()=>pending.promise}});
+  const sending=h.send();await flush();
+  const notice=h.messages[1];
+  assert.match(notice.textContent,/Waiting for your edit preview/);
+  assert.match(notice.textContent,/not been confirmed/);
+  assert.doesNotMatch(notice.textContent,/nothing.*drafted|nothing.*saved/i);
+  assert.equal(notice.attributes.role,'status');
+  assert.equal(h.calls.length,1);assert.equal(h.calls[0].signal,undefined);assert.equal(h.uuids(),0);
+  assert.equal(h.timing.size,0);assert.equal(h.storage.size,0);
+  h.nodes.chatInput.value='A later idea stays here';
+  pending.resolve(stage==='fetch'?response(draft()):draft());await sending;
+  assert.equal(h.messages.length,2);assert.equal(h.messages[1],notice);
+  assert.equal(notice.textContent,'');assert.match(notice.innerHTML,/Confirm &amp; publish/);
+  assert.match(notice.innerHTML,/data-draft-id="cid_synthetic"/);
+  assert.equal(h.calls.length,1,'no confirmation, status request, retry or duplicate submission');
+  assert.equal(h.nodes.chatInput.value,'A later idea stays here');assert.equal(h.storage.size,0);
+});
+
+for(const terminal of ['refusal','malformed-preview','fetch-error','body-error'])test(`ordinary pending feedback ends visibly for ${terminal} and never assumes no saved draft`,async()=>{
+  const pending=deferred();
+  const h=harness({fetchImpl:()=>pending.promise});
+  const sending=h.send();await flush();const notice=h.messages[1];
+  if(terminal==='fetch-error')pending.reject(Error('synthetic lost response'));
+  else if(terminal==='body-error')pending.resolve({ok:true,json:async()=>{throw Error('synthetic lost body');}});
+  else if(terminal==='refusal')pending.resolve(response({ok:false,refusal:'Outside the selected edit'}));
+  else pending.resolve(response({ok:true,draft_id:'possibly_saved'}));
+  await sending;
+  assert.equal(h.messages.length,2);assert.equal(h.messages[1],notice);
+  const visible=notice.innerHTML||notice.textContent;
+  assert.doesNotMatch(visible,/Waiting for your edit preview|Confirm &amp; publish|nothing.*drafted/i);
+  if(terminal==='refusal')assert.match(visible,/Refusal: Outside the selected edit/);
+  else assert.match(visible,/draft may already exist/i);
+  if(terminal.endsWith('error'))assert.match(visible,/Do not resend.*administrator/);
+  assert.equal(h.calls.length,1);assert.equal(h.calls[0].signal,undefined);
+  assert.equal(h.timing.size,0);assert.equal(h.uuids(),0);assert.equal(h.storage.size,0);
 });

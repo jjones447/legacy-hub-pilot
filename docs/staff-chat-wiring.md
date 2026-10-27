@@ -106,3 +106,27 @@ the former query and pass after correction; all 1,830 unit tests pass. This is
 source evidence, not a live-database diagnosis, deployed refresh or client
 acceptance. No audit is invented, backdated, rewritten or repaired, and no
 production request, fixture or provider operation is performed.
+
+## Assistant request feedback October 27
+
+[pc2-codex-42] A bootstrap fetch/body exception or the existing unavailable
+identity guard now displays one plain status message in the Assistant panel.
+It asks the administrator to check sign-in and the connection, and warns against
+resending an earlier request whose result is unclear. Send preserves the input
+and existing holds. No identity, authentication, bootstrap response classification,
+backend selection, storage, retry or recovery rule changes.
+
+The ordinary draft request now shows a pending message while its existing fetch
+and JSON parsing are unresolved. That same message becomes the preview, refusal,
+missing-preview warning or error. A lost response/body explicitly warns that a
+draft may already exist and needs administrator review. No timeout, abort,
+automatic retry, new submission lock, auto-confirmation or no-draft claim is
+introduced. Explicit preview validation and confirm/discard remain unchanged;
+the separately enabled isolated job lifecycle retains its existing deadline and
+uncertainty protections.
+
+Mocked UI regressions cover bootstrap transport/body failures, unavailable
+actor/origin/redirect metadata, input/hold preservation, notice deduplication,
+ordinary deferred fetch/body completion and success/refusal/malformed/error
+outcomes. This is feedback source work, not proof of the live backend cause,
+provider availability, deployment or five-workflow acceptance.
