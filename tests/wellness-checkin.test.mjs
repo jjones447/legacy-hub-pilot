@@ -11,6 +11,7 @@ import {
   staffSeries, caregiversWithCheckins, CHECKIN_EVERY_DAYS,
 } from '../functions/_lib/wellness.js';
 import { onRequestGet as getPortal, onRequestPost as postPortal } from '../functions/api/portal/[[path]].js';
+import { confirmPortal } from './helpers/confirmed-portal.mjs';
 import { onRequestGet as getStaff } from '../functions/api/staff/[[path]].js';
 
 const SCHEMA_1 = readFileSync(new URL('../schema/0001_init.sql', import.meta.url), 'utf8');
@@ -67,7 +68,7 @@ async function signIn(email = 'jane.doe@example.com') {
   try {
     const res = await postPortal({ request: request('http://localhost/api/portal/login', { method: 'POST', body: { email } }), env });
     assert.deepEqual(await res.json(), { ok: true });
-    const v = await getPortal({ request: request(link), env });
+    const v = await confirmPortal({ request: request(link), env });
     return decodeURIComponent(v.headers.get('Set-Cookie').split(';')[0]);
   } finally {
     globalThis.fetch = realFetch;

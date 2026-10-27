@@ -3,7 +3,8 @@ import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
-import { onRequestGet as getPortal, onRequestPost as postPortal } from '../functions/api/portal/[[path]].js';
+import { onRequestGet as getPortal, onRequestPost as postPortal, onRequestHead as headPortal } from '../functions/api/portal/[[path]].js';
+import { confirmPortal, prepareConfirmation } from './helpers/confirmed-portal.mjs';
 
 const SCHEMA_1 = readFileSync(new URL('../schema/0001_init.sql', import.meta.url), 'utf8');
 const SCHEMA_3 = readFileSync(new URL('../schema/0003_grant_award.sql', import.meta.url), 'utf8');
@@ -127,7 +128,7 @@ test('member email is mocked as mailed, never returned, and inserts hashed token
   assert.equal(tokenRow.caregiver_id, 'cg_seed_fictional');
 });
 
-test('verify endpoint validates good token, sets session cookie, redirects, and blocks reuse', async () => {
+test('explicit confirmation POST validates token, sets session, and blocks reuse', async () => {
   // 1. Request token
   const req1 = mockRequest('http://localhost/api/portal/login', 'POST', { email: 'jane.doe@example.com' });
   const res1 = await postPortal({ request: req1, env });
@@ -137,7 +138,7 @@ test('verify endpoint validates good token, sets session cookie, redirects, and 
 
   // 2. Verify token
   const req2 = mockRequest(verifyUrl.toString(), 'GET');
-  const res2 = await getPortal({ request: req2, env });
+  const res2 = await confirmPortal({ request: req2, env });
 
   assert.equal(res2.status, 302);
   assert.equal(res2.headers.get('Location'), '/portal.html');
@@ -156,7 +157,7 @@ test('verify endpoint validates good token, sets session cookie, redirects, and 
 
   // 3. Try to reuse same token -> should be rejected with friendly html error
   const req3 = mockRequest(verifyUrl.toString(), 'GET');
-  const res3 = await getPortal({ request: req3, env });
+  const res3 = await confirmPortal({ request: req3, env });
   assert.equal(res3.status, 400);
   const bodyText = await res3.text();
   assert.ok(bodyText.includes('already been used'));
@@ -169,7 +170,7 @@ test('gated me API returns caregiver-scoped data and rejects unauthorized reques
   const data1 = await res1.json();
   
   const req2 = mockRequest(emailedLink, 'GET');
-  const res2 = await getPortal({ request: req2, env });
+  const res2 = await confirmPortal({ request: req2, env });
   const cookie = res2.headers.get('Set-Cookie');
 
   // 2. Request gated /me with cookie
@@ -206,7 +207,7 @@ test('account grants are newest-first with a stable ID tie-break and exclude ano
   const login = await postPortal({ request: mockRequest('http://localhost/api/portal/login', 'POST', { email: 'jane.doe@example.com' }), env });
   const token = await login.json();
   assert.deepEqual(token, { ok: true });
-  const verify = await getPortal({ request: mockRequest(emailedLink), env });
+  const verify = await confirmPortal({ request: mockRequest(emailedLink), env });
   const response = await getPortal({ request: mockRequest('http://localhost/api/portal/me', 'GET', null, verify.headers.get('Set-Cookie')), env });
   assert.equal(response.status, 200);
   const data = await response.json();
@@ -226,7 +227,7 @@ test('SEC-3: a magic-link token cannot be pasted directly as a session cookie', 
   // ...and pastes it straight into portal_session, skipping /verify (and its single-use check)
   const forgedCookie = `portal_session=${encodeURIComponent(token)}`;
   const req2 = mockRequest('http://localhost/api/portal/me', 'GET', null, forgedCookie);
-  const res2 = await getPortal({ request: req2, env });
+  const res2 = await confirmPortal({ request: req2, env });
 
   // The opaque token is not an `id:exp:session-hmac` value, so it fails
   // session-cookie parsing. Pre-fix (shared secret + format) this returned 200
@@ -234,7 +235,7 @@ test('SEC-3: a magic-link token cannot be pasted directly as a session cookie', 
   assert.equal(res2.status, 401);
 });
 
-test('two simultaneous clicks on one link: exactly one signs in', async () => {
+test('two simultaneous confirmation POSTs: exactly one signs in', async () => {
   const res1 = await postPortal({ request: mockRequest('http://localhost/api/portal/login', 'POST', { email: 'jane.doe@example.com' }), env });
   assert.deepEqual(await res1.json(), { ok: true });
   const link = emailedLink;
@@ -256,8 +257,8 @@ test('two simultaneous clicks on one link: exactly one signs in', async () => {
   };
   const raceEnv = { ...env, LEGACY_DB: racingDb };
   const [a, b] = await Promise.all([
-    getPortal({ request: mockRequest(link, 'GET'), env: raceEnv }),
-    getPortal({ request: mockRequest(link, 'GET'), env: raceEnv }),
+    confirmPortal({ request: mockRequest(link, 'GET'), env: raceEnv }),
+    confirmPortal({ request: mockRequest(link, 'GET'), env: raceEnv }),
   ]);
   const statuses = [a.status, b.status].sort();
   assert.deepEqual(statuses, [302, 400]);
@@ -267,7 +268,7 @@ test('two simultaneous clicks on one link: exactly one signs in', async () => {
 
 test('verify rejects a random token that was never minted', async () => {
   const req = mockRequest('http://localhost/api/portal/verify?token=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', 'GET');
-  const res = await getPortal({ request: req, env });
+  const res = await confirmPortal({ request: req, env });
   assert.equal(res.status, 400);
   const bodyText = await res.text();
   assert.ok(bodyText.includes('unrecognized'));
@@ -281,7 +282,7 @@ test('verify rejects a token whose row is expired', async () => {
     .run(tokenHash, 'cg_seed_fictional', past);
 
   const req = mockRequest(`http://localhost/api/portal/verify?token=${token}`, 'GET');
-  const res = await getPortal({ request: req, env });
+  const res = await confirmPortal({ request: req, env });
   assert.equal(res.status, 400);
   const bodyText = await res.text();
   assert.ok(bodyText.includes('expired'));
@@ -294,7 +295,7 @@ test('logout api clears the session cookie and logs logout audit', async () => {
   const data1 = await res1.json();
   
   const req2 = mockRequest(emailedLink, 'GET');
-  const res2 = await getPortal({ request: req2, env });
+  const res2 = await confirmPortal({ request: req2, env });
   const cookie = res2.headers.get('Set-Cookie');
 
   // 2. Call logout
@@ -455,4 +456,190 @@ test('the per-IP limiter binds and stores only a hashed IP, never the raw addres
   assert.equal(hashed.n, 1);
   const leak = raw.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE actor LIKE ? OR IFNULL(entity_id, '') LIKE ? OR IFNULL(after_json, '') LIKE ?").get(`%${ip}%`, `%${ip}%`, `%${ip}%`);
   assert.equal(leak.n, 0);
+});
+
+// Actual handlers, native Request/Response and fictional in-memory SQLite only.
+// globalThis.fetch remains the existing mocked mail transport above.
+async function mintedConfirmation() {
+  const minted = await postPortal({ request: mockRequest('https://portal.synthetic.invalid/api/portal/login',
+    'POST', { email: 'jane.doe@example.com' }), env });
+  assert.equal(minted.status, 200);
+  return prepareConfirmation(emailedLink, env);
+}
+
+function loginCounts() {
+  return {
+    used: raw.prepare('SELECT SUM(used) AS n FROM portal_token').get().n,
+    audits: raw.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action='portal.login_success'").get().n,
+  };
+}
+
+test('prefetch GET and HEAD cannot consume a link before the intended browser confirms', async () => {
+  await mintedConfirmation();
+  const queries = [];
+  const original = env.LEGACY_DB.prepare;
+  env.LEGACY_DB.prepare = sql => { queries.push(sql); return original(sql); };
+  for (const headers of [{}, { Purpose: 'prefetch' }, { 'Sec-Purpose': 'prefetch;prerender' }]) {
+    const get = await getPortal({ env, request: new Request(emailedLink, { headers }) });
+    assert.equal(get.status, 200);
+    assert.equal(get.headers.get('Cache-Control'), 'no-store');
+    assert.equal(get.headers.get('Referrer-Policy'), 'no-referrer');
+    assert.match(get.headers.get('Content-Security-Policy'), /form-action 'self'/);
+    assert.match(get.headers.get('Set-Cookie'), /^__Host-portal_confirm=[A-Za-z0-9_-]{43}; HttpOnly; Secure; SameSite=Strict; Path=\/; Max-Age=900$/);
+    assert.doesNotMatch(get.headers.get('Set-Cookie'), /portal_session=|Domain=/i);
+    const html = await get.text();
+    assert.match(html, /<form method="post" action="\/api\/portal\/verify">/);
+    assert.doesNotMatch(html, /<script|onload=|localStorage|sessionStorage|auto.?submit/i);
+    const head = await headPortal({ env, request: new Request(emailedLink, { method: 'HEAD', headers }) });
+    assert.equal(head.status, 200);
+    assert.equal(await head.text(), '');
+    assert.equal(head.headers.get('Set-Cookie'), null);
+  }
+  assert.deepEqual(queries, [], 'landing and HEAD cannot even query token or caregiver state');
+  assert.deepEqual(loginCounts(), { used: 0, audits: 0 });
+  const intended = await prepareConfirmation(emailedLink, env);
+  const result = await postPortal({ env, request: intended.request() });
+  assert.equal(result.status, 302);
+  assert.deepEqual(loginCounts(), { used: 1, audits: 1 });
+});
+
+test('a browser refresh reuses its nonce so another landing does not invalidate its unsubmitted form', async () => {
+  const first = await mintedConfirmation();
+  const refreshed = await prepareConfirmation(emailedLink, env, first.cookie);
+  assert.equal(first.values.csrf, refreshed.values.csrf);
+  assert.equal(first.values.proof, refreshed.values.proof);
+  assert.equal((await postPortal({ env, request: first.request() })).status, 302);
+});
+
+test('two independent browser confirmations have exactly one token winner and login audit', async () => {
+  const a = await mintedConfirmation();
+  const b = await prepareConfirmation(emailedLink, env);
+  assert.notEqual(a.cookie, b.cookie);
+  const replies = await Promise.all([a, b].map(form => postPortal({ env, request: form.request() })));
+  assert.deepEqual(replies.map(res => res.status).sort(), [302, 400]);
+  assert.equal(replies.filter(res => res.headers.get('Set-Cookie')?.startsWith('portal_session=')).length, 1);
+  assert.deepEqual(loginCounts(), { used: 1, audits: 1 });
+});
+
+for (const [name, origin] of [
+  ['missing', null], ['literal null', 'null'], ['foreign', 'https://foreign.synthetic.invalid'],
+  ['suffix', 'https://portal.synthetic.invalid.evil.invalid'],
+  ['duplicate', 'https://portal.synthetic.invalid, https://portal.synthetic.invalid'],
+  ['different port', 'https://portal.synthetic.invalid:444'],
+]) test(`confirmation ${name} Origin refuses before cookie, body, secret or store access`, async () => {
+  const reads = [];
+  const request = { url: 'https://portal.synthetic.invalid/api/portal/verify', method: 'POST',
+    headers: { get(name) { reads.push(name); if (name !== 'Origin') throw new Error('Must not read another header'); return origin; } },
+    get body() { throw new Error('Must not read body'); },
+  };
+  const guardedEnv = { get PORTAL_TOKEN_SECRET() { throw new Error('Must not read secret'); },
+    get LEGACY_DB() { throw new Error('Must not read database'); } };
+  const response = await postPortal({ env: guardedEnv, request });
+  assert.equal(response.status, 403);
+  assert.deepEqual(await response.json(), { ok: false, error: 'forbidden' });
+  assert.deepEqual(reads, ['Origin']);
+});
+
+for (const [name, change] of [
+  ['missing cookie', form => ({ headers: { Cookie: '' } })],
+  ['duplicate cookie', form => ({ headers: { Cookie: `${form.cookie}; ${form.cookie}` } })],
+  ['wrong nonce', form => ({ values: { csrf: 'A'.repeat(43) } })],
+  ['wrong proof', form => ({ values: { proof: '0'.repeat(64) } })],
+  ['token substitution', form => ({ values: { token: 'other-synthetic-token' } })],
+  ['JSON body', form => ({ headers: { 'Content-Type': 'application/json' }, body: '{}' })],
+  ['oversized body despite small content length', form => ({ headers: { 'Content-Length': '1' }, body: 'x'.repeat(1025) })],
+  ['duplicate field', form => ({ body: new URLSearchParams([...Object.entries(form.values), ['proof', form.values.proof]]) })],
+  ['extra field', form => ({ body: new URLSearchParams({ ...form.values, extra: 'no' }) })],
+  ['missing field', form => ({ body: new URLSearchParams({ token: form.values.token, csrf: form.values.csrf }) })],
+]) test(`confirmation ${name} cannot touch identity/token state or issue a session`, async () => {
+  const form = await mintedConfirmation();
+  const original = env.LEGACY_DB.prepare;
+  const queries = [];
+  env.LEGACY_DB.prepare = sql => { queries.push(sql); return original(sql); };
+  const response = await postPortal({ env, request: form.request(change(form)) });
+  assert.equal(response.status, 403);
+  assert.equal(response.headers.get('Set-Cookie'), null);
+  assert.deepEqual(queries, []);
+  assert.deepEqual(loginCounts(), { used: 0, audits: 0 });
+});
+
+test('one browser cannot use another browser nonce, but its own explicit confirmation still works', async () => {
+  const a = await mintedConfirmation();
+  const b = await prepareConfirmation(emailedLink, env);
+  assert.equal((await postPortal({ env, request: a.request({ headers: { Cookie: b.cookie } }) })).status, 403);
+  assert.deepEqual(loginCounts(), { used: 0, audits: 0 });
+  assert.equal((await postPortal({ env, request: b.request() })).status, 302);
+});
+
+test('expiry and archive after landing are rechecked at confirmation without consuming the token', async () => {
+  const form = await mintedConfirmation();
+  raw.prepare("UPDATE portal_token SET expires_at='2020-01-01 00:00:00'").run();
+  let response = await postPortal({ env, request: form.request() });
+  assert.equal(response.status, 400);
+  assert.match(await response.text(), /expired/);
+  assert.deepEqual(loginCounts(), { used: 0, audits: 0 });
+  raw.prepare('UPDATE portal_token SET expires_at=?').run(new Date(Date.now() + 60_000).toISOString().replace('T', ' ').slice(0, 19));
+  raw.prepare("UPDATE caregiver SET status='archived' WHERE id='cg_seed_fictional'").run();
+  response = await postPortal({ env, request: form.request() });
+  assert.equal(response.status, 400);
+  assert.deepEqual(loginCounts(), { used: 0, audits: 0 });
+});
+
+test('post-claim login-audit failure stays consumed and fail-closed, never reset for reuse', async () => {
+  const form = await mintedConfirmation();
+  raw.exec("CREATE TRIGGER synthetic_login_audit_failure BEFORE INSERT ON audit_log WHEN NEW.action='portal.login_success' BEGIN SELECT RAISE(ABORT,'PRIVATE_SYNTHETIC_AUDIT_FAILURE'); END;");
+  const response = await postPortal({ env, request: form.request() });
+  assert.equal(response.status, 500);
+  assert.equal(response.headers.get('Set-Cookie'), null);
+  assert.deepEqual(await response.json(), { ok: false, error: 'internal_error' });
+  assert.deepEqual(loginCounts(), { used: 1, audits: 0 });
+  const later = await prepareConfirmation(emailedLink, env);
+  assert.equal((await postPortal({ env, request: later.request() })).status, 400);
+  assert.deepEqual(loginCounts(), { used: 1, audits: 0 });
+});
+
+test('a lost successful response cannot mint a second session, and the issued cookie remains scoped', async () => {
+  const form = await mintedConfirmation();
+  const first = await postPortal({ env, request: form.request() });
+  assert.equal(first.status, 302);
+  const cookie = first.headers.get('Set-Cookie');
+  assert.match(cookie, /HttpOnly; Secure; SameSite=Lax; Path=\/; Max-Age=7200$/);
+  const retry = await postPortal({ env, request: form.request() });
+  assert.equal(retry.status, 400);
+  assert.equal(retry.headers.get('Set-Cookie'), null);
+  assert.deepEqual(loginCounts(), { used: 1, audits: 1 });
+  const me = await getPortal({ env, request: mockRequest('https://portal.synthetic.invalid/api/portal/me', 'GET', null, cookie) });
+  assert.equal(me.status, 200);
+  assert.equal((await me.json()).profile.id, 'cg_seed_fictional');
+  const logout = await postPortal({ env, request: mockRequest('https://portal.synthetic.invalid/api/portal/logout', 'POST', null, cookie) });
+  assert.match(logout.headers.get('Set-Cookie'), /Max-Age=0/);
+});
+
+test('invalid or duplicate token query values never enter the landing HTML or database', async () => {
+  const forbidden = { prepare() { throw new Error('No token query allowed'); } };
+  for (const query of ['token=%22%3E%3Cscript%3E', 'token=a&token=b', `token=${'A'.repeat(129)}`]) {
+    const response = await getPortal({ env: { ...env, LEGACY_DB: forbidden },
+      request: new Request(`https://portal.synthetic.invalid/api/portal/verify?${query}`) });
+    assert.equal(response.status, 400);
+    assert.equal(response.headers.get('Set-Cookie'), null);
+    assert.doesNotMatch(await response.text(), /<script>/);
+  }
+});
+
+for (const environment of ['preview', 'development']) test(`${environment} confirmation GET/HEAD/POST refuses before all bindings and headers`, async () => {
+  const noEffects = { ENVIRONMENT: environment };
+  for (const name of ['PORTAL_TOKEN_SECRET', 'LEGACY_DB', 'EMAIL_API_KEY']) {
+    Object.defineProperty(noEffects, name, { get() { throw new Error('Forbidden synthetic binding access'); } });
+  }
+  for (const [method, handler] of [['GET', getPortal], ['HEAD', headPortal], ['POST', postPortal]]) {
+    const request = { url: 'https://portal.synthetic.invalid/api/portal/verify?token=synthetic-token', method,
+      headers: { get() { throw new Error('Forbidden synthetic header access'); } },
+      get body() { throw new Error('Forbidden synthetic body access'); } };
+    const response = await handler({ env: noEffects, request });
+    assert.equal(response.status, 503);
+    assert.equal(response.headers.get('Cache-Control'), 'no-store');
+    assert.equal(response.headers.get('Set-Cookie'), null);
+    if (method === 'HEAD') assert.equal(await response.text(), '');
+    else assert.deepEqual(await response.json(), { ok: false, error: 'preview_portal_disabled' });
+  }
 });
