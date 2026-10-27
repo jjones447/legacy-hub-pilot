@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { onRequestGet, onRequestPost } from '../functions/api/portal/[[path]].js';
+import { confirmPortal } from './helpers/confirmed-portal.mjs';
 
 const SECRET = 'synthetic-status-guard-key';
 const ID = 'cg_status_synthetic';
@@ -101,7 +102,7 @@ for (const status of ['missing', 'archived']) {
   test(`fresh token for ${status} caregiver refuses before claim, audit and cookie`, async () => {
     const f = fixture(status);
     const token = await freshToken(f);
-    const res = await onRequestGet({ env: f.env, request: request('verify', f.effects, { token }) });
+    const res = await confirmPortal({ env: f.env, request: request('verify', f.effects, { token }) });
     assert.equal(res.status, 400);
     assertNoLogin(f, res);
     assert.equal(f.effects.claims, 0);
@@ -124,12 +125,12 @@ for (const status of ['active', 'inactive']) {
   test(`${status} preserves existing nonarchived token and wellness success contract`, async () => {
     const f = fixture(status);
     const token = await freshToken(f);
-    const verify = await onRequestGet({ env: f.env, request: request('verify', f.effects, { token }) });
+    const verify = await confirmPortal({ env: f.env, request: request('verify', f.effects, { token }) });
     assert.equal(verify.status, 302);
     const cookie = verify.headers.get('Set-Cookie');
     assert.match(cookie, /HttpOnly; Secure; SameSite=Lax; Path=\/; Max-Age=7200/);
     assert.equal(f.raw.prepare('SELECT used FROM portal_token').get().used, 1);
-    const reused = await onRequestGet({ env: f.env, request: request('verify', f.effects, { token }) });
+    const reused = await confirmPortal({ env: f.env, request: request('verify', f.effects, { token }) });
     assert.equal(reused.status, 400);
     assert.equal(reused.headers.get('Set-Cookie'), null);
     const get = await onRequestGet({ env: f.env, request: request('wellness', f.effects, { cookie }) });
@@ -149,7 +150,7 @@ for (const removal of ['archive', 'delete']) test(`${removal} between lookup and
     else raw.prepare('DELETE FROM caregiver WHERE id=?').run(ID);
   } });
   const token = await freshToken(f);
-  const res = await onRequestGet({ env: f.env, request: request('verify', f.effects, { token }) });
+  const res = await confirmPortal({ env: f.env, request: request('verify', f.effects, { token }) });
   assert.equal(res.status, 400);
   assertNoLogin(f, res);
   assert.equal(f.effects.claims, 1);
@@ -173,7 +174,7 @@ for (const action of ['verify', 'wellness-GET', 'wellness-POST']) test(`${action
   const token = await freshToken(f);
   const cookie = await signedCookie();
   const method = action === 'wellness-POST' ? 'POST' : 'GET';
-  const handler = method === 'POST' ? onRequestPost : onRequestGet;
+  const handler = action === 'verify' ? confirmPortal : method === 'POST' ? onRequestPost : onRequestGet;
   const res = await handler({ env: f.env, request: request(action === 'verify' ? 'verify' : 'wellness', f.effects, { method, token, cookie }) });
   assert.equal(res.status, 500);
   assert.deepEqual(await res.json(), { ok: false, error: 'internal_error' });
@@ -186,7 +187,7 @@ for (const action of ['verify', 'wellness-GET', 'wellness-POST']) test(`${action
 test('claim-store failure issues no cookie or successful-login audit', async () => {
   const f = fixture('active', { claimError: true });
   const token = await freshToken(f);
-  const res = await onRequestGet({ env: f.env, request: request('verify', f.effects, { token }) });
+  const res = await confirmPortal({ env: f.env, request: request('verify', f.effects, { token }) });
   assert.equal(res.status, 500);
   assertNoLogin(f, res);
 });
@@ -198,7 +199,7 @@ for (const [name, claimResult] of [
 ]) test(`claim ${name} result fails closed even if the token update already committed`, async () => {
   const f = fixture('active', { claimResult });
   const token = await freshToken(f);
-  const res = await onRequestGet({ env: f.env, request: request('verify', f.effects, { token }) });
+  const res = await confirmPortal({ env: f.env, request: request('verify', f.effects, { token }) });
   assert.equal(res.status, 400);
   assertNoLogin(f, res, 1); // Ambiguous metadata cannot safely undo a committed claim.
 });
@@ -217,7 +218,7 @@ test('oversized signed caregiver ID is rejected before any identity-store query/
 test('oversized caregiver ID on a fresh token refuses before lookup or consumption', async () => {
   const f = fixture();
   const token = await freshToken(f, 'x'.repeat(257));
-  const res = await onRequestGet({ env: f.env, request: request('verify', f.effects, { token }) });
+  const res = await confirmPortal({ env: f.env, request: request('verify', f.effects, { token }) });
   assert.equal(res.status, 400);
   assertNoLogin(f, res);
   assert.equal(f.effects.claims, 0);
@@ -232,7 +233,7 @@ test('mismatched identity lookup result cannot authorize a different caregiver',
     ? { bind: () => ({ first: async () => ({ id: 'cg_other_synthetic' }) }) }
     : prepare(sql);
   const cookie = await signedCookie();
-  const verify = await onRequestGet({ env: f.env, request: request('verify', f.effects, { token }) });
+  const verify = await confirmPortal({ env: f.env, request: request('verify', f.effects, { token }) });
   assert.equal(verify.status, 400);
   assertNoLogin(f, verify);
   for (const [method, handler] of [['GET', onRequestGet], ['POST', onRequestPost]]) {

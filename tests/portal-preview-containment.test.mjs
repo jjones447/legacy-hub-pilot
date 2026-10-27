@@ -3,6 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { onRequestGet, onRequestPost } from '../functions/api/portal/[[path]].js';
+import { confirmPortal } from './helpers/confirmed-portal.mjs';
 import { onRequest as middleware } from '../functions/_middleware.js';
 import { canSendEmail } from '../functions/_lib/email.js';
 
@@ -64,11 +65,11 @@ async function productionCredentials() {
     assert.deepEqual(await login.json(), { ok: true }, 'even the retired flag cannot return production tokens');
     assert.equal(sends, 1);
     assert.match(mailedLink, /^https:\/\/portal\.synthetic\.invalid\/api\/portal\/verify\?token=[A-Za-z0-9_-]{43}$/);
-    const verify = await onRequestGet({ env, request: new Request(mailedLink) });
+    const verify = await confirmPortal({ env, request: new Request(mailedLink) });
     assert.equal(verify.status, 302);
     const cookie = verify.headers.get('Set-Cookie').split(';')[0];
     assert.match(cookie, /^portal_session=/);
-    const reused = await onRequestGet({ env, request: new Request(mailedLink) });
+    const reused = await confirmPortal({ env, request: new Request(mailedLink) });
     assert.equal(reused.status, 400, 'production still refuses a redeemed bearer token');
     // Leave a second valid, unredeemed token alongside the valid cookie, so
     // preview refusal proves containment of both kinds of retained credential.

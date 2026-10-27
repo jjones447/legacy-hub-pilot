@@ -79,6 +79,81 @@ async function hasNonarchivedCaregiver(db, caregiverId) {
 }
 
 const CLEARED_SESSION_COOKIE = 'portal_session=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT';
+const CONFIRM_COOKIE = '__Host-portal_confirm';
+const OPAQUE_TOKEN = /^[A-Za-z0-9_-]{1,128}$/;
+const CONFIRM_NONCE = /^[A-Za-z0-9_-]{43}$/;
+
+function confirmationCookieNonce(request) {
+  const values = (request.headers.get('Cookie') || '').split(';')
+    .map(value => value.trim()).filter(value => value.startsWith(`${CONFIRM_COOKIE}=`));
+  if (values.length !== 1) return null;
+  const nonce = values[0].slice(CONFIRM_COOKIE.length + 1);
+  return CONFIRM_NONCE.test(nonce) ? nonce : null;
+}
+
+function confirmationHeaders() {
+  return {
+    'content-type': 'text/html; charset=utf-8',
+    'Cache-Control': 'no-store',
+    // Native form navigation with no-referrer can send Origin:null. Send ONLY
+    // the origin (never this token-bearing path/query), retaining strict CSRF.
+    'Referrer-Policy': 'strict-origin',
+    'Content-Security-Policy': "default-src 'none'; style-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+  };
+}
+
+async function confirmationPage(request, token, secret) {
+  // GET/HEAD never read identity/token state, claim a token, audit a login or issue
+  // a session. Only GET creates a short-lived, non-authentication browser nonce.
+  if (request.method === 'HEAD') return new Response(null, { headers: confirmationHeaders() });
+  const nonce = confirmationCookieNonce(request) || randomToken();
+  const proof = await getHmacSha256(`portal-confirm:${await sha256(token)}:${nonce}`, secret);
+  // Values are restricted to the opaque-token/base64url/hex alphabets before
+  // interpolation. No script or auto-submit redeems a link on navigation.
+  return new Response(`<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Continue to your portal</title><link rel="stylesheet" href="/styles.css"></head>
+<body class="portal-error-body"><main class="portal-error-card">
+<h1 class="portal-error-title">Continue to your portal</h1>
+<p>Choose Continue to finish signing in. Opening this page does not sign you in.</p>
+<form method="post" action="/api/portal/verify">
+<input type="hidden" name="token" value="${token}">
+<input type="hidden" name="csrf" value="${nonce}">
+<input type="hidden" name="proof" value="${proof}">
+<button type="submit" class="btn btn-plum">Continue</button>
+</form></main></body></html>`, { headers: {
+    ...confirmationHeaders(),
+    'Set-Cookie': `${CONFIRM_COOKIE}=${nonce}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=900`,
+  } });
+}
+
+async function confirmationToken(request, secret) {
+  const nonce = confirmationCookieNonce(request);
+  if (!nonce || (request.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase() !== 'application/x-www-form-urlencoded') return null;
+  const reader = request.body?.getReader();
+  if (!reader) return null;
+  const chunks = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > 1024) { await reader.cancel(); return null; }
+      chunks.push(value);
+    }
+  } finally { reader.releaseLock(); }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+  const form = new URLSearchParams(new TextDecoder().decode(bytes));
+  if ([...form.keys()].sort().join(',') !== 'csrf,proof,token') return null;
+  const token = form.get('token'), csrf = form.get('csrf'), proof = form.get('proof');
+  if (!OPAQUE_TOKEN.test(token) || !CONFIRM_NONCE.test(csrf) || !/^[a-f0-9]{64}$/.test(proof)) return null;
+  if (!constantTimeEqual(csrf, nonce)) return null;
+  const expected = await getHmacSha256(`portal-confirm:${await sha256(token)}:${nonce}`, secret);
+  return constantTimeEqual(proof, expected) ? token : null;
+}
 
 function htmlErrorPage(message) {
   return new Response(`<!DOCTYPE html>
@@ -120,6 +195,44 @@ async function parseSessionCookie(cookieHeader, secret) {
   return caregiverId;
 }
 
+async function redeemToken(token, env, secret) {
+  const tokenHash = await sha256(token);
+  const tokenRow = await env.LEGACY_DB
+    .prepare(`SELECT caregiver_id, used, expires_at FROM portal_token WHERE token_hash = ?`)
+    .bind(tokenHash).first();
+  if (!tokenRow) return htmlErrorPage('This access link is unrecognized or has been revoked.');
+  if (tokenRow.used === 1) return htmlErrorPage('This access link has already been used.');
+  const expiresAtMs = Date.parse(tokenRow.expires_at.replace(' ', 'T') + 'Z');
+  if (!Number.isFinite(expiresAtMs) || Date.now() > expiresAtMs) return htmlErrorPage('This access link has expired (15-minute limit).');
+  const caregiverId = tokenRow.caregiver_id;
+  if (!await hasNonarchivedCaregiver(env.LEGACY_DB, caregiverId)) return htmlErrorPage('This access link is unrecognized or has been revoked.');
+  // Preserve the exact one-winner claim and current identity fence. Ambiguous
+  // commit metadata remains fail-closed; never reset used after an unknown save.
+  const claim = await env.LEGACY_DB
+    .prepare(`UPDATE portal_token SET used = 1 WHERE token_hash = ? AND used = 0 AND caregiver_id = ?
+                  AND EXISTS (SELECT 1 FROM caregiver WHERE id = portal_token.caregiver_id AND status != 'archived')`)
+    .bind(tokenHash, caregiverId).run();
+  if (!claim || claim.success === false || !claim.meta || claim.meta.changes !== 1) return htmlErrorPage('This access link is unavailable or has already been used.');
+  // This audit is still awaited before session issuance. A post-claim failure
+  // consumes the token without a session; do not turn that uncertainty into reuse.
+  await env.LEGACY_DB
+    .prepare(`INSERT INTO audit_log (actor, action, entity, entity_id) VALUES (?, 'portal.login_success', 'caregiver', ?)`)
+    .bind(caregiverId, caregiverId).run();
+  const sessionExp = Date.now() + 2 * 60 * 60 * 1000;
+  const sessionPayload = `${caregiverId}:${sessionExp}`;
+  const sessionSig = await getHmacSha256(`session:${sessionPayload}`, secret);
+  const cookieValue = encodeURIComponent(`${sessionPayload}:${sessionSig}`);
+  return new Response(null, { status: 302, headers: {
+    'Cache-Control': 'no-store', 'Location': '/portal.html',
+    'Set-Cookie': `portal_session=${cookieValue}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=7200`,
+  } });
+}
+
+export async function onRequestHead(context) {
+  const response = await onRequestGet(context);
+  return new Response(null, { status: response.status, headers: response.headers });
+}
+
 export async function onRequestGet({ request, env }) {
   try {
     const url = new URL(request.url);
@@ -140,67 +253,8 @@ export async function onRequestGet({ request, env }) {
       if (!token) {
         return htmlErrorPage('Missing verification token.');
       }
-
-      // The link carries an opaque random token — no caregiver id, expiry or
-      // signature in the URL. Resolve it by its stored hash.
-      const tokenHash = await sha256(token);
-      const tokenRow = await env.LEGACY_DB
-        .prepare(`SELECT caregiver_id, used, expires_at FROM portal_token WHERE token_hash = ?`)
-        .bind(tokenHash)
-        .first();
-
-      if (!tokenRow) {
-        return htmlErrorPage('This access link is unrecognized or has been revoked.');
-      }
-
-      if (tokenRow.used === 1) {
-        return htmlErrorPage('This access link has already been used.');
-      }
-
-      const expiresAtMs = Date.parse(tokenRow.expires_at.replace(' ', 'T') + 'Z');
-      if (!Number.isFinite(expiresAtMs) || Date.now() > expiresAtMs) {
-        return htmlErrorPage('This access link has expired (15-minute limit).');
-      }
-
-      const caregiverId = tokenRow.caregiver_id;
-      if (!await hasNonarchivedCaregiver(env.LEGACY_DB, caregiverId)) {
-        return htmlErrorPage('This access link is unrecognized or has been revoked.');
-      }
-
-      // Claim the token atomically: only one request can flip used 0 -> 1, so two simultaneous
-      // clicks on the same link cannot both sign in. Recheck caregiver eligibility
-      // inside this statement too; the preliminary lookup alone is not atomic
-      // with an archive. An archive AFTER this claim can still race session issuance.
-      const claim = await env.LEGACY_DB
-        .prepare(`UPDATE portal_token SET used = 1 WHERE token_hash = ? AND used = 0 AND caregiver_id = ?
-                  AND EXISTS (SELECT 1 FROM caregiver WHERE id = portal_token.caregiver_id AND status != 'archived')`)
-        .bind(tokenHash, caregiverId)
-        .run();
-      if (!claim || claim.success === false || !claim.meta || claim.meta.changes !== 1) {
-        return htmlErrorPage('This access link is unavailable or has already been used.');
-      }
-
-      // Audit log portal.login_success
-      await env.LEGACY_DB
-        .prepare(`INSERT INTO audit_log (actor, action, entity, entity_id) VALUES (?, 'portal.login_success', 'caregiver', ?)`)
-        .bind(caregiverId, caregiverId)
-        .run();
-
-      // Set signed session cookie
-      const sessionExp = Date.now() + 2 * 60 * 60 * 1000; // 2 hours
-      const sessionPayload = `${caregiverId}:${sessionExp}`;
-      const sessionSig = await getHmacSha256(`session:${sessionPayload}`, secret);
-      const cookieValue = encodeURIComponent(`${sessionPayload}:${sessionSig}`);
-      const cookieHeader = `portal_session=${cookieValue}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=7200`;
-
-      return new Response(null, {
-        status: 302,
-        headers: {
-          'Cache-Control': 'no-store',
-          'Location': '/portal.html',
-          'Set-Cookie': cookieHeader
-        }
-      });
+      if (url.searchParams.getAll('token').length !== 1 || !OPAQUE_TOKEN.test(token)) return htmlErrorPage('This access link is unrecognized or has been revoked.');
+      return await confirmationPage(request, token, secret);
     }
 
     if (action === 'me') {
@@ -293,10 +347,24 @@ export async function onRequestPost({ request, env }) {
         return json({ ok: false, error: 'forbidden' }, 403);
       }
     }
+    // Confirmation is deliberate browser-only POST: absence, null, duplicates
+    // and off-origin spellings all refuse BEFORE body/cookie/store access.
+    if (action === 'verify') {
+      const origin = request.headers.get('Origin');
+      if (origin === null || origin === 'null' || origin !== url.origin) {
+        return json({ ok: false, error: 'forbidden' }, 403);
+      }
+    }
 
     const secret = env.PORTAL_TOKEN_SECRET;
     if (!secret) {
       return json({ ok: false, error: 'auth_not_configured' }, 503);
+    }
+
+    if (action === 'verify') {
+      const token = await confirmationToken(request, secret);
+      if (!token) return json({ ok: false, error: 'forbidden' }, 403);
+      return await redeemToken(token, env, secret);
     }
 
     if (action === 'login') {

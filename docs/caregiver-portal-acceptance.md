@@ -1,5 +1,92 @@
 # Caregiver Portal — what "done" means
 
+## Deliberate sign-in confirmation — October 27, 2026
+
+[pc2-codex-1] Source correction; independent review, installation and intended-host
+mail/browser acceptance remain separate. An earlier automatic GET can consume the
+old verification link. This source finding does not identify a particular mail
+scanner or establish the cause of a live failure.
+
+The email destination stays `/api/portal/verify`. GET now displays a plain
+**Continue to your portal** form instead of redeeming the token. HEAD has no body
+or cookie. Neither method reads caregiver/token state, writes a claim/audit, sends
+mail or issues `portal_session`. A GET may set one short-lived **non-authentication**
+nonce cookie; this browser-only CSRF preparation is not a login or server-state
+mutation. There is no automatic script submission. Repeated GETs reuse a valid
+browser nonce so they do not invalidate an already-open confirmation form.
+
+The confirmation contract is deliberately narrow:
+
+- The form posts to the same `/api/portal/verify` endpoint. Its POST requires an
+  exact present Origin equal to the request URL origin. Missing, `null`, duplicate,
+  foreign and differently serialized origins refuse before other access. This
+  does not change the older missing-Origin compatibility of login/wellness/logout.
+- `__Host-portal_confirm` contains only a random nonce, not the email token,
+  caregiver identity or session. It is host-only, `HttpOnly`, `Secure`,
+  `SameSite=Strict`, `Path=/`, with a 900-second browser lifetime. Real browser use
+  requires HTTPS. Unit Request/Response objects are not cookie-store proof.
+- The form carries that nonce and a domain-separated HMAC over the token hash and
+  nonce using the existing secret. POST validates both against the browser cookie
+  before any identity/token-store query. A different browser needs its own landing
+  form; the email-request browser is not required, preserving cross-device use.
+- Only the three unique URL-encoded fields `token`, `csrf` and `proof` are accepted;
+  malformed/duplicate/extra fields, missing cookie, wrong proof or unsupported
+  content type refuse. Actual request-stream bytes are bounded to 1,024 regardless
+  of a supplied Content-Length. No raw token is written to logs, browser persistent
+  storage, a new database table or an audit payload.
+- The existing opaque-token hash, 15-minute token expiry, nonarchived identity
+  checks, atomic one-winner claim, two-hour domain-separated signed session and
+  logout remain. GET never extends the stored token expiry. Preview/development
+  still refuses before any header, credential, identity, body, database or mail
+  effect. No provider/Access configuration, secret or schema change is needed.
+
+The landing preserves `no-store` and same-origin form/CSP policy. It alone uses
+`Referrer-Policy: strict-origin`, preserved by the root middleware only for the
+successful confirmation GET/HEAD HTML response. This sends at most an origin,
+never the credential URL's path/query; HTTPS downgrade sends no referrer. Other
+pages, errors and POST redirects retain the middleware's `no-referrer` policy.
+The same narrow middleware branch sets the fixed restrictive confirmation CSP
+(`default-src 'none'`, no scripts, `base-uri 'none'`, same-origin form action),
+instead of replacing it with the shared page CSP. Both downstream confirmation
+headers and `no-store` must match; arbitrary request headers cannot opt in.
+Literal `no-referrer` on the landing would make native form navigation serialize
+Origin as `null` under the
+[Fetch Origin algorithm](https://fetch.spec.whatwg.org/#append-a-request-origin-header),
+and the deliberately strict POST must continue to reject that value. The
+[strict-origin referrer policy](https://w3c.github.io/webappsec-referrer-policy/#referrer-policy-strict-origin)
+is the narrow necessary adjustment, not permission to leak the bearer URL or
+weaken Origin validation. Unit tests check the handler plus middleware header
+contract; they do not emulate browser-produced Origin/Referer. Independent actual
+browser receiving must still verify those headers without exposing a real token.
+
+An explicit form addresses GET/prefetch consumption; it is not a claim that every
+automated client is incapable of submitting a form or that the token is not a
+bearer credential.
+
+Claim and login-success audit remain separate operations. An ambiguous committed
+claim or post-claim audit/signing/response failure can consume the token without
+delivering a usable session. These outcomes stay fail-closed: never reset used,
+reuse the link automatically, waive the audit or infer that nothing saved. An
+atomic claim/audit redesign is not included in this bounded correction.
+
+Qualification uses fictional in-memory SQLite, mocked email and native in-memory
+Request/Response objects: repeated GET/HEAD/prefetch without server/auth effects,
+deliberate POST, concurrent single-winner claims, expired/reused/archived refusal,
+Origin/CSRF/field/body bounds, audit failure and lost-response no-replay. Existing
+scope, no-store, preview, session and wellness regressions remain required. No
+workerd/browser/production acceptance follows from those unit tests. The existing
+release owner must separately qualify reviewed Functions parity, real HTTPS cookie
+behavior and the authorized own-work mail/confirmation/dashboard/signout flow.
+
+After stable review and actual installation, the corresponding reader-guide
+sentence needs one bounded successor: “Open the new email, follow its link
+yourself, then choose Continue to finish signing in.” Do not describe that step as
+installed while this change is only source, and do not re-export unrelated guides.
+
+The current [Workers guidance](https://developers.cloudflare.com/workers/best-practices/workers-best-practices/)
+and [Request API](https://developers.cloudflare.com/workers/runtime-apis/request/)
+were consulted. No new dependency, service or runtime route is introduced.
+
 ## Present-Origin POST refusal — October 14, 2026
 
 [pc2-codex-42] After the existing preview/development branch, production POST

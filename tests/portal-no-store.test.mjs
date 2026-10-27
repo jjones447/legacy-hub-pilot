@@ -3,6 +3,7 @@
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { onRequestGet, onRequestPost } from '../functions/api/portal/[[path]].js';
+import { confirmPortal } from './helpers/confirmed-portal.mjs';
 import { QUESTIONS, CHECKIN_EVERY_DAYS } from '../functions/_lib/wellness.js';
 
 const NOW = Date.parse('2026-10-14T02:00:00Z');
@@ -189,15 +190,15 @@ for (const [name, options, token, message] of [
   ['conditional claim refused', { claimChanges: 0 }, 'synthetic-token', 'This access link is unavailable or has already been used.'],
 ]) test(`verify ${name} keeps exact HTML400 body/headers`, async () => {
   const f = fixture(options);
-  const res = await onRequestGet({ env: f.env, request: request('verify', f.effects, { token }) });
+  const res = await confirmPortal({ env: f.env, request: request('verify', f.effects, { token }) });
   assert.equal(res.status, 400);
   expectHeaders(res, { 'content-type': 'text/html; charset=utf-8' });
   assert.equal(await res.text(), expectedHtml(message));
 });
 
-test('verify302 preserves null body, exact Location and entire signed cookie', async () => {
+test('confirmationPOST302 preserves null body, exact Location and entire signed cookie', async () => {
   const f = fixture();
-  const res = await onRequestGet({ env: f.env, request: request('verify', f.effects, { token: 'synthetic-token' }) });
+  const res = await confirmPortal({ env: f.env, request: request('verify', f.effects, { token: 'synthetic-token' }) });
   assert.equal(res.status, 302);
   assert.equal(res.body, null);
   const exp = NOW + 2 * 60 * 60 * 1000;
