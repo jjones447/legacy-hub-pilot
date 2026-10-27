@@ -2418,7 +2418,7 @@ function renderSiteContent() {
             <div class="content-item-label">${escapeHtml(label)}</div>
             <div class="content-item-id">${escapeHtml(item.id)}</div>
           </div>
-          <button class="btn btn-sm btn-outline btn-compact" data-action="edit-content-item" data-content-id="${escapeHtml(item.id)}">Edit</button>
+          <button class="btn btn-sm btn-outline btn-compact" data-action="edit-content-item" data-content-id="${escapeHtml(item.id)}" aria-label="Edit wording: ${escapeHtml(label)}">Edit wording</button>
         </div>
       `;
     }
@@ -2448,6 +2448,10 @@ function openContentEditor(contentId) {
 
   editorContainer.innerHTML = generateSchemaFormHtml(schema, parsedData, item.type_id, item.id);
   editorContainer.classList.remove('d-none');
+  const panel = document.getElementById('siteContentPanel');
+  if (panel) panel.open = true;
+  const heading = document.getElementById('contentEditorHeading');
+  if (heading) heading.focus();
 }
 
 function closeContentEditor() {
@@ -2478,11 +2482,12 @@ function contentEditorSchema(schema, data, contentId) {
 function generateSchemaFormHtml(schema, initialData, typeId, contentId) {
   const selected = contentEditorSchema(schema, initialData, contentId);
   if (!selected) {
-    return '<p class="small muted">This section cannot be edited here. Ask X-Centric for help.</p><button type="button" class="btn btn-sm btn-outline" data-action="close-content-editor">Close</button>';
+    return '<p class="small muted" id="contentEditorHeading" tabindex="-1">This section cannot be edited here. Ask X-Centric for help.</p><button type="button" class="btn btn-sm btn-outline" data-action="close-content-editor">Close</button>';
   }
   const props = selected.properties || {};
   const required = selected.required || [];
   const data = initialData || {};
+  const label = data.title || data.heading || data.label || data.name || contentId;
 
   let fieldsHtml = '';
   for (const [key, prop] of Object.entries(props)) {
@@ -2528,7 +2533,7 @@ function generateSchemaFormHtml(schema, initialData, typeId, contentId) {
   return `
     <div class="editor-box">
       <div class="editor-header">
-        <strong>Direct Edit: ${escapeHtml(contentId)} (${escapeHtml(typeId)})</strong>
+        <h5 class="m-0" id="contentEditorHeading" tabindex="-1">Edit wording: ${escapeHtml(label)}</h5>
         <button type="button" class="btn btn-sm btn-outline btn-compact" data-action="close-content-editor">Cancel</button>
       </div>
       <div id="contentEditorError" class="form-error-banner d-none"></div>
@@ -2645,7 +2650,7 @@ async function loadRecentChanges() {
     renderRecentChanges();
   } catch (e) {
     const list = document.getElementById('recentChangesList');
-    if (list) list.innerHTML = `<p class="muted small text-center my-20">Error loading recent changes: ${escapeHtml(e.message)}</p>`;
+    if (list) list.innerHTML = `<p class="muted small text-center my-20">Error loading change log: ${escapeHtml(e.message)}</p>`;
   }
 }
 
@@ -2654,7 +2659,7 @@ function renderRecentChanges() {
   if (!container) return;
 
   if (recentChanges.length === 0) {
-    container.innerHTML = '<p class="muted small text-center my-20">No recent changes recorded.</p>';
+    container.innerHTML = '<p class="muted small text-center my-20">No changes recorded.</p>';
     return;
   }
 
@@ -2729,8 +2734,10 @@ async function loadStaffTeam() {
     staffMe = meData.me;
     staffTeam = teamData.team || [];
     renderStaffTeam();
+    return true;
   } catch (e) {
     if (list) list.innerHTML = `<p class="muted small text-center my-20">Error loading staff: ${escapeHtml(e.message)}</p>`;
+    return false;
   }
 }
 
@@ -2772,7 +2779,7 @@ function renderStaffTeam() {
         <td>${nameCell}<div class="small muted">${email}${isSelf ? ' (you)' : ''}</div></td>
         <td>${roleCell}</td>
         <td><span class="badge ${active ? 'badge-green' : 'badge-amber'}">${active ? 'Active' : 'Access off'}</span><div class="small muted">Last seen: ${lastSeen}</div></td>
-        <td>${actions}</td>
+        <td>${actions}<p class="small muted mt-8" data-staff-row-message="${email}"></p></td>
       </tr>`;
   }
   container.innerHTML = `${isAdmin ? `
@@ -2787,8 +2794,7 @@ function renderStaffTeam() {
     <table class="data">
       <thead><tr><th>Person</th><th>Role</th><th>Status</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
-    </table>
-    <p class="small muted mt-8" id="staffTeamMessage" role="status" aria-live="polite"></p>`;
+    </table>`;
 }
 
 async function submitAddStaff(form) {
@@ -2816,9 +2822,27 @@ async function submitAddStaff(form) {
   }
 }
 
+function setStaffTeamMessage(email, text, state) {
+  const message = document.getElementById('staffTeamMessage');
+  const rowMessage = document.querySelector(`[data-staff-row-message="${CSS.escape(email)}"]`);
+  for (const target of [message, rowMessage]) {
+    if (target) {
+      target.textContent = text;
+      target.dataset.state = state;
+    }
+  }
+}
+
 async function saveStaffMember(email, changes, button) {
-  const msg = document.getElementById('staffTeamMessage');
-  if (button) button.disabled = true;
+  if (button && button.disabled) return;
+  const originalText = button ? button.textContent : '';
+  if (button) {
+    button.disabled = true;
+    button.textContent = 'Saving…';
+    button.setAttribute('aria-busy', 'true');
+  }
+  setStaffTeamMessage(email, `Saving changes for ${email}…`, 'saving');
+  let saved = false;
   try {
     const res = await fetch('/api/staff/team', {
       method: 'PATCH',
@@ -2827,13 +2851,24 @@ async function saveStaffMember(email, changes, button) {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.ok) throw new Error(data.error || 'Could not save');
-    await loadStaffTeam();
-    const after = document.getElementById('staffTeamMessage');
-    if (after) after.textContent = 'Saved.';
+    saved = true;
+    const refreshed = await loadStaffTeam();
+    setStaffTeamMessage(email, refreshed
+      ? `Saved changes for ${email}.`
+      : `Changes for ${email} were saved, but the staff list could not refresh. Use Refresh to check the record; do not save again.`,
+    refreshed ? 'success' : 'warning');
     loadRecentChanges();
   } catch (e) {
-    if (msg) msg.textContent = e.message;
-    if (button) button.disabled = false;
+    setStaffTeamMessage(email, saved
+      ? `Changes for ${email} were saved, but the on-screen confirmation could not finish. Use Refresh to check the record; do not save again.`
+      : `Save was not confirmed for ${email}: ${e.message}. Stop and ask the administrator to check what was saved before trying again.`,
+    saved ? 'warning' : 'error');
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = originalText;
+      button.removeAttribute('aria-busy');
+    }
   }
 }
 

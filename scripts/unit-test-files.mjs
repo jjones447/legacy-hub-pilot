@@ -79,6 +79,7 @@ export const UNIT_TEST_FILES = Object.freeze([
   'staff-console-escaping.test.mjs',
   'staff-console-plain-mic.test.mjs',
   'staff-console-v0.test.mjs',
+  'staff-console-clarity.test.mjs',
   'staff-notes-d2.test.mjs',
   'staff-team.test.mjs',
   'staging-db-config.test.mjs',
