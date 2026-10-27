@@ -201,7 +201,8 @@ export async function onRequestGet({ request, env }) {
     }
 
     if (subRoute === 'recent-changes') {
-      // GET /api/staff/recent-changes -- last 50 audit_log rows for content_item.* and caregiver.* actions
+      // The staff change log includes supported event/team edits too, not every
+      // auth/provider diagnostic stream. Preserve original audit insertion order.
       const { results: changes } = await env.LEGACY_DB.prepare(`
         SELECT id, actor, action, entity, entity_id, before_json, after_json, at
         FROM audit_log
@@ -209,6 +210,8 @@ export async function onRequestGet({ request, env }) {
            OR action LIKE 'caregiver.%'
            OR (entity IN ('content_item', 'caregiver') AND action = 'undo')
            OR action LIKE '%.undo'
+           OR (entity = 'event' AND action IN ('event.create', 'event.update', 'event.publish', 'event.unpublish', 'event.archive'))
+           OR (entity = 'staff_member' AND action IN ('staff.created', 'staff.updated', 'staff.first_sign_in'))
         ORDER BY id DESC
         LIMIT 50
       `).all();
@@ -238,6 +241,7 @@ export async function onRequestGet({ request, env }) {
 
       const enriched = (changes || []).map(row => {
         const isNonRestorable = nonRestorableActions.includes(row.action) ||
+                                row.entity === 'event' || row.entity === 'staff_member' ||
                                 row.action.startsWith('grant.') ||
                                 row.action.startsWith('agent_change.') ||
                                 row.action.endsWith('.undo') ||

@@ -2,11 +2,13 @@ import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
-import { onRequestGet as getStaff, onRequestPost as postStaff } from '../functions/api/staff/[[path]].js';
+import { onRequestGet as getStaff, onRequestPost as postStaff, onRequestPatch as patchStaff } from '../functions/api/staff/[[path]].js';
 
 const SCHEMA_1 = readFileSync(new URL('../schema/0001_init.sql', import.meta.url), 'utf8');
 const SCHEMA_3 = readFileSync(new URL('../schema/0003_grant_award.sql', import.meta.url), 'utf8');
 const SCHEMA_6 = readFileSync(new URL('../schema/0006_caregiver_contact_history_outcomes.sql', import.meta.url), 'utf8');
+const SCHEMA_11 = readFileSync(new URL('../schema/0011_staff_member.sql', import.meta.url), 'utf8');
+const SCHEMA_17 = readFileSync(new URL('../schema/0017_event_details.sql', import.meta.url), 'utf8');
 
 function d1(db) {
   return {
@@ -90,6 +92,85 @@ beforeEach(() => {
     INSERT OR IGNORE INTO followup (id, caregiver_id, kind, detail, status, source, external_ref)
     VALUES (1001, 'cg_seed_fictional', 'support_request', 'Need respite help', 'open', 'seed', 'ref_fu_001')
   `).run();
+});
+
+async function changeLog() {
+  const response = await getStaff({ request: mockRequest('https://synthetic.invalid/api/staff/recent-changes'), env });
+  assert.equal(response.status, 200);
+  return response.json();
+}
+
+const CHANGE_LOG_WORKFLOWS = [
+  ['event.create', 'event'], ['event.update', 'event'], ['event.publish', 'event'],
+  ['event.unpublish', 'event'], ['event.archive', 'event'],
+  ['staff.created', 'staff_member'], ['staff.updated', 'staff_member'], ['staff.first_sign_in', 'staff_member'],
+];
+
+test('change log includes event and staff workflows, preserves provenance and never offers unsupported undo', async () => {
+  const insert = raw.prepare(`INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json, at)
+    VALUES ('fictional-editor@synthetic.invalid', ?, ?, 'fictional-target', ?, ?, ?)`);
+  const ids = CHANGE_LOG_WORKFLOWS.map(([action, entity], index) => Number(insert.run(
+    action, entity, '{"original":"before"}', '{"original":"after"}', `2026-10-${String(index + 1).padStart(2, '0')} 12:00:00`,
+  ).lastInsertRowid));
+  insert.run('caregiver.update', 'caregiver', '{"first_name":"Before"}', '{"first_name":"After"}', '2026-07-01 00:00:00');
+  insert.run('content_item.publish', 'content_item', '{"status":"draft"}', '{"status":"published"}', '2026-07-01 00:00:00');
+  for (const [action, entity] of [['portal.login', 'caregiver'], ['staff.secret_diagnostic', 'staff_member'],
+    ['event.private_diagnostic', 'event'], ['staff.updated', 'unrelated'], ['event.publish', 'unrelated']]) {
+    insert.run(action, entity, null, '{"private":"not-a-change-log-workflow"}', '2026-10-27 12:00:00');
+  }
+  const original = raw.prepare('SELECT * FROM audit_log ORDER BY id').all();
+  const data = await changeLog();
+  assert.deepEqual(data.changes, data.recent_changes);
+  assert.equal(data.changes.length, 10);
+  for (const id of ids) {
+    const entry = data.changes.find(row => row.id === id);
+    assert.ok(entry, `missing workflow ${original.find(row => row.id === id).action}`);
+    const { restorable, can_undo, is_undone, ...persisted } = entry;
+    assert.deepEqual(persisted, { ...original.find(row => row.id === id) });
+    assert.equal(restorable, false);
+    assert.equal(can_undo, false);
+    assert.equal(is_undone, false);
+    assert.equal((await postStaff({ request: contentUndoRequest(id), env })).status, 409);
+  }
+  assert.ok(data.changes.filter(row => ['caregiver', 'content_item'].includes(row.entity)).every(row => row.restorable));
+  assert.deepEqual(raw.prepare('SELECT * FROM audit_log ORDER BY id').all(), original);
+});
+
+test('actual event create/publish and unchanged staff Save audit appear immediately in change log', async () => {
+  raw.exec(SCHEMA_11.split('-- The people already')[0]);
+  raw.exec(SCHEMA_17);
+  raw.prepare("INSERT INTO staff_member (email, display_name, role) VALUES ('staff@example.org', 'Fictional Admin', 'admin')").run();
+  const headers = { 'Cf-Access-Jwt-Assertion': 'header.eyJlbWFpbCI6InN0YWZmQGV4YW1wbGUub3JnIn0.signature' };
+  // Existing handler-unit actor seam only, not actual Access middleware authentication.
+  const created = await postStaff({ request: mockRequest('https://synthetic.invalid/api/staff/event', 'POST', {
+    id: 'ev_fictional_log', title: 'FICTIONAL SOURCE TEST', type: 'other', starts_at: '2026-10-29T15:00:00Z',
+  }, headers), env });
+  assert.equal(created.status, 201);
+  assert.equal((await postStaff({ request: mockRequest('https://synthetic.invalid/api/staff/event/ev_fictional_log/publish', 'POST', {}, headers), env })).status, 200);
+  assert.equal((await patchStaff({ request: mockRequest('https://synthetic.invalid/api/staff/team', 'PATCH', {
+    email: 'staff@example.org', display_name: 'Fictional Admin',
+  }, headers), env })).status, 200);
+  const original = raw.prepare('SELECT * FROM audit_log ORDER BY id DESC').all();
+  assert.deepEqual(original.map(row => row.action), ['staff.updated', 'event.publish', 'event.create']);
+  const data = await changeLog();
+  assert.deepEqual(data.changes.map(row => row.id), original.map(row => row.id));
+  assert.ok(data.changes.every(row => row.actor === 'staff@example.org' && !row.restorable && !row.can_undo));
+  assert.deepEqual(raw.prepare('SELECT * FROM audit_log ORDER BY id DESC').all(), original);
+});
+
+test('change log keeps insertion-ID newest-first ordering and fifty-row bound without exposing unrelated audit streams', async () => {
+  const insert = raw.prepare(`INSERT INTO audit_log (actor, action, entity, entity_id, at)
+    VALUES ('fictional@synthetic.invalid', ?, ?, ?, ?)`);
+  const expected = [];
+  for (let i = 0; i < 55; i++) {
+    expected.push(Number(insert.run('event.publish', 'event', `ev_fictional_${i}`, i % 2 ? '2026-10-01 00:00:00' : '2020-01-01 00:00:00').lastInsertRowid));
+  }
+  for (let i = 0; i < 60; i++) insert.run('portal.login', 'caregiver', 'fictional-private-stream', '2099-01-01 00:00:00');
+  const original = raw.prepare('SELECT * FROM audit_log ORDER BY id').all();
+  const data = await changeLog();
+  assert.deepEqual(data.changes.map(row => row.id), expected.reverse().slice(0, 50));
+  assert.ok(data.changes.every(row => row.entity === 'event' && !row.can_undo));
+  assert.deepEqual(raw.prepare('SELECT * FROM audit_log ORDER BY id').all(), original);
 });
 
 test('GET /api/staff/queue returns open followups with caregiver names', async () => {
