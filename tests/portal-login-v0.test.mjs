@@ -521,14 +521,15 @@ test('two independent browser confirmations have exactly one token winner and lo
   assert.deepEqual(loginCounts(), { used: 1, audits: 1 });
 });
 
-for (const [name, origin] of [
+for (const [name, origin, target = 'https://portal.synthetic.invalid/api/portal/verify'] of [
   ['missing', null], ['literal null', 'null'], ['foreign', 'https://foreign.synthetic.invalid'],
   ['suffix', 'https://portal.synthetic.invalid.evil.invalid'],
   ['duplicate', 'https://portal.synthetic.invalid, https://portal.synthetic.invalid'],
   ['different port', 'https://portal.synthetic.invalid:444'],
+  ['opaque URL null', 'null', 'data:/api/portal/verify'],
 ]) test(`confirmation ${name} Origin refuses before cookie, body, secret or store access`, async () => {
   const reads = [];
-  const request = { url: 'https://portal.synthetic.invalid/api/portal/verify', method: 'POST',
+  const request = { url: target, method: 'POST',
     headers: { get(name) { reads.push(name); if (name !== 'Origin') throw new Error('Must not read another header'); return origin; } },
     get body() { throw new Error('Must not read body'); },
   };

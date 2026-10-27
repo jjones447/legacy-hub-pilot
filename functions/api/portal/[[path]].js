@@ -347,8 +347,11 @@ export async function onRequestPost({ request, env }) {
     }
     // Confirmation is deliberate browser-only POST: absence, null, duplicates
     // and off-origin spellings all refuse BEFORE body/cookie/store access.
-    if (action === 'verify' && request.headers.get('Origin') !== url.origin) {
-      return json({ ok: false, error: 'forbidden' }, 403);
+    if (action === 'verify') {
+      const origin = request.headers.get('Origin');
+      if (origin === null || origin === 'null' || origin !== url.origin) {
+        return json({ ok: false, error: 'forbidden' }, 403);
+      }
     }
 
     const secret = env.PORTAL_TOKEN_SECRET;
