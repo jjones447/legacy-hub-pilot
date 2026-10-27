@@ -29,7 +29,7 @@ The confirmation contract is deliberately narrow:
   nonce using the existing secret. POST validates both against the browser cookie
   before any identity/token-store query. A different browser needs its own landing
   form; the email-request browser is not required, preserving cross-device use.
-- Only the three unique URL-encoded fields token/nonce-proof material are accepted;
+- Only the three unique URL-encoded fields `token`, `csrf` and `proof` are accepted;
   malformed/duplicate/extra fields, missing cookie, wrong proof or unsupported
   content type refuse. Actual request-stream bytes are bounded to 1,024 regardless
   of a supplied Content-Length. No raw token is written to logs, browser persistent
@@ -40,7 +40,25 @@ The confirmation contract is deliberately narrow:
   still refuses before any header, credential, identity, body, database or mail
   effect. No provider/Access configuration, secret or schema change is needed.
 
-The landing preserves `no-store`, `no-referrer` and same-origin form/CSP policy.
+The landing preserves `no-store` and same-origin form/CSP policy. It alone uses
+`Referrer-Policy: strict-origin`, preserved by the root middleware only for the
+successful confirmation GET/HEAD HTML response. This sends at most an origin,
+never the credential URL's path/query; HTTPS downgrade sends no referrer. Other
+pages, errors and POST redirects retain the middleware's `no-referrer` policy.
+The same narrow middleware branch sets the fixed restrictive confirmation CSP
+(`default-src 'none'`, no scripts, `base-uri 'none'`, same-origin form action),
+instead of replacing it with the shared page CSP. Both downstream confirmation
+headers and `no-store` must match; arbitrary request headers cannot opt in.
+Literal `no-referrer` on the landing would make native form navigation serialize
+Origin as `null` under the
+[Fetch Origin algorithm](https://fetch.spec.whatwg.org/#append-a-request-origin-header),
+and the deliberately strict POST must continue to reject that value. The
+[strict-origin referrer policy](https://w3c.github.io/webappsec-referrer-policy/#referrer-policy-strict-origin)
+is the narrow necessary adjustment, not permission to leak the bearer URL or
+weaken Origin validation. Unit tests check the handler plus middleware header
+contract; they do not emulate browser-produced Origin/Referer. Independent actual
+browser receiving must still verify those headers without exposing a real token.
+
 An explicit form addresses GET/prefetch consumption; it is not a claim that every
 automated client is incapable of submitting a form or that the token is not a
 bearer credential.

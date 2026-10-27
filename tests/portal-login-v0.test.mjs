@@ -483,7 +483,7 @@ test('prefetch GET and HEAD cannot consume a link before the intended browser co
     const get = await getPortal({ env, request: new Request(emailedLink, { headers }) });
     assert.equal(get.status, 200);
     assert.equal(get.headers.get('Cache-Control'), 'no-store');
-    assert.equal(get.headers.get('Referrer-Policy'), 'no-referrer');
+    assert.equal(get.headers.get('Referrer-Policy'), 'strict-origin');
     assert.match(get.headers.get('Content-Security-Policy'), /form-action 'self'/);
     assert.match(get.headers.get('Set-Cookie'), /^__Host-portal_confirm=[A-Za-z0-9_-]{43}; HttpOnly; Secure; SameSite=Strict; Path=\/; Max-Age=900$/);
     assert.doesNotMatch(get.headers.get('Set-Cookie'), /portal_session=|Domain=/i);

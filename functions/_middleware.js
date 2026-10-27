@@ -155,7 +155,9 @@ export async function verifyAccessJwt(token, { teamDomain, aud, fetchImpl = fetc
   return ok ? payload : null;
 }
 
-function withSecurityHeaders(resp, hostname, pathname = '') {
+const PORTAL_CONFIRMATION_CSP = "default-src 'none'; style-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'";
+
+function withSecurityHeaders(resp, hostname, pathname = '', method = '') {
   const h = new Headers(resp.headers);
   if (!PRODUCTION_HOSTNAMES.has(hostname)) {
     h.set('X-Robots-Tag', 'noindex, nofollow');
@@ -166,10 +168,19 @@ function withSecurityHeaders(resp, hostname, pathname = '') {
   h.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   h.set('X-Frame-Options', 'DENY');
   h.set('X-Content-Type-Options', 'nosniff');
-  h.set('Referrer-Policy', 'no-referrer');
+  // Only the deliberate portal confirmation landing opts into origin-only
+  // referrers so native form POST retains a non-null Origin. Never allow full
+  // token-bearing URLs; all other responses retain the existing no-referrer.
+  const portalConfirmation = (method === 'GET' || method === 'HEAD')
+    && /^\/api\/portal\/verify\/?$/.test(pathname) && resp.status === 200
+    && (h.get('Content-Type') || '').startsWith('text/html')
+    && h.get('Referrer-Policy') === 'strict-origin'
+    && h.get('Content-Security-Policy') === PORTAL_CONFIRMATION_CSP
+    && /\bno-store\b/i.test(h.get('Cache-Control') || '');
+  h.set('Referrer-Policy', portalConfirmation ? 'strict-origin' : 'no-referrer');
   h.set(
     'Content-Security-Policy',
-    "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+    portalConfirmation ? PORTAL_CONFIRMATION_CSP : "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
   );
   return new Response(resp.body, { status: resp.status, statusText: resp.statusText, headers: h });
 }
@@ -217,17 +228,17 @@ export async function onRequest(context) {
   if (isConsole) {
     // Non-prod escape for preview/demo (never set in production).
     if (env.ALLOW_DEV_CONSOLE === '1') {
-      return withSecurityHeaders(await next(), url.hostname, path);
+      return withSecurityHeaders(await next(), url.hostname, path, request.method);
     }
     // Real verification. Fail closed until Cloudflare Access is configured.
     const teamDomain = env.CF_ACCESS_TEAM_DOMAIN;
     const aud = env.CF_ACCESS_AUD;
-    if (!teamDomain || !aud) return withSecurityHeaders(forbidden(), url.hostname, path);
+    if (!teamDomain || !aud) return withSecurityHeaders(forbidden(), url.hostname, path, request.method);
     const token = request.headers.get('Cf-Access-Jwt-Assertion');
     const payload = await verifyAccessJwt(token, { teamDomain, aud });
-    if (!payload) return withSecurityHeaders(forbidden(), url.hostname, path);
+    if (!payload) return withSecurityHeaders(forbidden(), url.hostname, path, request.method);
     const refused = await staffGate(env, payload);
-    if (refused) return withSecurityHeaders(refused, url.hostname, path);
+    if (refused) return withSecurityHeaders(refused, url.hostname, path, request.method);
     if (typeof payload.email === 'string' && !payload.common_name) {
       try {
         const member = await getStaffMember(env.LEGACY_DB, payload.email);
@@ -242,6 +253,7 @@ export async function onRequest(context) {
   return withSecurityHeaders(
     await maybeRewriteContent(context, await maybeRewriteMedia(context, await next())),
     url.hostname,
-    path
+    path,
+    request.method
   );
 }

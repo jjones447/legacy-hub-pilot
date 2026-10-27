@@ -95,7 +95,9 @@ function confirmationHeaders() {
   return {
     'content-type': 'text/html; charset=utf-8',
     'Cache-Control': 'no-store',
-    'Referrer-Policy': 'no-referrer',
+    // Native form navigation with no-referrer can send Origin:null. Send ONLY
+    // the origin (never this token-bearing path/query), retaining strict CSRF.
+    'Referrer-Policy': 'strict-origin',
     'Content-Security-Policy': "default-src 'none'; style-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
   };
 }
