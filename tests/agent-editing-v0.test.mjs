@@ -260,6 +260,36 @@ test('POST /api/agent/draft handles agent refusal', async () => {
   assert.equal(data.refusal, 'Refused request to edit routing code');
 });
 
+for (const [name, envelope, accepted] of [
+  ['change', { change: { title: 'Synthetic native resource', description: 'Test only', category: 'crisis' } }, true],
+  ['refusal', { refusal: 'Out of scope' }, false],
+  ['schema-invalid change', { change: { title: 123 } }, false]
+]) {
+  test(`native content object ${name} retains schema validation and preview-only writes`, async () => {
+    let calls = 0;
+    const nativeEnv = { ...env, AGENT_MAPPER_BACKEND: undefined,
+      AI: { run: async () => { calls++; return { response: envelope }; } } };
+    const response = await postAgent({ request: new Request('http://localhost/api/agent/draft', {
+      method: 'POST', body: JSON.stringify({ request: 'Add a synthetic resource', type_id: 'resource' })
+    }), env: nativeEnv });
+    const result = await response.json();
+    assert.equal(result.ok, accepted);
+    assert.equal(calls, 1);
+    assert.equal(raw.prepare('SELECT COUNT(*) AS n FROM audit_log').get().n, 0);
+    assert.equal(raw.prepare("SELECT COUNT(*) AS n FROM content_item WHERE status = 'published'").get().n, 0);
+    assert.equal(raw.prepare('SELECT COUNT(*) AS n FROM content_item').get().n, accepted ? 1 : 0);
+    if (accepted) {
+      assert.match(result.preview_version, /^[0-9a-f]{64}$/);
+      assert.equal(result.draft.status, 'draft');
+      assert.equal(result.confirmation_preview.after.title, 'Synthetic native resource');
+      assert.equal(raw.prepare('SELECT status FROM content_item WHERE id = ?').get(result.draft_id).status, 'draft');
+    } else {
+      assert.equal(result.draft_id, undefined);
+      assert.match(result.refusal, name === 'refusal' ? /Out of scope/ : /schema validation/);
+    }
+  });
+}
+
 test('POST /api/agent/confirm requires staff identity and publishes + audits', async () => {
   // Let's create a draft first
   const draftId = 'ci_test_draft';

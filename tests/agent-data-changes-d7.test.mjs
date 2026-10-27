@@ -193,6 +193,42 @@ test('Grant: draft stores a preview and writes nothing to domain tables', async 
   assert.equal(audit.c, 0);
 });
 
+for (const [name, envelope, accepted] of [
+  ['change', { change: { operation: 'review', payload: { review_notes: 'Synthetic native review' } } }, true],
+  ['refusal', { refusal: 'Out of scope' }, false],
+  ['invalid transition', { change: { operation: 'close', payload: { outcome: 'Premature close' } } }, false]
+]) {
+  test(`native grant object ${name} retains domain validation and preview-only writes`, async () => {
+    const beforeGrant = raw.prepare('SELECT * FROM grant_application WHERE id = 1').get();
+    const beforeCaregiver = raw.prepare('SELECT * FROM caregiver WHERE id = ?').get('cg_test_1');
+    let calls = 0;
+    const response = await postAgent({ request: new Request('http://localhost/api/agent/change/draft', {
+      method: 'POST', headers: { 'content-type': 'application/json', 'x-dev-actor': 'synthetic@example.invalid' },
+      body: JSON.stringify({ area: 'grant', target_id: 1, request: 'Review this synthetic application' })
+    }), env: { ...env, AGENT_MAPPER_BACKEND: undefined,
+      AI: { run: async () => { calls++; return { response: envelope }; } } } });
+    const result = await response.json();
+    assert.equal(result.ok, accepted);
+    assert.equal(calls, 1);
+    assert.deepEqual(raw.prepare('SELECT * FROM grant_application WHERE id = 1').get(), beforeGrant);
+    assert.deepEqual(raw.prepare('SELECT * FROM caregiver WHERE id = ?').get('cg_test_1'), beforeCaregiver);
+    assert.equal(raw.prepare('SELECT COUNT(*) AS n FROM audit_log').get().n, 0);
+    assert.equal(raw.prepare('SELECT COUNT(*) AS n FROM agent_change').get().n, accepted ? 1 : 0);
+    if (accepted) {
+      assert.match(result.preview_version, /^[0-9a-f]{64}$/);
+      assert.equal(result.preview.before.status, 'submitted');
+      assert.equal(result.preview.after.status, 'in_review');
+      const saved = raw.prepare('SELECT * FROM agent_change WHERE id = ?').get(result.change_id);
+      assert.equal(saved.status, 'draft');
+      assert.equal(saved.requested_by, 'access_staff:synthetic@example.invalid');
+      assert.equal(saved.confirmed_by, null);
+    } else {
+      assert.equal(result.change_id, undefined);
+      assert.match(result.refusal, name === 'refusal' ? /Out of scope/ : /cannot be applied/);
+    }
+  });
+}
+
 test('Grant: confirm applies change and writes both audit rows with verified actor', async () => {
   // Create draft
   const reqDraft = new Request('http://localhost/api/agent/change/draft', {

@@ -578,6 +578,9 @@ function workersAiEnvelopeSchema(changeSchema) {
 function workersAiResultText(result) {
   if (typeof result === 'string') return result;
   if (typeof result?.response === 'string') return result.response;
+  // Native JSON Mode returns the generated envelope as response: object.
+  // The caller still enforces exactly change/refusal and all local validation.
+  if (result?.response && typeof result.response === 'object' && !Array.isArray(result.response)) return result.response;
   if (typeof result?.result === 'string') return result.result;
   const content = result?.choices?.[0]?.message?.content;
   if (typeof content === 'string') return content;
@@ -613,7 +616,7 @@ function parseWorkersAiEnvelope(result) {
   return { ok: true, change: parsed.change };
 }
 
-async function invokeWorkersAi({ ai, model, messages, schemaName, responseSchema }) {
+async function invokeWorkersAi({ ai, model, messages, responseSchema }) {
   let lastMalformed = false;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const attemptMessages = attempt === 0
@@ -632,11 +635,7 @@ async function invokeWorkersAi({ ai, model, messages, schemaName, responseSchema
         messages: attemptMessages,
         response_format: {
           type: 'json_schema',
-          json_schema: {
-            name: schemaName,
-            strict: true,
-            schema: responseSchema
-          }
+          json_schema: responseSchema
         },
         max_tokens: WORKERS_AI_MAX_TOKENS
       });
@@ -670,7 +669,6 @@ Current content data: ${currentData ? JSON.stringify(currentData) : 'None'}`;
   const response = await invokeWorkersAi({
     ai,
     model,
-    schemaName: 'agent_content_change',
     responseSchema: workersAiEnvelopeSchema(jsonSchema),
     messages: [
       { role: 'system', content: systemPrompt },
@@ -749,7 +747,6 @@ Current event data: ${currentData ? JSON.stringify(currentData) : 'None'}`
   const response = await invokeWorkersAi({
     ai,
     model,
-    schemaName: `agent_${area}_workflow_change`,
     responseSchema: workersAiEnvelopeSchema(workersAiWorkflowSchema(area)),
     messages: [
       { role: 'system', content: systemPrompt },
