@@ -83,3 +83,26 @@ workflow, deployed or client-acceptance evidence. This source-only change is
 submitted for normal independent review/hosted CI, not author self-merge or
 production deployment. Existing API/auth/schema, signing keys, Docker/runtime
 custody, schedules and disabled Coming Soon/reminders are unchanged.
+
+## Staff change-log coverage · October 27
+
+[pc2-codex-1] The former recent-changes query intentionally selected only
+content/caregiver actions and undo history. It therefore omitted existing event
+create/update/publish/unpublish/archive and staff created/updated/first-sign-in
+audits, even after a successful refresh. An unchanged staff Save also writes an
+existing `staff.updated` audit; this correction does not create that audit.
+
+The query now includes those exact event/team action-and-entity pairs. It keeps
+the last 50 matching rows in descending audit insertion-ID order and returns the
+original actor, time and before/after data. Unrelated authentication, provider
+and diagnostic streams are not newly exposed. Event/team entries are read-only:
+no Undo button is advertised for entities unsupported by the existing undo API.
+Existing content/caregiver undo rules and audit writers remain unchanged.
+
+Three new in-memory handler regressions cover real event create/publish and
+unchanged staff Save, all eight supported added actions, provenance/preservation,
+unsupported undo refusal, exclusions and the ordering/50-row bound. They fail on
+the former query and pass after correction; all 1,830 unit tests pass. This is
+source evidence, not a live-database diagnosis, deployed refresh or client
+acceptance. No audit is invented, backdated, rewritten or repaired, and no
+production request, fixture or provider operation is performed.
