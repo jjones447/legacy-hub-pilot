@@ -2020,6 +2020,7 @@ let agentWebJobRecord = null;
 let agentWebJobRecoveryPending = false;
 let agentWebJobStorageFault = false;
 let agentWebJobRecoveryNode = null;
+let agentUnavailableNotice = null;
 const AGENT_WEB_JOB_RECORD = 'agent-web-job-record-v1';
 const AGENT_WEB_JOB_SESSION = 'agent-web-job-session-v1';
 const webJobId = value => typeof value === 'string' && /^[a-f0-9]{32}$/.test(value);
@@ -2126,6 +2127,18 @@ async function recoverAgentWebJobHold(legacyJobId = null) {
   } catch { agentConfirmationHold = true; return false; }
   finally { agentWebJobRecoveryPending = false; }
 }
+function showAgentUnavailable() {
+  const body = document.getElementById('chatBody');
+  if (!body) return;
+  if (!agentUnavailableNotice) {
+    agentUnavailableNotice = document.createElement('div');
+    agentUnavailableNotice.className = 'msg bot';
+    agentUnavailableNotice.setAttribute?.('role', 'status');
+    agentUnavailableNotice.textContent = 'Legacy Assistant is unavailable on this page. Ask the Legacy administrator to check sign-in and the connection. Do not resend an earlier request unless its result has been checked.';
+    body.appendChild(agentUnavailableNotice);
+  }
+  body.scrollTop = body.scrollHeight;
+}
 async function initWebJobFeature() {
   try {
     const response = await fetch('/api/agent/web-jobs');
@@ -2134,7 +2147,11 @@ async function initWebJobFeature() {
     agentWebJobActor = agentWebJobsEnabled && !response.redirected && result.origin === window.location?.origin && typeof result.actor === 'string' && result.actor.includes('@') && result.actor.length <= 254 ? result.actor : null;
     agentWebJobIdentityUnavailable = agentWebJobsEnabled && !agentWebJobActor;
     renderWebJobRecovery();
-  } catch { agentWebJobsEnabled = false; agentWebJobActor = null; agentWebJobIdentityUnavailable = true; } // Unknown bootstrap never admits an uncorrelated send.
+    if (agentWebJobIdentityUnavailable) showAgentUnavailable();
+  } catch {
+    agentWebJobsEnabled = false; agentWebJobActor = null; agentWebJobIdentityUnavailable = true;
+    showAgentUnavailable();
+  } // Unknown bootstrap never admits an uncorrelated send.
 }
 async function webJobJson(path, body, until) {
   const remaining = until - Date.now();
@@ -2194,7 +2211,8 @@ async function awaitCurrentWebJob(initial, pendingNode, until = Date.now() + 600
 }
 
 window.agentSend = async function () {
-  if (agentConfirmationHold || agentConfirmationPending || agentWebJobPending || agentWebJobRecoveryPending || agentWebJobIdentityUnavailable) return;
+  if (agentWebJobIdentityUnavailable) { showAgentUnavailable(); return; }
+  if (agentConfirmationHold || agentConfirmationPending || agentWebJobPending || agentWebJobRecoveryPending) return;
   const input = document.getElementById('chatInput');
   const body = document.getElementById('chatBody');
   const text = (input?.value || '').trim();
@@ -2267,6 +2285,7 @@ window.agentSend = async function () {
   const webJobLifecycle = agentWebJobsEnabled;
   if (webJobLifecycle) agentWebJobPending = true;
   const jobDeadline = webJobLifecycle ? Date.now() + 60000 : null;
+  let ordinaryPendingNode = null;
   try {
     const draftPath = isContent ? '/api/agent/draft' : '/api/agent/change/draft';
     const draftRequest = {
@@ -2278,6 +2297,14 @@ window.agentSend = async function () {
     if (webJobLifecycle && agentWebJobActor) {
       saveWebJobRecord({ v:1,kind:'web_job',actor:agentWebJobActor,origin:window.location.origin,session_id:webJobSession(),job_id:null,idempotency_key:draftRequest.idempotency_key,phase:'create' });
     }
+    if (!webJobLifecycle) {
+      ordinaryPendingNode = document.createElement('div');
+      ordinaryPendingNode.className = 'msg bot';
+      ordinaryPendingNode.setAttribute?.('role', 'status');
+      ordinaryPendingNode.textContent = 'Waiting for your edit preview. This request has not been confirmed. Do not resend it while its result is unclear.';
+      body.appendChild(ordinaryPendingNode);
+      body.scrollTop = body.scrollHeight;
+    }
     const created = webJobLifecycle ? await webJobJson(draftPath, draftRequest, jobDeadline) : null;
     const res = created ? created.response : await fetch(draftPath, {
       method: 'POST',
@@ -2286,13 +2313,14 @@ window.agentSend = async function () {
     });
 
     let data = created ? created.data : await res.json();
-    const botDiv = document.createElement('div');
+    const botDiv = ordinaryPendingNode || document.createElement('div');
     botDiv.className = 'msg bot';
+    if (ordinaryPendingNode) botDiv.textContent = '';
 
     if (res.ok && data.ok && data.job_id) {
       if (agentWebJobRecord) saveWebJobRecord({ ...agentWebJobRecord, job_id:data.job_id, phase:'waiting' });
       botDiv.textContent = 'Request saved privately; waiting for the existing container assistant.';
-      body.appendChild(botDiv);
+      if (!ordinaryPendingNode) body.appendChild(botDiv);
       body.scrollTop = body.scrollHeight;
       data = await awaitCurrentWebJob(data, botDiv, jobDeadline || undefined);
     }
@@ -2303,7 +2331,7 @@ window.agentSend = async function () {
         else holdWebJob();
       }
       botDiv.innerHTML = `⚠️ Refusal: ${escapeHtml(data.refusal || data.error || 'Request refused')}`;
-      body.appendChild(botDiv);
+      if (!ordinaryPendingNode) body.appendChild(botDiv);
       body.scrollTop = body.scrollHeight;
       return;
     }
@@ -2315,7 +2343,7 @@ window.agentSend = async function () {
       if (webJobLifecycle) holdWebJob();
       // The server may have saved a draft already; do not turn a missing preview into {} or replay it.
       botDiv.textContent = 'Preview unavailable — nothing has been confirmed. A draft may already exist. Do not retry; have an administrator inspect the saved draft.';
-      body.appendChild(botDiv);
+      if (!ordinaryPendingNode) body.appendChild(botDiv);
       body.scrollTop = body.scrollHeight;
       return;
     }
@@ -2345,15 +2373,16 @@ window.agentSend = async function () {
         <button class="chip-btn chip-cancel" data-action="agent-change-discard" ${idAttribute}>Discard</button>
       </div>
     `;
-    body.appendChild(botDiv);
+    if (!ordinaryPendingNode) body.appendChild(botDiv);
     body.scrollTop = body.scrollHeight;
     if (webJobLifecycle) forgetFinishedWebJob();
   } catch (e) {
     if (webJobLifecycle) holdWebJob(); // Typed job HOLD is distinct from uncertain business confirmation.
-    const botDiv = document.createElement('div');
+    const botDiv = ordinaryPendingNode || document.createElement('div');
     botDiv.className = 'msg bot';
-    botDiv.innerHTML = `Error drafting change: ${escapeHtml(e.message)}`;
-    body.appendChild(botDiv);
+    if (ordinaryPendingNode) botDiv.textContent = '';
+    botDiv.innerHTML = `Error drafting change: ${escapeHtml(e.message)}${ordinaryPendingNode ? ' A draft may already exist. Do not resend this request; ask the administrator to check its result.' : ''}`;
+    if (!ordinaryPendingNode) body.appendChild(botDiv);
     body.scrollTop = body.scrollHeight;
   } finally {
     if (webJobLifecycle) agentWebJobPending = false; // Persistent HOLD, if set, still blocks every later mutation.
