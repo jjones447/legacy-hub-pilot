@@ -32,8 +32,8 @@ test('Workers AI maps existing-event update and advertises the constrained Event
   assert.deepEqual(result, { ok: true, ...change });
   assert.equal(calls.length, 1);
   const schema = calls[0].options.response_format.json_schema;
-  assert.equal(schema.name, 'agent_event_workflow_change');
-  const operations = schema.schema.oneOf[0].properties.change.oneOf;
+  assert.deepEqual(Object.keys(schema), ['oneOf']);
+  const operations = schema.oneOf[0].properties.change.oneOf;
   assert.deepEqual(operations.map(b => b.properties.operation.enum[0]), ['create', 'update', 'publish', 'unpublish', 'archive']);
   assert.equal(operations[1].properties.payload.additionalProperties, false);
   assert.equal('publish_state' in operations[1].properties.payload.properties, false);
@@ -216,6 +216,41 @@ test('Event draft only writes durable draft; confirmation applies selected recor
   assert.ok(db.state.audits.some(a => a.sql.includes("'event.update'")));
   assert.ok(db.state.audits.some(a => a.values.includes('agent_change.confirm')));
 });
+
+test('native Event object response stores only a version-bound preview, never applies', async () => {
+  const db = workflowDb();
+  let calls = 0;
+  const drafted = await post(db, 'draft', { area: 'event', target_id: event.id, request: 'Update title to After' },
+    { run: async () => { calls++; return { response: { change: { operation: 'update', payload: { title: 'After' } } } }; } });
+  assert.equal(drafted.data.ok, true);
+  assert.equal(calls, 1);
+  assert.match(drafted.data.preview_version, /^[0-9a-f]{64}$/);
+  assert.equal(drafted.data.preview.before.title, 'Before');
+  assert.equal(drafted.data.preview.after.title, 'After');
+  assert.equal(db.state.change.status, 'draft');
+  assert.equal(db.state.event.title, 'Before');
+  assert.equal(db.state.audits.length, 0);
+  assert.equal(db.state.writes.length, 1);
+  assert.match(db.state.writes[0], /INSERT INTO agent_change/);
+});
+
+for (const [name, envelope] of [
+  ['provider refusal', { refusal: 'Out of scope' }],
+  ['invalid Event field', { change: { operation: 'update', payload: { publish_state: 'published' } } }]
+]) {
+  test(`native Event ${name} creates no draft or domain/audit write`, async () => {
+    const db = workflowDb();
+    let calls = 0;
+    const result = await post(db, 'draft', { area: 'event', target_id: event.id, request: 'Update title' },
+      { run: async () => { calls++; return { response: envelope }; } });
+    assert.equal(result.data.ok, false);
+    assert.equal(calls, 1);
+    assert.equal(db.state.change, null);
+    assert.equal(db.state.event.title, 'Before');
+    assert.deepEqual(db.state.writes, []);
+    assert.deepEqual(db.state.audits, []);
+  });
+}
 test('Event drift refuses both confirmation and stale-preview discard before any apply', async () => {
   const db = workflowDb();
   const drafted = await post(db, 'draft', { area: 'event', target_id: event.id, request: 'Update title' });

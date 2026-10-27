@@ -130,3 +130,33 @@ actor/origin/redirect metadata, input/hold preservation, notice deduplication,
 ordinary deferred fetch/body completion and success/refusal/malformed/error
 outcomes. This is feedback source work, not proof of the live backend cause,
 provider availability, deployment or five-workflow acceptance.
+
+## Native Workers AI JSON compatibility October 27
+
+[pc2-codex-42] The native binding now receives the existing change/refusal
+schema directly in `response_format.json_schema`. It previously received an
+extra OpenAI-style `name`/`strict`/`schema` wrapper. The native result extractor
+also accepts the documented non-null, non-array `response` object before the
+same exact-one-key change/refusal parser and downstream schema/domain checks.
+Existing string responses, raw envelopes and message-content compatibility
+remain. This does not change the separately configured gateway tool contract,
+backend precedence, selected model, 800-token/12,000-character limits, two-call
+malformed-response bound, target/version checks or explicit confirmation.
+
+Primary references retrieved October 27: [Cloudflare JSON Mode request and
+response examples](https://developers.cloudflare.com/workers-ai/features/json-mode/)
+and the [selected model](https://developers.cloudflare.com/workers-ai/models/llama-3.3-70b-instruct-fp8-fast/).
+Structured generation is not a substitute for local validation. The published
+Workers types `5.20261027.1` expose `json_schema?: any`, which does not qualify
+either schema semantics or a live response.
+
+The targeted regression subset ran against the old mapper first: 27 tests,
+11 passed and 16 failed. The corrected mapper passes the same 27. The five-file
+mapper/handler/confirmation suite passes 399 tests with no failures or skips,
+including 29 new cases. Mocks cover direct native schemas, object changes and
+refusals, legacy response forms, malformed/ambiguous refusal and bounded retry.
+Synthetic content/Event/Grant handlers retain validation and version-bound
+preview-only writes; they do not apply changes or write confirmation audits.
+These local tests are not live inference, real authentication, D1/workerd,
+installation or five-workflow/client acceptance. No live prompt, draft,
+provider/configuration/credential operation or deployment was performed.

@@ -100,7 +100,12 @@ test('Workers AI content backend returns a schema-envelope change', async () => 
   assert.equal(calls[0].model, '@cf/test/model');
   assert.equal(calls[0].options.max_tokens, WORKERS_AI_MAX_TOKENS);
   assert.equal(calls[0].options.response_format.type, 'json_schema');
-  assert.equal(calls[0].options.response_format.json_schema.strict, true);
+  assert.deepEqual(calls[0].options.response_format.json_schema, {
+    oneOf: [
+      { type: 'object', properties: { change: contentType.json_schema }, required: ['change'], additionalProperties: false },
+      { type: 'object', properties: { refusal: { type: 'string' } }, required: ['refusal'], additionalProperties: false }
+    ]
+  });
 });
 
 test('Workers AI refusal is passed through without a second call', async () => {
@@ -164,5 +169,80 @@ test('Workers AI backend serves the workflow mapper through the same selection',
 
   assert.deepEqual(result, { ok: true, operation: 'review', payload: { review_notes: 'verified' } });
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].options.response_format.json_schema.schema.oneOf[0].properties.change.properties.operation.enum[0], 'review');
+  assert.deepEqual(calls[0].options.response_format.json_schema.oneOf[0].properties.change.properties.operation.enum,
+    ['review', 'decision', 'course_complete', 'close']);
+});
+
+// Native Workers AI JSON Mode returns an object under response, unlike the
+// separately configured gateway's tool-call contract. All inference is mocked.
+for (const [name, envelope, expected] of [
+  ['change', { change: { title: 'Native object' } }, { ok: true, change: { title: 'Native object' } }],
+  ['refusal', { refusal: 'Out of scope' }, { ok: false, refusal: 'Out of scope' }]
+]) {
+  test(`native object ${name} is handled in one inference call`, async () => {
+    const calls = [];
+    const ai = fakeAi([{ response: envelope, usage: { total_tokens: 25 } }], calls);
+    assert.deepEqual(await mapRequestToChange({ request: 'Update title', contentType, ai }), expected);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].model, DEFAULT_WORKERS_AI_MODEL);
+    assert.equal(calls[0].options.max_tokens, 800);
+  });
+}
+
+for (const [name, result] of [
+  ['raw JSON string', '{"change":{"title":"Compatible"}}'],
+  ['raw envelope', { change: { title: 'Compatible' } }],
+  ['response string', { response: '{"change":{"title":"Compatible"}}' }],
+  ['result string', { result: '{"change":{"title":"Compatible"}}' }],
+  ['message string', { choices: [{ message: { content: '{"change":{"title":"Compatible"}}' } }] }]
+]) {
+  test(`existing ${name} compatibility is retained`, async () => {
+    const calls = [];
+    assert.deepEqual(await mapRequestToChange({ request: 'Update title', contentType, ai: fakeAi([result], calls) }),
+      { ok: true, change: { title: 'Compatible' } });
+    assert.equal(calls.length, 1);
+  });
+}
+
+for (const [name, response] of [
+  ['null', null], ['array', [{ change: { title: 'Wrong container' } }]],
+  ['empty object', {}], ['dual keys', { change: { title: 'Ambiguous' }, refusal: 'No' }],
+  ['extra envelope key', { change: { title: 'Extra' }, actor: 'invented' }],
+  ['null change', { change: null }], ['array change', { change: [] }],
+  ['empty refusal', { refusal: '   ' }], ['nonstring refusal', { refusal: {} }],
+  ['nested response wrapper', { response: { change: { title: 'Too deeply wrapped' } } }]
+]) {
+  test(`native ${name} remains malformed with at most two inference calls`, async () => {
+    const calls = [];
+    const result = await mapRequestToChange({ request: 'Update title', contentType,
+      ai: fakeAi([{ response }, { response }], calls) });
+    assert.deepEqual(result, { ok: false, refusal: 'Workers AI returned malformed JSON after one retry' });
+    assert.equal(calls.length, 2);
+    assert.match(calls[1].options.messages.at(-1).content, /malformed/);
+  });
+}
+
+test('malformed native object can recover on the one existing retry, never a third', async () => {
+  const calls = [];
+  const result = await mapRequestToChange({ request: 'Update title', contentType,
+    ai: fakeAi([{ response: { unexpected: true } }, { response: { change: { title: 'Recovered' } } }], calls) });
+  assert.deepEqual(result, { ok: true, change: { title: 'Recovered' } });
+  assert.equal(calls.length, 2);
+});
+
+test('native provider exception refuses after one call without another backend', async () => {
+  const calls = [];
+  const result = await mapRequestToChange({ request: 'Update title', contentType,
+    ai: fakeAi([() => { throw new Error('Mock inference unavailable'); }], calls) });
+  assert.deepEqual(result, { ok: false, refusal: 'Workers AI inference failed: Mock inference unavailable' });
+  assert.equal(calls.length, 1);
+});
+
+test('native grant object change retains the workflow operation and single call', async () => {
+  const calls = [];
+  const change = { operation: 'review', payload: { review_notes: 'Synthetic review' } };
+  const result = await mapRequestToWorkflowChange({ area: 'grant', target_id: '1', request: 'Review the grant',
+    current: { status: 'submitted' }, ai: fakeAi([{ response: { change } }], calls) });
+  assert.deepEqual(result, { ok: true, ...change });
+  assert.equal(calls.length, 1);
 });
