@@ -50,11 +50,14 @@ function navigationFixture() {
     };
     return {
       button, child, querySelector: () => button,
+      addEventListener(type, fn) { this[type] = fn; },
       contains: target => target === child || target === button,
       classList: { contains: c => classes.has(c), remove: c => classes.delete(c), toggle(c, on) { if (on) classes.add(c); else classes.delete(c); } },
     };
   });
-  runInNewContext(loadFile('nav-v2.js'), { document });
+  runInNewContext(loadFile('nav-v2.js'), {
+    document, window: { matchMedia: () => ({ matches: false }) },
+  });
   const click = { stopPropagation() {} };
   return { document, handlers, items, click };
 }

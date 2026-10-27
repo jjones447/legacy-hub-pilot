@@ -48,6 +48,7 @@ export const UNIT_TEST_FILES = Object.freeze([
   'inline-handlers-removed.test.mjs',
   'inline-html-sanitizer-d7-s0b.test.mjs',
   'intake.test.mjs',
+  'nav-dropdown-hover.test.mjs',
   'payment-write-atomicity.test.mjs',
   'portal-banner.test.mjs',
   'portal-caregiver-status.test.mjs',
