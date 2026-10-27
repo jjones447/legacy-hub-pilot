@@ -164,7 +164,7 @@ beforeEach(() => {
   `).run();
 });
 
-test('1. Staff Console UI contains Site content and Recent changes markup with zero inline styles', () => {
+test('1. Staff Console UI contains collapsed Site content and Change log with zero inline styles', () => {
   assert.ok(STAFF_HTML.includes('id="siteContentPanel"'), 'siteContentPanel must exist in staff.html');
   assert.ok(STAFF_HTML.includes('id="siteContentList"'), 'siteContentList must exist in staff.html');
   assert.ok(STAFF_HTML.includes('id="siteContentEditor"'), 'siteContentEditor must exist in staff.html');
@@ -173,7 +173,7 @@ test('1. Staff Console UI contains Site content and Recent changes markup with z
   assert.ok(STAFF_HTML.includes('id="refreshRecentChangesBtn"'), 'refreshRecentChangesBtn must exist in staff.html');
 
   // Verify siteContentPanel and recentChangesPanel have zero style="..." attributes
-  const siteContentMatch = STAFF_HTML.match(/<div class="panel" id="siteContentPanel">[\s\S]*?<\/div>\s*<\/div>\s*<\/div>/);
+  const siteContentMatch = STAFF_HTML.match(/<details class="panel" id="siteContentPanel">[\s\S]*?<\/details>/);
   assert.ok(siteContentMatch, 'siteContentPanel markup located');
   assert.doesNotMatch(siteContentMatch[0], /\sstyle=["'][^"']*["']/i, 'siteContentPanel must not use inline style attributes');
 

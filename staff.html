@@ -34,6 +34,7 @@
   <div class="container">
     <div class="staff-header-status mb-28">
       <h2>Legacy Hub · Staff console</h2>
+      <p class="small muted">Staff accounts are for the team who manage the Hub. Caregivers use the Caregiver Portal for their own membership and wellness information.</p>
       <p id="staffStatusLine" class="staff-status-line">Loading status…</p>
       <button type="button" class="btn btn-sm btn-outline staff-assistant-toggle" id="staffAssistantToggle" aria-expanded="false" aria-controls="staffAssistantPanel">Open Legacy Assistant</button>
     </div>
@@ -71,9 +72,9 @@
       <div>
         <div class="panel" id="caregiverSearchPanel">
           <h4>🔍 Caregiver search</h4>
-          <p class="small muted mb-12">Search and filter caregiver records by name, contact, status, or segment.</p>
+          <p class="small muted mb-12" id="caregiverSearchHelp">Search caregiver records by name, contact, status, or segment. Results appear after you search; select a name to open that person's record below.</p>
           <div class="staff-search-controls">
-            <input type="text" id="caregiverSearchQuery" placeholder="Search by name, email, phone..." class="staff-search-input">
+            <input type="text" id="caregiverSearchQuery" placeholder="Search by name, email, phone..." class="staff-search-input" aria-label="Search caregiver records" aria-describedby="caregiverSearchHelp">
             <select id="caregiverSearchSegment" class="staff-search-select">
               <option value="">All segments</option>
               <option value="dementia">Dementia</option>
@@ -105,6 +106,19 @@
                 <button class="btn btn-sm btn-outline" data-action="search-next" id="caregiverSearchNextBtn" disabled>Next</button>
               </div>
             </div>
+          </div>
+        </div>
+
+        <div class="panel" id="staffTeamPanel">
+          <div class="flex-between-center mb-12">
+            <h4 class="m-0">Staff management</h4>
+            <button class="btn btn-sm btn-outline" id="refreshStaffTeamBtn">Refresh</button>
+          </div>
+          <p class="small muted mb-12">These accounts let your team manage the Hub. Staff can edit content and events. Admins can also add staff, change names and roles, and turn access off. Caregiver portal accounts and wellness check-ins are separate.</p>
+          <p class="small muted mb-12">Use an existing @legacyhomehealthservices.org email for sign-in by emailed code. Adding a record here does not create a mailbox or send an invitation. Other email addresses may need the site administrator to allow sign-in first.</p>
+          <p class="small muted mb-12" id="staffTeamMessage" role="status" aria-live="polite"></p>
+          <div id="staffTeamList">
+            <p class="muted small text-center my-20">Loading staff...</p>
           </div>
         </div>
 
@@ -166,16 +180,7 @@
         <div class="panel" id="caregiverRecordPanel">
           <h4>👤 Caregiver record</h4>
           <p class="small muted mb-12">View and manage caregiver contact details, program attendance, grants, and staff notes.</p>
-          <p class="muted small text-center my-20">Select a caregiver from the follow-up queue or attendance list to view their full record.</p>
-        </div>
-
-        <div class="panel" id="siteContentPanel">
-          <h4>Site content</h4>
-          <p class="small muted mb-12">Direct editor for published site content and pages.</p>
-          <div id="siteContentList">
-            <p class="muted small text-center my-20">Loading site content...</p>
-          </div>
-          <div id="siteContentEditor" class="d-none"></div>
+          <p class="muted small text-center my-20">This area shows the caregiver you select. <a href="#caregiverSearchQuery">Search caregiver records</a> above, then select a name. You can also open a record from the follow-up queue or attendance list.</p>
         </div>
 
         <div class="panel" id="wellnessPanel">
@@ -183,7 +188,7 @@
             <h4 class="m-0">Caregiver wellness</h4>
             <button class="btn btn-sm btn-outline" id="refreshWellnessBtn">Refresh</button>
           </div>
-          <p class="small muted mb-12">Scores from each caregiver's check-ins in the portal: 100 means doing well. Pick one or more caregivers and a time range.</p>
+          <p class="small muted mb-12">Caregivers submit wellness check-ins through their own portal accounts. Only caregivers with recorded check-ins appear in this list; adding a staff account does not add a caregiver here. This chart summarizes those check-ins, not a diagnosis or a measure of improvement. Choose caregivers and a time range.</p>
           <div class="wellness-controls">
             <select id="wellnessCaregivers" multiple aria-label="Caregivers"></select>
             <select id="wellnessRange" class="staff-filter-select-sm" aria-label="Time range">
@@ -198,27 +203,24 @@
           </div>
         </div>
 
-        <div class="panel" id="staffTeamPanel">
+        <details class="panel" id="recentChangesPanel">
+          <summary><strong>Change log</strong></summary>
           <div class="flex-between-center mb-12">
-            <h4 class="m-0">Staff</h4>
-            <button class="btn btn-sm btn-outline" id="refreshStaffTeamBtn">Refresh</button>
-          </div>
-          <p class="small muted mb-12">Admins can add staff, set names and roles, and turn access off. Staff can edit content and events. Admins can also manage the team.</p>
-          <p class="small muted mb-12">Use an existing @legacyhomehealthservices.org email for sign-in by emailed code. Adding a record here does not create a mailbox or send an invitation. Other email addresses may need the site administrator to allow sign-in first.</p>
-          <div id="staffTeamList">
-            <p class="muted small text-center my-20">Loading staff...</p>
-          </div>
-        </div>
-
-        <div class="panel" id="recentChangesPanel">
-          <div class="flex-between-center mb-12">
-            <h4 class="m-0">Recent changes</h4>
             <button class="btn btn-sm btn-outline" id="refreshRecentChangesBtn">Refresh</button>
           </div>
           <div id="recentChangesList">
-            <p class="muted small text-center my-20">Loading recent changes...</p>
+            <p class="muted small text-center my-20">Loading change log...</p>
           </div>
-        </div>
+        </details>
+
+        <details class="panel" id="siteContentPanel">
+          <summary><strong>Site content</strong></summary>
+          <p class="small muted mb-12">Edit existing published wording. Choose Edit wording next to an item to open its editor above the list. Saving publishes the change.</p>
+          <div id="siteContentEditor" class="d-none"></div>
+          <div id="siteContentList">
+            <p class="muted small text-center my-20">Loading site content...</p>
+          </div>
+        </details>
       </div>
 
     </div>
@@ -237,7 +239,7 @@
 
 <script src="app.js?v=92ea66804e5e"></script>
 <script src="nav-v2.js"></script>
-<script src="staff.js?v=d526bc50c073"></script>
+<script src="staff.js?v=7945041ebe48"></script>
 </body>
 </html>
 

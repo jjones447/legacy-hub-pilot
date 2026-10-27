@@ -319,12 +319,12 @@ test('staff console header, plain labels, empty state, and zero demo/sales copy'
   assert.ok(!STAFF_HTML.includes('no spreadsheets'));
 
   // Plain one-line explanations under all 6 panels
-  assert.ok(STAFF_HTML.includes('Search and filter caregiver records by name, contact, status, or segment.'));
+  assert.ok(STAFF_HTML.includes('Search caregiver records by name, contact, status, or segment. Results appear after you search; select a name'));
   assert.ok(STAFF_HTML.includes('Open follow-ups and action items requiring staff review.'));
   assert.ok(STAFF_HTML.includes('Schedule, manage, and take attendance for community events and respite sessions.'));
   assert.ok(STAFF_HTML.includes('Track grant applications from review through award, course completion, and closeout.'));
   assert.ok(STAFF_HTML.includes('View and manage caregiver contact details, program attendance, grants, and staff notes.'));
-  assert.ok(STAFF_HTML.includes('Direct editor for published site content and pages.'));
+  assert.ok(STAFF_HTML.includes('Edit existing published wording. Choose Edit wording next to an item to open its editor above the list. Saving publishes the change.'));
 
   // Assistant plain labels
   assert.ok(STAFF_HTML.includes('id="chatEmptyState"'));
