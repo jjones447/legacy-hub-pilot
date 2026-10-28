@@ -6,6 +6,84 @@ import { runInNewContext } from 'node:vm';
 
 const source = readFileSync(new URL('../nav-v2.js', import.meta.url), 'utf8');
 
+function mobileMenu({ width = 375, headerBottom = 112 } = {}) {
+  const handlers = {}, windowHandlers = {}, viewportHandlers = {}, properties = {}, attrs = {};
+  const classes = new Set();
+  let focused = null, submenuOpen = false;
+  const link = {};
+  const toggle = { setAttribute(k, v) { attrs[k] = v; }, focus() { focused = toggle; } };
+  const nav = {
+    classList: { contains: k => classes.has(k), toggle(k, v) { if (v) classes.add(k); else classes.delete(k); } },
+    style: { setProperty(k, v) { properties[k] = v; } },
+    contains: n => n === link,
+    querySelector: () => submenuOpen ? {} : null,
+  };
+  const document = {
+    querySelector: s => s === '.site-header' ? { getBoundingClientRect: () => ({ bottom: headerBottom }) }
+      : s === '[data-action="toggle-nav"]' ? toggle : nav,
+    querySelectorAll: () => [],
+    addEventListener(type, fn) { (handlers[type] ??= []).push(fn); },
+  };
+  const window = { innerWidth: width, addEventListener(type, fn) { windowHandlers[type] = fn; },
+    visualViewport: { addEventListener(type, fn) { viewportHandlers[type] = fn; } } };
+  runInNewContext(source, { document, window });
+  return { nav, toggle, link, attrs, properties,
+    open: () => window.toggleMainNavigation(),
+    escape(target = link) { handlers.keydown.forEach(fn => fn({ key: 'Escape', target })); },
+    resize(w, bottom) { window.innerWidth = w; headerBottom = bottom; windowHandlers.resize(); },
+    viewportResize(bottom) { headerBottom = bottom; viewportHandlers.resize(); },
+    setSubmenu(open) { submenuOpen = open; }, focused: () => focused,
+  };
+}
+
+test('scrolled mobile open anchors to the visible header, not the original document menu position', () => {
+  const h = mobileMenu();
+  // At scrollY=900 the old normal-flow panel at documentY=112 is y=-788.
+  assert.equal(112 - 900 < 0, true);
+  h.open();
+  assert.equal(h.properties['--mobile-nav-top'], '112px');
+  assert.equal(h.nav.classList.contains('open'), true);
+  assert.equal(h.attrs['aria-expanded'], 'true');
+  h.open();
+  assert.equal(h.nav.classList.contains('open'), false);
+  assert.equal(h.attrs['aria-expanded'], 'false');
+});
+
+test('open menu tracks viewport/header changes and closes when returning to desktop', () => {
+  const h = mobileMenu(); h.open();
+  h.resize(667, 86);
+  assert.equal(h.properties['--mobile-nav-top'], '86px');
+  h.viewportResize(74);
+  assert.equal(h.properties['--mobile-nav-top'], '74px');
+  h.resize(1280, 120);
+  assert.equal(h.nav.classList.contains('open'), false);
+  assert.equal(h.attrs['aria-expanded'], 'false');
+});
+
+test('mobile Escape preserves submenu dismissal, then closes the panel and restores button focus', () => {
+  const h = mobileMenu(); h.open(); h.setSubmenu(true);
+  h.escape();
+  assert.equal(h.nav.classList.contains('open'), true);
+  assert.equal(h.focused(), null);
+  h.setSubmenu(false); h.escape({});
+  assert.equal(h.nav.classList.contains('open'), true, 'outside Escape does not steal focus');
+  h.escape();
+  assert.equal(h.nav.classList.contains('open'), false);
+  assert.equal(h.focused(), h.toggle);
+});
+
+test('mobile panel uses viewport positioning and scrolls overflowing links within the remaining height', () => {
+  const css = readFileSync(new URL('../styles.css', import.meta.url), 'utf8');
+  const mobile = css.slice(css.indexOf('@media (max-width: 1150px)', css.indexOf('v2 collapses')));
+  const panel = mobile.match(/nav\.main-nav\.nav-v2\s*\{([^}]+)\}/)[1];
+  assert.match(panel, /position:\s*fixed/);
+  assert.match(panel, /top:\s*var\(--mobile-nav-top/);
+  assert.match(panel, /max-height:\s*calc\(100dvh - var\(--mobile-nav-top/);
+  assert.match(panel, /overflow-y:\s*auto/);
+  const app = readFileSync(new URL('../app.js', import.meta.url), 'utf8');
+  assert.match(app, /action === 'toggle-nav'[\s\S]*?window\.toggleMainNavigation\(\)/);
+});
+
 function harness({ width = 1280, hover = true, fine = true, mediaSupported = true } = {}) {
   let clock = 0;
   let nextTimer = 0;
