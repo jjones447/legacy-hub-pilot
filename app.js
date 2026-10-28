@@ -1185,7 +1185,8 @@ document.addEventListener('click', function (e) {
   } else if (action === 'toggle-nav') {
     e.preventDefault();
     const nav = document.querySelector('.main-nav');
-    if (nav) nav.classList.toggle('open');
+    if (window.toggleMainNavigation) window.toggleMainNavigation();
+    else if (nav) nav.classList.toggle('open');
   } else if (action === 'demo-resource-link') {
     e.preventDefault();
     resourceLinkPending(target);
