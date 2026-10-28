@@ -819,8 +819,9 @@ Current event data: ${currentData ? JSON.stringify(currentData) : 'None'}`
   if (area === 'caregiver') {
     const { operation, payload } = response.change;
     const caregiverRequest = String(requestText ?? '');
-    const requestsIdMutation = /\b(?:change|set|update|modify|edit|replace|rename)\s+(?:the\s+)?(?:caregiver\s+|record\s+)?id\b/i.test(caregiverRequest);
-    if (operation !== 'update'
+    const requestsIdMutation = /\b(?:change|set|update|modify|edit|replace|rename|reassign|overwrite)\s+(?:(?:the|this|that|selected|current|their|its)\s+)*(?:(?:caregiver|record|profile)(?:['’]s|s['’])?\s+)*(?:id|identifier)\b/i.test(caregiverRequest);
+    if (requestsIdMutation
+        || operation !== 'update'
         || !target_id || typeof target_id !== 'string'
         || !currentData || typeof currentData !== 'object' || Array.isArray(currentData)
         || ('id' in currentData && currentData.id !== target_id)
@@ -831,7 +832,7 @@ Current event data: ${currentData ? JSON.stringify(currentData) : 'None'}`
     const normalizedPayload = {};
     for (const [key, val] of Object.entries(payload)) {
       if (key === 'id') {
-        if (val !== target_id || requestsIdMutation) {
+        if (val !== target_id) {
           return { ok: false, refusal: 'Workers AI returned an invalid caregiver operation, target, or field' };
         }
         continue;

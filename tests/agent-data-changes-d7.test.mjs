@@ -901,10 +901,12 @@ test('Caregiver: native Workers AI response echoing selected id on cg_demo_thu_2
   assert.deepEqual(raw.prepare('SELECT * FROM caregiver WHERE id = ?').get('cg_demo_thu_20261029_1'), beforeCaregiver);
 });
 
-for (const [name, badPayload] of [
-  ['mismatched caregiver id', { id: 'cg_other', first_name: 'DEMO A PREVIEW ONLY' }],
-  ['forbidden created_at column', { first_name: 'DEMO A PREVIEW ONLY', created_at: '2020-01-01' }],
-  ['forbidden actor column', { first_name: 'DEMO A PREVIEW ONLY', actor: 'spoofed' }]
+for (const [name, badPayload, requestOverride] of [
+  ['mismatched caregiver id', { id: 'cg_other', first_name: 'DEMO A PREVIEW ONLY' }, 'Update first_name'],
+  ['explicit id-change intent when model omits id', { first_name: 'DEMO A PREVIEW ONLY' }, 'Change caregiver id to cg_other and first_name to DEMO A PREVIEW ONLY'],
+  ['possessive id-change intent when model echoes selected id', { id: 'cg_test_1', first_name: 'DEMO A PREVIEW ONLY' }, "Change this caregiver's id to cg_other and first_name to DEMO A PREVIEW ONLY"],
+  ['forbidden created_at column', { first_name: 'DEMO A PREVIEW ONLY', created_at: '2020-01-01' }, 'Update first_name'],
+  ['forbidden actor column', { first_name: 'DEMO A PREVIEW ONLY', actor: 'spoofed' }, 'Update first_name']
 ]) {
   test(`Caregiver: native Workers AI response with ${name} is refused with zero draft or domain writes`, async () => {
     const beforeCaregiver = raw.prepare('SELECT * FROM caregiver WHERE id = ?').get('cg_test_1');
@@ -915,7 +917,7 @@ for (const [name, badPayload] of [
         body: JSON.stringify({
           area: 'caregiver',
           target_id: 'cg_test_1',
-          request: 'Update first_name'
+          request: requestOverride
         })
       }),
       env: {
