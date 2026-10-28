@@ -810,3 +810,126 @@ for (const c of atomicDomainCases.filter(c => c.area === 'caregiver' || c.area =
     } finally { f.db.close(); }
   });
 }
+
+test('Caregiver: native Workers AI response echoing selected id on cg_demo_thu_20261029_1 drafts only first_name preview and preserves discard audit/domain guards', async () => {
+  raw.prepare(`
+    INSERT INTO caregiver (
+      id, first_name, last_name, email, phone, preferred_contact,
+      sanctuary_member, source, caring_for, relationship, segment_tags,
+      status, outcome_status, outcome_notes
+    ) VALUES (
+      'cg_demo_thu_20261029_1', 'DEMO A', 'FICTIONAL', 'demo.a.20261029@example.invalid',
+      '555-0191', 'email', 0, 'staff', 'Spouse (Fictional Demo)', 'Spouse',
+      '["fictional_demo","dementia"]', 'inactive', 'stable',
+      'Fictional demonstration caregiver record.'
+    )
+  `).run();
+
+  const beforeCaregiver = raw.prepare('SELECT * FROM caregiver WHERE id = ?').get('cg_demo_thu_20261029_1');
+  let aiCalls = 0;
+  const nativeEnv = {
+    ...env,
+    AGENT_MAPPER_BACKEND: undefined,
+    AI: {
+      run: async () => {
+        aiCalls += 1;
+        return {
+          response: {
+            change: {
+              operation: 'update',
+              payload: {
+                id: 'cg_demo_thu_20261029_1',
+                first_name: 'DEMO A PREVIEW ONLY',
+                last_name: 'FICTIONAL',
+                status: 'inactive'
+              }
+            }
+          }
+        };
+      }
+    }
+  };
+
+  const draftRes = await postAgent({
+    request: new Request('http://localhost/api/agent/change/draft', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-dev-actor': 'jacob.jones447@gmail.com' },
+      body: JSON.stringify({
+        area: 'caregiver',
+        target_id: 'cg_demo_thu_20261029_1',
+        request: 'For this selected fictional demonstration caregiver, propose changing only first_name from DEMO A to DEMO A PREVIEW ONLY. Leave every other field unchanged.'
+      })
+    }),
+    env: nativeEnv
+  });
+  assert.equal(draftRes.status, 200);
+  const draftData = await draftRes.json();
+  assert.equal(draftData.ok, true);
+  assert.equal(aiCalls, 1);
+  assert.match(draftData.change_id, /^ac_/);
+  assert.match(draftData.preview_version, /^[0-9a-f]{64}$/);
+  assert.deepEqual(draftData.change.payload, { first_name: 'DEMO A PREVIEW ONLY' });
+  assert.deepEqual(draftData.preview.before, { first_name: 'DEMO A' });
+  assert.deepEqual(draftData.preview.after, { first_name: 'DEMO A PREVIEW ONLY' });
+  assert.deepEqual(raw.prepare('SELECT * FROM caregiver WHERE id = ?').get('cg_demo_thu_20261029_1'), beforeCaregiver);
+  assert.equal(raw.prepare('SELECT COUNT(*) AS n FROM audit_log').get().n, 0);
+
+  const discardRes = await postAgent({
+    request: new Request('http://localhost/api/agent/change/discard', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-dev-actor': 'jacob.jones447@gmail.com' },
+      body: JSON.stringify({ change_id: draftData.change_id })
+    }),
+    env: nativeEnv
+  });
+  assert.equal(discardRes.status, 200);
+  const discardData = await discardRes.json();
+  assert.equal(discardData.ok, true);
+
+  const savedChange = raw.prepare('SELECT * FROM agent_change WHERE id = ?').get(draftData.change_id);
+  assert.equal(savedChange.area, 'caregiver');
+  assert.equal(savedChange.target_id, 'cg_demo_thu_20261029_1');
+  assert.equal(savedChange.operation, 'update');
+  assert.equal(savedChange.requested_by, 'access_staff:jacob.jones447@gmail.com');
+  assert.equal(savedChange.status, 'discarded');
+
+  const discardAudit = raw.prepare("SELECT * FROM audit_log WHERE action = 'agent_change.discard' AND entity_id = ?").get(draftData.change_id);
+  assert.ok(discardAudit);
+  assert.equal(discardAudit.actor, 'jacob.jones447@gmail.com');
+  assert.deepEqual(JSON.parse(discardAudit.before_json), { status: 'draft' });
+  assert.deepEqual(JSON.parse(discardAudit.after_json), { status: 'discarded' });
+  assert.deepEqual(raw.prepare('SELECT * FROM caregiver WHERE id = ?').get('cg_demo_thu_20261029_1'), beforeCaregiver);
+});
+
+for (const [name, badPayload, requestOverride] of [
+  ['mismatched caregiver id', { id: 'cg_other', first_name: 'DEMO A PREVIEW ONLY' }, 'Update first_name'],
+  ['explicit id-change intent when model omits id', { first_name: 'DEMO A PREVIEW ONLY' }, 'Change caregiver id to cg_other and first_name to DEMO A PREVIEW ONLY'],
+  ['possessive id-change intent when model echoes selected id', { id: 'cg_test_1', first_name: 'DEMO A PREVIEW ONLY' }, "Change this caregiver's id to cg_other and first_name to DEMO A PREVIEW ONLY"],
+  ['forbidden created_at column', { first_name: 'DEMO A PREVIEW ONLY', created_at: '2020-01-01' }, 'Update first_name'],
+  ['forbidden actor column', { first_name: 'DEMO A PREVIEW ONLY', actor: 'spoofed' }, 'Update first_name']
+]) {
+  test(`Caregiver: native Workers AI response with ${name} is refused with zero draft or domain writes`, async () => {
+    const beforeCaregiver = raw.prepare('SELECT * FROM caregiver WHERE id = ?').get('cg_test_1');
+    const res = await postAgent({
+      request: new Request('http://localhost/api/agent/change/draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-dev-actor': 'staff@example.org' },
+        body: JSON.stringify({
+          area: 'caregiver',
+          target_id: 'cg_test_1',
+          request: requestOverride
+        })
+      }),
+      env: {
+        ...env,
+        AGENT_MAPPER_BACKEND: undefined,
+        AI: { run: async () => ({ response: { change: { operation: 'update', payload: badPayload } } }) }
+      }
+    });
+    const data = await res.json();
+    assert.equal(data.ok, false);
+    assert.equal(raw.prepare('SELECT COUNT(*) AS n FROM agent_change').get().n, 0);
+    assert.equal(raw.prepare('SELECT COUNT(*) AS n FROM audit_log').get().n, 0);
+    assert.deepEqual(raw.prepare('SELECT * FROM caregiver WHERE id = ?').get('cg_test_1'), beforeCaregiver);
+  });
+}
