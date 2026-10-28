@@ -1,4 +1,5 @@
 // Pure NL -> change mapper (the LLM step - testable) (slice 07)
+import { ALLOWED_CAREGIVER_UPDATE_FIELDS } from '../../_lib/domain/caregivers.js';
 import { ALLOWED_EVENT_UPDATE_FIELDS, EVENT_TYPES } from '../../_lib/domain/events.js';
 export const DEFAULT_WORKERS_AI_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 export const WORKERS_AI_MAX_TOKENS = 800;
@@ -678,6 +679,28 @@ Current content data: ${currentData ? JSON.stringify(currentData) : 'None'}`;
   return response;
 }
 
+const CAREGIVER_STATUSES = ['active', 'inactive', 'archived'];
+const CAREGIVER_OUTCOMES = ['improving', 'stable', 'needs_support', 'disengaged'];
+
+function caregiverEditableData(currentData) {
+  if (!currentData || typeof currentData !== 'object' || Array.isArray(currentData)) return null;
+  const editable = {};
+  for (const field of ALLOWED_CAREGIVER_UPDATE_FIELDS) {
+    if (!(field in currentData)) continue;
+    if (field === 'segment_tags' && typeof currentData.segment_tags === 'string') {
+      try {
+        const parsed = JSON.parse(currentData.segment_tags);
+        editable.segment_tags = Array.isArray(parsed) ? parsed : currentData.segment_tags;
+      } catch {
+        editable.segment_tags = currentData.segment_tags;
+      }
+    } else {
+      editable[field] = currentData[field];
+    }
+  }
+  return editable;
+}
+
 function workersAiWorkflowSchema(area) {
   if (area === 'event') {
     const fields = {
@@ -699,6 +722,39 @@ function workersAiWorkflowSchema(area) {
       branch('update', fields), branch('publish', {}), branch('unpublish', {}),
       branch('archive', { confirm_with_registrations: { type: 'boolean' } })
     ] };
+  }
+  if (area === 'caregiver') {
+    return {
+      type: 'object',
+      properties: {
+        operation: { type: 'string', enum: ['update'] },
+        payload: {
+          type: 'object',
+          properties: {
+            first_name: { type: 'string' },
+            last_name: { type: ['string', 'null'] },
+            email: { type: ['string', 'null'] },
+            phone: { type: ['string', 'null'] },
+            preferred_contact: { type: ['string', 'null'] },
+            caring_for: { type: ['string', 'null'] },
+            relationship: { type: ['string', 'null'] },
+            segment_tags: {
+              type: ['array', 'null'],
+              items: { type: 'string' }
+            },
+            status: { type: 'string', enum: CAREGIVER_STATUSES },
+            outcome_status: {
+              type: ['string', 'null'],
+              enum: [...CAREGIVER_OUTCOMES, null]
+            },
+            outcome_notes: { type: ['string', 'null'] }
+          },
+          additionalProperties: false
+        }
+      },
+      required: ['operation', 'payload'],
+      additionalProperties: false
+    };
   }
   const operations = area === 'grant'
     ? ['review', 'decision', 'course_complete', 'close']
@@ -725,10 +781,12 @@ Current grant data: ${currentData ? JSON.stringify(currentData) : 'None'}`
     : area === 'caregiver'
       ? `You are a staff assistant mapping natural language requests to structured caregiver updates.
 You must adhere to these rules:
-1. Updates are strictly limited to allowed caregiver fields: first_name, last_name, email, phone, preferred_contact, caring_for, relationship, segment_tags, status, outcome_status, outcome_notes.
-2. If the request cannot be expressed or attempts forbidden modifications, refuse the request.
+1. Valid operation is update. Updates are strictly limited to allowed caregiver fields: ${ALLOWED_CAREGIVER_UPDATE_FIELDS.join(', ')}.
+2. Include only the caregiver fields being changed in payload. Do not include id, unchanged fields, or system metadata in payload.
+3. Target caregiver ID is fixed to Selected caregiver ID (${target_id}); if the request cannot be expressed or attempts to modify id, target a different record, or change forbidden fields, refuse the request.
 
-Current caregiver data: ${currentData ? JSON.stringify(currentData) : 'None'}`
+Selected caregiver ID: ${target_id}
+Current caregiver data: ${currentData ? JSON.stringify(caregiverEditableData(currentData)) : 'None'}`
       : area === 'event'
         ? `You are a staff assistant mapping natural language requests to structured event operations.
 1. Valid operations are create, update, publish, unpublish, and archive. Updates use only these fields: ${ALLOWED_EVENT_UPDATE_FIELDS.join(', ')}. Description is plain text; registration_url must be an absolute HTTPS URL without credentials, or null.
@@ -757,6 +815,58 @@ Current event data: ${currentData ? JSON.stringify(currentData) : 'None'}`
   if (!response.ok) return response;
   if (!response.change?.operation || !response.change?.payload) {
     return { ok: false, refusal: 'Workers AI returned an invalid workflow change' };
+  }
+  if (area === 'caregiver') {
+    const { operation, payload } = response.change;
+    const caregiverRequest = String(requestText ?? '');
+    const requestsIdMutation = /\b(?:change|set|update|modify|edit|replace|rename)\s+(?:the\s+)?(?:caregiver\s+|record\s+)?id\b/i.test(caregiverRequest);
+    if (operation !== 'update'
+        || !target_id || typeof target_id !== 'string'
+        || !currentData || typeof currentData !== 'object' || Array.isArray(currentData)
+        || ('id' in currentData && currentData.id !== target_id)
+        || !payload || typeof payload !== 'object' || Array.isArray(payload)
+        || Object.keys(response.change).some(key => !['operation', 'payload'].includes(key))) {
+      return { ok: false, refusal: 'Workers AI returned an invalid caregiver operation, target, or field' };
+    }
+    const normalizedPayload = {};
+    for (const [key, val] of Object.entries(payload)) {
+      if (key === 'id') {
+        if (val !== target_id || requestsIdMutation) {
+          return { ok: false, refusal: 'Workers AI returned an invalid caregiver operation, target, or field' };
+        }
+        continue;
+      }
+      if (!ALLOWED_CAREGIVER_UPDATE_FIELDS.includes(key)) {
+        return { ok: false, refusal: 'Workers AI returned an invalid caregiver operation, target, or field' };
+      }
+      normalizedPayload[key] = val;
+    }
+    if (('first_name' in normalizedPayload && (typeof normalizedPayload.first_name !== 'string' || !normalizedPayload.first_name.trim()))
+        || (['last_name', 'email', 'phone', 'preferred_contact', 'caring_for', 'relationship', 'outcome_notes'].some(
+          field => field in normalizedPayload && normalizedPayload[field] !== null && typeof normalizedPayload[field] !== 'string'
+        ))
+        || ('status' in normalizedPayload && !CAREGIVER_STATUSES.includes(normalizedPayload.status))
+        || ('outcome_status' in normalizedPayload && normalizedPayload.outcome_status !== null && !CAREGIVER_OUTCOMES.includes(normalizedPayload.outcome_status))
+        || ('segment_tags' in normalizedPayload && normalizedPayload.segment_tags !== null
+          && (!Array.isArray(normalizedPayload.segment_tags) || !normalizedPayload.segment_tags.every(item => typeof item === 'string')))) {
+      return { ok: false, refusal: 'Workers AI returned invalid or missing caregiver data' };
+    }
+    const editableCurrent = caregiverEditableData(currentData) || {};
+    const changedEntries = Object.entries(normalizedPayload).filter(([key, val]) => {
+      if (!(key in editableCurrent)) return true;
+      if (key === 'segment_tags' && Array.isArray(val) && Array.isArray(editableCurrent.segment_tags)) {
+        return JSON.stringify(val) !== JSON.stringify(editableCurrent.segment_tags);
+      }
+      return val !== editableCurrent[key];
+    });
+    if (Object.keys(normalizedPayload).length === 0 || (Object.keys(editableCurrent).length > 0 && changedEntries.length === 0)) {
+      return { ok: false, refusal: 'Workers AI returned an invalid caregiver operation, target, or field' };
+    }
+    return {
+      ok: true,
+      operation: 'update',
+      payload: Object.keys(editableCurrent).length > 0 ? Object.fromEntries(changedEntries) : normalizedPayload
+    };
   }
   if (area === 'event') {
     const { operation, payload } = response.change;
