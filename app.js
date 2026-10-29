@@ -184,6 +184,54 @@ function submitMembership(e) {
   return false;
 }
 
+/* ---------- Virtual support group: interest only, not session registration ---------- */
+let supportGroupInterestOpener = null;
+
+function openSupportGroupInterest(opener) {
+  const dialog = document.getElementById('supportGroupInterestModal');
+  const form = document.getElementById('supportGroupInterestForm');
+  if (!dialog || !form || dialog.open) return;
+  supportGroupInterestOpener = opener || document.activeElement;
+  setFormState(form, 'idle');
+  dialog.showModal();
+  document.getElementById('supportGroupName').focus();
+}
+
+function closeSupportGroupInterest() {
+  const dialog = document.getElementById('supportGroupInterestModal');
+  if (dialog && dialog.open) dialog.close();
+}
+
+(function () {
+  const dialog = document.getElementById('supportGroupInterestModal');
+  if (!dialog) return;
+  dialog.addEventListener('close', function () {
+    if (supportGroupInterestOpener) supportGroupInterestOpener.focus();
+    supportGroupInterestOpener = null;
+  });
+})();
+
+function submitSupportGroupInterest(e) {
+  e.preventDefault();
+  const form = document.getElementById('supportGroupInterestForm');
+  const name = splitName(document.getElementById('supportGroupName').value);
+  const payload = {
+    kind: 'support_request',
+    source: 'site_form:support_group',
+    external_ref: intakeExternalRef(form, 'support_request'),
+    first_name: name.first_name,
+    last_name: name.last_name,
+    email: document.getElementById('supportGroupEmail').value.trim(),
+    message: 'Virtual support group interest — request joining details',
+  };
+  postIntake(form, payload).then(function () {
+    setFormState(form, 'success');
+  }).catch(function () {
+    setFormState(form, 'error', "We couldn't save your request just now. Please contact Legacy if you need help.");
+  });
+  return false;
+}
+
 /* ---------- Resource hub: search + category filter ---------- */
 (function () {
   const grid = document.getElementById('resourceGrid');
@@ -964,6 +1012,9 @@ document.addEventListener('submit', function (e) {
   } else if (action === 'submit-coaching-interest') {
     e.preventDefault();
     submitCoachingInterest(e);
+  } else if (action === 'submit-support-group-interest') {
+    e.preventDefault();
+    submitSupportGroupInterest(e);
   } else if (action === 'submit-register') {
     e.preventDefault();
     submitRegister(e);
@@ -1174,6 +1225,12 @@ document.addEventListener('click', function (e) {
   } else if (action === 'close-coaching-interest') {
     e.preventDefault();
     closeCoachingInterest();
+  } else if (action === 'open-support-group-interest') {
+    e.preventDefault();
+    openSupportGroupInterest(target);
+  } else if (action === 'close-support-group-interest') {
+    e.preventDefault();
+    closeSupportGroupInterest();
   } else if (action === 'open-register') {
     e.preventDefault();
     const title = target.getAttribute('data-event-title') || '';
