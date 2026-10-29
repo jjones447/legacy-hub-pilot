@@ -696,6 +696,13 @@ function openCaregiverDetail() {
   if (firstOpen) document.getElementById('caregiverBackButton')?.focus();
 }
 
+function openCaregiverEditor() {
+  const editor = document.getElementById('caregiverEditDetails');
+  if (!editor) return;
+  editor.open = true;
+  editor.querySelector('[name="first_name"]')?.focus();
+}
+
 function backToStaffDashboard() {
   caregiverDetailEpoch++;
   caregiverDetailOpen = false;
@@ -873,6 +880,7 @@ async function viewCaregiver(id) {
 
     panel.innerHTML = `
       <h2 id="caregiverDetailHeading" tabindex="-1">Caregiver record — ${name} ${memberBadge} ${statusBadge}</h2>
+      <button type="button" class="btn btn-sm btn-outline mb-16" data-action="caregiver-edit">Edit caregiver details</button>
       <div class="kv-row"><span class="k">Contact Info</span><span class="v">${contactInfo}</span></div>
       <div class="kv-row"><span class="k">Sanctuary member since</span><span class="v">${memberSince}</span></div>
       <div class="kv-row"><span class="k">Caring for</span><span class="v">${caringFor} ${relationship}</span></div>
@@ -940,7 +948,7 @@ async function viewCaregiver(id) {
         </form>
       </details>
 
-      <details class="mt-16">
+      <details class="mt-16" id="caregiverEditDetails">
         <summary class="cursor-pointer note-section-summary"><strong>✏️ Edit Caregiver Details</strong></summary>
         <form data-action="submit-edit-caregiver" class="record-form-panel">
           <div class="form-row-compact">
@@ -1762,6 +1770,9 @@ document.addEventListener('click', function (e) {
     const id = Number(target.getAttribute('data-registration-id'));
     const status = target.getAttribute('data-status');
     updateAttendance(id, status, e);
+  } else if (action === 'caregiver-edit') {
+    e.stopPropagation();
+    openCaregiverEditor();
   } else if (action === 'caregiver-back') {
     e.stopPropagation();
     backToStaffDashboard();

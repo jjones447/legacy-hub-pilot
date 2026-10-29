@@ -315,3 +315,15 @@ test('staff Edit preserves self-access protections and ignores forged nonadmin e
   assert.doesNotMatch(h.list.innerHTML,/data-staff-name=|staff-save|staff-edit/);
   assert.equal(h.calls.length,0);
 });
+
+
+test('focused caregiver Edit opens the existing form and focuses its first field without a write', () => {
+  const field = { calls: 0, focus() { this.calls++; } };
+  const details = {open:false, querySelector: selector => {assert.equal(selector, '[name="first_name"]');return field;}};
+  const context = createContext({document:{getElementById:id => {assert.equal(id,'caregiverEditDetails');return details;}}});
+  runInContext(source.slice(source.indexOf('function openCaregiverEditor('),source.indexOf('function backToStaffDashboard(')),context);
+  context.openCaregiverEditor();
+  assert.equal(details.open,true);
+  assert.equal(field.calls,1);
+  assert.match(source,/data-action="caregiver-edit">Edit caregiver details/);
+});

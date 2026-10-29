@@ -168,6 +168,7 @@ test('exact call wiring: every action branch calls its expected function and exc
     'update-attendance': 'updateAttendance(id, status, e)',
     'view-caregiver': 'viewCaregiver(id)',
     'caregiver-back': 'backToStaffDashboard()',
+    'caregiver-edit': 'openCaregiverEditor()',
     'select-event': 'selectEvent(id, title)',
     'search-caregivers': 'searchCaregivers(0)',
     'search-prev': 'searchPrev()',
