@@ -658,6 +658,10 @@ async function invokeWorkersAi({ ai, model, messages, responseSchema }) {
 }
 
 async function workersAiContentBackend({ requestText, jsonSchema, currentData, ai, model, role, sensitivity }) {
+  const effectiveSchema = (currentData?.section_key && Array.isArray(jsonSchema?.oneOf))
+    ? (jsonSchema.oneOf.find((b) => b.properties?.section_key?.const === currentData.section_key) || jsonSchema)
+    : jsonSchema;
+
   const systemPrompt = `You are a site-builder agent mapping natural language requests to structured content edits.
 You must adhere to these rules:
 1. Output content must validate against the target schema.
@@ -670,12 +674,15 @@ Current content data: ${currentData ? JSON.stringify(currentData) : 'None'}`;
   const response = await invokeWorkersAi({
     ai,
     model,
-    responseSchema: workersAiEnvelopeSchema(jsonSchema),
+    responseSchema: workersAiEnvelopeSchema(effectiveSchema),
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: `Map the user's natural language request to a structured change.\nRequest: ${capWorkersAiRequest(requestText)}` }
     ]
   });
+  if (response.ok && response.change && currentData?.section_key && !('section_key' in response.change)) {
+    response.change = { section_key: currentData.section_key, ...response.change };
+  }
   return response;
 }
 
@@ -913,5 +920,332 @@ Current event data: ${currentData ? JSON.stringify(currentData) : 'None'}`
     ok: true,
     operation: response.change.operation,
     payload: response.change.payload
+  };
+}
+
+const CATALOG_TARGET_RULES = Object.freeze({
+  'ps_home.hero': {
+    label: 'Homepage — Hero Banner',
+    page_path: '/index.html',
+    phrases: ['homepage hero', 'home hero', 'home page hero', 'homepage banner', 'home banner', 'homepage headline', 'homepage title', 'homepage subtitle', 'homepage lede', 'home title', 'home subtitle', 'home lede', 'front page hero', 'welcome banner'],
+    page_tokens: ['home', 'homepage', 'front page', 'index', 'landing'],
+    section_tokens: ['hero', 'banner', 'headline', 'title', 'subtitle', 'lede', 'top'],
+  },
+  'ps_home.journey': {
+    label: 'Homepage — Caregiving Journey',
+    page_path: '/index.html',
+    phrases: ['home journey', 'homepage journey', 'caregiving journey', 'caregiver journey section', 'navigate it alone'],
+    page_tokens: ['home', 'homepage', 'index'],
+    section_tokens: ['journey', 'navigate', 'alone'],
+  },
+  'ps_home.support': {
+    label: 'Homepage — How We Support Caregivers',
+    page_path: '/index.html',
+    phrases: ['how we support caregivers', 'home support section', 'homepage support', 'support tiles'],
+    page_tokens: ['home', 'homepage', 'index'],
+    section_tokens: ['how we support', 'tiles', 'pillars'],
+  },
+  'ps_home.community_wellness_partners': {
+    label: 'Homepage — Community Wellness Partners',
+    page_path: '/index.html',
+    phrases: ['community wellness partners', 'wellness partners section', 'caregiver-supportive community'],
+    page_tokens: ['home', 'homepage', 'index'],
+    section_tokens: ['community wellness partners', 'wellness partners', 'partners'],
+  },
+  'ps_about.hero': {
+    label: 'About Page — Hero Banner',
+    page_path: '/about.html',
+    phrases: ['about hero', 'about page hero', 'about banner', 'about title', 'about subtitle', 'about lede', 'born from the journey'],
+    page_tokens: ['about', 'about us', 'about page'],
+    section_tokens: ['hero', 'banner', 'headline', 'title', 'subtitle', 'lede', 'top'],
+  },
+  'ps_about.story': {
+    label: 'About Page — Our Story',
+    page_path: '/about.html',
+    phrases: ['our story', 'about story', 'about page story', 'founder story', 'shanelle story', 'from one family'],
+    page_tokens: ['about', 'about us', 'about page'],
+    section_tokens: ['story', 'our story', 'founder', 'shanelle', 'snowden'],
+  },
+  'ps_about.values': {
+    label: 'About Page — What Guides Us (Values)',
+    page_path: '/about.html',
+    phrases: ['about values', 'what guides us', 'our values', 'guiding values'],
+    page_tokens: ['about', 'about us', 'about page'],
+    section_tokens: ['values', 'guides us', 'what guides us'],
+  },
+  'ps_about.join': {
+    label: 'About Page — Join Us Call to Action',
+    page_path: '/about.html',
+    phrases: ['about join', 'about cta', 'join us on about', 'explore the sanctuary'],
+    page_tokens: ['about', 'about us', 'about page'],
+    section_tokens: ['join', 'join us', 'cta', 'call to action'],
+  },
+  'ps_programs.hero': {
+    label: 'Programs Page — Hero Banner',
+    page_path: '/programs.html',
+    phrases: ['programs hero', 'programs page hero', 'programs banner', 'sanctuary hero', 'programs title', 'programs subtitle', 'programs lede'],
+    page_tokens: ['programs', 'program', 'programs page', 'sanctuary page'],
+    section_tokens: ['hero', 'banner', 'headline', 'title', 'subtitle', 'lede', 'top'],
+  },
+  'ps_programs.membership': {
+    label: 'Programs Page — Sanctuary Membership Section',
+    page_path: '/programs.html#membership',
+    phrases: ['programs membership', 'membership section', 'sanctuary membership section', 'one membership every kind of support'],
+    page_tokens: ['programs', 'program', 'programs page', 'sanctuary'],
+    section_tokens: ['membership section', 'one membership', 'membership includes'],
+  },
+  'ps_programs.support_group': {
+    label: 'Programs Page — Virtual Support Group Section',
+    page_path: '/programs.html#support-group',
+    phrases: ['programs support group', 'virtual support group section', 'support group section', 'judgment-free hour'],
+    page_tokens: ['programs', 'program', 'programs page'],
+    section_tokens: ['support group', 'virtual support group', 'judgment-free'],
+  },
+  'ps_programs.grants': {
+    label: 'Programs Page — Wellness Grants Section',
+    page_path: '/programs.html#grants',
+    phrases: ['programs grants', 'wellness grants section', 'grants section', 'personalized stipend', 'your grant journey'],
+    page_tokens: ['programs', 'program', 'programs page'],
+    section_tokens: ['wellness grants', 'grants section', 'stipend', 'grant journey'],
+  },
+  'ps_programs.socials': {
+    label: 'Programs Page — Memory Socials Section',
+    page_path: '/programs.html#memory-socials',
+    phrases: ['programs socials', 'memory socials section', 'memory socials', 'drop-in respite'],
+    page_tokens: ['programs', 'program', 'programs page'],
+    section_tokens: ['memory socials', 'socials', 'drop-in respite', 'respite'],
+  },
+  'ps_programs.coaching': {
+    label: 'Programs Page — 1:1 Wellness Coaching Section',
+    page_path: '/programs.html#coaching',
+    phrases: ['programs coaching', 'wellness coaching section', '1:1 wellness coaching', 'coaching section'],
+    page_tokens: ['programs', 'program', 'programs page'],
+    section_tokens: ['1:1 wellness coaching', 'wellness coaching', 'coaching section'],
+  },
+  'ps_request_support.hero': {
+    label: 'Request Support Page — Hero Banner',
+    page_path: '/request-support.html',
+    phrases: ['request support hero', 'request support banner', 'request support page title', 'request support page subtitle', 'request support lede'],
+    page_tokens: ['request support page', 'request-support'],
+    section_tokens: ['hero', 'banner', 'title', 'subtitle', 'lede'],
+  },
+  'ps_request_support.next': {
+    label: 'Request Support Page — What Happens Next',
+    page_path: '/request-support.html',
+    phrases: ['what happens next', 'request support next', 'a person not a process'],
+    page_tokens: ['request support', 'request-support'],
+    section_tokens: ['what happens next', 'happens next', 'person not a process'],
+  },
+  'ps_form.membership': {
+    label: 'Form — Sanctuary Membership Signup',
+    page_path: '/index.html#membershipModal',
+    phrases: ['membership form', 'join form', 'sanctuary membership form', 'membership signup form', 'membership modal', 'caring for options', 'join the caregiver sanctuary form'],
+    page_tokens: ['form', 'modal', 'signup', 'button', 'label', 'options'],
+    section_tokens: ['membership', 'join free', 'caring for'],
+  },
+  'ps_form.grant_apply': {
+    label: 'Form — Wellness Grant Application',
+    page_path: '/programs.html#grantApplyModal',
+    phrases: ['grant form', 'grant application form', 'wellness grant form', 'grant apply form', 'apply for a wellness grant form', 'grant modal'],
+    page_tokens: ['form', 'modal', 'application', 'button', 'label'],
+    section_tokens: ['grant', 'wellness grant', 'requested for'],
+  },
+  'ps_form.coaching_interest': {
+    label: 'Form — 1:1 Wellness Coaching Interest',
+    page_path: '/programs.html#coachingInterestModal',
+    phrases: ['coaching form', 'coaching interest form', 'wellness coaching form', 'join the coaching interest list', 'coaching modal'],
+    page_tokens: ['form', 'modal', 'interest list', 'button', 'label'],
+    section_tokens: ['coaching', 'coaching interest'],
+  },
+  'ps_form.request_support': {
+    label: 'Form — Request Support Intake',
+    page_path: '/request-support.html#supportForm',
+    phrases: ['request support form', 'support request form', 'intake form', 'tell us what you need', 'support form', 'who options', 'what options'],
+    page_tokens: ['form', 'intake', 'button', 'label', 'options'],
+    section_tokens: ['request support', 'support needed', 'tell us what you need'],
+  },
+});
+
+function parseItemData(raw) {
+  if (!raw) return {};
+  if (typeof raw === 'object') return raw;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+
+function candidateInfo(item) {
+  const data = parseItemData(item.data);
+  const rule = CATALOG_TARGET_RULES[item.id];
+  const isForm = String(item.id || '').startsWith('ps_form.');
+  if (rule) {
+    return {
+      id: item.id,
+      type_id: item.type_id || 'page_section',
+      area: isForm ? 'form' : 'content',
+      label: rule.label,
+      page_path: rule.page_path,
+    };
+  }
+  const displayTitle = data.title || data.heading || data.question || data.name || item.id;
+  const pagePath = item.type_id === 'resource' ? '/resources.html'
+    : item.type_id === 'faq' ? '/faq.html'
+    : item.type_id === 'partner' ? '/sanctuary.html'
+    : '/index.html';
+  return {
+    id: item.id,
+    type_id: item.type_id || 'content',
+    area: isForm ? 'form' : 'content',
+    label: displayTitle && displayTitle !== item.id ? `${item.id} (${displayTitle})` : item.id,
+    page_path: pagePath,
+  };
+}
+
+export function resolveContentTarget({ request, publishedItems = [], area = 'auto' }) {
+  const text = String(request ?? '').trim();
+  const lower = text.toLowerCase();
+  const normalizedArea = area === 'form' || area === 'content' ? area : 'auto';
+
+  const allPublished = (Array.isArray(publishedItems) ? publishedItems : []).filter(
+    (item) => item && item.status === 'published' && typeof item.id === 'string'
+  );
+
+  const areaFiltered = normalizedArea === 'form'
+    ? allPublished.filter((item) => item.id.startsWith('ps_form.'))
+    : normalizedArea === 'content'
+      ? allPublished.filter((item) => !item.id.startsWith('ps_form.'))
+      : allPublished;
+
+  const pool = areaFiltered.length > 0 ? areaFiltered : allPublished;
+
+  // Detect if the user is clearly asking to mutate a caregiver, grant, or event record
+  // rather than website copy/forms when in auto/untargeted mode.
+  const mentionsFormOrSection = /\b(?:form|page|section|hero|banner|heading|subtitle|lede|paragraph|copy|wording|button|label|placeholder|option|cta|website|site)\b/i.test(text);
+  if (!mentionsFormOrSection) {
+    if (/\b(?:award|decline)\s+(?:the\s+|this\s+)?grant\b|\bgrant\s+(?:review\s+notes|decision|course\s+complete)\b/i.test(text)) {
+      return {
+        ok: true,
+        resolved: false,
+        clarification_needed: true,
+        reason: 'missing_workflow_target',
+        workflow_area: 'grant',
+        message: 'It sounds like you want to update a grant application record. Select the grant application in the console first (or choose a website Grants section below if you meant public page copy):',
+        candidates: pool.filter((i) => i.id.includes('grant')).slice(0, 4).map(candidateInfo),
+      };
+    }
+    if (/\b(?:caregiver(?:'s|s)?\s+(?:phone|email|status|outcome|segment|preferred_contact|caring_for|relationship)|mark\s+caregiver)\b/i.test(text)) {
+      return {
+        ok: true,
+        resolved: false,
+        clarification_needed: true,
+        reason: 'missing_workflow_target',
+        workflow_area: 'caregiver',
+        message: 'It sounds like you want to update a caregiver record. Search and select the caregiver in the console first, then send your request.',
+        candidates: [],
+      };
+    }
+  }
+
+  if (pool.length === 0) {
+    return {
+      ok: true,
+      resolved: false,
+      clarification_needed: true,
+      reason: 'empty_catalog',
+      message: 'No published content items were found in this area. Please select or seed a published item first.',
+      candidates: [],
+    };
+  }
+
+  // Score each published item against the natural-language request
+  const scored = pool.map((item) => {
+    const data = parseItemData(item.data);
+    const rule = CATALOG_TARGET_RULES[item.id];
+    const sectionKey = item.id.startsWith('ps_') ? item.id.slice(3) : (data.section_key || '');
+    let score = 0;
+
+    // 1. Exact ID or section_key mention
+    if (lower.includes(item.id.toLowerCase())) {
+      score += 120;
+    } else if (sectionKey && lower.includes(sectionKey.toLowerCase())) {
+      score += 100;
+    }
+
+    // 2. Curated phrase and page+section token rules
+    if (rule) {
+      for (const phrase of rule.phrases) {
+        if (lower.includes(phrase)) {
+          score += 55;
+        }
+      }
+      const hasPage = rule.page_tokens.some((tok) => lower.includes(tok));
+      const hasSection = rule.section_tokens.some((tok) => lower.includes(tok));
+      if (hasPage && hasSection) {
+        score += 45;
+      } else if (hasPage) {
+        score += 12;
+      } else if (hasSection) {
+        score += 15;
+      }
+    }
+
+    // 3. Form vs page disambiguation boost
+    const isForm = item.id.startsWith('ps_form.');
+    if (/\b(?:form|modal|submit\s+button|button\s+label|input|placeholder|dropdown|options)\b/i.test(text)) {
+      if (isForm) score += 20;
+    }
+
+    // 4. Match against current published title / heading / question / name
+    for (const field of ['title', 'heading', 'eyebrow', 'question', 'name', 'submit_label', 'cta_label']) {
+      const val = typeof data[field] === 'string' ? data[field].trim().toLowerCase() : '';
+      if (val && val.length >= 5 && lower.includes(val)) {
+        score += 45;
+      }
+    }
+
+    // 5. Match against schema field names present on this item when only 1 item in pool
+    if (pool.length === 1) {
+      const mentionsKnownField = Object.keys(data).some((k) => lower.includes(k.replace(/_/g, ' ')) || lower.includes(k));
+      if (mentionsKnownField || /\b(?:title|heading|subtitle|lede|button|label|text|copy|wording|description)\b/i.test(text)) {
+        score += 35;
+      }
+    }
+
+    return { item, data, score, info: candidateInfo(item) };
+  });
+
+  scored.sort((a, b) => b.score - a.score);
+  const top = scored[0];
+  const second = scored[1] || null;
+
+  // Confident single match: high score and clear separation from runner-up
+  if (top && top.score >= 35 && (!second || top.score - second.score >= 15)) {
+    return {
+      ok: true,
+      resolved: true,
+      clarification_needed: false,
+      target_id: top.item.id,
+      type_id: top.item.type_id || 'page_section',
+      item: top.item,
+      currentData: top.data,
+      target_label: top.info.label,
+      page_path: top.info.page_path,
+    };
+  }
+
+  // Ambiguous or underspecified: return top candidate chips without guessing
+  const positiveMatches = scored.filter((s) => s.score > 0);
+  const candidateSlice = (positiveMatches.length > 0 ? positiveMatches : scored).slice(0, 5);
+  return {
+    ok: true,
+    resolved: false,
+    clarification_needed: true,
+    reason: positiveMatches.length > 1 ? 'ambiguous_target' : 'unspecified_target',
+    message: positiveMatches.length > 1
+      ? 'Your request matches more than one website section. Which section would you like to preview a draft for?'
+      : 'Which website page section or form would you like to change? Choose one below or name the page and section in your message:',
+    candidates: candidateSlice.map((s) => s.info),
   };
 }
