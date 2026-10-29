@@ -660,8 +660,18 @@ function previewFailClosed(status, error, message) {
   );
 }
 
-async function injectDraftPreviewBanner(response, draftRow, targetLabel, previewVersion = null) {
-  const html = await response.text();
+async function injectDraftPreviewBanner(response, draftRow, targetLabel, previewVersion = null, anchor = '') {
+  let html = await response.text();
+  if (typeof anchor === 'string' && /^#(membershipModal|grantApplyModal|coachingInterestModal)$/.test(anchor)) {
+    const modalId = anchor.slice(1);
+    html = html.replace(
+      new RegExp(`<div\\b[^>]*\\bid=["']${modalId}["'][^>]*>`, 'i'),
+      (tag) => {
+        if (/\bclass=["'][^"']*\bopen\b[^"']*["']/i.test(tag)) return tag;
+        return tag.replace(/\bclass=(["'])([^"']*)\1/i, (m, q, cls) => `class=${q}${cls.trim()} open${q}`);
+      }
+    );
+  }
   const safeDraftId = escapeHtml(draftRow.id);
   const safeTarget = escapeHtml(targetLabel || draftRow.draft_of || draftRow.type_id || 'content');
   const safeVer = previewVersion ? escapeHtml(previewVersion) : '';
@@ -774,7 +784,7 @@ export async function maybeRewriteContent(context, response) {
       };
       const rewritten = await rewriteContent(response, baseSections);
       const meta = getContentTargetMeta(targetId, draftRow.type_id, draftData);
-      return await injectDraftPreviewBanner(rewritten, draftRow, meta.label, binding.version);
+      return await injectDraftPreviewBanner(rewritten, draftRow, meta.label, binding.version, meta.anchor);
     }
 
     if (!response || response.status !== 200) {

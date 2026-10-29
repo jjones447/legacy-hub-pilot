@@ -205,3 +205,77 @@ for(const terminal of ['refusal','malformed-preview','fetch-error','body-error']
   assert.equal(h.calls.length,1);assert.equal(h.calls[0].signal,undefined);
   assert.equal(h.timing.size,0);assert.equal(h.uuids(),0);assert.equal(h.storage.size,0);
 });
+
+test('FULL auto/empty-target ON reserves synchronously before deferred fetch/body, posts exact governed body with signal/idempotency_key, and blocks double Enter',async()=>{
+  const pending=deferred();
+  const h=harness({fetchImpl:()=>pending.promise});
+  h.enable();
+  h.nodes.chatAreaSelect.value='auto';
+  h.nodes.chatContentTarget.value='';
+  const first=h.send();
+  assert.equal(h.calls.length,1);
+  assert.equal(h.state().pending,true);
+  assert.equal(h.uuids(),1);
+  assert.equal(h.calls[0].body.type_id,'page_section');
+  assert.equal(h.calls[0].body.target_id,'ps_home.hero');
+  assert.equal(h.calls[0].body.request,'First intent');
+  assert.match(h.calls[0].body.idempotency_key,/^[a-f0-9]{32}$/);
+  assert.ok(h.calls[0].signal&&h.calls[0].signal.aborted===false);
+  h.nodes.chatInput.value='Second intent must remain';
+  const second=h.send();
+  assert.equal(h.calls.length,1);
+  assert.equal(h.uuids(),1);
+  assert.equal(h.nodes.chatInput.value,'Second intent must remain');
+  pending.resolve(response(draft()));
+  await Promise.all([first,second]);
+  assert.equal(h.state().pending,false);
+  assert.equal(h.state().hold,false);
+  assert.equal(h.nodes.chatInput.value,'Second intent must remain');
+
+  // Immediate ON probe with auto/empty target verifies idempotency_key and signal
+  const imm=harness({fetchImpl:()=>response(draft())});
+  imm.enable();
+  imm.nodes.chatAreaSelect.value='auto';
+  imm.nodes.chatContentTarget.value='';
+  await imm.send();
+  assert.equal(imm.calls.length,1);
+  assert.match(imm.calls[0].body.idempotency_key,/^[a-f0-9]{32}$/);
+  assert.ok(imm.calls[0].signal);
+  assert.deepEqual(Object.keys(imm.calls[0].body).sort(),['idempotency_key','request','target_id','type_id']);
+
+  // Unsupported ON section refuses synchronously before sending
+  const unsupported=harness({fetchImpl:()=>response(draft())});
+  unsupported.enable();
+  unsupported.nodes.chatAreaSelect.value='auto';
+  unsupported.nodes.chatContentTarget.value='';
+  unsupported.nodes.chatInput.value='Update the About page story heading';
+  await unsupported.send();
+  assert.equal(unsupported.calls.length,0);
+  assert.equal(unsupported.uuids(),0);
+  assert.equal(unsupported.state().pending,false);
+  assert.equal(unsupported.state().hold,false);
+  assert.match(unsupported.messages.at(-1).textContent,/Select a published item in this area first/);
+});
+
+for(const stage of ['fetch','body'])test(`ordinary OFF auto/empty-target reserves pending synchronously during deferred ${stage} and blocks double Enter`,async()=>{
+  const pending=deferred();
+  const h=harness({fetchImpl:()=>stage==='fetch'?pending.promise:{ok:true,json:()=>pending.promise}});
+  h.nodes.chatAreaSelect.value='auto';
+  h.nodes.chatContentTarget.value='';
+  const first=h.send();
+  if(stage==='body')await flush();
+  assert.equal(h.calls.length,1);
+  assert.equal(h.state().pending,true);
+  assert.equal(h.uuids(),0);
+  assert.deepEqual(h.calls[0].body,{request:'First intent'});
+  assert.equal(h.calls[0].signal,undefined);
+  h.nodes.chatInput.value='Second intent must remain';
+  const second=h.send();
+  assert.equal(h.calls.length,1);
+  assert.equal(h.nodes.chatInput.value,'Second intent must remain');
+  pending.resolve(stage==='fetch'?response(draft()):draft());
+  await Promise.all([first,second]);
+  assert.equal(h.state().pending,false);
+  assert.equal(h.state().hold,false);
+  assert.equal(h.nodes.chatInput.value,'Second intent must remain');
+});

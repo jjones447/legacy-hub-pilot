@@ -906,3 +906,146 @@ test('non-page_section drafts (resource, faq, partner) return honest unsupported
     assert.equal((await resp.json()).error, 'preview_unsupported_type');
   });
 });
+
+test('authorized modal form previews (ps_form.membership, ps_form.grant_apply, ps_form.coaching_interest) open the exact target modal (.open) while ordinary public renders keep modals closed', async () => {
+  await withPreviewJwks(async () => {
+    const committedIndexHtml = loadHtml('index.html');
+    const committedProgramsHtml = loadHtml('programs.html');
+    const committedCss = loadHtml('styles.css');
+    assert.match(committedCss, /\.modal-overlay\s*\{[^}]*display:\s*none/s);
+    assert.match(committedCss, /\.modal-overlay\.open\s*\{\s*display:\s*flex;\s*\}/);
+
+    const publishedItems = [
+      {
+        id: 'ps_form.membership',
+        type_id: 'page_section',
+        status: 'published',
+        draft_of: null,
+        updated_by: 'seed',
+        updated_at: '2026-10-01 00:00:00',
+        data: JSON.stringify({ section_key: 'form.membership', heading: 'LIVE form' }),
+      },
+      {
+        id: 'ps_form.grant_apply',
+        type_id: 'page_section',
+        status: 'published',
+        draft_of: null,
+        updated_by: 'seed',
+        updated_at: '2026-10-01 00:00:00',
+        data: JSON.stringify({ section_key: 'form.grant_apply', heading: 'LIVE grant form' }),
+      },
+      {
+        id: 'ps_form.coaching_interest',
+        type_id: 'page_section',
+        status: 'published',
+        draft_of: null,
+        updated_by: 'seed',
+        updated_at: '2026-10-01 00:00:00',
+        data: JSON.stringify({ section_key: 'form.coaching_interest', heading: 'LIVE coaching form' }),
+      },
+    ];
+    const drafts = [
+      {
+        id: 'cid_review_one',
+        type_id: 'page_section',
+        status: 'draft',
+        draft_of: 'ps_form.membership',
+        updated_by: draftOwner('jane@legacy.org'),
+        updated_at: '2026-10-29 16:00:00',
+        data: JSON.stringify({ section_key: 'form.membership', heading: 'PROPOSED form' }),
+      },
+      {
+        id: 'cid_review_grant',
+        type_id: 'page_section',
+        status: 'draft',
+        draft_of: 'ps_form.grant_apply',
+        updated_by: draftOwner('jane@legacy.org'),
+        updated_at: '2026-10-29 16:01:00',
+        data: JSON.stringify({ section_key: 'form.grant_apply', heading: 'PROPOSED grant form' }),
+      },
+      {
+        id: 'cid_review_coaching',
+        type_id: 'page_section',
+        status: 'draft',
+        draft_of: 'ps_form.coaching_interest',
+        updated_by: draftOwner('jane@legacy.org'),
+        updated_at: '2026-10-29 16:02:00',
+        data: JSON.stringify({ section_key: 'form.coaching_interest', heading: 'PROPOSED coaching form' }),
+      },
+    ];
+    const db = new FakeD1(
+      [...publishedItems, ...drafts],
+      [{ email: 'jane@legacy.org', display_name: 'Jane', role: 'staff', status: 'active' }]
+    );
+    const ownerToken = await makePreviewAccessJwt({ email: 'jane@legacy.org' });
+    const previewEnv = {
+      ENVIRONMENT: 'preview',
+      CF_ACCESS_TEAM_DOMAIN: PREVIEW_TEAM,
+      CF_ACCESS_AUD: PREVIEW_AUD,
+      LEGACY_DB: db,
+    };
+
+    // 1. Membership modal preview on index.html opens #membershipModal (.open)
+    const memBinding = await confirmationBinding(db, 'content', drafts[0], 'https://staging.caregiversanctuary.org', publishedItems[0]);
+    const memResp = await onRequest({
+      request: new Request(
+        `https://staging.caregiversanctuary.org/index.html?preview_draft=cid_review_one&preview_version=${memBinding.version}`,
+        { method: 'GET', headers: { 'Cf-Access-Jwt-Assertion': ownerToken } }
+      ),
+      next: async () => new Response(committedIndexHtml, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } }),
+      env: previewEnv,
+    });
+    assert.equal(memResp.status, 200);
+    const memHtml = await memResp.text();
+    assert.ok(memHtml.includes('PROPOSED form'));
+    assert.ok(memHtml.includes('staging-draft-preview-banner'));
+    assert.match(memHtml, /<div class="modal-overlay open" id="membershipModal">/);
+
+    // 2. Grant application modal preview on programs.html opens ONLY #grantApplyModal (.open)
+    const grantBinding = await confirmationBinding(db, 'content', drafts[1], 'https://staging.caregiversanctuary.org', publishedItems[1]);
+    const grantResp = await onRequest({
+      request: new Request(
+        `https://staging.caregiversanctuary.org/programs.html?preview_draft=cid_review_grant&preview_version=${grantBinding.version}`,
+        { method: 'GET', headers: { 'Cf-Access-Jwt-Assertion': ownerToken } }
+      ),
+      next: async () => new Response(committedProgramsHtml, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } }),
+      env: previewEnv,
+    });
+    assert.equal(grantResp.status, 200);
+    const grantHtml = await grantResp.text();
+    assert.ok(grantHtml.includes('PROPOSED grant form'));
+    assert.match(grantHtml, /<div class="modal-overlay open" id="grantApplyModal">/);
+    assert.match(grantHtml, /<div class="modal-overlay" id="membershipModal">/);
+    assert.match(grantHtml, /<div class="modal-overlay" id="coachingInterestModal">/);
+
+    // 3. Coaching interest modal preview on programs.html opens ONLY #coachingInterestModal (.open)
+    const coachBinding = await confirmationBinding(db, 'content', drafts[2], 'https://staging.caregiversanctuary.org', publishedItems[2]);
+    const coachResp = await onRequest({
+      request: new Request(
+        `https://staging.caregiversanctuary.org/programs.html?preview_draft=cid_review_coaching&preview_version=${coachBinding.version}`,
+        { method: 'GET', headers: { 'Cf-Access-Jwt-Assertion': ownerToken } }
+      ),
+      next: async () => new Response(committedProgramsHtml, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } }),
+      env: previewEnv,
+    });
+    assert.equal(coachResp.status, 200);
+    const coachHtml = await coachResp.text();
+    assert.ok(coachHtml.includes('PROPOSED coaching form'));
+    assert.match(coachHtml, /<div class="modal-overlay open" id="coachingInterestModal">/);
+    assert.match(coachHtml, /<div class="modal-overlay" id="membershipModal">/);
+    assert.match(coachHtml, /<div class="modal-overlay" id="grantApplyModal">/);
+
+    // 4. Ordinary public render of index.html keeps #membershipModal closed (no .open)
+    const publicResp = await onRequest({
+      request: new Request('https://staging.caregiversanctuary.org/index.html', { method: 'GET' }),
+      next: async () => new Response(committedIndexHtml, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } }),
+      env: previewEnv,
+    });
+    assert.equal(publicResp.status, 200);
+    const publicHtml = await publicResp.text();
+    assert.ok(publicHtml.includes('LIVE form'));
+    assert.ok(!publicHtml.includes('PROPOSED form'));
+    assert.match(publicHtml, /<div class="modal-overlay" id="membershipModal">/);
+    assert.doesNotMatch(publicHtml, /<div class="modal-overlay open" id="membershipModal">/);
+  });
+});

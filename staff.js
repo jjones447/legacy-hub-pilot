@@ -2342,6 +2342,27 @@ window.agentSend = async function () {
       if (selectedArea === 'auto') {
         effectiveArea = contentItem.id.startsWith('ps_form.') ? 'form' : 'content';
       }
+    } else if (agentWebJobsEnabled) {
+      const unsupportedWebJobTarget = selectedArea === 'form'
+        ? /\b(?:membership|grant|coaching)\b/i.test(text)
+        : /\b(?:about\s+page|our\s+story|values\s+section|programs?\s+page|membership\s*(?:form|modal|section|signup)?|grant\s*(?:form|modal|section|application)?|coaching\s*(?:form|modal|section|interest)?|memory\s+socials?|virtual\s+support\s+group|resources?\s+page|faq\s+page|partners?\s+page|caregiving\s+journey)\b/i.test(text)
+          || (selectedArea === 'content' && /\b(?:request[\s-]+support|intake\s+form|support\s+form|name_label)\b/i.test(text));
+      const candidateTargetId = unsupportedWebJobTarget
+        ? ''
+        : (selectedArea === 'form' || (selectedArea === 'auto' && /\b(?:request[\s-]+support|intake\s+form|support\s+form|name_label)\b/i.test(text)))
+          ? 'ps_form.request_support'
+          : 'ps_home.hero';
+      contentItem = candidateTargetId ? chatContentItems(selectedArea).find(item => item.id === candidateTargetId) : null;
+      if (!contentItem) {
+        const botDiv = document.createElement('div');
+        botDiv.className = 'msg bot';
+        botDiv.textContent = 'Select a published item in this area first. Nothing has been drafted.';
+        body.appendChild(botDiv);
+        body.scrollTop = body.scrollHeight;
+        return;
+      }
+      targetId = contentItem.id;
+      effectiveArea = contentItem.id.startsWith('ps_form.') ? 'form' : 'content';
     } else if (selectedArea === 'auto' && /\b(?:create|add|schedule)\b[\s\S]*\b(?:event|support group|memory social|workshop)\b/i.test(text) && !/\b(?:page|section|form|hero|banner|heading|subtitle|lede|button)\b/i.test(text)) {
       isContent = false;
       effectiveArea = 'event';
@@ -2388,8 +2409,8 @@ window.agentSend = async function () {
 
   // Reserve synchronously before the FIRST await. A second Enter returns at the
   // entry guard without clearing its text, generating another ID, or posting.
-  const webJobLifecycle = agentWebJobsEnabled && !untargetedContentRequest;
-  if (webJobLifecycle) agentWebJobPending = true;
+  const webJobLifecycle = agentWebJobsEnabled;
+  agentWebJobPending = true;
   const jobDeadline = webJobLifecycle ? Date.now() + 60000 : null;
   let ordinaryPendingNode = null;
   try {
@@ -2525,7 +2546,7 @@ window.agentSend = async function () {
     if (!ordinaryPendingNode) body.appendChild(botDiv);
     body.scrollTop = body.scrollHeight;
   } finally {
-    if (webJobLifecycle) agentWebJobPending = false; // Persistent HOLD, if set, still blocks every later mutation.
+    agentWebJobPending = false; // Persistent HOLD, if set, still blocks every later mutation.
   }
 };
 
