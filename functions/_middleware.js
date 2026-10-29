@@ -1,5 +1,5 @@
 import { maybeRewriteMedia } from './_media.mjs';
-import { maybeRewriteContent, isRewritableRoute } from './_content.mjs';
+import { maybeRewriteContent, isRewritableRoute, renderProtectedDraftPreviewPage } from './_content.mjs';
 import { recordStaffSignIn, getStaffMember, normalizeEmail } from './_lib/staff.js';
 import { setVerifiedAccessStaffActor, confirmationActor } from './_lib/agent-confirmation.mjs';
 
@@ -221,9 +221,13 @@ export async function onRequest(context) {
   setVerifiedAccessStaffActor(context.data, null);
   const url = new URL(request.url);
   const path = url.pathname;
+  const isProtectedPreviewRender =
+    matchesPrefix(path, '/api/agent/preview/page') ||
+    (matchesPrefix(path, '/api/agent/preview') && url.searchParams.get('format') === 'html');
   const isDraftPreview =
-    isRewritableRoute(path) &&
-    (url.searchParams.has('preview_draft') || url.searchParams.has('preview_version'));
+    isProtectedPreviewRender ||
+    (isRewritableRoute(path) &&
+      (url.searchParams.has('preview_draft') || url.searchParams.has('preview_version')));
   const isConsole =
     CONSOLE_API_PREFIXES.some((p) => matchesPrefix(path, p)) ||
     CONSOLE_PAGE_SET.has(normalizePagePath(path));
@@ -233,7 +237,7 @@ export async function onRequest(context) {
       return withSecurityHeaders(forbidden(), url.hostname, path, request.method);
     }
     // Non-prod escape for console only (never grants confirmationActor or draft preview access).
-    if (isConsole && env.ALLOW_DEV_CONSOLE === '1') {
+    if (isConsole && !isDraftPreview && env.ALLOW_DEV_CONSOLE === '1') {
       return withSecurityHeaders(await next(), url.hostname, path, request.method);
     }
     // Real verification. Fail closed until Cloudflare Access is configured.
@@ -255,6 +259,18 @@ export async function onRequest(context) {
     }
     if (isDraftPreview && !confirmationActor(context.data)) {
       return withSecurityHeaders(forbidden(), url.hostname, path, request.method);
+    }
+    if (isProtectedPreviewRender) {
+      if (typeof env?.ASSETS?.fetch !== 'function' && typeof next === 'function') {
+        context.data.previewAssetFetch = (targetPagePath) =>
+          next(new Request(new URL(targetPagePath, url.origin), { method: 'GET' }));
+      }
+      return withSecurityHeaders(
+        await maybeRewriteMedia(context, await renderProtectedDraftPreviewPage(context)),
+        url.hostname,
+        path,
+        request.method
+      );
     }
     // Verified. Endpoints may now safely decode the (verified) JWT for the actor email.
   }

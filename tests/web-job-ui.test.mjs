@@ -206,19 +206,20 @@ for(const terminal of ['refusal','malformed-preview','fetch-error','body-error']
   assert.equal(h.timing.size,0);assert.equal(h.uuids(),0);assert.equal(h.storage.size,0);
 });
 
-test('FULL auto/empty-target ON reserves synchronously before deferred fetch/body, posts exact governed body with signal/idempotency_key, and blocks double Enter',async()=>{
+test('FULL auto/empty-target ON requires positive unambiguous hero/request-support resolution, reserves synchronously before deferred fetch/body, and refuses unrelated or ambiguous requests before sending',async()=>{
   const pending=deferred();
   const h=harness({fetchImpl:()=>pending.promise});
   h.enable();
   h.nodes.chatAreaSelect.value='auto';
   h.nodes.chatContentTarget.value='';
+  h.nodes.chatInput.value='Update the homepage hero title';
   const first=h.send();
   assert.equal(h.calls.length,1);
   assert.equal(h.state().pending,true);
   assert.equal(h.uuids(),1);
   assert.equal(h.calls[0].body.type_id,'page_section');
   assert.equal(h.calls[0].body.target_id,'ps_home.hero');
-  assert.equal(h.calls[0].body.request,'First intent');
+  assert.equal(h.calls[0].body.request,'Update the homepage hero title');
   assert.match(h.calls[0].body.idempotency_key,/^[a-f0-9]{32}$/);
   assert.ok(h.calls[0].signal&&h.calls[0].signal.aborted===false);
   h.nodes.chatInput.value='Second intent must remain';
@@ -232,29 +233,38 @@ test('FULL auto/empty-target ON reserves synchronously before deferred fetch/bod
   assert.equal(h.state().hold,false);
   assert.equal(h.nodes.chatInput.value,'Second intent must remain');
 
-  // Immediate ON probe with auto/empty target verifies idempotency_key and signal
+  // Immediate ON probe with auto/empty target and genuine hero request verifies idempotency_key and signal
   const imm=harness({fetchImpl:()=>response(draft())});
   imm.enable();
   imm.nodes.chatAreaSelect.value='auto';
   imm.nodes.chatContentTarget.value='';
+  imm.nodes.chatInput.value='Update the homepage hero banner headline';
   await imm.send();
   assert.equal(imm.calls.length,1);
+  assert.equal(imm.calls[0].body.target_id,'ps_home.hero');
   assert.match(imm.calls[0].body.idempotency_key,/^[a-f0-9]{32}$/);
   assert.ok(imm.calls[0].signal);
   assert.deepEqual(Object.keys(imm.calls[0].body).sort(),['idempotency_key','request','target_id','type_id']);
 
-  // Unsupported ON section refuses synchronously before sending
-  const unsupported=harness({fetchImpl:()=>response(draft())});
-  unsupported.enable();
-  unsupported.nodes.chatAreaSelect.value='auto';
-  unsupported.nodes.chatContentTarget.value='';
-  unsupported.nodes.chatInput.value='Update the About page story heading';
-  await unsupported.send();
-  assert.equal(unsupported.calls.length,0);
-  assert.equal(unsupported.uuids(),0);
-  assert.equal(unsupported.state().pending,false);
-  assert.equal(unsupported.state().hold,false);
-  assert.match(unsupported.messages.at(-1).textContent,/Select a published item in this area first/);
+  // Unrelated, non-hero, event, or ambiguous ON requests with empty target refuse synchronously before sending
+  for (const unrelatedText of [
+    'Change the contact footer phone number to 555-0100',
+    'Add a new event tomorrow',
+    'Update the About page story heading',
+    'First intent',
+  ]) {
+    const unsupported=harness({fetchImpl:()=>response(draft())});
+    unsupported.enable();
+    unsupported.nodes.chatAreaSelect.value='auto';
+    unsupported.nodes.chatContentTarget.value='';
+    unsupported.nodes.chatInput.value=unrelatedText;
+    await unsupported.send();
+    assert.equal(unsupported.calls.length,0,`must not send for: ${unrelatedText}`);
+    assert.equal(unsupported.uuids(),0,`must not allocate UUID for: ${unrelatedText}`);
+    assert.equal(unsupported.state().pending,false);
+    assert.equal(unsupported.state().hold,false);
+    assert.match(unsupported.messages.at(-1).textContent,/Select a published item in this area first/);
+  }
 });
 
 for(const stage of ['fetch','body'])test(`ordinary OFF auto/empty-target reserves pending synchronously during deferred ${stage} and blocks double Enter`,async()=>{

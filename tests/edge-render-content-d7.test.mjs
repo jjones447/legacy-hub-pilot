@@ -1047,5 +1047,50 @@ test('authorized modal form previews (ps_form.membership, ps_form.grant_apply, p
     assert.ok(!publicHtml.includes('PROPOSED form'));
     assert.match(publicHtml, /<div class="modal-overlay" id="membershipModal">/);
     assert.doesNotMatch(publicHtml, /<div class="modal-overlay open" id="membershipModal">/);
+
+    // 5. Protected /api/agent/preview/page entrypoint (covered by Access 3757b2d6 api/agent path) renders the target page with <base href="/">, .open modal, and preview banner, while refusing ALLOW_DEV_CONSOLE bypass without verified JWT
+    const info = buildContentPreviewInfo({
+      draftId: 'cid_review_one',
+      targetId: 'ps_form.membership',
+      typeId: 'page_section',
+      itemData: { section_key: 'form.membership', heading: 'PROPOSED form' },
+      previewVersion: memBinding.version,
+      requestUrl: 'https://staging.caregiversanctuary.org/api/agent/draft',
+      env: previewEnv,
+      authorized: true,
+    });
+    assert.equal(info.preview_path, `/api/agent/preview/page?draft_id=cid_review_one&preview_version=${memBinding.version}#membershipModal`);
+    assert.equal(info.staging_preview_url, `https://staging.caregiversanctuary.org/api/agent/preview/page?draft_id=cid_review_one&preview_version=${memBinding.version}#membershipModal`);
+
+    const protectedPageResp = await onRequest({
+      request: new Request(
+        `https://staging.caregiversanctuary.org/api/agent/preview/page?draft_id=cid_review_one&preview_version=${memBinding.version}`,
+        { method: 'GET', headers: { 'Cf-Access-Jwt-Assertion': ownerToken } }
+      ),
+      next: async (req) => {
+        const p = new URL(req.url).pathname;
+        assert.equal(p, '/index.html');
+        return new Response(committedIndexHtml, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } });
+      },
+      env: previewEnv,
+    });
+    assert.equal(protectedPageResp.status, 200);
+    assert.equal(protectedPageResp.headers.get('cache-control'), 'no-store');
+    const protectedPageHtml = await protectedPageResp.text();
+    assert.ok(protectedPageHtml.includes('<base href="/">'));
+    assert.ok(protectedPageHtml.includes('PROPOSED form'));
+    assert.ok(protectedPageHtml.includes('staging-draft-preview-banner'));
+    assert.match(protectedPageHtml, /<div class="modal-overlay open" id="membershipModal">/);
+
+    // ALLOW_DEV_CONSOLE=1 without verified JWT on /api/agent/preview/page still fails closed (403)
+    const devBypassResp = await onRequest({
+      request: new Request(
+        `https://staging.caregiversanctuary.org/api/agent/preview/page?draft_id=cid_review_one&preview_version=${memBinding.version}`,
+        { method: 'GET' }
+      ),
+      next: async () => new Response(committedIndexHtml, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } }),
+      env: { ...previewEnv, ALLOW_DEV_CONSOLE: '1' },
+    });
+    assert.equal(devBypassResp.status, 403);
   });
 });

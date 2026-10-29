@@ -6,7 +6,7 @@ import * as caregiversDomain from '../../_lib/domain/caregivers.js';
 import * as eventsDomain from '../../_lib/domain/events.js';
 import { getActor } from '../../_lib/actor.js';
 import { internalError } from '../../_lib/errors.js';
-import { _resetContentCache, findDisallowedHtml, buildContentPreviewInfo } from '../../_content.mjs';
+import { _resetContentCache, findDisallowedHtml, buildContentPreviewInfo, renderProtectedDraftPreviewPage } from '../../_content.mjs';
 import { onRequestPost as postTranscribe } from './transcribe.js';
 import { confirmationActor, draftOwner, ownsDraft, confirmationBinding, confirmationAudit, matchesPersistedPreview } from '../../_lib/agent-confirmation.mjs';
 import { createWebJob, enabled as webJobsEnabled } from '../../_lib/assistant-web-jobs.mjs';
@@ -18,6 +18,9 @@ export async function onRequestGet({ request, env, data }) {
 
     const action = pathSegments[2];
     if (action === 'preview') {
+      if (pathSegments[3] === 'page' || url.searchParams.get('format') === 'html') {
+        return await renderProtectedDraftPreviewPage({ request, env, data });
+      }
       const actor = confirmationActor(data);
       if (!actor) {
         return json({ ok: false, error: 'human preview context not qualified' }, 403);

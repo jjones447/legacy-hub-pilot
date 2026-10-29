@@ -457,8 +457,8 @@ test('7. conversation-first untargeted request auto-resolves ps_home.hero and re
   assert.equal(draftJson.target_label, 'Homepage — Hero Banner');
   assert.equal(draftJson.page_path, '/index.html');
   assert.equal(draftJson.staging_preview_supported, true);
-  assert.equal(draftJson.preview_path, `/index.html?preview_draft=${draftJson.draft_id}&preview_version=${draftJson.preview_version}`);
-  assert.equal(draftJson.staging_preview_url, `https://staging.caregiversanctuary.org/index.html?preview_draft=${draftJson.draft_id}&preview_version=${draftJson.preview_version}`);
+  assert.equal(draftJson.preview_path, `/api/agent/preview/page?draft_id=${draftJson.draft_id}&preview_version=${draftJson.preview_version}`);
+  assert.equal(draftJson.staging_preview_url, `https://staging.caregiversanctuary.org/api/agent/preview/page?draft_id=${draftJson.draft_id}&preview_version=${draftJson.preview_version}`);
   assert.ok(!draftJson.staging_preview_url.includes('preview_envelope'));
 
   // 1. Unauthenticated GET /api/agent/preview is refused (403)
@@ -494,7 +494,7 @@ test('7. conversation-first untargeted request auto-resolves ps_home.hero and re
   assert.equal(previewJson.draft_of, 'ps_home.hero');
   assert.equal(previewJson.preview_version, draftJson.preview_version);
   assert.equal(previewJson.after.lede, 'Supporting every family caregiver across Greater Milwaukee.');
-  assert.equal(previewJson.staging_preview_url, `https://staging.caregiversanctuary.org/index.html?preview_draft=${draftJson.draft_id}&preview_version=${draftJson.preview_version}`);
+  assert.equal(previewJson.staging_preview_url, `https://staging.caregiversanctuary.org/api/agent/preview/page?draft_id=${draftJson.draft_id}&preview_version=${draftJson.preview_version}`);
 
   // 4. Stale preview_version on GET /api/agent/preview is refused (409)
   const stalePreviewRes = await getAgent({
@@ -540,8 +540,8 @@ test('8. conversation-first untargeted request auto-resolves ps_form.membership 
   assert.equal(draftJson.ok, true);
   assert.equal(draftJson.resolved_target_id, 'ps_form.membership');
   assert.equal(draftJson.staging_preview_supported, true);
-  assert.equal(draftJson.preview_path, `/index.html?preview_draft=${draftJson.draft_id}&preview_version=${draftJson.preview_version}#membershipModal`);
-  assert.equal(draftJson.staging_preview_url, `https://staging.caregiversanctuary.org/index.html?preview_draft=${draftJson.draft_id}&preview_version=${draftJson.preview_version}#membershipModal`);
+  assert.equal(draftJson.preview_path, `/api/agent/preview/page?draft_id=${draftJson.draft_id}&preview_version=${draftJson.preview_version}#membershipModal`);
+  assert.equal(draftJson.staging_preview_url, `https://staging.caregiversanctuary.org/api/agent/preview/page?draft_id=${draftJson.draft_id}&preview_version=${draftJson.preview_version}#membershipModal`);
 
   // When created in production (without ENVIRONMENT='preview'), staging_preview_supported is false and staging_preview_url is null
   const prodDraftReq = new Request('https://legacy-hub-5qo.pages.dev/api/agent/draft', {

@@ -2343,20 +2343,25 @@ window.agentSend = async function () {
         effectiveArea = contentItem.id.startsWith('ps_form.') ? 'form' : 'content';
       }
     } else if (agentWebJobsEnabled) {
-      const unsupportedWebJobTarget = selectedArea === 'form'
-        ? /\b(?:membership|grant|coaching)\b/i.test(text)
-        : /\b(?:about\s+page|our\s+story|values\s+section|programs?\s+page|membership\s*(?:form|modal|section|signup)?|grant\s*(?:form|modal|section|application)?|coaching\s*(?:form|modal|section|interest)?|memory\s+socials?|virtual\s+support\s+group|resources?\s+page|faq\s+page|partners?\s+page|caregiving\s+journey)\b/i.test(text)
-          || (selectedArea === 'content' && /\b(?:request[\s-]+support|intake\s+form|support\s+form|name_label)\b/i.test(text));
-      const candidateTargetId = unsupportedWebJobTarget
-        ? ''
-        : (selectedArea === 'form' || (selectedArea === 'auto' && /\b(?:request[\s-]+support|intake\s+form|support\s+form|name_label)\b/i.test(text)))
+      const mentionsOtherTarget = /\b(?:about|programs?|membership|grant|coaching|memory\s+socials?|support\s+group|resources?|faq|partners?|journey|values|story|footer|phone|contact|event|caregiver|workshop)\b/i.test(text);
+      const matchesHomeHero = (selectedArea === 'auto' || selectedArea === 'content')
+        && !mentionsOtherTarget
+        && !/\b(?:request[\s-]+support|intake|name_label)\b/i.test(text)
+        && /\b(?:ps_home\.hero|home\.hero|home(?:\s*page)?\s+(?:hero|banner|headline|heading|title|lede|subtitle)|hero\s+(?:banner|headline|heading|title|lede|subtitle|section))\b/i.test(text);
+      const matchesRequestSupportForm = (selectedArea === 'auto' || selectedArea === 'form')
+        && !mentionsOtherTarget
+        && !/\b(?:home(?:\s*page)?|hero|banner)\b/i.test(text)
+        && /\b(?:ps_form\.request_support|form\.request_support|request[\s-]+support\s+(?:form|intake|heading|title|label|field|button|copy)|support\s+intake\s+form|name_label)\b/i.test(text);
+      const candidateTargetId = (matchesHomeHero && !matchesRequestSupportForm)
+        ? 'ps_home.hero'
+        : (matchesRequestSupportForm && !matchesHomeHero)
           ? 'ps_form.request_support'
-          : 'ps_home.hero';
+          : '';
       contentItem = candidateTargetId ? chatContentItems(selectedArea).find(item => item.id === candidateTargetId) : null;
       if (!contentItem) {
         const botDiv = document.createElement('div');
         botDiv.className = 'msg bot';
-        botDiv.textContent = 'Select a published item in this area first. Nothing has been drafted.';
+        botDiv.textContent = 'Select a published item in this area first, or specify the homepage hero banner or request support form. Nothing has been drafted.';
         body.appendChild(botDiv);
         body.scrollTop = body.scrollHeight;
         return;
