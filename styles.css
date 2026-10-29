@@ -1179,26 +1179,35 @@ footer a:hover { color: #fff; }
 .wellness-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 6px; }
 .wellness-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
 
-/* October 16 client originals: scoped, uncropped media presentation. */
-.client-photo-hero .client-hero-layout {
-  position: relative; z-index: 2;
-  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 32px; align-items: center;
+/* October 16 & O26 hero media treatments: overlaid copy over client photos/video + Resource Hub portrait framing. */
+.hero.has-media.about-hero,
+.hero.has-media.get-involved-hero {
+  min-height: 380px;
+  display: flex;
+  align-items: center;
 }
-.hero.has-media.client-photo-hero .hero-media {
-  position: static; inset: auto; width: 100%; height: auto;
-  object-fit: contain; opacity: 1; border-radius: var(--radius);
+.hero.has-media.about-hero .hero-media {
+  object-fit: cover;
+  object-position: 50% 16%;
 }
-.hero.has-media.client-photo-hero .hero-scrim { display: none; }
+.hero.has-media.get-involved-hero .hero-media {
+  object-fit: cover;
+  object-position: 50% 45%;
+}
+.hero.has-media.resources-hero {
+  min-height: 440px;
+  display: flex;
+  align-items: center;
+}
+.hero.has-media.resources-hero .hero-media {
+  object-fit: cover;
+  object-position: 50% 4%;
+}
 .client-founder-layout { grid-template-columns: minmax(0, 1fr) minmax(240px, 360px); }
 .client-founder-photo { margin: 0; }
 .client-founder-photo img {
   display: block; width: 100%; height: auto; object-fit: contain;
   border-radius: var(--radius);
-}
-.client-sanctuary-wordmark {
-  display: block; width: min(100%, 360px); height: auto;
-  object-fit: contain; margin-bottom: 24px;
 }
 .client-partner-logos {
   list-style: none; padding: 0; margin: 0;
@@ -1217,25 +1226,61 @@ footer a:hover { color: #fff; }
   display: block; width: 100%; height: 100px; object-fit: contain;
 }
 @media (max-width: 800px) {
-  .client-photo-hero .client-hero-layout, .client-founder-layout { grid-template-columns: minmax(0, 1fr); }
+  .client-founder-layout { grid-template-columns: minmax(0, 1fr); }
   .client-founder-photo { width: min(100%, 360px); margin-inline: auto; }
 }
 
-/* Client Video 1: user-controlled portrait media, never a cover-cropped backdrop. */
-.client-video-layout {
-  position: relative; z-index: 2; display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(240px, 360px);
-  gap: 32px; align-items: center;
+/* Client Video 1 (O26-02): Sanctuary hero copy overlaid over user-controlled client video without wordmark overlay. */
+.hero.has-media.client-video-hero {
+  padding: 64px 0 96px;
+  min-height: 420px;
 }
-.client-video-panel { width: min(100%, 360px); margin: 0 auto; }
 .hero.has-media.client-video-hero .hero-media {
-  position: static; inset: auto; display: block; width: 100%; height: auto;
-  object-fit: contain; opacity: 1; background: #000; border-radius: var(--radius);
+  position: absolute; inset: 0;
+  display: block; width: 100%; height: 100%;
+  object-fit: cover; object-position: 50% 40%;
+  z-index: 1; opacity: 0.62; background: #2c1810;
 }
-.hero.has-media.client-video-hero .hero-scrim { display: none; }
-.client-video-panel a { color: #fff; text-decoration: underline; }
-@media (max-width: 800px) {
-  .client-video-layout { grid-template-columns: minmax(0, 1fr); }
+.hero.has-media.client-video-hero .hero-scrim {
+  display: block; position: absolute; inset: 0;
+  z-index: 2; pointer-events: none;
+  background: linear-gradient(100deg,
+    rgba(90, 53, 38, 0.80) 0%,
+    rgba(94, 50, 38, 0.56) 45%,
+    rgba(94, 50, 38, 0.34) 75%,
+    rgba(94, 50, 38, 0.24) 100%);
+}
+.hero.has-media.client-video-hero::before,
+.hero.has-media.client-video-hero::after {
+  z-index: 2; pointer-events: none;
+}
+.hero.has-media.client-video-hero .hero-content {
+  position: relative; z-index: 3; pointer-events: none;
+}
+.hero.has-media.client-video-hero .hero-content h1,
+.hero.has-media.client-video-hero .hero-content p,
+.hero.has-media.client-video-hero .hero-content .btn-row,
+.hero.has-media.client-video-hero .hero-content .btn {
+  pointer-events: auto;
+}
+@media (max-width: 768px) {
+  .hero.has-media.about-hero,
+  .hero.has-media.get-involved-hero {
+    min-height: 320px;
+  }
+  .hero.has-media.resources-hero {
+    min-height: 340px;
+  }
+  .hero.has-media.client-video-hero {
+    padding: 48px 0 88px;
+    min-height: 380px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero.has-media.client-video-hero .hero-media {
+    transition: none;
+    animation: none;
+  }
 }
 
 /* October 21 client formatting polish: paragraph/list spacing and stat contrast. */

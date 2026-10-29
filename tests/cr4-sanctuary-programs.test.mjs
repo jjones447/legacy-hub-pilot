@@ -303,3 +303,39 @@ test('(e) the Passport page contains all five structure points and names the Wel
   assert.match(html, /data-action="open-grant-apply"/, 'Passport must provide data-action="open-grant-apply"');
   assert.match(html, /id="grantApplyModal"/, 'Passport must include grant application modal machinery');
 });
+
+test('O26-02/03/04: Sanctuary, About, and Get Involved place hero text over supplied media without wordmark overlay or side-by-side hero layout', () => {
+  const sanctuaryHtml = loadFile('sanctuary.html');
+  const sanctuaryHero = sanctuaryHtml.match(/<section class="hero has-media client-video-hero[^"]*">([\s\S]*?)<\/section>/)?.[1];
+  assert.ok(sanctuaryHero, 'Sanctuary hero section must exist');
+  assert.doesNotMatch(sanctuaryHero, /caregiver-sanctuary-logo\.png|client-sanctuary-wordmark|client-video-layout|client-video-panel/);
+  assert.match(sanctuaryHero, /<video class="hero-media" controls playsinline preload="metadata" width="720" height="1280" aria-label="Caregiver Sanctuary community video">/);
+  assert.doesNotMatch(sanctuaryHero, /\bautoplay\b/);
+  assert.match(sanctuaryHero, /<source src="media\/client-oct16\/sanctuary-video-1\.mp4#t=0\.1" type="video\/mp4">/);
+  assert.match(sanctuaryHero, /<div class="hero-scrim" aria-hidden="true"><\/div>\s*<div class="container hero-content">/);
+  assert.match(sanctuaryHero, /<h1 class="hero-title-clamp">Caregiver Sanctuary<\/h1>/);
+  assert.match(sanctuaryHero, /<a class="btn btn-coral" href="programs\.html">Join Caregiver Sanctuary<\/a>/);
+  assert.match(sanctuaryHero, /<a class="btn btn-outline" href="request-support\.html">Contact \/ Request Support<\/a>/);
+
+  for (const rel of ['about.html', 'templates/about.html.j2']) {
+    const aboutHtml = loadFile(rel);
+    const aboutHero = aboutHtml.match(/<section class="hero has-media about-hero[^"]*">([\s\S]*?)<\/section>/)?.[1];
+    assert.ok(aboutHero, `${rel}: About hero section must exist`);
+    assert.doesNotMatch(aboutHero, /client-photo-hero|client-hero-layout/);
+    assert.match(aboutHero, /<img class="hero-media" src="media\/client-oct16\/about-family-img-1846\.jpg" alt="" aria-hidden="true" width="2058" height="1474" decoding="async">/);
+    assert.match(aboutHero, /<div class="hero-scrim" aria-hidden="true"><\/div>\s*<div class="container hero-content">/);
+    assert.match(aboutHtml, /<figure class="client-founder-photo">\s*<img src="media\/client-oct16\/founder-img-7045\.jpg"/);
+  }
+
+  const getInvolvedHtml = loadFile('get-involved.html');
+  const getInvolvedHero = getInvolvedHtml.match(/<section class="hero has-media get-involved-hero[^"]*">([\s\S]*?)<\/section>/)?.[1];
+  assert.ok(getInvolvedHero, 'Get Involved hero section must exist');
+  assert.doesNotMatch(getInvolvedHero, /client-photo-hero|client-hero-layout/);
+  assert.match(getInvolvedHero, /<img class="hero-media" src="media\/client-oct16\/get-involved-header-photo-1\.jpg" alt="" aria-hidden="true" width="4032" height="3024" decoding="async">/);
+  assert.match(getInvolvedHero, /<div class="hero-scrim" aria-hidden="true"><\/div>\s*<div class="container hero-content">/);
+
+  const css = loadFile('styles.css');
+  assert.match(css, /\.hero\.has-media\.client-video-hero\s+\.hero-media\s*\{[^}]*position:\s*absolute;[^}]*object-fit:\s*cover/);
+  assert.match(css, /\.hero\.has-media\.client-video-hero\s+\.hero-scrim\s*\{[^}]*display:\s*block;[^}]*pointer-events:\s*none/);
+  assert.match(css, /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]*?\.hero\.has-media\.client-video-hero\s+\.hero-media/);
+});
