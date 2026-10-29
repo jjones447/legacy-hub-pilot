@@ -655,6 +655,14 @@ footer a:hover { color: #fff; }
   background: #fff; border-radius: var(--radius); max-width: 520px; width: 100%;
   padding: 34px; box-shadow: var(--shadow-lg); max-height: 90vh; overflow-y: auto;
 }
+/* Native support-group dialog keeps the shared modal appearance after the reset. */
+#supportGroupInterestModal {
+  position: fixed; inset: 0; margin: auto; border: 0;
+  width: calc(100% - 40px);
+  max-height: calc(100vh - 40px);
+  max-height: calc(100dvh - 40px);
+}
+#supportGroupInterestModal::backdrop { background: rgba(43,35,51,0.55); }
 .modal h3 { font-size: 23px; margin-bottom: 6px; }
 .modal .sub { color: var(--ink-soft); font-size: 14px; margin-bottom: 22px; }
 .modal-close { float: right; background: none; border: none; font-size: 22px; cursor: pointer; color: var(--ink-soft); }

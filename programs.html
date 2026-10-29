@@ -7,7 +7,7 @@
 <meta name="description" content="A free membership community for caregivers of loved ones with dementia in Greater Milwaukee.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=25151f8c2e28">
+<link rel="stylesheet" href="styles.css?v=5549317bced9">
 <link rel="icon" href="favicon.ico" sizes="32x32">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -158,6 +158,8 @@
         <div class="kv-row"><span class="k">Facilitation</span><span class="v">Alzheimer's Association-certified</span></div>
         <div class="kv-row"><span class="k">Cost</span><span class="v">Free</span></div>
         <a href="events.html" class="btn btn-plum btn-sm mt-16 d-inline-block" data-cs="programs.support_group.panel_cta_label">View Events</a>
+        <button type="button" class="btn btn-outline btn-sm mt-16" data-action="open-support-group-interest" aria-haspopup="dialog" aria-controls="supportGroupInterestModal">Request joining details</button>
+        <p class="small muted mt-16">Request information from Legacy staff before joining. This is not a session registration or an automatic joining email.</p>
       </div>
       <div>
         <span class="eyebrow" data-cs="programs.support_group.eyebrow">Virtual Support Group</span>
@@ -233,6 +235,29 @@
     </div>
   </div>
 </section>
+
+
+<!-- Native dialog supplies keyboard focus containment and Escape-to-close. -->
+<dialog id="supportGroupInterestModal" class="modal" aria-labelledby="supportGroupInterestTitle" aria-describedby="supportGroupInterestDescription">
+  <button type="button" class="modal-close" data-action="close-support-group-interest" aria-label="Close support-group interest form">&#215;</button>
+  <h3 id="supportGroupInterestTitle">Request virtual support-group joining details</h3>
+  <p class="sub" id="supportGroupInterestDescription">Leave your name and email for Legacy staff to review. This requests information; it does not register you for a session or send a joining link automatically.</p>
+  <form id="supportGroupInterestForm" data-action="submit-support-group-interest">
+    <div class="field">
+      <label for="supportGroupName">Your name</label>
+      <input id="supportGroupName" name="name" type="text" autocomplete="name" required>
+    </div>
+    <div class="field">
+      <label for="supportGroupEmail">Email</label>
+      <input id="supportGroupEmail" name="email" type="email" autocomplete="email" required>
+    </div>
+    <p class="privacy-line">By sending this request, you consent to Legacy using your name and email to find or create your caregiver record and follow up about the virtual support group. This does not subscribe you to reminders.</p>
+    <button type="submit" class="btn btn-coral w-100">Request joining details</button>
+    <div class="success-note" data-intake-success role="status" aria-live="polite">Your interest is saved for Legacy staff to review. You are not registered for a session.</div>
+    <div class="error-note" data-intake-error role="alert" aria-live="assertive"></div>
+    <div class="routing-note" data-intake-routing>Your request is in the staff follow-up queue. Staff must review it and provide joining details.</div>
+  </form>
+</dialog>
 
 <!-- Membership modal -->
 <div class="modal-overlay" id="membershipModal">
@@ -351,7 +376,7 @@
 </footer>
 
 
-<script src="app.js?v=4367528d0028"></script>
+<script src="app.js?v=9da96976b839"></script>
 <script src="nav-v2.js"></script>
 </body>
 </html>
