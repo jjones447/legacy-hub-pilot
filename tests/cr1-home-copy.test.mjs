@@ -13,7 +13,7 @@ test('home page carries client banner headline and lede verbatim', () => {
   const html = file('index.html');
   assert.match(
     html,
-    /<h1[^>]*>A place for caregivers to find support, respite, wellness and community\.<\/h1>/
+    /<h1[^>]*>A place for caregivers to find support, respite, wellness and community<\/h1>/
   );
   assert.match(
     html,
