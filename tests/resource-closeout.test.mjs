@@ -135,3 +135,17 @@ test('FAQ preserves conditional grants, variable fees and nonmedical limits', ()
   assert.match(main, /call or text <a href="tel:988">988<\/a>/);
   assert.match(main, /every Wednesday from 5:00 to 6:00 p\.m\. Central Time/);
 });
+
+
+test('About contact separates the confirmed mailing address from a future physical location without inventing inquiry routing', () => {
+  for (const path of ['templates/about.html.j2', 'about.html']) {
+    const contact = read(path).match(/<section id="contact">([\s\S]*?)<\/section>/)?.[1];
+    assert.ok(contact, `${path} must preserve the business CTA destination`);
+    assert.match(contact, /Mailing address<\/h3>\s*<address[^>]*>PO Box 250403<br>Milwaukee, WI 53225<\/address>/);
+    assert.match(contact, /Future physical location \(coming soon\)<\/h3>\s*<address[^>]*>7828 W Appleton Ave<br>Milwaukee, WI 53218<\/address>/);
+    assert.equal((contact.match(/<address\b/g) || []).length, 2);
+    assert.match(contact, /href="request-support\.html">Request caregiver support<\/a>/);
+    assert.match(contact, /Email and phone contact details for community and corporate partnerships/);
+    assert.doesNotMatch(contact, /262-20[47]-7836|mailto:|tel:|<form\b|walk[ -]?in|open now|office hours|visit us at|invalid_auth|conflicting/i);
+  }
+});
