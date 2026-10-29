@@ -104,9 +104,11 @@ export async function handleIntake(db, body) {
       .prepare(`UPDATE caregiver SET sanctuary_member = 1, member_since = COALESCE(member_since, ?), updated_at = ? WHERE id = ?`)
       .bind(nowIso(), nowIso(), caregiverId)
       .run();
+    const note = typeof body.message === 'string' ? body.message : '';
+    const detail = note.trim() ? `Welcome new Sanctuary member\n\n${note}` : 'Welcome new Sanctuary member';
     await db
       .prepare(`INSERT INTO followup (caregiver_id, kind, detail, source, external_ref) VALUES (?, 'membership_welcome', ?, ?, ?)`)
-      .bind(caregiverId, 'Welcome new Sanctuary member', source, body.external_ref)
+      .bind(caregiverId, detail, source, body.external_ref)
       .run();
   } else if (body.kind === 'grant_application') {
     await db
