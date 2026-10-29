@@ -14,14 +14,12 @@
 {% set active_page = 'about' %}
 {% include '_header.html.j2' %}
 
-<section class="hero has-media client-photo-hero py-56-64">
+<section class="hero has-media about-hero py-56-64">
+  <img class="hero-media" src="media/client-oct16/about-family-img-1846.jpg" alt="" aria-hidden="true" width="2058" height="1474" decoding="async">
   <div class="hero-scrim" aria-hidden="true"></div>
-  <div class="container client-hero-layout">
-    <div class="hero-content">
-      <h1 class="hero-title-clamp" data-cs="about.hero.title">{{ sections["about.hero"].title }}</h1>
-      <p class="lede" data-cs="about.hero.lede">{{ sections["about.hero"].lede }}</p>
-    </div>
-    <img class="hero-media" src="media/client-oct16/about-family-img-1846.jpg" alt="" aria-hidden="true" width="2058" height="1474" decoding="async">
+  <div class="container hero-content">
+    <h1 class="hero-title-clamp" data-cs="about.hero.title">{{ sections["about.hero"].title }}</h1>
+    <p class="lede" data-cs="about.hero.lede">{{ sections["about.hero"].lede }}</p>
   </div>
 </section>
 

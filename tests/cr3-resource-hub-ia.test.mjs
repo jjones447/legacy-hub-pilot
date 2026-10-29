@@ -118,3 +118,18 @@ test('(e) every item in resources.json uses one of the six categories', () => {
     );
   }
 });
+
+test('(f) O26-05: Resource Hub hero uses a dedicated portrait-preserving selector without altering global .hero.has-media cropping', () => {
+  for (const rel of ['resources.html', 'templates/resources.html.j2']) {
+    const html = loadFile(rel);
+    const hero = html.match(/<section class="hero has-media resources-hero[^"]*">([\s\S]*?)<\/section>/)?.[1];
+    assert.ok(hero, `${rel}: Resource Hub hero section must carry .resources-hero`);
+    assert.match(hero, /<img class="hero-media" src="media\/headers\/resources\.jpg" alt="" aria-hidden="true" width="1440" height="1920" decoding="async">/);
+    assert.match(hero, /<div class="hero-scrim" aria-hidden="true"><\/div>\s*<div class="container hero-content">/);
+    assert.match(hero, /<h1 class="hero-title-clamp">Resource Hub<\/h1>/);
+  }
+  const css = loadFile('styles.css');
+  assert.match(css, /\.hero\.has-media\s+\.hero-media\s*\{[^}]*object-fit:\s*cover;\s*object-position:\s*center 35%;/);
+  assert.match(css, /\.hero\.has-media\.resources-hero\s*\{[^}]*min-height:\s*440px;/);
+  assert.match(css, /\.hero\.has-media\.resources-hero\s+\.hero-media\s*\{[^}]*object-fit:\s*cover;\s*object-position:\s*50% 4%;/);
+});
