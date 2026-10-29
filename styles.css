@@ -906,7 +906,7 @@ footer a:hover { color: #fff; }
 .hero.has-media { position: relative; overflow: hidden; }
 .hero.has-media .hero-media { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 35%; z-index: 0; opacity: 0.62; }
 .hero.has-media .hero-scrim { position: absolute; inset: 0; z-index: 1; background: linear-gradient(100deg, rgba(90,53,38,0.78) 0%, rgba(94,50,38,0.52) 42%, rgba(94,50,38,0.30) 72%, rgba(94,50,38,0.22) 100%); }
-.hero.has-media .hero-content { position: relative; z-index: 2; }
+.hero.has-media .hero-content { position: relative; z-index: 2; width: 100%; }
 .hero.has-media::before, .hero.has-media::after { z-index: 1; }
 /* SEC-5b-2: former inline styles */
 .section-sand { background: var(--sand); }
@@ -1250,16 +1250,16 @@ footer a:hover { color: #fff; }
   .client-founder-photo { width: min(100%, 360px); margin-inline: auto; }
 }
 
-/* Client Video 1 (O26-02): Sanctuary hero copy overlaid over user-controlled client video without wordmark overlay. */
+/* Sanctuary: retain overlaid copy while showing the complete portrait frame. */
 .hero.has-media.client-video-hero {
   padding: 64px 0 96px;
-  min-height: 420px;
+  min-height: 520px;
 }
 .hero.has-media.client-video-hero .hero-media {
   position: absolute; inset: 0;
   display: block; width: 100%; height: 100%;
-  object-fit: cover; object-position: 50% 40%;
-  z-index: 1; opacity: 0.62; background: #2c1810;
+  object-fit: contain; object-position: center;
+  z-index: 1; opacity: 1; background: #2c1810;
 }
 .hero.has-media.client-video-hero .hero-scrim {
   display: block; position: absolute; inset: 0;
