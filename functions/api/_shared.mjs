@@ -1,4 +1,4 @@
-// Intake core — pure logic over a D1-shaped binding (prepare/bind/run/first).
+// Intake core — pure logic over a D1-shaped binding (prepare/bind/run/first/batch).
 // No handler exports, so Pages creates no route for this file. Tested directly
 // in tests/intake.test.mjs against the real schema via node:sqlite.
 
@@ -49,15 +49,15 @@ export async function handleIntake(db, body) {
     .first();
 
   let caregiverId;
+  let caregiverWrite;
   if (caregiver) {
     caregiverId = caregiver.id;
-    await db
+    caregiverWrite = db
       .prepare(`UPDATE caregiver SET updated_at = ? WHERE id = ?`)
-      .bind(nowIso(), caregiverId)
-      .run();
+      .bind(nowIso(), caregiverId);
   } else {
     caregiverId = 'cg_' + crypto.randomUUID();
-    await db
+    caregiverWrite = db
       .prepare(
         `INSERT INTO caregiver (id, first_name, last_name, email, phone, caring_for, relationship, source)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
@@ -71,9 +71,14 @@ export async function handleIntake(db, body) {
         body.caring_for || null,
         body.relationship || null,
         source
-      )
-      .run();
+      );
   }
+
+  // Membership/support business mutations and their original audit commit together.
+  // Keep the existing event/grant workflow and request-limit accounting unchanged.
+  const atomic = body.kind === 'membership' || body.kind === 'support_request';
+  const writes = atomic ? [caregiverWrite] : null;
+  if (!atomic) await caregiverWrite.run();
 
   // Kind-specific workflow row.
   if (body.kind === 'event_registration') {
@@ -100,16 +105,14 @@ export async function handleIntake(db, body) {
       .bind(caregiverId, `Confirm registration for ${body.event_id}`, source, body.external_ref + ':fu')
       .run();
   } else if (body.kind === 'membership') {
-    await db
+    writes.push(db
       .prepare(`UPDATE caregiver SET sanctuary_member = 1, member_since = COALESCE(member_since, ?), updated_at = ? WHERE id = ?`)
-      .bind(nowIso(), nowIso(), caregiverId)
-      .run();
+      .bind(nowIso(), nowIso(), caregiverId));
     const note = typeof body.message === 'string' ? body.message : '';
     const detail = note.trim() ? `Welcome new Sanctuary member\n\n${note}` : 'Welcome new Sanctuary member';
-    await db
+    writes.push(db
       .prepare(`INSERT INTO followup (caregiver_id, kind, detail, source, external_ref) VALUES (?, 'membership_welcome', ?, ?, ?)`)
-      .bind(caregiverId, detail, source, body.external_ref)
-      .run();
+      .bind(caregiverId, detail, source, body.external_ref));
   } else if (body.kind === 'grant_application') {
     await db
       .prepare(
@@ -124,22 +127,30 @@ export async function handleIntake(db, body) {
       .run();
   } else {
     // support_request
-    await db
+    writes.push(db
       .prepare(`INSERT INTO followup (caregiver_id, kind, detail, source, external_ref) VALUES (?, 'support_request', ?, ?, ?)`)
-      .bind(caregiverId, body.message || '(no message)', source, body.external_ref)
-      .run();
+      .bind(caregiverId, body.message || '(no message)', source, body.external_ref));
   }
 
   // Audit trail — every intake mutation lands here.
-  await db
+  const auditWrite = db
     .prepare(`INSERT INTO audit_log (actor, action, entity, entity_id, after_json) VALUES (?, ?, 'caregiver', ?, ?)`)
     .bind(
       source,
       `intake.${body.kind}`,
       caregiverId,
       JSON.stringify({ kind: body.kind, external_ref: body.external_ref, event_id: body.event_id || null })
-    )
-    .run();
+    );
+
+  if (atomic) {
+    writes.push(auditWrite);
+    const results = await db.batch(writes);
+    if (!Array.isArray(results) || results.length !== writes.length || results.some(result => result?.success !== true)) {
+      throw new Error('intake batch did not confirm all mutations');
+    }
+  } else {
+    await auditWrite.run();
+  }
 
   return { status: 201, body: { ok: true, caregiver_id: caregiverId } };
 }
