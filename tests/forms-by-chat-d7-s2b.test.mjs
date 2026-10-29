@@ -505,7 +505,7 @@ test('7. conversation-first untargeted request auto-resolves ps_home.hero and re
   assert.equal(stalePreviewRes.status, 409);
 });
 
-test('8. conversation-first untargeted request auto-resolves ps_form.membership and returns modal staging preview link in preview environment (and reports unavailable in production)', async () => {
+test('8. conversation-first untargeted request auto-resolves ps_form.membership and returns local preview and an authenticated production transfer when configured', async () => {
   const raw = new DatabaseSync(':memory:');
   raw.exec(SCHEMA_1);
   raw.exec(SCHEMA_3);
@@ -553,7 +553,7 @@ test('8. conversation-first untargeted request auto-resolves ps_form.membership 
   });
   const prodDraftRes = await postAgent({
     request: prodDraftReq,
-    env: { ...previewEnv, ENVIRONMENT: undefined },
+    env: { ...previewEnv, ENVIRONMENT: undefined, PREVIEW_TRANSFER_SECRET: 'unit-test-only-preview-transfer-key-not-a-real-credential' },
   });
   assert.equal(prodDraftRes.status, 200);
   const prodDraftJson = await prodDraftRes.json();

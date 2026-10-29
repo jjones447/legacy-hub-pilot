@@ -58,7 +58,7 @@ export async function onRequestGet({ request, env, data }) {
       if (url.searchParams.has('preview_version') && url.searchParams.get('preview_version') !== binding.version) {
         return json({ ok: false, error: 'preview version missing or changed; preview refused' }, 409);
       }
-      const previewInfo = buildContentPreviewInfo({
+      const previewInfo = await buildContentPreviewInfo({
         draftId: item.id,
         targetId: item.draft_of || item.id,
         typeId: item.type_id,
@@ -667,7 +667,7 @@ export async function onRequestPost({ request, env, data, redactErrors = false, 
       const actor = confirmationActor(data);
       const binding = await confirmationBinding(env.LEGACY_DB, 'content', savedDraft, url.origin, currentItem);
       const effectivePreviewVersion = actor && ownsDraft(savedDraft?.updated_by, actor) ? binding.version : null;
-      const previewInfo = buildContentPreviewInfo({
+      const previewInfo = await buildContentPreviewInfo({
         draftId: draft_id,
         targetId: draft_of || draft_id,
         typeId: resolvedTypeId,

@@ -11,6 +11,7 @@ import { onRequest } from '../functions/_middleware.js';
 import { onRequestGet as getAgent, onRequestPost as postAgent } from '../functions/api/agent/[[path]].js';
 import { onRequest as handleWebJobs } from '../functions/api/agent/web-jobs.js';
 import { seedPageSections } from '../scripts/seed-page-sections.mjs';
+import { signPreviewTransfer } from '../functions/_lib/preview-transfer.mjs';
 import {
   _resetContentCache,
   escapeHtml,
@@ -29,6 +30,7 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const rootDir = resolve(__dirname, '..');
+const TRANSFER_TEST_SECRET = 'unit-test-only-preview-transfer-key-not-a-real-credential';
 
 function loadHtml(relPath) {
   return readFileSync(resolve(rootDir, relPath), 'utf-8');
@@ -669,6 +671,7 @@ test('two-isolated-DB boundary: raw production draft IDs fail closed (404) on st
       CF_ACCESS_TEAM_DOMAIN: PREVIEW_TEAM,
       CF_ACCESS_AUD: PREVIEW_AUD,
       LEGACY_DB: stagingDb,
+      PREVIEW_TRANSFER_SECRET: TRANSFER_TEST_SECRET,
     };
 
     const crossDbResp = await onRequest({
@@ -689,14 +692,14 @@ test('two-isolated-DB boundary: raw production draft IDs fail closed (404) on st
     assert.equal(errBody.error, 'preview_draft_not_found');
 
     // 2. buildContentPreviewInfo on production with verified owner + draftRow + targetRow emits an authenticated cross-environment transfer URL to staging /api/agent/preview/page
-    const prodPreviewInfo = buildContentPreviewInfo({
+    const prodPreviewInfo = await buildContentPreviewInfo({
       draftId: prodDraft.id,
       targetId: 'ps_programs.hero',
       typeId: 'page_section',
       itemData: JSON.parse(prodDraft.data),
       previewVersion: prodBinding.version,
       requestUrl: 'https://caregiversanctuary.org/api/agent/draft',
-      env: { LEGACY_DB: prodDb },
+      env: { LEGACY_DB: prodDb, PREVIEW_TRANSFER_SECRET: TRANSFER_TEST_SECRET },
       authorized: true,
       owner: prodDraft.updated_by,
       draftRow: prodDraft,
@@ -737,6 +740,69 @@ test('two-isolated-DB boundary: raw production draft IDs fail closed (404) on st
     assert.equal(tamperedVerResp.status, 409);
     assert.equal((await tamperedVerResp.json()).error, 'preview_version_mismatch');
     assert.equal(stagingDb.rows.filter((r) => r.status === 'draft').length, 0);
+
+    // An attacker can recompute an unkeyed version digest; it is not source authentication.
+    const forgedUrl = new URL(prodPreviewInfo.staging_preview_url);
+    const forged = JSON.parse(Buffer.from(forgedUrl.searchParams.get('transfer'), 'base64url').toString('utf8'));
+    forged.data.title = 'Forged title never proposed in production';
+    forged.source_draft.data = JSON.stringify(forged.data);
+    const forgedBinding = await confirmationBinding(
+      null, 'content', forged.source_draft, forged.source_origin, forged.source_target
+    );
+    forged.source_preview_version = forgedBinding.version;
+    forgedUrl.searchParams.set('transfer', Buffer.from(JSON.stringify(forged)).toString('base64url'));
+    forgedUrl.searchParams.set('source_version', forgedBinding.version);
+    const forgedResp = await onRequest({
+      request: new Request(forgedUrl, { headers: { 'Cf-Access-Jwt-Assertion': ownerToken } }),
+      next,
+      env: stagingEnv,
+    });
+    assert.deepEqual(
+      { status: forgedResp.status, drafts: stagingDb.rows.filter(r => r.status === 'draft').length },
+      { status: 403, drafts: 0 },
+      'recomputed public digest must not authenticate attacker-controlled preview content'
+    );
+
+    const originalTransferUrl = new URL(prodPreviewInfo.staging_preview_url);
+    const originalEnvelope = JSON.parse(Buffer.from(originalTransferUrl.searchParams.get('transfer'), 'base64url').toString('utf8'));
+    for (const [label, changes] of [
+      ['expired', { expires_at: Math.floor(Date.now() / 1000) - 1 }],
+      ['wrong audience', { audience: 'https://caregiversanctuary.org' }],
+      ['unapproved source', { source_origin: 'https://untrusted.invalid' }],
+    ]) {
+      const invalidEnvelope = { ...originalEnvelope, ...changes };
+      const token = Buffer.from(JSON.stringify(invalidEnvelope)).toString('base64url');
+      const invalidUrl = new URL(originalTransferUrl);
+      invalidUrl.searchParams.set('transfer', token);
+      invalidUrl.searchParams.set('transfer_signature', await signPreviewTransfer(token, stagingEnv));
+      const rejected = await onRequest({
+        request: new Request(invalidUrl, { headers: { 'Cf-Access-Jwt-Assertion': ownerToken } }),
+        next, env: stagingEnv,
+      });
+      assert.equal(rejected.status, 403, label);
+      assert.equal(stagingDb.rows.filter(r => r.status === 'draft').length, 0, label);
+    }
+    for (const [label, requestUrl, receiverEnv, expectedStatus] of [
+      ['missing signature', (() => { const u = new URL(originalTransferUrl); u.searchParams.delete('transfer_signature'); return u; })(), stagingEnv, 403],
+      ['missing key', originalTransferUrl, { ...stagingEnv, PREVIEW_TRANSFER_SECRET: undefined }, 503],
+      ['mismatched key', originalTransferUrl, { ...stagingEnv, PREVIEW_TRANSFER_SECRET: 'other-unit-test-only-key-not-a-real-credential' }, 403],
+    ]) {
+      const rejected = await onRequest({
+        request: new Request(requestUrl, { headers: { 'Cf-Access-Jwt-Assertion': ownerToken } }),
+        next, env: receiverEnv,
+      });
+      assert.equal(rejected.status, expectedStatus, label);
+      assert.equal(stagingDb.rows.filter(r => r.status === 'draft').length, 0, label);
+    }
+    const unconfiguredInfo = await buildContentPreviewInfo({
+      draftId: prodDraft.id, targetId: 'ps_programs.hero', typeId: 'page_section',
+      itemData: JSON.parse(prodDraft.data), previewVersion: prodBinding.version,
+      requestUrl: 'https://caregiversanctuary.org/api/agent/draft',
+      env: { LEGACY_DB: prodDb }, authorized: true, owner: prodDraft.updated_by,
+      draftRow: prodDraft, targetRow: prodPublished,
+    });
+    assert.equal(unconfiguredInfo.staging_preview_supported, false);
+    assert.equal(unconfiguredInfo.staging_preview_url, null);
 
     // 5. Authenticated initiating staff owner opening staging_preview_url materializes a real staging draft row in stagingDb and renders the preview
     const validTransferResp = await onRequest({
@@ -955,7 +1021,7 @@ test('non-page_section drafts (resource, faq, partner) return honest unsupported
     const binding = await confirmationBinding(db, 'content', resourceDraft, 'https://staging.caregiversanctuary.org', publishedResource);
 
     for (const [typeId, targetId] of [['resource', 'res_caregiver_guide'], ['faq', 'faq_what_is_sanctuary'], ['partner', 'partner_milwaukee_aging']]) {
-      const info = buildContentPreviewInfo({
+      const info = await buildContentPreviewInfo({
         draftId: 'cid_non_ps_1',
         targetId,
         typeId,
@@ -1142,7 +1208,7 @@ test('authorized modal form previews (ps_form.membership, ps_form.grant_apply, p
     assert.doesNotMatch(publicHtml, /<div class="modal-overlay open" id="membershipModal">/);
 
     // 5. Protected /api/agent/preview/page entrypoint (covered by Access 3757b2d6 api/agent path) renders the target page with <base href="/">, .open modal, and preview banner, while refusing ALLOW_DEV_CONSOLE bypass without verified JWT
-    const info = buildContentPreviewInfo({
+    const info = await buildContentPreviewInfo({
       draftId: 'cid_review_one',
       targetId: 'ps_form.membership',
       typeId: 'page_section',
@@ -1188,7 +1254,7 @@ test('authorized modal form previews (ps_form.membership, ps_form.grant_apply, p
   });
 });
 
-test('ordinary browser session (staff.js + real onRequest middleware + real RS256 Access JWTs across two isolated SQLite D1 databases): production Assistant conversation -> authenticated staging draft materialization & preview -> production confirmation without DB cross-contamination or provider/job replay', async () => {
+test('local VM integration (staff.js + onRequest middleware + test-signed RS256 Access JWTs across isolated SQLite databases): production Assistant conversation -> authenticated staging draft materialization & preview -> production confirmation without DB cross-contamination or provider/job replay', async () => {
   await withPreviewJwks(async () => {
     const schemaFiles = [
       'schema/0001_init.sql',
@@ -1285,6 +1351,7 @@ test('ordinary browser session (staff.js + real onRequest middleware + real RS25
       CF_ACCESS_TEAM_DOMAIN: PREVIEW_TEAM,
       CF_ACCESS_AUD: PREVIEW_AUD,
       LEGACY_DB: prodDb,
+      PREVIEW_TRANSFER_SECRET: TRANSFER_TEST_SECRET,
       AGENT_MAPPER_BACKEND: prodMapper,
     };
     const stagingEnv = {
@@ -1292,6 +1359,7 @@ test('ordinary browser session (staff.js + real onRequest middleware + real RS25
       CF_ACCESS_TEAM_DOMAIN: PREVIEW_TEAM,
       CF_ACCESS_AUD: PREVIEW_AUD,
       LEGACY_DB: stagingDb,
+      PREVIEW_TRANSFER_SECRET: TRANSFER_TEST_SECRET,
     };
 
     const committedIndexHtml = loadHtml('index.html');
@@ -1321,7 +1389,7 @@ test('ordinary browser session (staff.js + real onRequest middleware + real RS25
     const ownerToken = await makePreviewAccessJwt({ email: 'jane@legacy.org' });
     const otherToken = await makePreviewAccessJwt({ email: 'other@legacy.org' });
 
-    // Mount real staff.js in an ordinary browser session on https://caregiversanctuary.org
+    // Exercise staff.js in a local VM DOM stub; this is not live browser acceptance.
     const staffSource = readFileSync(resolve(rootDir, 'staff.js'), 'utf8');
     const chatSection = staffSource.slice(
       staffSource.indexOf('function initStaffChatTargets()'),

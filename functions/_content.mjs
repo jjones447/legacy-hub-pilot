@@ -5,6 +5,7 @@
 // Hard fallback: if LEGACY_DB is undefined, D1 query errors, key/field is missing,
 // or type is unexpected, the response passes through untouched.
 import { confirmationActor, draftOwner, ownsDraft, confirmationBinding } from './_lib/agent-confirmation.mjs';
+import { PREVIEW_TRANSFER_TTL_SECONDS, isPreviewTransferSource, previewTransferConfigured, signPreviewTransfer, verifyPreviewTransfer } from './_lib/preview-transfer.mjs';
 
 export function escapeHtml(str) {
   if (str == null) return '';
@@ -588,7 +589,7 @@ function decodeBase64UrlUtf8(token) {
   }
 }
 
-export function buildContentPreviewInfo({
+export async function buildContentPreviewInfo({
   draftId,
   targetId,
   typeId,
@@ -667,8 +668,17 @@ export function buildContentPreviewInfo({
       }
     } catch {}
 
+    if (!previewTransferConfigured(env) || !isPreviewTransferSource(sourceOrigin)) {
+      return {
+        target_label: meta.label, page_path: meta.page_path, preview_path: null,
+        staging_preview_url: null, preview_url: null, staging_preview_supported: false,
+        preview_unavailable_reason: 'Authenticated staging preview transfer is not configured for this environment.',
+      };
+    }
     const transferEnvelope = canonicalPreviewValue({
       v: 1,
+      audience: fallbackStagingOrigin,
+      expires_at: Math.floor(Date.now() / 1000) + PREVIEW_TRANSFER_TTL_SECONDS,
       source_origin: sourceOrigin,
       source_draft_id: draftId,
       source_preview_version: previewVersion.toLowerCase(),
@@ -680,7 +690,15 @@ export function buildContentPreviewInfo({
       source_target: (targetRow && typeof targetRow === 'object') ? targetRow : null,
     });
     const transferToken = encodeBase64UrlUtf8(JSON.stringify(transferEnvelope));
-    const stagingQuery = `?transfer=${encodeURIComponent(transferToken)}&source_version=${encodeURIComponent(previewVersion.toLowerCase())}`;
+    if (transferToken.length > 16384) {
+      return {
+        target_label: meta.label, page_path: meta.page_path, preview_path: null,
+        staging_preview_url: null, preview_url: null, staging_preview_supported: false,
+        preview_unavailable_reason: 'This draft exceeds the supported staging preview transfer size.',
+      };
+    }
+    const signature = await signPreviewTransfer(transferToken, env);
+    const stagingQuery = `?transfer=${encodeURIComponent(transferToken)}&transfer_signature=${signature}&source_version=${encodeURIComponent(previewVersion.toLowerCase())}`;
     const stagingPreviewUrl = `${fallbackStagingOrigin}/api/agent/preview/page${stagingQuery}${meta.anchor || ''}`;
 
     return {
@@ -854,6 +872,8 @@ async function injectDraftPreviewBanner(response, draftRow, targetLabel, preview
 
 const ALLOWED_TRANSFER_KEYS = new Set([
   'v',
+  'audience',
+  'expires_at',
   'source_origin',
   'source_draft_id',
   'source_preview_version',
@@ -919,6 +939,23 @@ async function materializeCrossOriginDraftTransfer({ url, env, actor, expectedPa
     return {
       errorResponse: previewFailClosed(400, 'invalid_preview_transfer', 'Unsupported transfer envelope structure.'),
     };
+  }
+
+  // Public SHA versions cannot authenticate client-controlled snapshots.
+  // Verify source authentication before staging draft reads or writes.
+  if (!previewTransferConfigured(env)) {
+    return { errorResponse: previewFailClosed(503, 'preview_transfer_unconfigured', 'Authenticated preview transfer is not configured.') };
+  }
+  if (!await verifyPreviewTransfer(transferParam, url.searchParams.get('transfer_signature'), env)) {
+    return { errorResponse: previewFailClosed(403, 'preview_transfer_unauthenticated', 'Preview transfer authentication failed.') };
+  }
+  const now = Math.floor(Date.now() / 1000);
+  if (transfer.audience !== url.origin || !Number.isSafeInteger(transfer.expires_at)
+      || transfer.expires_at <= now || transfer.expires_at > now + PREVIEW_TRANSFER_TTL_SECONDS + 30) {
+    return { errorResponse: previewFailClosed(403, 'preview_transfer_expired_or_wrong_audience', 'Preview transfer has expired or targets another environment.') };
+  }
+  if (!isPreviewTransferSource(transfer.source_origin)) {
+    return { errorResponse: previewFailClosed(403, 'preview_transfer_invalid_source', 'Preview transfer source is not a production origin.') };
   }
 
   let parsedSourceOrigin;
