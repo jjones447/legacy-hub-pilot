@@ -65,12 +65,71 @@ test('the existing shell gains a Forms choice and labeled content target without
   assert.doesNotMatch(h.nodes.chatContentTarget.innerHTML, /ps_form.draft|resource_one/);
 });
 
-for (const [area, target] of [['content', ''], ['content', 'ps_form.membership'], ['form', 'resource_one'], ['form', 'ps_form.draft']]) {
-  test(`missing/wrong/unpublished target is refused locally: ${area}/${target}`, async () => {
+for (const [area, target] of [['content', 'ps_form.membership'], ['form', 'resource_one'], ['form', 'ps_form.draft'], ['auto', 'ps_form.draft']]) {
+  test(`wrong/unpublished explicit target is refused locally: ${area}/${target}`, async () => {
     const h = harness({ area, target }); await h.send();
     assert.equal(h.calls.length, 0); assert.doesNotMatch(h.html(), /Confirm &amp; publish/);
   });
 }
+
+test('conversation-first default (auto or untargeted area) sends request without mandatory target selection and renders staging preview link', async () => {
+  const h = harness({
+    area: 'auto',
+    target: '',
+    reply: {
+      ok: true,
+      draft_id: 'cid_auto_hero',
+      resolved_target_id: 'ps_home.hero',
+      target_label: 'Homepage — Hero Banner',
+      staging_preview_url: 'https://staging.caregiversanctuary.org/index.html?preview_draft=cid_auto_hero',
+      preview_path: '/index.html?preview_draft=cid_auto_hero',
+      draft: { data: { section_key: 'home.hero', title: 'New Hero' } },
+      confirmation_preview: { before: { section_key: 'home.hero', title: 'Old Hero' }, after: { section_key: 'home.hero', title: 'New Hero' } },
+      preview_version: 'b'.repeat(64),
+    },
+  });
+  await h.send();
+  assert.deepEqual(h.calls, [{ url: '/api/agent/draft', body: { request: 'Update the title' } }]);
+  assert.match(h.html(), /ps_home\.hero/);
+  assert.match(h.html(), /Open staging preview ↗/);
+  assert.match(h.html(), /https:\/\/staging\.caregiversanctuary\.org\/index\.html\?preview_draft=cid_auto_hero/);
+  assert.match(h.html(), /Confirm &amp; publish/);
+});
+
+test('ambiguous untargeted request renders clarification candidates without confirmation controls or HOLD', async () => {
+  const storage = new Map();
+  const h = harness({
+    area: 'content',
+    target: '',
+    storage,
+    reply: {
+      ok: true,
+      clarification_needed: true,
+      reason: 'ambiguous_target',
+      message: 'Your request matches more than one website section.',
+      candidates: [
+        { id: 'ps_home.hero', area: 'content', label: 'Homepage — Hero Banner' },
+        { id: 'ps_about.hero', area: 'content', label: 'About Page — Hero Banner' },
+      ],
+    },
+  });
+  await h.send();
+  assert.deepEqual(h.calls, [{ url: '/api/agent/draft', body: { request: 'Update the title', area: 'content' } }]);
+  assert.match(h.html(), /Which section should I update\?/);
+  assert.match(h.html(), /data-action="agent-select-candidate"/);
+  assert.match(h.html(), /Homepage — Hero Banner/);
+  assert.doesNotMatch(h.html(), /Confirm &amp; publish/);
+  assert.equal(storage.get('agent-confirmation-hold'), undefined);
+
+  // Clicking a candidate populates target selection and restores the request text
+  h.nodes.chatInput.value = '';
+  h.context.selectAgentCandidateTarget({
+    getAttribute: (name) => name === 'data-target-id' ? 'resource_one' : name === 'data-area' ? 'content' : null,
+  });
+  assert.equal(h.nodes.chatAreaSelect.value, 'content');
+  assert.equal(h.nodes.chatContentTarget.value, 'resource_one');
+  assert.equal(h.nodes.chatInput.value, 'Update the title');
+});
 
 test('Event supplies the selected event ID and labels its preview correctly', async () => {
   const h = harness({ area: 'event' }); await h.send();

@@ -479,6 +479,128 @@ export async function rewriteContent(response, sections) {
   return rewriter.transform(response);
 }
 
+const SECTION_PREVIEW_MAP = Object.freeze({
+  'ps_home.hero': { page_path: '/index.html', anchor: '', label: 'Homepage — Hero Banner' },
+  'ps_home.journey': { page_path: '/index.html', anchor: '', label: 'Homepage — Caregiving Journey' },
+  'ps_home.support': { page_path: '/index.html', anchor: '', label: 'Homepage — How We Support Caregivers' },
+  'ps_home.community_wellness_partners': { page_path: '/index.html', anchor: '', label: 'Homepage — Community Wellness Partners' },
+  'ps_about.hero': { page_path: '/about.html', anchor: '', label: 'About Page — Hero Banner' },
+  'ps_about.story': { page_path: '/about.html', anchor: '', label: 'About Page — Our Story' },
+  'ps_about.values': { page_path: '/about.html', anchor: '', label: 'About Page — What Guides Us (Values)' },
+  'ps_about.join': { page_path: '/about.html', anchor: '', label: 'About Page — Join Us Call to Action' },
+  'ps_programs.hero': { page_path: '/programs.html', anchor: '', label: 'Programs Page — Hero Banner' },
+  'ps_programs.membership': { page_path: '/programs.html', anchor: '#membership', label: 'Programs Page — Sanctuary Membership Section' },
+  'ps_programs.support_group': { page_path: '/programs.html', anchor: '#support-group', label: 'Programs Page — Virtual Support Group Section' },
+  'ps_programs.grants': { page_path: '/programs.html', anchor: '#grants', label: 'Programs Page — Wellness Grants Section' },
+  'ps_programs.socials': { page_path: '/programs.html', anchor: '#memory-socials', label: 'Programs Page — Memory Socials Section' },
+  'ps_programs.coaching': { page_path: '/programs.html', anchor: '#coaching', label: 'Programs Page — 1:1 Wellness Coaching Section' },
+  'ps_request_support.hero': { page_path: '/request-support.html', anchor: '', label: 'Request Support Page — Hero Banner' },
+  'ps_request_support.next': { page_path: '/request-support.html', anchor: '', label: 'Request Support Page — What Happens Next' },
+  'ps_form.membership': { page_path: '/index.html', anchor: '#membershipModal', label: 'Form — Sanctuary Membership Signup' },
+  'ps_form.grant_apply': { page_path: '/programs.html', anchor: '#grantApplyModal', label: 'Form — Wellness Grant Application' },
+  'ps_form.coaching_interest': { page_path: '/programs.html', anchor: '#coachingInterestModal', label: 'Form — 1:1 Wellness Coaching Interest' },
+  'ps_form.request_support': { page_path: '/request-support.html', anchor: '#supportForm', label: 'Form — Request Support Intake' },
+});
+
+export function getContentTargetMeta(targetId, typeId, itemData = null) {
+  const id = typeof targetId === 'string' ? targetId : '';
+  if (id && SECTION_PREVIEW_MAP[id]) {
+    return { id, type_id: typeId || 'page_section', ...SECTION_PREVIEW_MAP[id] };
+  }
+  const sectionKey = id.startsWith('ps_') ? id.slice(3) : (typeof itemData?.section_key === 'string' ? itemData.section_key : '');
+  if (sectionKey && SECTION_PREVIEW_MAP[`ps_${sectionKey}`]) {
+    return { id: id || `ps_${sectionKey}`, type_id: typeId || 'page_section', ...SECTION_PREVIEW_MAP[`ps_${sectionKey}`] };
+  }
+  if (sectionKey.startsWith('home.')) return { id, type_id: typeId || 'page_section', page_path: '/index.html', anchor: '', label: `Homepage — ${sectionKey}` };
+  if (sectionKey.startsWith('about.')) return { id, type_id: typeId || 'page_section', page_path: '/about.html', anchor: '', label: `About Page — ${sectionKey}` };
+  if (sectionKey.startsWith('programs.')) return { id, type_id: typeId || 'page_section', page_path: '/programs.html', anchor: '', label: `Programs Page — ${sectionKey}` };
+  if (sectionKey.startsWith('request_support.')) return { id, type_id: typeId || 'page_section', page_path: '/request-support.html', anchor: '', label: `Request Support Page — ${sectionKey}` };
+  if (sectionKey.startsWith('form.')) return { id, type_id: typeId || 'page_section', page_path: '/index.html', anchor: '', label: `Form — ${sectionKey}` };
+  if (typeId === 'resource' || id.startsWith('res_')) {
+    return { id, type_id: 'resource', page_path: '/resources.html', anchor: '', label: itemData?.title ? `Resource — ${itemData.title}` : `Resource (${id || 'new'})` };
+  }
+  if (typeId === 'faq' || id.startsWith('faq_')) {
+    return { id, type_id: 'faq', page_path: '/faq.html', anchor: '', label: itemData?.question ? `FAQ — ${itemData.question}` : `FAQ (${id || 'new'})` };
+  }
+  if (typeId === 'partner' || id.startsWith('partner_')) {
+    return { id, type_id: 'partner', page_path: '/sanctuary.html', anchor: '', label: itemData?.name ? `Partner — ${itemData.name}` : `Partner (${id || 'new'})` };
+  }
+  return { id, type_id: typeId || 'content', page_path: '/index.html', anchor: '', label: id || typeId || 'Website Content' };
+}
+
+export function buildContentPreviewInfo({ draftId, targetId, typeId, itemData = null, requestUrl = '', env = {} }) {
+  const meta = getContentTargetMeta(targetId, typeId, itemData);
+  const encodedDraft = draftId ? `?preview_draft=${encodeURIComponent(draftId)}` : '';
+  const previewPath = `${meta.page_path}${encodedDraft}${meta.anchor || ''}`;
+  const stagingOrigin = (typeof env?.STAGING_PREVIEW_ORIGIN === 'string' && env.STAGING_PREVIEW_ORIGIN.trim())
+    ? env.STAGING_PREVIEW_ORIGIN.trim().replace(/\/+$/, '')
+    : 'https://staging.caregiversanctuary.org';
+  const stagingPreviewUrl = `${stagingOrigin}${previewPath}`;
+  let previewUrl = stagingPreviewUrl;
+  try {
+    if (requestUrl) {
+      const parsed = new URL(requestUrl);
+      if (parsed.hostname && parsed.hostname !== 'caregiversanctuary.org' && parsed.hostname !== 'www.caregiversanctuary.org') {
+        previewUrl = `${parsed.origin}${previewPath}`;
+      }
+    }
+  } catch {}
+  return {
+    target_label: meta.label,
+    page_path: meta.page_path,
+    preview_path: previewPath,
+    staging_preview_url: stagingPreviewUrl,
+    preview_url: previewUrl,
+  };
+}
+
+async function getDraftPreviewRow(env, draftId) {
+  if (!env || !env.LEGACY_DB || typeof env.LEGACY_DB.prepare !== 'function') return null;
+  if (typeof draftId !== 'string' || !/^(?:cid_|ci_)[A-Za-z0-9_-]{1,128}$/.test(draftId)) return null;
+  try {
+    const stmt = env.LEGACY_DB.prepare(
+      "SELECT id, type_id, data, status, draft_of, updated_at FROM content_item WHERE id = ? AND status = 'draft'"
+    );
+    if (typeof stmt.bind === 'function') {
+      const bound = stmt.bind(draftId);
+      if (typeof bound.first === 'function') {
+        return await bound.first();
+      }
+      if (typeof bound.all === 'function') {
+        const { results } = await bound.all();
+        return Array.isArray(results) ? (results.find((r) => r.id === draftId && r.status === 'draft') || null) : null;
+      }
+    }
+    if (typeof stmt.all === 'function') {
+      const { results } = await stmt.all();
+      return Array.isArray(results) ? (results.find((r) => r.id === draftId && r.status === 'draft') || null) : null;
+    }
+  } catch {}
+  return null;
+}
+
+async function injectDraftPreviewBanner(response, draftRow, targetLabel) {
+  const html = await response.text();
+  const safeDraftId = escapeHtml(draftRow.id);
+  const safeTarget = escapeHtml(targetLabel || draftRow.draft_of || draftRow.type_id || 'content');
+  const bannerHtml =
+    `<div class="staging-draft-preview-banner" data-preview-draft-id="${safeDraftId}" role="status" aria-live="polite">` +
+    `<strong>Staging Draft Preview</strong> (<code>${safeDraftId}</code> · ${safeTarget}) — ` +
+    `This proposed wording is a draft preview and is <strong>not yet published</strong> to the live site. ` +
+    `Return to the Staff Assistant to click <em>Confirm &amp; publish</em> or <em>Discard</em>.` +
+    `</div>`;
+  const updatedHtml = /<body\b[^>]*>/i.test(html)
+    ? html.replace(/<body\b[^>]*>/i, (match) => `${match}\n  ${bannerHtml}`)
+    : `${bannerHtml}\n${html}`;
+  const headers = new Headers(response.headers);
+  headers.set('Cache-Control', 'no-store');
+  return new Response(updatedHtml, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 export async function maybeRewriteContent(context, response) {
   try {
     const { request, env } = context;
@@ -507,12 +629,37 @@ export async function maybeRewriteContent(context, response) {
       return response;
     }
 
-    const sections = await getPublishedSections(env);
-    if (!sections || Object.keys(sections).length === 0) {
+    const previewDraftId = url.searchParams.get('preview_draft');
+    const publishedSections = await getPublishedSections(env);
+
+    if (previewDraftId && /^(?:cid_|ci_)[A-Za-z0-9_-]{1,128}$/.test(previewDraftId)) {
+      const draftRow = await getDraftPreviewRow(env, previewDraftId);
+      if (draftRow && draftRow.status === 'draft') {
+        const draftData = typeof draftRow.data === 'string' ? JSON.parse(draftRow.data) : draftRow.data;
+        const baseSections = publishedSections ? { ...publishedSections } : {};
+        const targetId = draftRow.draft_of || draftRow.id || '';
+        const sectionKey = targetId.startsWith('ps_')
+          ? targetId.slice(3)
+          : (typeof draftData?.section_key === 'string' ? draftData.section_key : '');
+        if (sectionKey && draftData && typeof draftData === 'object') {
+          baseSections[sectionKey] = {
+            ...(baseSections[sectionKey] || {}),
+            ...draftData,
+          };
+        }
+        const rewritten = Object.keys(baseSections).length > 0
+          ? await rewriteContent(response, baseSections)
+          : response;
+        const meta = getContentTargetMeta(targetId, draftRow.type_id, draftData);
+        return await injectDraftPreviewBanner(rewritten, draftRow, meta.label);
+      }
+    }
+
+    if (!publishedSections || Object.keys(publishedSections).length === 0) {
       return response;
     }
 
-    return await rewriteContent(response, sections);
+    return await rewriteContent(response, publishedSections);
   } catch {
     // Hard fallback: never break a page if rewrite fails
     return response;

@@ -6,7 +6,7 @@
 <title>Legacy Hub · Staff console</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=5549317bced9">
+<link rel="stylesheet" href="styles.css?v=f11dd7cdd828">
 <link rel="icon" href="favicon.ico" sizes="32x32">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -46,18 +46,22 @@
           <h3 id="staffAssistantHeading">Legacy Assistant · browser chat</h3>
           <button type="button" id="staffAssistantClose" class="staff-assistant-close">Close assistant</button>
         </div>
-        <p id="staffAssistantHelp" class="small staff-assistant-help">Use this browser chat to preview an edit before you confirm it. Slack is a separate entry point; this panel does not show the Slack conversation.</p>
-        <div class="chat-area-bar">
-          <label for="chatAreaSelect" class="chat-area-label">Area:</label>
-          <select id="chatAreaSelect" class="chat-area-select">
-            <option value="content">Content</option>
-            <option value="grant">Grant</option>
-            <option value="caregiver">Caregiver</option>
-            <option value="event">Event</option>
-          </select>
-        </div>
+        <p id="staffAssistantHelp" class="small staff-assistant-help">Describe what you want to change in plain English—use this browser chat to preview an edit before you confirm it. Slack is a separate entry point; this panel does not show the Slack conversation.</p>
+        <details id="chatAdvancedTargeting" class="chat-advanced-targeting">
+          <summary class="small muted">Advanced targeting (optional)</summary>
+          <div class="chat-area-bar">
+            <label for="chatAreaSelect" class="chat-area-label">Area:</label>
+            <select id="chatAreaSelect" class="chat-area-select">
+              <option value="auto" selected>Auto-detect from message (default)</option>
+              <option value="content">Content</option>
+              <option value="grant">Grant</option>
+              <option value="caregiver">Caregiver</option>
+              <option value="event">Event</option>
+            </select>
+          </div>
+        </details>
         <div class="chat-body" id="chatBody">
-          <div class="chat-empty-state" id="chatEmptyState">Tell me what to change, for example: Add a support group on October 15 at 6 PM on Google Meet.</div>
+          <div class="chat-empty-state" id="chatEmptyState">Tell me what to change, for example: Add a support group on October 15 at 6 PM on Google Meet. You can also ask to change homepage copy or form wording directly.</div>
         </div>
         <div class="chat-input-row">
           <input id="chatInput" type="text" aria-label="Message to Legacy Assistant" aria-describedby="staffAssistantHelp" placeholder='Describe the change you want…'>
@@ -239,7 +243,7 @@
 
 <script src="app.js?v=9da96976b839"></script>
 <script src="nav-v2.js"></script>
-<script src="staff.js?v=7078af0c8fdc"></script>
+<script src="staff.js?v=51c9994e97be"></script>
 </body>
 </html>
 

@@ -1764,6 +1764,9 @@ document.addEventListener('click', function (e) {
   } else if (action === 'agent-change-discard') {
     e.stopPropagation();
     discardAgentChange(target);
+  } else if (action === 'agent-select-candidate') {
+    e.stopPropagation();
+    selectAgentCandidateTarget(target);
   } else if (action === 'agent-web-job-recover') {
     e.stopPropagation();
     void recoverAgentWebJobHold();
@@ -1851,6 +1854,8 @@ function initStaffAssistantDisclosure() {
 }
 
 // Extend the browser chat controls without changing the approval transport.
+let lastClarificationRequest = '';
+
 function initStaffChatTargets() {
   const area = document.getElementById('chatAreaSelect');
   if (!area) return;
@@ -1878,16 +1883,18 @@ function initStaffChatTargets() {
 
 function chatContentItems(area) {
   return siteContentItems.filter(item => {
+    if (item.status !== 'published') return false;
+    if (area === 'auto') return true;
     const isForm = item.type_id === 'page_section' && item.id.startsWith('ps_form.');
-    return item.status === 'published' && (area === 'form' ? isForm : !isForm);
+    return area === 'form' ? isForm : !isForm;
   });
 }
 
 function refreshStaffChatTargets() {
-  const area = document.getElementById('chatAreaSelect')?.value || 'content';
+  const area = document.getElementById('chatAreaSelect')?.value || 'auto';
   const select = document.getElementById('chatContentTarget');
   if (!select) return;
-  const active = area === 'content' || area === 'form';
+  const active = area === 'auto' || area === 'content' || area === 'form';
   select.hidden = !active;
   const label = document.getElementById('chatContentTargetLabel');
   if (label) label.hidden = !active;
@@ -1897,6 +1904,30 @@ function refreshStaffChatTargets() {
     chatContentItems(area).map(item =>
       `<option value="${escapeHtml(item.id)}">${escapeHtml(item.id)}</option>`).join('');
   if (chatContentItems(area).some(item => item.id === previous)) select.value = previous;
+}
+
+function selectAgentCandidateTarget(button) {
+  if (!button) return;
+  const targetId = button.getAttribute('data-target-id') || '';
+  const area = button.getAttribute('data-area') || (targetId.startsWith('ps_form.') ? 'form' : 'content');
+  const details = document.getElementById('chatAdvancedTargeting');
+  if (details) details.open = true;
+  const areaSelect = document.getElementById('chatAreaSelect');
+  if (areaSelect) {
+    areaSelect.value = area;
+    refreshStaffChatTargets();
+  }
+  const targetSelect = document.getElementById('chatContentTarget');
+  if (targetSelect && targetId) {
+    targetSelect.value = targetId;
+  }
+  const input = document.getElementById('chatInput');
+  if (input && !input.value.trim() && lastClarificationRequest) {
+    input.value = lastClarificationRequest;
+  }
+  if (input && typeof input.focus === 'function') {
+    input.focus();
+  }
 }
 
 let agentConfirmationHold = false;
@@ -2227,21 +2258,34 @@ window.agentSend = async function () {
   body.appendChild(userDiv);
 
   const areaSelect = document.getElementById('chatAreaSelect');
-  const selectedArea = areaSelect ? areaSelect.value : 'content';
+  const selectedArea = areaSelect ? areaSelect.value : 'auto';
 
-  const isContent = selectedArea === 'content' || selectedArea === 'form';
+  let effectiveArea = selectedArea;
+  let isContent = selectedArea === 'auto' || selectedArea === 'content' || selectedArea === 'form';
   let contentItem = null;
   let targetId = null;
+  let untargetedContentRequest = false;
   if (isContent) {
-    targetId = document.getElementById('chatContentTarget')?.value;
-    contentItem = chatContentItems(selectedArea).find(item => item.id === targetId);
-    if (!contentItem) {
-      const botDiv = document.createElement('div');
-      botDiv.className = 'msg bot';
-      botDiv.textContent = 'Select a published item in this area first. Nothing has been drafted.';
-      body.appendChild(botDiv);
-      body.scrollTop = body.scrollHeight;
-      return;
+    targetId = document.getElementById('chatContentTarget')?.value || '';
+    if (targetId) {
+      contentItem = chatContentItems(selectedArea).find(item => item.id === targetId);
+      if (!contentItem) {
+        const botDiv = document.createElement('div');
+        botDiv.className = 'msg bot';
+        botDiv.textContent = 'Select a published item in this area first. Nothing has been drafted.';
+        body.appendChild(botDiv);
+        body.scrollTop = body.scrollHeight;
+        return;
+      }
+      if (selectedArea === 'auto') {
+        effectiveArea = contentItem.id.startsWith('ps_form.') ? 'form' : 'content';
+      }
+    } else if (selectedArea === 'auto' && /\b(?:create|add|schedule)\b[\s\S]*\b(?:event|support group|memory social|workshop)\b/i.test(text) && !/\b(?:page|section|form|hero|banner|heading|subtitle|lede|button)\b/i.test(text)) {
+      isContent = false;
+      effectiveArea = 'event';
+      targetId = 'new';
+    } else {
+      untargetedContentRequest = true;
     }
   } else if (selectedArea === 'event') {
     targetId = currentEventId;
@@ -2282,18 +2326,23 @@ window.agentSend = async function () {
 
   // Reserve synchronously before the FIRST await. A second Enter returns at the
   // entry guard without clearing its text, generating another ID, or posting.
-  const webJobLifecycle = agentWebJobsEnabled;
+  const webJobLifecycle = agentWebJobsEnabled && !untargetedContentRequest;
   if (webJobLifecycle) agentWebJobPending = true;
   const jobDeadline = webJobLifecycle ? Date.now() + 60000 : null;
   let ordinaryPendingNode = null;
   try {
     const draftPath = isContent ? '/api/agent/draft' : '/api/agent/change/draft';
-    const draftRequest = {
-      ...(isContent ? { type_id: contentItem.type_id } : { area: selectedArea }),
-      target_id: targetId,
-      request: text,
-      ...(webJobLifecycle ? { idempotency_key: crypto.randomUUID().replaceAll('-', '') } : {})
-    };
+    const draftRequest = untargetedContentRequest
+      ? {
+          request: text,
+          ...(selectedArea === 'content' || selectedArea === 'form' ? { area: selectedArea } : {}),
+        }
+      : {
+          ...(isContent ? { type_id: contentItem.type_id } : { area: effectiveArea }),
+          target_id: targetId,
+          request: text,
+          ...(webJobLifecycle ? { idempotency_key: crypto.randomUUID().replaceAll('-', '') } : {})
+        };
     if (webJobLifecycle && agentWebJobActor) {
       saveWebJobRecord({ v:1,kind:'web_job',actor:agentWebJobActor,origin:window.location.origin,session_id:webJobSession(),job_id:null,idempotency_key:draftRequest.idempotency_key,phase:'create' });
     }
@@ -2325,6 +2374,22 @@ window.agentSend = async function () {
       data = await awaitCurrentWebJob(data, botDiv, jobDeadline || undefined);
     }
 
+    if (res.ok && data.ok && data.clarification_needed) {
+      lastClarificationRequest = text;
+      const candidates = Array.isArray(data.candidates) ? data.candidates : [];
+      const chipsHtml = candidates.length > 0
+        ? `<div class="confirm-row" role="group" aria-label="Suggested sections">` +
+          candidates.map(cand =>
+            `<button type="button" class="chip-btn" data-action="agent-select-candidate" data-target-id="${escapeHtml(cand.id || '')}" data-area="${escapeHtml(cand.area || 'content')}">${escapeHtml(cand.label || cand.id || '')}</button>`
+          ).join('') +
+          `</div>`
+        : '';
+      botDiv.innerHTML = `<div class="clarification-msg"><strong>Which section should I update?</strong> ${escapeHtml(data.message || 'Choose a section below or reply with the page and section name.')}${chipsHtml}</div>`;
+      if (!ordinaryPendingNode) body.appendChild(botDiv);
+      body.scrollTop = body.scrollHeight;
+      return;
+    }
+
     if (!res.ok || !data.ok || !(isContent ? data.draft_id : data.change_id)) {
       if (webJobLifecycle) {
         if (data.terminal_refused === true) forgetFinishedWebJob();
@@ -2349,14 +2414,24 @@ window.agentSend = async function () {
     }
     const beforeJson = escapeHtml(JSON.stringify(before || {}, null, 2));
     const afterJson = escapeHtml(JSON.stringify(after || {}, null, 2));
-    const areaLabel = { content: '📚 Content Update', form: '📝 Form Copy Update', grant: '🎁 Grant Transition', caregiver: '👤 Caregiver Update', event: '📅 Event Update' }[selectedArea];
+    const resolvedTargetId = data.resolved_target_id || data.draft?.draft_of || contentItem?.id || data.change?.operation || 'change';
+    const displayArea = isContent
+      ? (effectiveArea === 'form' || String(resolvedTargetId).startsWith('ps_form.') ? 'form' : 'content')
+      : effectiveArea;
+    const areaLabel = { content: '📚 Content Update', form: '📝 Form Copy Update', grant: '🎁 Grant Transition', caregiver: '👤 Caregiver Update', event: '📅 Event Update' }[displayArea];
     const idAttribute = (isContent ? `data-draft-id="${escapeHtml(data.draft_id)}"` : `data-change-id="${escapeHtml(data.change_id)}"`) + ` data-preview-version="${escapeHtml(data.preview_version)}"`;
+    const stagingPreviewHref = isContent ? (data.staging_preview_url || data.preview_url || data.preview_path || '') : '';
+    const localPreviewHref = isContent ? (data.preview_path || '') : '';
+    const stagingPreviewHtml = stagingPreviewHref
+      ? `<p class="small draft-staging-preview-row"><a href="${escapeHtml(stagingPreviewHref)}" target="_blank" rel="noopener noreferrer" class="preview-staging-link">Open staging preview ↗</a>${localPreviewHref && localPreviewHref !== stagingPreviewHref ? ` · <a href="${escapeHtml(localPreviewHref)}" target="_blank" rel="noopener noreferrer">Preview on this host ↗</a>` : ''} <span class="muted">(unconfirmed draft <code>${escapeHtml(data.draft_id)}</code>)</span></p>`
+      : '';
 
     botDiv.innerHTML = `
       Here's what will change:
       <div class="preview">
-        <div class="p-title">${areaLabel} (${escapeHtml(contentItem?.id || data.change?.operation || 'change')})</div>
+        <div class="p-title">${areaLabel} (${escapeHtml(resolvedTargetId)})</div>
         ${isContent ? '<p class="small">Before and after: website preview. Review before confirming.</p>' : ''}
+        ${stagingPreviewHtml}
         <div class="diff-container">
           <div class="diff-box">
             <div class="diff-header">Before</div>

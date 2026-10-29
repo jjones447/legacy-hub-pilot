@@ -1,12 +1,12 @@
 // GET/POST /api/agent/[[path]] — site-builder agent editing loop endpoints (slice 07)
 // and governed workflow data changes (slice D7-S1).
-import { mapRequestToChange, mapRequestToWorkflowChange, validateJsonSchema } from './_mapper.mjs';
+import { mapRequestToChange, mapRequestToWorkflowChange, validateJsonSchema, resolveContentTarget } from './_mapper.mjs';
 import * as grantsDomain from '../../_lib/domain/grants.js';
 import * as caregiversDomain from '../../_lib/domain/caregivers.js';
 import * as eventsDomain from '../../_lib/domain/events.js';
 import { getActor } from '../../_lib/actor.js';
 import { internalError } from '../../_lib/errors.js';
-import { _resetContentCache, findDisallowedHtml } from '../../_content.mjs';
+import { _resetContentCache, findDisallowedHtml, buildContentPreviewInfo } from '../../_content.mjs';
 import { onRequestPost as postTranscribe } from './transcribe.js';
 import { confirmationActor, draftOwner, ownsDraft, confirmationBinding, confirmationAudit, matchesPersistedPreview } from '../../_lib/agent-confirmation.mjs';
 import { createWebJob, enabled as webJobsEnabled } from '../../_lib/assistant-web-jobs.mjs';
@@ -14,9 +14,53 @@ import { createWebJob, enabled as webJobsEnabled } from '../../_lib/assistant-we
 export async function onRequestGet({ request, env }) {
   try {
     const url = new URL(request.url);
-    const pathSegments = url.pathname.split('/').filter(Boolean); // ['api', 'agent', 'drafts' | 'changes']
+    const pathSegments = url.pathname.split('/').filter(Boolean); // ['api', 'agent', 'drafts' | 'changes' | 'preview']
 
     const action = pathSegments[2];
+    if (action === 'preview') {
+      const draftId = url.searchParams.get('draft_id');
+      if (!draftId) {
+        return json({ ok: false, error: 'draft_id is required' }, 400);
+      }
+      const item = await env.LEGACY_DB
+        .prepare('SELECT id, type_id, data, status, draft_of, updated_by, updated_at FROM content_item WHERE id = ?')
+        .bind(draftId)
+        .first();
+      if (!item) {
+        return json({ ok: false, error: 'draft not found' }, 404);
+      }
+      const afterData = typeof item.data === 'string' ? JSON.parse(item.data) : item.data;
+      let beforeData = {};
+      if (item.draft_of) {
+        const target = await env.LEGACY_DB
+          .prepare('SELECT id, type_id, data, status FROM content_item WHERE id = ?')
+          .bind(item.draft_of)
+          .first();
+        if (target && target.data) {
+          beforeData = typeof target.data === 'string' ? JSON.parse(target.data) : target.data;
+        }
+      }
+      const previewInfo = buildContentPreviewInfo({
+        draftId: item.id,
+        targetId: item.draft_of || item.id,
+        typeId: item.type_id,
+        itemData: afterData,
+        requestUrl: request.url,
+        env,
+      });
+      return json({
+        ok: true,
+        draft_id: item.id,
+        draft_of: item.draft_of || null,
+        type_id: item.type_id,
+        status: item.status,
+        updated_at: item.updated_at,
+        ...previewInfo,
+        before: beforeData,
+        after: afterData,
+      });
+    }
+
     if (action === 'drafts') {
       let results;
       try {
@@ -460,32 +504,77 @@ export async function onRequestPost({ request, env, data, redactErrors = false, 
     const body = await request.json().catch(() => ({}));
 
     if (action === 'draft') {
-      if (!body.request || !body.type_id) {
+      if (!body.request || typeof body.request !== 'string' || !body.request.trim()) {
+        return json({ ok: false, error: 'request and type_id are required' }, 400);
+      }
+
+      let resolvedTypeId = (body.type_id && body.type_id !== 'auto') ? body.type_id : null;
+      let resolvedTargetId = body.target_id || null;
+      let currentData = null;
+      let currentItem = null;
+
+      if (!resolvedTargetId && !resolvedTypeId) {
+        let publishedItems = [];
+        try {
+          const pubRes = await env.LEGACY_DB
+            .prepare("SELECT id, type_id, data, status, updated_by, updated_at FROM content_item WHERE status = 'published' ORDER BY id")
+            .all();
+          publishedItems = pubRes.results || [];
+        } catch {
+          publishedItems = [];
+        }
+
+        const resolution = resolveContentTarget({
+          request: body.request,
+          publishedItems,
+          area: body.area || 'auto',
+        });
+
+        if (resolution.clarification_needed) {
+          return json({
+            ok: true,
+            clarification_needed: true,
+            reason: resolution.reason,
+            message: resolution.message,
+            candidates: resolution.candidates || [],
+            ...(resolution.workflow_area ? { workflow_area: resolution.workflow_area } : {}),
+          });
+        }
+
+        resolvedTargetId = resolution.target_id;
+        resolvedTypeId = resolution.type_id;
+        currentItem = resolution.item;
+        currentData = resolution.currentData;
+      }
+
+      if (!resolvedTypeId) {
         return json({ ok: false, error: 'request and type_id are required' }, 400);
       }
 
       const contentType = await env.LEGACY_DB
         .prepare(`SELECT id, json_schema FROM content_type WHERE id = ?`)
-        .bind(body.type_id)
+        .bind(resolvedTypeId)
         .first();
 
       if (!contentType) {
-        return json({ ok: false, error: `content type ${body.type_id} not found` }, 404);
+        return json({ ok: false, error: `content type ${resolvedTypeId} not found` }, 404);
       }
 
-      let currentData = null;
-      let currentItem = null;
-      if (body.target_id) {
+      if (resolvedTargetId && !currentItem) {
         const item = await env.LEGACY_DB
           .prepare(`SELECT * FROM content_item WHERE id = ? AND type_id = ?`)
-          .bind(body.target_id, body.type_id)
+          .bind(resolvedTargetId, resolvedTypeId)
           .first();
 
         if (!item) {
-          return json({ ok: false, error: `content item ${body.target_id} not found` }, 404);
+          return json({ ok: false, error: `content item ${resolvedTargetId} not found` }, 404);
         }
         currentData = JSON.parse(item.data);
         currentItem = item;
+      }
+
+      if (resolvedTypeId === 'page_section' && currentData && !currentData.section_key && resolvedTargetId?.startsWith('ps_')) {
+        currentData = { section_key: resolvedTargetId.slice(3), ...currentData };
       }
 
       const backend = env.AGENT_MAPPER_BACKEND || null;
@@ -511,6 +600,10 @@ export async function onRequestPost({ request, env, data, redactErrors = false, 
         return json({ ok: false, refusal: res.refusal });
       }
 
+      if (resolvedTypeId === 'page_section' && currentData?.section_key && res.change && typeof res.change === 'object' && !('section_key' in res.change)) {
+        res.change = { section_key: currentData.section_key, ...res.change };
+      }
+
       const jsonSchema = typeof contentType.json_schema === 'string'
         ? JSON.parse(contentType.json_schema)
         : contentType.json_schema;
@@ -525,16 +618,16 @@ export async function onRequestPost({ request, env, data, redactErrors = false, 
       }
 
       let draftData = { ...res.change };
-      if (body.type_id === 'page_section') {
+      if (resolvedTypeId === 'page_section') {
         const { section_key, ...changes } = res.change;
         draftData = currentData ? { ...currentData, ...changes } : changes;
       } else if (currentData) {
         draftData = { ...currentData, ...res.change };
       }
 
-      const isTargeted = Boolean(body.target_id);
-      const draft_id = isTargeted ? ('cid_' + crypto.randomUUID()) : (body.target_id || ('ci_' + crypto.randomUUID()));
-      const draft_of = isTargeted ? body.target_id : null;
+      const isTargeted = Boolean(resolvedTargetId);
+      const draft_id = isTargeted ? ('cid_' + crypto.randomUUID()) : (resolvedTargetId || ('ci_' + crypto.randomUUID()));
+      const draft_of = isTargeted ? resolvedTargetId : null;
       const dataStr = JSON.stringify(draftData);
 
       const draftInsert = env.LEGACY_DB
@@ -542,20 +635,30 @@ export async function onRequestPost({ request, env, data, redactErrors = false, 
           INSERT INTO content_item (id, type_id, data, status, draft_of, updated_by, updated_at)
           VALUES (?, ?, ?, 'draft', ?, ?, datetime('now'))
         `)
-        .bind(draft_id, body.type_id, dataStr, draft_of, draftOwner(confirmationActor(data)) || 'agent');
+        .bind(draft_id, resolvedTypeId, dataStr, draft_of, draftOwner(confirmationActor(data)) || 'agent');
       if (draftGuards.length) await env.LEGACY_DB.batch([...draftGuards, draftInsert]);
       else await draftInsert.run();
 
       const savedDraft = await env.LEGACY_DB.prepare('SELECT * FROM content_item WHERE id = ?').bind(draft_id).first();
       const binding = await confirmationBinding(env.LEGACY_DB, 'content', savedDraft, url.origin, currentItem);
+      const previewInfo = buildContentPreviewInfo({
+        draftId: draft_id,
+        targetId: draft_of || draft_id,
+        typeId: resolvedTypeId,
+        itemData: draftData,
+        requestUrl: request.url,
+        env,
+      });
       return json({
         ok: true,
         draft_id,
+        resolved_target_id: draft_of || draft_id,
+        ...previewInfo,
         preview_version: confirmationActor(data) ? binding.version : null,
         confirmation_preview: { before: currentData || {}, after: draftData },
         draft: {
           id: draft_id,
-          type_id: body.type_id,
+          type_id: resolvedTypeId,
           data: draftData,
           status: 'draft',
           draft_of

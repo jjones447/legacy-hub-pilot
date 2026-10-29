@@ -1293,3 +1293,34 @@ main ul.measure-620 { margin: 16px 0; padding-left: 24px; }
 .section-sand .stat .label { color: var(--ink-soft); }
 .stats-grid + p { margin-top: 20px; }
 .stats-band .muted { color: #eeddd2; }
+
+/* Conversation-first Staff Assistant optional targeting & staging draft preview banner */
+.staff-assistant-panel .chat-advanced-targeting {
+  border-top: 1px solid #f0e2d8;
+  border-bottom: 1px solid #f0e2d8;
+  background: #fdf8f4;
+}
+.staff-assistant-panel .chat-advanced-targeting > summary {
+  padding: 8px 14px;
+  cursor: pointer;
+  user-select: none;
+}
+.draft-staging-preview-row {
+  margin: 6px 0 8px;
+}
+.preview-staging-link {
+  font-weight: 600;
+  color: var(--plum);
+  text-decoration: underline;
+}
+.staging-draft-preview-banner {
+  background: #fff8e6;
+  color: #3a2318;
+  border-bottom: 2px solid #d9774a;
+  padding: 10px 16px;
+  font-size: 14px;
+  text-align: center;
+  position: sticky;
+  top: 0;
+  z-index: 9999;
+}

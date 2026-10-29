@@ -9,6 +9,7 @@ import { DatabaseSync } from 'node:sqlite';
 
 import { onRequest } from '../functions/_middleware.js';
 import { _resetContentCache } from '../functions/_content.mjs';
+import { onRequestGet as getAgent } from '../functions/api/agent/[[path]].js';
 import { postAgentFixture as postAgent } from './helpers/confirmed-agent.mjs';
 import { seedPageSections } from '../scripts/seed-page-sections.mjs';
 
@@ -415,4 +416,133 @@ test('6. options with apostrophes render with literal single quotes, matching bu
   // Must contain literal single quotes, not &#39;
   assert.ok(html.includes('<option value="I\'m caring for a family member">I\'m caring for a family member</option>'));
   assert.ok(html.includes('<option value="Don\'t know yet">Don\'t know yet</option>'));
+});
+
+test('7. conversation-first untargeted request auto-resolves ps_home.hero and returns staging preview URL + GET /api/agent/preview metadata', async () => {
+  const raw = new DatabaseSync(':memory:');
+  raw.exec(SCHEMA_1);
+  raw.exec(SCHEMA_3);
+  raw.exec(SCHEMA_4);
+  raw.exec(SCHEMA_9);
+  raw.exec(SCHEMA_10);
+  await seedPageSections({ db: raw });
+
+  const env = {
+    LEGACY_DB: d1(raw),
+    AGENT_MAPPER_BACKEND: ({ current }) => ({
+      ok: true,
+      change: {
+        section_key: current.section_key,
+        lede: 'Supporting every family caregiver across Greater Milwaukee.',
+      },
+    }),
+  };
+
+  // Send natural-language request WITHOUT type_id or target_id
+  const draftReq = new Request('https://staging.caregiversanctuary.org/api/agent/draft', {
+    method: 'POST',
+    headers: { 'x-dev-actor': 'staff_manager@example.org' },
+    body: JSON.stringify({
+      request: 'Change the homepage hero subtitle to Supporting every family caregiver across Greater Milwaukee.',
+    }),
+  });
+
+  const draftRes = await postAgent({ request: draftReq, env });
+  assert.equal(draftRes.status, 200);
+  const draftJson = await draftRes.json();
+  assert.equal(draftJson.ok, true);
+  assert.equal(draftJson.resolved_target_id, 'ps_home.hero');
+  assert.equal(draftJson.target_label, 'Homepage — Hero Banner');
+  assert.equal(draftJson.page_path, '/index.html');
+  assert.equal(draftJson.preview_path, `/index.html?preview_draft=${draftJson.draft_id}`);
+  assert.equal(draftJson.staging_preview_url, `https://staging.caregiversanctuary.org/index.html?preview_draft=${draftJson.draft_id}`);
+
+  // Inspect structured preview endpoint GET /api/agent/preview?draft_id=...
+  const previewRes = await getAgent({
+    request: new Request(`https://staging.caregiversanctuary.org/api/agent/preview?draft_id=${draftJson.draft_id}`),
+    env,
+  });
+  assert.equal(previewRes.status, 200);
+  const previewJson = await previewRes.json();
+  assert.equal(previewJson.ok, true);
+  assert.equal(previewJson.draft_id, draftJson.draft_id);
+  assert.equal(previewJson.draft_of, 'ps_home.hero');
+  assert.equal(previewJson.after.lede, 'Supporting every family caregiver across Greater Milwaukee.');
+  assert.equal(previewJson.staging_preview_url, `https://staging.caregiversanctuary.org/index.html?preview_draft=${draftJson.draft_id}`);
+});
+
+test('8. conversation-first untargeted request auto-resolves ps_form.membership and returns modal staging preview link', async () => {
+  const raw = new DatabaseSync(':memory:');
+  raw.exec(SCHEMA_1);
+  raw.exec(SCHEMA_3);
+  raw.exec(SCHEMA_4);
+  raw.exec(SCHEMA_9);
+  raw.exec(SCHEMA_10);
+  await seedPageSections({ db: raw });
+
+  const env = {
+    LEGACY_DB: d1(raw),
+    AGENT_MAPPER_BACKEND: ({ current }) => ({
+      ok: true,
+      change: {
+        section_key: current.section_key,
+        submit_label: 'Join Free Today',
+      },
+    }),
+  };
+
+  const draftReq = new Request('http://localhost/api/agent/draft', {
+    method: 'POST',
+    headers: { 'x-dev-actor': 'staff_manager@example.org' },
+    body: JSON.stringify({
+      request: 'Update the membership form button label to Join Free Today',
+    }),
+  });
+
+  const draftRes = await postAgent({ request: draftReq, env });
+  assert.equal(draftRes.status, 200);
+  const draftJson = await draftRes.json();
+  assert.equal(draftJson.ok, true);
+  assert.equal(draftJson.resolved_target_id, 'ps_form.membership');
+  assert.equal(draftJson.staging_preview_url, `https://staging.caregiversanctuary.org/index.html?preview_draft=${draftJson.draft_id}#membershipModal`);
+});
+
+test('9. ambiguous untargeted request returns clarification_needed with candidate targets and zero DB writes or LLM calls', async () => {
+  const raw = new DatabaseSync(':memory:');
+  raw.exec(SCHEMA_1);
+  raw.exec(SCHEMA_3);
+  raw.exec(SCHEMA_4);
+  raw.exec(SCHEMA_9);
+  raw.exec(SCHEMA_10);
+  await seedPageSections({ db: raw });
+
+  let mapperCalls = 0;
+  const env = {
+    LEGACY_DB: d1(raw),
+    AGENT_MAPPER_BACKEND: () => {
+      mapperCalls++;
+      return { ok: true, change: {} };
+    },
+  };
+
+  const beforeDraftCount = raw.prepare("SELECT COUNT(*) AS n FROM content_item WHERE status = 'draft'").get().n;
+  const draftReq = new Request('http://localhost/api/agent/draft', {
+    method: 'POST',
+    headers: { 'x-dev-actor': 'staff_manager@example.org' },
+    body: JSON.stringify({
+      request: 'Update the hero banner title to Welcome',
+    }),
+  });
+
+  const draftRes = await postAgent({ request: draftReq, env });
+  assert.equal(draftRes.status, 200);
+  const draftJson = await draftRes.json();
+  assert.equal(draftJson.ok, true);
+  assert.equal(draftJson.clarification_needed, true);
+  assert.ok(Array.isArray(draftJson.candidates));
+  assert.ok(draftJson.candidates.some((c) => c.id === 'ps_home.hero'));
+  assert.ok(draftJson.candidates.some((c) => c.id === 'ps_about.hero'));
+  assert.equal(mapperCalls, 0);
+  const afterDraftCount = raw.prepare("SELECT COUNT(*) AS n FROM content_item WHERE status = 'draft'").get().n;
+  assert.equal(afterDraftCount, beforeDraftCount);
 });

@@ -397,3 +397,59 @@ test('multiple sections rewrite cleanly on programs and request-support pages', 
     assert.ok(html.includes('We will respond promptly.'));
   }
 });
+
+test('preview_draft query parameter overlays unconfirmed draft wording with non-published banner and no-store header without mutating published cache', async () => {
+  const committedHtml = loadHtml('index.html');
+  const db = new FakeD1([
+    {
+      id: 'ps_home.hero',
+      type_id: 'page_section',
+      status: 'published',
+      data: JSON.stringify({
+        section_key: 'home.hero',
+        title: 'Published Live Hero Title',
+        lede: 'Published Live Hero Lede',
+      }),
+    },
+    {
+      id: 'cid_preview_draft_1',
+      type_id: 'page_section',
+      status: 'draft',
+      draft_of: 'ps_home.hero',
+      data: JSON.stringify({
+        section_key: 'home.hero',
+        title: 'Proposed Staging Preview Hero Title',
+        lede: 'Proposed Staging Preview Hero Lede',
+      }),
+    },
+  ]);
+
+  const next = async () =>
+    new Response(committedHtml, {
+      status: 200,
+      headers: { 'content-type': 'text/html; charset=utf-8' },
+    });
+
+  // 1. Request with ?preview_draft=cid_preview_draft_1 renders draft overlay + banner
+  const previewReq = new Request('https://staging.caregiversanctuary.org/index.html?preview_draft=cid_preview_draft_1', {
+    method: 'GET',
+  });
+  const previewResp = await onRequest({ request: previewReq, next, env: { LEGACY_DB: db } });
+  assert.equal(previewResp.status, 200);
+  assert.equal(previewResp.headers.get('cache-control'), 'no-store');
+  const previewHtml = await previewResp.text();
+  assert.ok(previewHtml.includes('Proposed Staging Preview Hero Title'));
+  assert.ok(previewHtml.includes('Proposed Staging Preview Hero Lede'));
+  assert.ok(previewHtml.includes('data-preview-draft-id="cid_preview_draft_1"'));
+  assert.ok(previewHtml.includes('not yet published'));
+
+  // 2. Subsequent normal request without ?preview_draft serves untouched published content
+  const normalReq = new Request('https://staging.caregiversanctuary.org/index.html', {
+    method: 'GET',
+  });
+  const normalResp = await onRequest({ request: normalReq, next, env: { LEGACY_DB: db } });
+  const normalHtml = await normalResp.text();
+  assert.ok(normalHtml.includes('Published Live Hero Title'));
+  assert.ok(!normalHtml.includes('Proposed Staging Preview Hero Title'));
+  assert.ok(!normalHtml.includes('data-preview-draft-id="cid_preview_draft_1"'));
+});
