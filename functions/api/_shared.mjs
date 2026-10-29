@@ -4,6 +4,19 @@
 
 export const INTAKE_KINDS = ['support_request', 'membership', 'event_registration', 'grant_application'];
 
+// The Dementia Caregiver Virtual Support Group joining link Legacy supplied (Oct 26). It is
+// returned ONLY in the success response of a confirmed support-group capture, never in page
+// source, and never for any other form or group.
+export const SUPPORT_GROUP_SOURCE = 'site_form:support_group';
+export const SUPPORT_GROUP_JOIN_URL = 'https://meet.google.com/dmc-orwi-afk';
+
+function withSupportGroupJoin(body, payload) {
+  if (body.kind === 'support_request' && body.source === SUPPORT_GROUP_SOURCE) {
+    return { ...payload, join_url: SUPPORT_GROUP_JOIN_URL };
+  }
+  return payload;
+}
+
 export function validateIntake(body) {
   if (!body || typeof body !== 'object') return 'body must be a JSON object';
   if (!INTAKE_KINDS.includes(body.kind)) return `kind must be one of ${INTAKE_KINDS.join(', ')}`;
@@ -38,7 +51,7 @@ export async function handleIntake(db, body) {
     .prepare(`SELECT id FROM ${table} WHERE source = ? AND external_ref = ?`)
     .bind(source, body.external_ref)
     .first();
-  if (dup) return { status: 200, body: { ok: true, duplicate: true } };
+  if (dup) return { status: 200, body: withSupportGroupJoin(body, { ok: true, duplicate: true }) };
 
   // Upsert caregiver by email (fallback phone).
   const matchField = body.email ? 'email' : 'phone';
@@ -152,7 +165,7 @@ export async function handleIntake(db, body) {
     await auditWrite.run();
   }
 
-  return { status: 201, body: { ok: true, caregiver_id: caregiverId } };
+  return { status: 201, body: withSupportGroupJoin(body, { ok: true, caregiver_id: caregiverId }) };
 }
 
 // Per-IP request limits, counted in audit_log (no new binding or table).

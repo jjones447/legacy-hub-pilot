@@ -154,12 +154,12 @@
       <div class="visual bg-white">
         <h3 class="fs-18-mb-14" data-cs="programs.support_group.panel_heading">Virtual Support Group</h3>
         <div class="kv-row"><span class="k">When</span><span class="v">Schedule pending — dates and times to be confirmed</span></div>
-        <div class="kv-row"><span class="k">Where</span><span class="v">Online — joining details to be confirmed</span></div>
+        <div class="kv-row"><span class="k">Where</span><span class="v">Online — Google Meet link shown after you share your name and email</span></div>
         <div class="kv-row"><span class="k">Facilitation</span><span class="v">Alzheimer's Association-certified</span></div>
         <div class="kv-row"><span class="k">Cost</span><span class="v">Free</span></div>
         <a href="events.html" class="btn btn-plum btn-sm mt-16 d-inline-block" data-cs="programs.support_group.panel_cta_label">View Events</a>
-        <button type="button" class="btn btn-outline btn-sm mt-16" data-action="open-support-group-interest" aria-haspopup="dialog" aria-controls="supportGroupInterestModal">Request joining details</button>
-        <p class="small muted mt-16">Request information from Legacy staff before joining. This is not a session registration or an automatic joining email.</p>
+        <button type="button" class="btn btn-outline btn-sm mt-16" data-action="open-support-group-interest" aria-haspopup="dialog" aria-controls="supportGroupInterestModal">Get the joining link</button>
+        <p class="small muted mt-16">Share your name and email to see the Google Meet joining link. This is not a session registration and no email is sent.</p>
       </div>
       <div>
         <span class="eyebrow" data-cs="programs.support_group.eyebrow">Virtual Support Group</span>
@@ -240,8 +240,8 @@
 <!-- Native dialog supplies keyboard focus containment and Escape-to-close. -->
 <dialog id="supportGroupInterestModal" class="modal" aria-labelledby="supportGroupInterestTitle" aria-describedby="supportGroupInterestDescription">
   <button type="button" class="modal-close" data-action="close-support-group-interest" aria-label="Close support-group interest form">&#215;</button>
-  <h3 id="supportGroupInterestTitle">Request virtual support-group joining details</h3>
-  <p class="sub" id="supportGroupInterestDescription">Leave your name and email for Legacy staff to review. This requests information; it does not register you for a session or send a joining link automatically.</p>
+  <h3 id="supportGroupInterestTitle">Join the Dementia Caregiver Virtual Support Group</h3>
+  <p class="sub" id="supportGroupInterestDescription">Leave your name and email, and the Google Meet joining link appears here once they are saved. This does not register you for a session or send you an email.</p>
   <form id="supportGroupInterestForm" data-action="submit-support-group-interest">
     <div class="field">
       <label for="supportGroupName">Your name</label>
@@ -252,10 +252,11 @@
       <input id="supportGroupEmail" name="email" type="email" autocomplete="email" required>
     </div>
     <p class="privacy-line">By sending this request, you consent to Legacy using your name and email to find or create your caregiver record and follow up about the virtual support group. This does not subscribe you to reminders.</p>
-    <button type="submit" class="btn btn-coral w-100">Request joining details</button>
-    <div class="success-note" data-intake-success role="status" aria-live="polite">Your interest is saved for Legacy staff to review. You are not registered for a session.</div>
+    <button type="submit" class="btn btn-coral w-100">Show the joining link</button>
+    <div class="success-note" data-intake-success role="status" aria-live="polite">Thank you. Your details are saved. You are not registered for a session.</div>
+    <p class="success-note" data-intake-join hidden>Join the group on Google Meet: <a data-support-group-join-link href="#" target="_blank" rel="noopener noreferrer"></a></p>
     <div class="error-note" data-intake-error role="alert" aria-live="assertive"></div>
-    <div class="routing-note" data-intake-routing>Your request is in the staff follow-up queue. Staff must review it and provide joining details.</div>
+    <div class="routing-note" data-intake-routing>Legacy staff can also see your details and may follow up with you.</div>
   </form>
 </dialog>
 
@@ -376,7 +377,7 @@
 </footer>
 
 
-<script src="app.js?v=9da96976b839"></script>
+<script src="app.js?v=29742a613b6e"></script>
 <script src="nav-v2.js"></script>
 </body>
 </html>

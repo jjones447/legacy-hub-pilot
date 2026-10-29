@@ -222,13 +222,16 @@ test('support-group interest is a named native dialog with only name/email and t
   assert.match(dialog, /<label for="supportGroupEmail">Email<\/label>/);
   assert.match(dialog, /type="email" autocomplete="email" required/);
   assert.match(dialog, /data-action="close-support-group-interest" aria-label="Close support-group interest form"/);
-  assert.match(dialog, /does not register you for a session or send a joining link automatically/);
+  assert.match(dialog, /does not register you for a session or send you an email/);
+  // The joining region exists but is hidden and EMPTY in static HTML: the link only arrives in a confirmed save's response.
+  assert.match(dialog, /<p class="success-note" data-intake-join hidden>Join the group on Google Meet: <a data-support-group-join-link href="#" target="_blank" rel="noopener noreferrer"><\/a><\/p>/);
   assert.match(dialog, /consent to Legacy using your name and email to find or create your caregiver record/);
   assert.match(dialog, /does not subscribe you to reminders/);
   assert.match(dialog, /data-intake-success role="status" aria-live="polite"/);
   assert.match(dialog, /data-intake-error role="alert" aria-live="assertive"/);
   assert.doesNotMatch(dialog, /<textarea|meet\.google|event_id|type="date"/);
-  assert.match(file('programs-events.html'), /href="programs\.html#support-group">Request support-group joining details/);
+  assert.match(file('programs-events.html'), /href="programs\.html#support-group">Get the support-group joining link/);
+  assert.doesNotMatch(file('programs-events.html') + file('app.js'), /meet\.google\.com\/[a-z]/);
   assert.match(page, /href="events\.html"[^>]*data-cs="programs.support_group.panel_cta_label"/);
 });
 
@@ -237,8 +240,8 @@ test('support-group delegated request reaches its own shared staff task and orig
   const source = app.slice(0, app.indexOf('/* ---------- Resource hub:'))
     + app.slice(app.indexOf('function openRegister('), app.indexOf("document.addEventListener('click'"))
     + app.slice(app.indexOf("document.addEventListener('submit'"), app.indexOf('/* ---------- Portal: My Wellness'));
-  const regions = Object.fromEntries(['[data-intake-success]', '[data-intake-routing]', '[data-intake-error]', '[type="submit"]']
-    .map(selector => [selector, { style: { display: 'none' }, disabled: false, textContent: '' }]));
+  const regions = Object.fromEntries(['[data-intake-success]', '[data-intake-routing]', '[data-intake-error]', '[type="submit"]', '[data-intake-join]', '[data-support-group-join-link]']
+    .map(selector => [selector, { style: { display: 'none' }, disabled: false, textContent: '', hidden: true, href: '#' }]));
   const form = { id: 'supportGroupInterestForm', querySelector: selector => regions[selector],
     getAttribute: () => 'submit-support-group-interest', closest: () => form };
   const listeners = {}, dialogHandlers = {}, storage = new Map(), requests = [];
@@ -276,10 +279,14 @@ test('support-group delegated request reaches its own shared staff task and orig
   assert.equal(regions['[type="submit"]'].disabled, true);
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(regions['[data-intake-success]'].style.display, 'block');
+  // Revealed only after the confirmed save, from the server response.
+  assert.equal(regions['[data-intake-join]'].hidden, false);
+  assert.equal(regions['[data-support-group-join-link]'].href, 'https://meet.google.com/dmc-orwi-afk');
+  assert.equal(regions['[data-support-group-join-link]'].textContent, 'https://meet.google.com/dmc-orwi-afk');
   assert.deepEqual(requests[0].payload, {
     kind: 'support_request', source: 'site_form:support_group',
     external_ref: 'fictional-support-group-ref', first_name: 'Demo', last_name: 'Group',
-    email: 'group-interest@example.invalid', message: 'Virtual support group interest — request joining details',
+    email: 'group-interest@example.invalid', message: 'Virtual support group — joining link shown on the website after this save',
   });
   const caregiver = raw.prepare(`SELECT * FROM caregiver WHERE email = ?`).get('group-interest@example.invalid');
   assert.equal(caregiver.sanctuary_member, 0);
@@ -288,7 +295,7 @@ test('support-group delegated request reaches its own shared staff task and orig
   assert.equal(queue.queue[0].caregiver_id, caregiver.id);
   assert.equal(queue.queue[0].source, 'site_form:support_group');
   assert.equal(queue.queue[0].kind, 'support_request');
-  assert.equal(queue.queue[0].detail, 'Virtual support group interest — request joining details');
+  assert.equal(queue.queue[0].detail, 'Virtual support group — joining link shown on the website after this save');
   const audit = raw.prepare(`SELECT * FROM audit_log WHERE action = 'intake.support_request'`).get();
   assert.equal(audit.actor, 'site_form:support_group');
   assert.equal(audit.entity_id, caregiver.id);
@@ -313,4 +320,38 @@ test('support-group dialog overrides the global margin reset with scoped native 
   assert.match(dialog, /max-height:\s*calc\(100vh - 40px\)/);
   assert.match(dialog, /max-height:\s*calc\(100dvh - 40px\)/);
   assert.match(styles, /#supportGroupInterestModal::backdrop\s*\{[^}]*rgba\(43,\s*35,\s*51,\s*0\.55\)/);
+});
+
+test('support-group joining link stays hidden on a failed save and never renders a non-Meet value', async () => {
+  const app = file('app.js');
+  const source = app.slice(0, app.indexOf('/* ---------- Resource hub:'));
+  async function run(response) {
+    const regions = Object.fromEntries(['[data-intake-success]', '[data-intake-routing]', '[data-intake-error]', '[type="submit"]', '[data-intake-join]', '[data-support-group-join-link]']
+      .map(selector => [selector, { style: { display: 'none' }, disabled: false, textContent: '', hidden: true, href: '#' }]));
+    const form = { id: 'supportGroupInterestForm', querySelector: selector => regions[selector] };
+    const nodes = { supportGroupInterestForm: form,
+      supportGroupName: { value: 'Demo Group' }, supportGroupEmail: { value: 'g@example.invalid' } };
+    const context = {
+      document: { getElementById: id => nodes[id], addEventListener() {} },
+      crypto: { randomUUID: () => 'fictional-ref' },
+      sessionStorage: { getItem() {}, setItem() {} },
+      fetch: async () => response,
+    };
+    vm.runInNewContext(source, context);
+    context.submitSupportGroupInterest({ preventDefault() {} });
+    await new Promise(resolve => setImmediate(resolve));
+    return regions;
+  }
+  const failed = await run(new Response(JSON.stringify({ ok: false, error: 'boom' }), { status: 500 }));
+  assert.equal(failed['[data-intake-success]'].style.display, 'none');
+  assert.equal(failed['[data-intake-error]'].style.display, 'block');
+  assert.match(failed['[data-intake-error]'].textContent, /joining link isn't shown/);
+  assert.equal(failed['[data-intake-join]'].hidden, true);
+  assert.equal(failed['[data-support-group-join-link]'].href, '#');
+  for (const join_url of ['javascript:alert(1)', 'https://meet.google.com.evil.example/abc-defg-hij', 'https://example.com/x', undefined]) {
+    const odd = await run(new Response(JSON.stringify({ ok: true, join_url }), { status: 201 }));
+    assert.equal(odd['[data-intake-success]'].style.display, 'block');
+    assert.equal(odd['[data-intake-join]'].hidden, true, String(join_url));
+    assert.equal(odd['[data-support-group-join-link]'].href, '#', String(join_url));
+  }
 });

@@ -40,6 +40,9 @@ function setFormState(form, state, message) {
     error.style.display = state === 'error' ? 'block' : 'none';
   }
   if (submit) submit.disabled = state === 'pending';
+  // A success-only joining link is never left visible by an idle, pending or failed state.
+  const join = form.querySelector('[data-intake-join]');
+  if (join && state !== 'success') join.hidden = true;
 }
 
 function postIntake(form, payload) {
@@ -222,14 +225,31 @@ function submitSupportGroupInterest(e) {
     first_name: name.first_name,
     last_name: name.last_name,
     email: document.getElementById('supportGroupEmail').value.trim(),
-    message: 'Virtual support group interest — request joining details',
+    message: 'Virtual support group — joining link shown on the website after this save',
   };
-  postIntake(form, payload).then(function () {
+  postIntake(form, payload).then(function (body) {
     setFormState(form, 'success');
+    showSupportGroupJoin(form, body && body.join_url);
   }).catch(function () {
-    setFormState(form, 'error', "We couldn't save your request just now. Please contact Legacy if you need help.");
+    setFormState(form, 'error', "We couldn't save your details just now, so the joining link isn't shown. Please contact Legacy if you need help.");
   });
   return false;
+}
+
+// Only a Google Meet link returned by a confirmed save is shown; anything else stays hidden.
+const SUPPORT_GROUP_JOIN_PATTERN = /^https:\/\/meet\.google\.com\/[a-z]{3}-[a-z]{4}-[a-z]{3}$/;
+
+function showSupportGroupJoin(form, url) {
+  const join = form.querySelector('[data-intake-join]');
+  const link = form.querySelector('[data-support-group-join-link]');
+  if (!join || !link) return;
+  if (typeof url !== 'string' || !SUPPORT_GROUP_JOIN_PATTERN.test(url)) {
+    join.hidden = true;
+    return;
+  }
+  link.href = url;
+  link.textContent = url;
+  join.hidden = false;
 }
 
 /* ---------- Resource hub: search + category filter ---------- */

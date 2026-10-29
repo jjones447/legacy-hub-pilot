@@ -415,3 +415,45 @@ test('unqualified batch acknowledgement fails without a sequential-write fallbac
     assert.deepEqual(intakeSnapshot(),before);
   }
 });
+
+// Oct 26 request: the support-group joining link is returned only for a confirmed
+// support-group capture, never for other forms, kinds or failed saves.
+const SUPPORT_GROUP_LINK = 'https://meet.google.com/dmc-orwi-afk';
+const supportGroupPayload = (ref) => ({
+  kind: 'support_request', source: 'site_form:support_group', first_name: 'Demo',
+  email: 'group@example.invalid', message: 'Virtual support group', external_ref: ref,
+});
+
+test('support-group capture returns the joining link only after the atomic save, and again on its duplicate', async () => {
+  const first = await handleIntake(db, supportGroupPayload('sg-1'));
+  assert.equal(first.status, 201);
+  assert.equal(first.body.join_url, SUPPORT_GROUP_LINK);
+  assert.equal(raw.prepare(`SELECT COUNT(*) AS n FROM followup WHERE source = 'site_form:support_group'`).get().n, 1);
+  const again = await handleIntake(db, supportGroupPayload('sg-1'));
+  assert.equal(again.status, 200);
+  assert.equal(again.body.duplicate, true);
+  assert.equal(again.body.join_url, SUPPORT_GROUP_LINK);
+  assert.equal(raw.prepare(`SELECT COUNT(*) AS n FROM followup`).get().n, 1);
+});
+
+test('no joining link for other sources, other kinds or an invalid request', async () => {
+  for (const body of [
+    { ...supportGroupPayload('sg-2'), source: 'site_form:support' },
+    { ...supportGroupPayload('sg-3'), source: 'site_form:coaching' },
+    { ...supportGroupPayload('sg-4'), source: undefined },
+    { ...supportGroupPayload('sg-5'), kind: 'membership' },
+  ]) {
+    const res = await handleIntake(db, body);
+    assert.ok(res.status === 200 || res.status === 201, JSON.stringify(res));
+    assert.equal(res.body.join_url, undefined, body.source + '/' + body.kind);
+  }
+  const invalid = await handleIntake(db, { ...supportGroupPayload('sg-6'), email: undefined });
+  assert.equal(invalid.status, 400);
+  assert.equal(invalid.body.join_url, undefined);
+});
+
+test('a support-group save that does not confirm returns no joining link', async () => {
+  db.batch = async () => [{ success: true }];  // batch reports fewer confirmed writes than requested
+  await assert.rejects(() => handleIntake(db, supportGroupPayload('sg-7')), /did not confirm/);
+  assert.equal(raw.prepare(`SELECT COUNT(*) AS n FROM followup`).get().n, 0);
+});
