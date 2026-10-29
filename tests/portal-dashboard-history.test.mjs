@@ -147,3 +147,31 @@ test('tile copy distinguishes account registrations, public calendar/library and
   assert.doesNotMatch(html, /Attended \(2026\)/);
   assert.match(html, /library is public, not a personalized saved list/);
 });
+
+
+test('portal events lead the real summary cards and wellness is a separate full-width section below', () => {
+  const gridStart=html.indexOf('<div class="portal-summary-grid">');
+  const wellness=html.indexOf('id="portalWellnessTile"');
+  const sample=html.indexOf('id="portalWellnessSample"');
+  assert.ok(gridStart>0 && wellness>gridStart && sample>wellness);
+  const realCards=html.slice(gridStart,wellness);
+  assert.ok(realCards.indexOf('My Events') < realCards.indexOf('My Wellness Grant'));
+  assert.ok(realCards.indexOf('My Wellness Grant') < realCards.indexOf('My Memory Socials'));
+  assert.match(html, /class="panel portal-wellness-section" id="portalWellnessTile"/);
+  const styles=readFileSync(new URL('../styles.css',import.meta.url),'utf8');
+  assert.match(styles, /#dashView \.portal-wellness-section[^}]*width: 100%/);
+  assert.match(styles, /#dashView #portalWellnessHistory > summary[^}]*16px/);
+  assert.match(styles, /#dashView #portalWellnessHistoryRows ol[^}]*padding-inline-start: 24px/);
+  assert.match(styles, /@media \(max-width: 700px\)[\s\S]*#dashView \.portal-summary-grid[^}]*grid-template-columns: minmax\(0, 1fr\)/);
+});
+
+test('whole-portal examples remain opt-in, fictional, outside actual records and have no write controls', () => {
+  const match=html.match(/<details([^>]+)id="portalWellnessSample">([\s\S]*?)<\/details>/);
+  assert.ok(match);assert.doesNotMatch(match[1],/\bopen(?:\s|=|$)/);
+  assert.match(match[2],/Preview a filled-out portal \(sample data\)/);
+  for(const area of ['events','grant','socials','resources','wellness']) assert.match(match[2],new RegExp(`data-portal-sample="${area}"`));
+  assert.match(match[2],/All events, applications, attendance and scores below are illustrations/);
+  assert.match(match[2],/Nothing here registers you, submits an application, awards a grant or makes a payment/);
+  assert.doesNotMatch(match[2],/<form\b|<input\b|<button\b|data-action=|href="(?:\/api|https?:)/);
+  for(const id of ['portalEventsList','portalGrantStatus','portalSocialsCount','portalWellnessHistoryRows','portalWellnessForm']) assert.equal(match[2].includes(`id="${id}"`),false,id);
+});
