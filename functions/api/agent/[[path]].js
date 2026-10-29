@@ -67,6 +67,9 @@ export async function onRequestGet({ request, env, data }) {
         requestUrl: request.url,
         env,
         authorized: true,
+        owner: item.updated_by || null,
+        draftRow: item,
+        targetRow,
       });
       return json({
         ok: true,
@@ -673,6 +676,9 @@ export async function onRequestPost({ request, env, data, redactErrors = false, 
         requestUrl: request.url,
         env,
         authorized: Boolean(effectivePreviewVersion),
+        owner: savedDraft?.updated_by || null,
+        draftRow: savedDraft,
+        targetRow: currentItem,
       });
       return json({
         ok: true,
@@ -699,6 +705,9 @@ export async function onRequestPost({ request, env, data, redactErrors = false, 
       // SEC-2: actor comes from the verified identity, never the request body.
       const actor = confirmationActor(data);
       if (!actor || Object.hasOwn(body, 'thread_id') || Object.hasOwn(body, 'conversation_id')) return json({ ok: false, error: 'human confirmation context not qualified' }, 403);
+      if (String(body.draft_id).startsWith('cid_stg_')) {
+        return json({ ok: false, error: 'staging transfer preview drafts are preview-only; confirm the originating production draft in the Staff Assistant' }, 409);
+      }
 
       let item;
       try {

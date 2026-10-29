@@ -4,7 +4,7 @@
 //
 // Hard fallback: if LEGACY_DB is undefined, D1 query errors, key/field is missing,
 // or type is unexpected, the response passes through untouched.
-import { confirmationActor, ownsDraft, confirmationBinding } from './_lib/agent-confirmation.mjs';
+import { confirmationActor, draftOwner, ownsDraft, confirmationBinding } from './_lib/agent-confirmation.mjs';
 
 export function escapeHtml(str) {
   if (str == null) return '';
@@ -547,6 +547,47 @@ export function isSupportedPageSectionPreviewTarget(targetId, typeId, itemData =
   );
 }
 
+function canonicalPreviewValue(value) {
+  if (Array.isArray(value)) return value.map(canonicalPreviewValue);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, canonicalPreviewValue(value[key])])
+    );
+  }
+  return value;
+}
+
+async function sha256Hex(value) {
+  const str = typeof value === 'string' ? value : JSON.stringify(canonicalPreviewValue(value));
+  const bytes = new TextEncoder().encode(str);
+  const digestBytes = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+  return Array.from(digestBytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function encodeBase64UrlUtf8(str) {
+  const bytes = new TextEncoder().encode(str);
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function decodeBase64UrlUtf8(token) {
+  if (typeof token !== 'string' || !token || token.length > 16384 || !/^[A-Za-z0-9_-]+$/.test(token)) {
+    return null;
+  }
+  try {
+    const padded = token.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((token.length + 3) % 4);
+    const bin = atob(padded);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    return null;
+  }
+}
+
 export function buildContentPreviewInfo({
   draftId,
   targetId,
@@ -556,6 +597,9 @@ export function buildContentPreviewInfo({
   requestUrl = '',
   env = {},
   authorized = true,
+  owner = null,
+  draftRow = null,
+  targetRow = null,
 }) {
   const meta = getContentTargetMeta(targetId, typeId, itemData);
   if (!isSupportedPageSectionPreviewTarget(targetId, typeId, itemData)) {
@@ -567,18 +611,6 @@ export function buildContentPreviewInfo({
       preview_url: null,
       staging_preview_supported: false,
       preview_unavailable_reason: `Rendered page preview is not supported for ${meta.type_id || 'this content type'}; review the proposed before/after fields in the Assistant card.`,
-    };
-  }
-
-  if (!env || env.ENVIRONMENT !== 'preview') {
-    return {
-      target_label: meta.label,
-      page_path: meta.page_path,
-      preview_path: null,
-      staging_preview_url: null,
-      preview_url: null,
-      staging_preview_supported: false,
-      preview_unavailable_reason: 'Staging page preview is unavailable for drafts created outside the staging preview environment because production and staging use separate isolated databases.',
     };
   }
 
@@ -594,12 +626,77 @@ export function buildContentPreviewInfo({
     };
   }
 
-  const query = `?draft_id=${encodeURIComponent(draftId)}&preview_version=${encodeURIComponent(previewVersion)}`;
-  const previewPath = `/api/agent/preview/page${query}${meta.anchor || ''}`;
-
   const fallbackStagingOrigin = (typeof env?.STAGING_PREVIEW_ORIGIN === 'string' && env.STAGING_PREVIEW_ORIGIN.trim())
     ? env.STAGING_PREVIEW_ORIGIN.trim().replace(/\/+$/, '')
     : 'https://staging.caregiversanctuary.org';
+
+  if (!env || env.ENVIRONMENT !== 'preview') {
+    const effectiveOwner = (typeof owner === 'string' && owner)
+      ? owner
+      : (typeof draftRow?.updated_by === 'string' ? draftRow.updated_by : null);
+    if (
+      !/^(?:cid_|ci_)[A-Za-z0-9_-]{1,128}$/.test(draftId) ||
+      typeof effectiveOwner !== 'string' ||
+      !effectiveOwner.startsWith('access_staff:') ||
+      !draftRow ||
+      typeof draftRow !== 'object' ||
+      Array.isArray(draftRow) ||
+      !itemData ||
+      typeof itemData !== 'object' ||
+      Array.isArray(itemData) ||
+      findDisallowedHtml(itemData)
+    ) {
+      return {
+        target_label: meta.label,
+        page_path: meta.page_path,
+        preview_path: null,
+        staging_preview_url: null,
+        preview_url: null,
+        staging_preview_supported: false,
+        preview_unavailable_reason: 'Rendered page preview requires a verified staff session and exact draft version.',
+      };
+    }
+
+    let sourceOrigin = 'https://caregiversanctuary.org';
+    try {
+      if (requestUrl) {
+        const parsed = new URL(requestUrl);
+        if (parsed.origin && parsed.origin !== 'null') {
+          sourceOrigin = parsed.origin;
+        }
+      }
+    } catch {}
+
+    const transferEnvelope = canonicalPreviewValue({
+      v: 1,
+      source_origin: sourceOrigin,
+      source_draft_id: draftId,
+      source_preview_version: previewVersion.toLowerCase(),
+      owner: effectiveOwner,
+      target_id: meta.id,
+      type_id: 'page_section',
+      data: itemData,
+      source_draft: draftRow,
+      source_target: (targetRow && typeof targetRow === 'object') ? targetRow : null,
+    });
+    const transferToken = encodeBase64UrlUtf8(JSON.stringify(transferEnvelope));
+    const stagingQuery = `?transfer=${encodeURIComponent(transferToken)}&source_version=${encodeURIComponent(previewVersion.toLowerCase())}`;
+    const stagingPreviewUrl = `${fallbackStagingOrigin}/api/agent/preview/page${stagingQuery}${meta.anchor || ''}`;
+
+    return {
+      target_label: meta.label,
+      page_path: meta.page_path,
+      preview_path: null,
+      staging_preview_url: stagingPreviewUrl,
+      preview_url: stagingPreviewUrl,
+      staging_preview_supported: true,
+      preview_unavailable_reason: null,
+    };
+  }
+
+  const query = `?draft_id=${encodeURIComponent(draftId)}&preview_version=${encodeURIComponent(previewVersion)}`;
+  const previewPath = `/api/agent/preview/page${query}${meta.anchor || ''}`;
+
   let origin = fallbackStagingOrigin;
   try {
     if (requestUrl) {
@@ -647,6 +744,56 @@ async function getContentItemById(env, itemId) {
   return null;
 }
 
+async function validatePageSectionSchemaInDb(env, targetId, proposedData) {
+  if (!env || !env.LEGACY_DB || typeof env.LEGACY_DB.prepare !== 'function') return null;
+  try {
+    const stmt = env.LEGACY_DB.prepare('SELECT id, json_schema FROM content_type WHERE id = ?');
+    const ctRow = typeof stmt.bind === 'function' ? await stmt.bind('page_section').first?.() : await stmt.first?.();
+    if (!ctRow || !ctRow.json_schema) return null;
+    const schema = typeof ctRow.json_schema === 'string' ? JSON.parse(ctRow.json_schema) : ctRow.json_schema;
+    if (!schema || !Array.isArray(schema.oneOf)) return null;
+    const sectionKey = targetId.startsWith('ps_') ? targetId.slice(3) : targetId;
+    const candidate = { ...proposedData, section_key: sectionKey };
+    const branch = schema.oneOf.find(
+      (b) =>
+        b.properties?.section_key?.const === sectionKey ||
+        b.properties?.section_key?.enum?.includes(sectionKey)
+    );
+    if (!branch) return `section_key '${sectionKey}' does not match any valid section schema`;
+    if (Array.isArray(branch.required)) {
+      for (const req of branch.required) {
+        if (!(req in candidate) || candidate[req] === undefined || candidate[req] === null) {
+          return `missing required property: ${req}`;
+        }
+      }
+    }
+    for (const [key, val] of Object.entries(candidate)) {
+      const propSchema = branch.properties?.[key];
+      if (!propSchema) {
+        if (branch.additionalProperties === false) return `unsupported additional property: ${key}`;
+        continue;
+      }
+      if (propSchema.readOnly) return `cannot modify read-only property: ${key}`;
+      if (propSchema.type === 'string') {
+        if (typeof val !== 'string') return `property ${key} must be a string`;
+        if (propSchema.maxLength && val.length > propSchema.maxLength) return `property ${key} exceeds maximum length`;
+      } else if (propSchema.type === 'array') {
+        if (!Array.isArray(val)) return `property ${key} must be an array`;
+        if (propSchema.maxItems && val.length > propSchema.maxItems) return `property ${key} exceeds maximum items`;
+        if (propSchema.items) {
+          for (const it of val) {
+            if (propSchema.items.type === 'string' && typeof it !== 'string') return `items of ${key} must be strings`;
+            if (propSchema.items.maxLength && typeof it === 'string' && it.length > propSchema.items.maxLength) return `item of ${key} exceeds maximum length`;
+          }
+        }
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 function previewFailClosed(status, error, message) {
   return new Response(
     JSON.stringify({ ok: false, error, message }),
@@ -682,9 +829,14 @@ async function injectDraftPreviewBanner(response, draftRow, targetLabel, preview
   const safeVer = previewVersion ? escapeHtml(previewVersion) : '';
   const shortVer = previewVersion ? ` · version <code>${escapeHtml(String(previewVersion).slice(0, 12))}</code>` : '';
   const verAttr = safeVer ? ` data-preview-version="${safeVer}"` : '';
+  const sourceDraftAttr = options?.sourceDraftId ? ` data-source-draft-id="${escapeHtml(options.sourceDraftId)}"` : '';
+  const sourceVerAttr = options?.sourcePreviewVersion ? ` data-source-preview-version="${escapeHtml(options.sourcePreviewVersion)}"` : '';
+  const sourceNote = options?.sourceDraftId
+    ? ` · production draft <code>${escapeHtml(options.sourceDraftId)}</code>`
+    : '';
   const bannerHtml =
-    `<div class="staging-draft-preview-banner" data-preview-draft-id="${safeDraftId}"${verAttr} role="status" aria-live="polite">` +
-    `<strong>Staging Draft Preview</strong> (<code>${safeDraftId}</code>${shortVer} · ${safeTarget}) — ` +
+    `<div class="staging-draft-preview-banner" data-preview-draft-id="${safeDraftId}"${verAttr}${sourceDraftAttr}${sourceVerAttr} role="status" aria-live="polite">` +
+    `<strong>Staging Draft Preview</strong> (<code>${safeDraftId}</code>${sourceNote}${shortVer} · ${safeTarget}) — ` +
     `This proposed wording is a draft preview and is <strong>not yet published</strong> to the live site. ` +
     `Return to the Staff Assistant to click <em>Confirm &amp; publish</em> or <em>Discard</em>.` +
     `</div>`;
@@ -698,6 +850,304 @@ async function injectDraftPreviewBanner(response, draftRow, targetLabel, preview
     statusText: response.statusText,
     headers,
   });
+}
+
+const ALLOWED_TRANSFER_KEYS = new Set([
+  'v',
+  'source_origin',
+  'source_draft_id',
+  'source_preview_version',
+  'owner',
+  'target_id',
+  'type_id',
+  'data',
+  'source_draft',
+  'source_target',
+]);
+
+async function materializeCrossOriginDraftTransfer({ url, env, actor, expectedPathCheck }) {
+  if (expectedPathCheck !== null) {
+    return {
+      errorResponse: previewFailClosed(
+        403,
+        'preview_protected_route_required',
+        'Cross-environment draft preview requires the protected /api/agent/preview/page entrypoint.'
+      ),
+    };
+  }
+  if (url.searchParams.has('draft_id') || url.searchParams.has('preview_draft')) {
+    return {
+      errorResponse: previewFailClosed(
+        400,
+        'invalid_preview_transfer',
+        'Cannot combine transfer with a direct draft_id query parameter.'
+      ),
+    };
+  }
+  const transferParam = url.searchParams.get('transfer');
+  const sourceVersionParam = url.searchParams.get('source_version') || url.searchParams.get('preview_version');
+  if (!sourceVersionParam || !/^[0-9a-f]{64}$/i.test(sourceVersionParam)) {
+    return {
+      errorResponse: previewFailClosed(
+        409,
+        'preview_version_required',
+        'Current exact source_version is required to render a transferred draft preview.'
+      ),
+    };
+  }
+  const decodedJson = decodeBase64UrlUtf8(transferParam);
+  if (!decodedJson) {
+    return {
+      errorResponse: previewFailClosed(400, 'invalid_preview_transfer', 'Malformed transfer envelope.'),
+    };
+  }
+  let transfer;
+  try {
+    transfer = JSON.parse(decodedJson);
+  } catch {
+    return {
+      errorResponse: previewFailClosed(400, 'invalid_preview_transfer', 'Invalid transfer JSON.'),
+    };
+  }
+  if (
+    !transfer ||
+    typeof transfer !== 'object' ||
+    Array.isArray(transfer) ||
+    transfer.v !== 1 ||
+    !Object.keys(transfer).every((k) => ALLOWED_TRANSFER_KEYS.has(k))
+  ) {
+    return {
+      errorResponse: previewFailClosed(400, 'invalid_preview_transfer', 'Unsupported transfer envelope structure.'),
+    };
+  }
+
+  let parsedSourceOrigin;
+  try {
+    parsedSourceOrigin = new URL(transfer.source_origin);
+  } catch {
+    return {
+      errorResponse: previewFailClosed(400, 'invalid_preview_transfer', 'Invalid transfer source_origin.'),
+    };
+  }
+  if (
+    !/^https?:$/i.test(parsedSourceOrigin.protocol) ||
+    parsedSourceOrigin.origin !== transfer.source_origin ||
+    parsedSourceOrigin.origin === url.origin
+  ) {
+    return {
+      errorResponse: previewFailClosed(
+        400,
+        'invalid_preview_transfer',
+        'Cross-environment draft transfer requires a distinct valid source_origin.'
+      ),
+    };
+  }
+
+  if (
+    typeof transfer.source_draft_id !== 'string' ||
+    !/^(?:cid_|ci_)[A-Za-z0-9_-]{1,128}$/.test(transfer.source_draft_id) ||
+    transfer.source_draft_id.startsWith('cid_stg_') ||
+    typeof transfer.source_preview_version !== 'string' ||
+    !/^[0-9a-f]{64}$/i.test(transfer.source_preview_version)
+  ) {
+    return {
+      errorResponse: previewFailClosed(400, 'invalid_preview_transfer', 'Invalid source draft identifiers in transfer.'),
+    };
+  }
+
+  if (transfer.source_preview_version.toLowerCase() !== sourceVersionParam.toLowerCase()) {
+    return {
+      errorResponse: previewFailClosed(
+        409,
+        'preview_version_mismatch',
+        'Transfer source_preview_version does not match source_version.'
+      ),
+    };
+  }
+
+  if (typeof transfer.owner !== 'string' || !ownsDraft(transfer.owner, actor)) {
+    return {
+      errorResponse: previewFailClosed(
+        403,
+        'preview_forbidden_owner',
+        'Only the verified initiating staff member who owns this draft can preview it.'
+      ),
+    };
+  }
+
+  if (
+    transfer.type_id !== 'page_section' ||
+    typeof transfer.target_id !== 'string' ||
+    !isSupportedPageSectionPreviewTarget(transfer.target_id, transfer.type_id, transfer.data)
+  ) {
+    return {
+      errorResponse: previewFailClosed(
+        422,
+        'preview_unsupported_type',
+        `Rendered page preview is not supported for ${transfer.type_id || 'this content type'}.`
+      ),
+    };
+  }
+
+  if (!transfer.data || typeof transfer.data !== 'object' || Array.isArray(transfer.data) || findDisallowedHtml(transfer.data)) {
+    return {
+      errorResponse: previewFailClosed(422, 'preview_invalid_data', 'Draft payload failed preview validation.'),
+    };
+  }
+
+  const sd = transfer.source_draft;
+  if (
+    !sd ||
+    typeof sd !== 'object' ||
+    Array.isArray(sd) ||
+    sd.id !== transfer.source_draft_id ||
+    sd.type_id !== 'page_section' ||
+    sd.status !== 'draft' ||
+    sd.draft_of !== transfer.target_id ||
+    sd.updated_by !== transfer.owner
+  ) {
+    return {
+      errorResponse: previewFailClosed(409, 'preview_version_mismatch', 'Source draft snapshot does not match transfer metadata.'),
+    };
+  }
+  let sdData;
+  try {
+    sdData = typeof sd.data === 'string' ? JSON.parse(sd.data) : sd.data;
+  } catch {
+    return {
+      errorResponse: previewFailClosed(409, 'preview_version_mismatch', 'Invalid source draft data snapshot.'),
+    };
+  }
+  if (JSON.stringify(canonicalPreviewValue(sdData)) !== JSON.stringify(canonicalPreviewValue(transfer.data))) {
+    return {
+      errorResponse: previewFailClosed(409, 'preview_version_mismatch', 'Transfer data does not match source draft snapshot.'),
+    };
+  }
+  const recomputedSourceVersion = await sha256Hex({
+    kind: 'content',
+    origin: parsedSourceOrigin.origin,
+    draft: sd,
+    table: 'content_item',
+    targetId: transfer.target_id,
+    target: transfer.source_target ?? null,
+    linkedAward: null,
+  });
+  if (recomputedSourceVersion !== transfer.source_preview_version.toLowerCase()) {
+    return {
+      errorResponse: previewFailClosed(
+        409,
+        'preview_version_mismatch',
+        'Transferred draft snapshot does not match its source confirmation binding.'
+      ),
+    };
+  }
+
+  const schemaErr = await validatePageSectionSchemaInDb(env, transfer.target_id, transfer.data);
+  if (schemaErr) {
+    return {
+      errorResponse: previewFailClosed(422, 'preview_invalid_data', `Draft payload failed schema validation: ${schemaErr}`),
+    };
+  }
+
+  const stagingTargetRow = await getContentItemById(env, transfer.target_id);
+  if (!stagingTargetRow || stagingTargetRow.status !== 'published') {
+    return {
+      errorResponse: previewFailClosed(404, 'preview_target_not_found', 'Target page section is not published in the staging database.'),
+    };
+  }
+
+  const stagingDraftHash = await sha256Hex({
+    v: 1,
+    staging_origin: url.origin,
+    source_origin: parsedSourceOrigin.origin,
+    source_draft_id: transfer.source_draft_id,
+    source_preview_version: transfer.source_preview_version.toLowerCase(),
+    owner: draftOwner(actor),
+    target_id: transfer.target_id,
+    data: transfer.data,
+  });
+  const stagingDraftId = `cid_stg_${stagingDraftHash.slice(0, 32)}`;
+
+  let stagingDraftRow = await getContentItemById(env, stagingDraftId);
+  if (!stagingDraftRow) {
+    let targetBaseData = {};
+    try {
+      targetBaseData = typeof stagingTargetRow.data === 'string'
+        ? JSON.parse(stagingTargetRow.data)
+        : (stagingTargetRow.data || {});
+    } catch {}
+    const stagedData = {
+      ...targetBaseData,
+      ...transfer.data,
+      section_key: transfer.target_id.slice(3),
+    };
+    const stagedDataStr = JSON.stringify(stagedData);
+    const auditBeforeStr = JSON.stringify({
+      source_origin: parsedSourceOrigin.origin,
+      source_draft_id: transfer.source_draft_id,
+      source_preview_version: transfer.source_preview_version.toLowerCase(),
+      draft_of: transfer.target_id,
+    });
+    const insertDraftStmt = env.LEGACY_DB
+      .prepare(
+        `INSERT INTO content_item (id, type_id, data, status, draft_of, updated_by, updated_at)
+         VALUES (?, 'page_section', ?, 'draft', ?, ?, datetime('now'))`
+      )
+      .bind(stagingDraftId, stagedDataStr, transfer.target_id, draftOwner(actor));
+    const insertAuditStmt = env.LEGACY_DB
+      .prepare(
+        `INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
+         VALUES (?, 'content_item.staging_preview_stage', 'content_item', ?, ?, ?)`
+      )
+      .bind(actor, stagingDraftId, auditBeforeStr, stagedDataStr);
+
+    if (typeof env.LEGACY_DB.batch === 'function') {
+      await env.LEGACY_DB.batch([insertDraftStmt, insertAuditStmt]);
+    } else {
+      await insertDraftStmt.run();
+      await insertAuditStmt.run();
+    }
+    stagingDraftRow = await getContentItemById(env, stagingDraftId);
+  } else {
+    if (stagingDraftRow.status !== 'draft') {
+      return {
+        errorResponse: previewFailClosed(
+          409,
+          'preview_draft_not_active',
+          `Draft is in status ${stagingDraftRow.status} and can no longer be previewed.`
+        ),
+      };
+    }
+    if (!ownsDraft(stagingDraftRow.updated_by, actor)) {
+      return {
+        errorResponse: previewFailClosed(
+          403,
+          'preview_forbidden_owner',
+          'Only the verified initiating staff member who owns this draft can preview it.'
+        ),
+      };
+    }
+    if (stagingDraftRow.draft_of !== transfer.target_id) {
+      return {
+        errorResponse: previewFailClosed(409, 'preview_page_mismatch', 'Staging draft target mismatch.'),
+      };
+    }
+  }
+
+  if (!stagingDraftRow) {
+    return {
+      errorResponse: previewFailClosed(500, 'preview_error', 'Failed to materialize staging preview draft.'),
+    };
+  }
+
+  const stagingBinding = await confirmationBinding(env.LEGACY_DB, 'content', stagingDraftRow, url.origin, stagingTargetRow);
+  return {
+    draftRow: stagingDraftRow,
+    targetRow: stagingTargetRow,
+    binding: stagingBinding,
+    sourceDraftId: transfer.source_draft_id,
+    sourcePreviewVersion: transfer.source_preview_version.toLowerCase(),
+  };
 }
 
 async function validateAndRenderDraftPreview({
@@ -719,24 +1169,48 @@ async function validateAndRenderDraftPreview({
     return previewFailClosed(403, 'preview_unauthorized', 'Draft page preview requires a verified active staff identity.');
   }
   const url = new URL(request.url);
-  const previewDraftId = url.searchParams.get('draft_id') || url.searchParams.get('preview_draft');
-  const previewVersionParam = url.searchParams.get('preview_version');
-  if (!previewDraftId || !/^(?:cid_|ci_)[A-Za-z0-9_-]{1,128}$/.test(previewDraftId)) {
-    return previewFailClosed(400, 'invalid_preview_draft', 'A valid preview_draft ID is required.');
-  }
-  if (!previewVersionParam || !/^[0-9a-f]{64}$/i.test(previewVersionParam)) {
-    return previewFailClosed(409, 'preview_version_required', 'Current exact preview_version is required to render a draft preview.');
-  }
 
-  const draftRow = await getContentItemById(env, previewDraftId);
-  if (!draftRow) {
-    return previewFailClosed(404, 'preview_draft_not_found', 'Draft was not found in this environment database; production and staging use separate isolated databases.');
-  }
-  if (draftRow.status !== 'draft') {
-    return previewFailClosed(409, 'preview_draft_not_active', `Draft is in status ${draftRow.status} and can no longer be previewed.`);
-  }
-  if (!ownsDraft(draftRow.updated_by, actor)) {
-    return previewFailClosed(403, 'preview_forbidden_owner', 'Only the verified initiating staff member who owns this draft can preview it.');
+  let draftRow = null;
+  let targetRow = null;
+  let binding = null;
+  let sourceDraftId = null;
+  let sourcePreviewVersion = null;
+
+  if (url.searchParams.has('transfer')) {
+    const materialized = await materializeCrossOriginDraftTransfer({
+      url,
+      env,
+      actor,
+      expectedPathCheck,
+    });
+    if (materialized.errorResponse) {
+      return materialized.errorResponse;
+    }
+    draftRow = materialized.draftRow;
+    targetRow = materialized.targetRow;
+    binding = materialized.binding;
+    sourceDraftId = materialized.sourceDraftId;
+    sourcePreviewVersion = materialized.sourcePreviewVersion;
+  } else {
+    const previewDraftId = url.searchParams.get('draft_id') || url.searchParams.get('preview_draft');
+    const previewVersionParam = url.searchParams.get('preview_version');
+    if (!previewDraftId || !/^(?:cid_|ci_)[A-Za-z0-9_-]{1,128}$/.test(previewDraftId)) {
+      return previewFailClosed(400, 'invalid_preview_draft', 'A valid preview_draft ID is required.');
+    }
+    if (!previewVersionParam || !/^[0-9a-f]{64}$/i.test(previewVersionParam)) {
+      return previewFailClosed(409, 'preview_version_required', 'Current exact preview_version is required to render a draft preview.');
+    }
+
+    draftRow = await getContentItemById(env, previewDraftId);
+    if (!draftRow) {
+      return previewFailClosed(404, 'preview_draft_not_found', 'Draft was not found in this environment database; production and staging use separate isolated databases.');
+    }
+    if (draftRow.status !== 'draft') {
+      return previewFailClosed(409, 'preview_draft_not_active', `Draft is in status ${draftRow.status} and can no longer be previewed.`);
+    }
+    if (!ownsDraft(draftRow.updated_by, actor)) {
+      return previewFailClosed(403, 'preview_forbidden_owner', 'Only the verified initiating staff member who owns this draft can preview it.');
+    }
   }
 
   const targetId = typeof draftRow.draft_of === 'string' ? draftRow.draft_of : '';
@@ -749,10 +1223,13 @@ async function validateAndRenderDraftPreview({
     return previewFailClosed(409, 'preview_page_mismatch', `Draft ${draftRow.id} targets ${expectedPagePath}, not ${expectedPathCheck}.`);
   }
 
-  const targetRow = await getContentItemById(env, targetId);
-  const binding = await confirmationBinding(env.LEGACY_DB, 'content', draftRow, url.origin, targetRow);
-  if (!binding || binding.version !== previewVersionParam) {
-    return previewFailClosed(409, 'preview_version_mismatch', 'Preview version is stale or does not match the current draft and target state.');
+  if (!binding) {
+    targetRow = await getContentItemById(env, targetId);
+    binding = await confirmationBinding(env.LEGACY_DB, 'content', draftRow, url.origin, targetRow);
+    const previewVersionParam = url.searchParams.get('preview_version');
+    if (!binding || binding.version !== previewVersionParam) {
+      return previewFailClosed(409, 'preview_version_mismatch', 'Preview version is stale or does not match the current draft and target state.');
+    }
   }
 
   let pageResponse = upstreamResponse;
@@ -789,7 +1266,11 @@ async function validateAndRenderDraftPreview({
   };
   const rewritten = await rewriteContent(pageResponse, baseSections);
   const meta = getContentTargetMeta(targetId, draftRow.type_id, draftData);
-  return await injectDraftPreviewBanner(rewritten, draftRow, meta.label, binding.version, meta.anchor, { injectBaseHref });
+  return await injectDraftPreviewBanner(rewritten, draftRow, meta.label, binding.version, meta.anchor, {
+    injectBaseHref,
+    sourceDraftId,
+    sourcePreviewVersion,
+  });
 }
 
 export async function renderProtectedDraftPreviewPage(context) {

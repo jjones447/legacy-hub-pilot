@@ -543,7 +543,7 @@ test('8. conversation-first untargeted request auto-resolves ps_form.membership 
   assert.equal(draftJson.preview_path, `/api/agent/preview/page?draft_id=${draftJson.draft_id}&preview_version=${draftJson.preview_version}#membershipModal`);
   assert.equal(draftJson.staging_preview_url, `https://staging.caregiversanctuary.org/api/agent/preview/page?draft_id=${draftJson.draft_id}&preview_version=${draftJson.preview_version}#membershipModal`);
 
-  // When created in production (without ENVIRONMENT='preview'), staging_preview_supported is false and staging_preview_url is null
+  // When created in production (without ENVIRONMENT='preview'), preview_path is null (no local production preview) and staging_preview_url is a cross-environment transfer URL to staging /api/agent/preview/page
   const prodDraftReq = new Request('https://legacy-hub-5qo.pages.dev/api/agent/draft', {
     method: 'POST',
     headers: { 'x-dev-actor': 'staff_manager@example.org' },
@@ -558,11 +558,12 @@ test('8. conversation-first untargeted request auto-resolves ps_form.membership 
   assert.equal(prodDraftRes.status, 200);
   const prodDraftJson = await prodDraftRes.json();
   assert.equal(prodDraftJson.ok, true);
-  assert.equal(prodDraftJson.staging_preview_supported, false);
-  assert.equal(prodDraftJson.staging_preview_url, null);
-  assert.equal(prodDraftJson.preview_url, null);
+  assert.equal(prodDraftJson.staging_preview_supported, true);
   assert.equal(prodDraftJson.preview_path, null);
-  assert.ok(prodDraftJson.preview_unavailable_reason.includes('separate isolated databases'));
+  assert.equal(prodDraftJson.preview_unavailable_reason, null);
+  assert.ok(prodDraftJson.staging_preview_url.startsWith('https://staging.caregiversanctuary.org/api/agent/preview/page?transfer='));
+  assert.ok(prodDraftJson.staging_preview_url.endsWith(`&source_version=${prodDraftJson.preview_version}#membershipModal`));
+  assert.equal(prodDraftJson.preview_url, prodDraftJson.staging_preview_url);
 });
 
 test('9. non-page_section drafts (resource) return staging_preview_supported: false and null preview links', async () => {

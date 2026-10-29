@@ -1,11 +1,16 @@
 // Tests for published content edge rewrites per D-011 (LEGACY-D7-S0B-EDGE-RENDER-CONTENT-R1)
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
+import vm from 'node:vm';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { DatabaseSync } from 'node:sqlite';
 
 import { onRequest } from '../functions/_middleware.js';
+import { onRequestGet as getAgent, onRequestPost as postAgent } from '../functions/api/agent/[[path]].js';
+import { onRequest as handleWebJobs } from '../functions/api/agent/web-jobs.js';
+import { seedPageSections } from '../scripts/seed-page-sections.mjs';
 import {
   _resetContentCache,
   escapeHtml,
@@ -33,8 +38,16 @@ class FakeD1 {
   constructor(rows = [], staffRows = []) {
     this.rows = rows;
     this.staffRows = staffRows;
+    this.auditRows = [];
     this.queryCount = 0;
     this.shouldThrow = false;
+  }
+  async batch(stmts) {
+    const out = [];
+    for (const stmt of stmts) {
+      out.push(await stmt.run());
+    }
+    return out;
   }
   prepare(sql) {
     const self = this;
@@ -52,11 +65,35 @@ class FakeD1 {
       }
       return null;
     };
+    const runBound = async (params = []) => {
+      if (self.shouldThrow) throw new Error('D1 query error');
+      if (/INSERT\s+INTO\s+content_item/i.test(sql)) {
+        self.rows.push({
+          id: params[0],
+          type_id: 'page_section',
+          data: params[1],
+          status: 'draft',
+          draft_of: params[2],
+          updated_by: params[3],
+          updated_at: '2026-10-29 19:00:00',
+        });
+      } else if (/INSERT\s+INTO\s+audit_log/i.test(sql)) {
+        self.auditRows.push({
+          actor: params[0],
+          action: 'content_item.staging_preview_stage',
+          entity: 'content_item',
+          entity_id: params[1],
+          before_json: params[2],
+          after_json: params[3],
+        });
+      }
+      return { success: true };
+    };
     return {
       bind(...params) {
         return {
           first: async () => matchRow(params),
-          run: async () => ({ success: true }),
+          run: () => runBound(params),
           all: async () => {
             self.queryCount++;
             if (self.shouldThrow) throw new Error('D1 query error');
@@ -66,7 +103,7 @@ class FakeD1 {
         };
       },
       first: async () => matchRow([]),
-      run: async () => ({ success: true }),
+      run: () => runBound([]),
       all: async () => {
         self.queryCount++;
         if (self.shouldThrow) {
@@ -572,7 +609,7 @@ test('preview_draft query parameter overlays unconfirmed draft wording with non-
   });
 });
 
-test('two-isolated-DB boundary: production-created draft reports staging preview unavailable and missing draft on staging DB fails closed (404) without falling back to live content', async () => {
+test('two-isolated-DB boundary: raw production draft IDs fail closed (404) on staging DB while verified cross-environment transfer materializes an authenticated staging draft without DB cross-contamination', async () => {
   await withPreviewJwks(async () => {
     const committedHtml = loadHtml('programs.html');
     // Production DB (3c06) has the draft, while Staging DB (42be) only has published rows
@@ -604,69 +641,125 @@ test('two-isolated-DB boundary: production-created draft reports staging preview
         cta_label: 'Join Today',
       }),
     };
-    const prodDb = new FakeD1(
-      [prodPublished, prodDraft],
-      [{ email: 'jane@legacy.org', display_name: 'Jane', role: 'staff', status: 'active' }]
-    );
-    const stagingDb = new FakeD1(
-      [prodPublished],
-      [{ email: 'jane@legacy.org', display_name: 'Jane', role: 'staff', status: 'active' }]
-    );
+    const staffList = [
+      { email: 'jane@legacy.org', display_name: 'Jane', role: 'staff', status: 'active' },
+      { email: 'other@legacy.org', display_name: 'Other', role: 'staff', status: 'active' },
+    ];
+    const prodDb = new FakeD1([prodPublished, prodDraft], staffList);
+    const stagingDb = new FakeD1([prodPublished], staffList);
 
     const prodBinding = await confirmationBinding(
       prodDb,
       'content',
       prodDraft,
-      'https://legacy-hub-5qo.pages.dev',
+      'https://caregiversanctuary.org',
       prodPublished
     );
 
-    // 1. buildContentPreviewInfo on production (ENVIRONMENT !== 'preview') reports unavailable and never emits a fake staging link
-    const prodPreviewInfo = buildContentPreviewInfo({
-      draftId: prodDraft.id,
-      targetId: 'ps_programs.hero',
-      typeId: 'page_section',
-      itemData: JSON.parse(prodDraft.data),
-      previewVersion: prodBinding.version,
-      requestUrl: 'https://legacy-hub-5qo.pages.dev/api/agent/draft',
-      env: { LEGACY_DB: prodDb },
-      authorized: true,
-    });
-    assert.equal(prodPreviewInfo.staging_preview_supported, false);
-    assert.equal(prodPreviewInfo.staging_preview_url, null);
-    assert.equal(prodPreviewInfo.preview_url, null);
-    assert.equal(prodPreviewInfo.preview_path, null);
-    assert.ok(prodPreviewInfo.preview_unavailable_reason.includes('separate isolated databases'));
-
-    // 2. Attempting to open ?preview_draft=cid_prod_only_draft_99 on staging DB (where the draft does not exist) fails closed with 404 and NEVER renders unchanged live content
-    const token = await makePreviewAccessJwt({ email: 'jane@legacy.org' });
+    // 1. Attempting to open a raw production ?preview_draft=cid_prod_only_draft_99 or /api/agent/preview/page?draft_id=cid_prod_only_draft_99 on staging DB fails closed with 404
+    const ownerToken = await makePreviewAccessJwt({ email: 'jane@legacy.org' });
+    const otherToken = await makePreviewAccessJwt({ email: 'other@legacy.org' });
     const next = async () =>
       new Response(committedHtml, {
         status: 200,
         headers: { 'content-type': 'text/html; charset=utf-8' },
       });
+    const stagingEnv = {
+      ENVIRONMENT: 'preview',
+      CF_ACCESS_TEAM_DOMAIN: PREVIEW_TEAM,
+      CF_ACCESS_AUD: PREVIEW_AUD,
+      LEGACY_DB: stagingDb,
+    };
 
     const crossDbResp = await onRequest({
       request: new Request(
         `https://staging.caregiversanctuary.org/programs.html?preview_draft=${prodDraft.id}&preview_version=${prodBinding.version}`,
         {
           method: 'GET',
-          headers: { 'Cf-Access-Jwt-Assertion': token },
+          headers: { 'Cf-Access-Jwt-Assertion': ownerToken },
         }
       ),
       next,
-      env: {
-        ENVIRONMENT: 'preview',
-        CF_ACCESS_TEAM_DOMAIN: PREVIEW_TEAM,
-        CF_ACCESS_AUD: PREVIEW_AUD,
-        LEGACY_DB: stagingDb,
-      },
+      env: stagingEnv,
     });
     assert.equal(crossDbResp.status, 404);
     assert.equal(crossDbResp.headers.get('cache-control'), 'no-store');
     const errBody = await crossDbResp.json();
     assert.equal(errBody.ok, false);
     assert.equal(errBody.error, 'preview_draft_not_found');
+
+    // 2. buildContentPreviewInfo on production with verified owner + draftRow + targetRow emits an authenticated cross-environment transfer URL to staging /api/agent/preview/page
+    const prodPreviewInfo = buildContentPreviewInfo({
+      draftId: prodDraft.id,
+      targetId: 'ps_programs.hero',
+      typeId: 'page_section',
+      itemData: JSON.parse(prodDraft.data),
+      previewVersion: prodBinding.version,
+      requestUrl: 'https://caregiversanctuary.org/api/agent/draft',
+      env: { LEGACY_DB: prodDb },
+      authorized: true,
+      owner: prodDraft.updated_by,
+      draftRow: prodDraft,
+      targetRow: prodPublished,
+    });
+    assert.equal(prodPreviewInfo.staging_preview_supported, true);
+    assert.equal(prodPreviewInfo.preview_path, null);
+    assert.equal(prodPreviewInfo.preview_unavailable_reason, null);
+    assert.ok(prodPreviewInfo.staging_preview_url.startsWith('https://staging.caregiversanctuary.org/api/agent/preview/page?transfer='));
+    assert.ok(prodPreviewInfo.staging_preview_url.endsWith(`&source_version=${prodBinding.version}`));
+
+    // 3. Foreign staff member (other@legacy.org) cannot materialize or view the transferred production draft (403)
+    const foreignTransferResp = await onRequest({
+      request: new Request(prodPreviewInfo.staging_preview_url, {
+        method: 'GET',
+        headers: { 'Cf-Access-Jwt-Assertion': otherToken },
+      }),
+      next,
+      env: stagingEnv,
+    });
+    assert.equal(foreignTransferResp.status, 403);
+    assert.equal((await foreignTransferResp.json()).error, 'preview_forbidden_owner');
+    assert.equal(stagingDb.rows.filter((r) => r.status === 'draft').length, 0);
+
+    // 4. Tampered source_version or tampered transfer payload fails closed (409) without writing to staging DB
+    const tamperedVerUrl = prodPreviewInfo.staging_preview_url.replace(
+      `source_version=${prodBinding.version}`,
+      `source_version=${'f'.repeat(64)}`
+    );
+    const tamperedVerResp = await onRequest({
+      request: new Request(tamperedVerUrl, {
+        method: 'GET',
+        headers: { 'Cf-Access-Jwt-Assertion': ownerToken },
+      }),
+      next,
+      env: stagingEnv,
+    });
+    assert.equal(tamperedVerResp.status, 409);
+    assert.equal((await tamperedVerResp.json()).error, 'preview_version_mismatch');
+    assert.equal(stagingDb.rows.filter((r) => r.status === 'draft').length, 0);
+
+    // 5. Authenticated initiating staff owner opening staging_preview_url materializes a real staging draft row in stagingDb and renders the preview
+    const validTransferResp = await onRequest({
+      request: new Request(prodPreviewInfo.staging_preview_url, {
+        method: 'GET',
+        headers: { 'Cf-Access-Jwt-Assertion': ownerToken },
+      }),
+      next,
+      env: stagingEnv,
+    });
+    assert.equal(validTransferResp.status, 200);
+    assert.equal(validTransferResp.headers.get('cache-control'), 'no-store');
+    const html = await validTransferResp.text();
+    assert.ok(html.includes('Production-Only Draft Title'));
+    assert.ok(html.includes('Production-Only Draft Lede'));
+    assert.ok(html.includes(`data-source-draft-id="${prodDraft.id}"`));
+    assert.ok(html.includes(`data-source-preview-version="${prodBinding.version}"`));
+    const materializedStagingDrafts = stagingDb.rows.filter((r) => r.status === 'draft');
+    assert.equal(materializedStagingDrafts.length, 1);
+    assert.ok(materializedStagingDrafts[0].id.startsWith('cid_stg_'));
+    assert.equal(materializedStagingDrafts[0].updated_by, draftOwner('jane@legacy.org'));
+    assert.equal(stagingDb.auditRows.length, 1);
+    assert.equal(stagingDb.auditRows[0].action, 'content_item.staging_preview_stage');
   });
 });
 
@@ -1092,5 +1185,370 @@ test('authorized modal form previews (ps_form.membership, ps_form.grant_apply, p
       env: { ...previewEnv, ALLOW_DEV_CONSOLE: '1' },
     });
     assert.equal(devBypassResp.status, 403);
+  });
+});
+
+test('ordinary browser session (staff.js + real onRequest middleware + real RS256 Access JWTs across two isolated SQLite D1 databases): production Assistant conversation -> authenticated staging draft materialization & preview -> production confirmation without DB cross-contamination or provider/job replay', async () => {
+  await withPreviewJwks(async () => {
+    const schemaFiles = [
+      'schema/0001_init.sql',
+      'schema/0003_grant_award.sql',
+      'schema/0004_content_types.sql',
+      'schema/0009_content_live.sql',
+      'schema/0010_page_section_forms.sql',
+      'schema/0011_staff_member.sql',
+    ];
+    const makeSqliteD1 = async () => {
+      const raw = new DatabaseSync(':memory:');
+      for (const f of schemaFiles) {
+        raw.exec(readFileSync(resolve(rootDir, f), 'utf8'));
+      }
+      await seedPageSections({ db: raw });
+      raw.prepare(
+        "INSERT INTO staff_member (email, display_name, role, status, first_seen_at, last_seen_at) VALUES ('jane@legacy.org', 'Jane', 'staff', 'active', '2026-10-01 00:00:00', '2026-10-29 19:00:00')"
+      ).run();
+      raw.prepare(
+        "INSERT INTO staff_member (email, display_name, role, status, first_seen_at, last_seen_at) VALUES ('other@legacy.org', 'Other', 'staff', 'active', '2026-10-01 00:00:00', '2026-10-29 19:00:00')"
+      ).run();
+      const d1 = {
+        raw,
+        async batch(statements) {
+          raw.exec('BEGIN');
+          try {
+            const results = statements.map(({ sql, params }) => {
+              const statement = raw.prepare(sql);
+              if (statement.columns().length) {
+                return { success: true, results: statement.all(...params), meta: {} };
+              }
+              const result = statement.run(...params);
+              return { success: true, results: [], meta: { changes: Number(result.changes) } };
+            });
+            raw.exec('COMMIT');
+            return results;
+          } catch (error) {
+            raw.exec('ROLLBACK');
+            throw error;
+          }
+        },
+        prepare(sql) {
+          return {
+            sql,
+            params: [],
+            bind(...params) {
+              return {
+                sql,
+                params,
+                async first() {
+                  return raw.prepare(sql).get(...params) ?? null;
+                },
+                async run() {
+                  return raw.prepare(sql).run(...params);
+                },
+                async all() {
+                  return { results: raw.prepare(sql).all(...params) };
+                },
+              };
+            },
+            async first() {
+              return raw.prepare(sql).get() ?? null;
+            },
+            async run() {
+              return raw.prepare(sql).run();
+            },
+            async all() {
+              return { results: raw.prepare(sql).all() };
+            },
+          };
+        },
+      };
+      return d1;
+    };
+
+    // Two strictly isolated SQLite D1 instances: production (prodDb) and staging (stagingDb)
+    const prodDb = await makeSqliteD1();
+    const stagingDb = await makeSqliteD1();
+
+    let mapperCalls = 0;
+    const prodMapper = async ({ request, current }) => {
+      mapperCalls++;
+      return {
+        ok: true,
+        change: {
+          ...current,
+          section_key: 'home.hero',
+          lede: 'Supporting every family caregiver across Greater Milwaukee.',
+        },
+      };
+    };
+
+    const prodEnv = {
+      CF_ACCESS_TEAM_DOMAIN: PREVIEW_TEAM,
+      CF_ACCESS_AUD: PREVIEW_AUD,
+      LEGACY_DB: prodDb,
+      AGENT_MAPPER_BACKEND: prodMapper,
+    };
+    const stagingEnv = {
+      ENVIRONMENT: 'preview',
+      CF_ACCESS_TEAM_DOMAIN: PREVIEW_TEAM,
+      CF_ACCESS_AUD: PREVIEW_AUD,
+      LEGACY_DB: stagingDb,
+    };
+
+    const committedIndexHtml = loadHtml('index.html');
+    const dispatchEdge = async (req, env) => {
+      const data = {};
+      const next = async (forwardedReq = req) => {
+        const u = new URL(forwardedReq.url);
+        if (u.pathname === '/api/agent/web-jobs') {
+          return handleWebJobs({ request: forwardedReq, env, data });
+        }
+        if (u.pathname.startsWith('/api/agent/')) {
+          return forwardedReq.method === 'GET'
+            ? getAgent({ request: forwardedReq, env, data })
+            : postAgent({ request: forwardedReq, env, data });
+        }
+        if (u.pathname === '/index.html' || u.pathname === '/') {
+          return new Response(committedIndexHtml, {
+            status: 200,
+            headers: { 'content-type': 'text/html; charset=utf-8' },
+          });
+        }
+        return new Response('not found', { status: 404 });
+      };
+      return onRequest({ request: req, next, env, data });
+    };
+
+    const ownerToken = await makePreviewAccessJwt({ email: 'jane@legacy.org' });
+    const otherToken = await makePreviewAccessJwt({ email: 'other@legacy.org' });
+
+    // Mount real staff.js in an ordinary browser session on https://caregiversanctuary.org
+    const staffSource = readFileSync(resolve(rootDir, 'staff.js'), 'utf8');
+    const chatSection = staffSource.slice(
+      staffSource.indexOf('function initStaffChatTargets()'),
+      staffSource.indexOf('let siteContentItems =')
+    );
+    const messages = [];
+    const storage = new Map();
+    const nodes = {
+      chatInput: { value: 'Change the homepage hero subtitle to Supporting every family caregiver across Greater Milwaukee.' },
+      chatBody: {
+        scrollHeight: 0,
+        scrollTop: 0,
+        appendChild(n) {
+          if (!messages.includes(n)) messages.push(n);
+        },
+      },
+      chatAreaSelect: { value: 'content' },
+      chatContentTarget: { value: 'ps_home.hero' },
+    };
+    const document = {
+      hidden: false,
+      getElementById: (id) => nodes[id] || null,
+      querySelector: () => null,
+      createElement: () => ({
+        dataset: {},
+        innerHTML: '',
+        textContent: '',
+        attributes: {},
+        className: '',
+        setAttribute(name, value) {
+          this.attributes[name] = value;
+        },
+      }),
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    };
+    const browserCtx = vm.createContext({
+      document,
+      AbortController,
+      Date,
+      setTimeout,
+      clearTimeout,
+      window: {
+        location: { origin: 'https://caregiversanctuary.org' },
+        sessionStorage: {
+          getItem: (k) => storage.get(k) || null,
+          setItem: (k, v) => storage.set(k, String(v)),
+          removeItem: (k) => storage.delete(k),
+        },
+      },
+      crypto,
+      escapeHtml,
+      currentEventId: null,
+      currentCaregiverId: null,
+      currentGrantId: null,
+      loadStaffConsole: async () => {},
+      viewCaregiver: async () => {},
+      fetch: async (path, options = {}) => {
+        const url = new URL(path, 'https://caregiversanctuary.org').toString();
+        const headers = new Headers(options.headers || {});
+        // Browser session sends its Cloudflare Access session token, never x-dev-actor or synthetic fixtures
+        headers.set('Cf-Access-Jwt-Assertion', ownerToken);
+        if ((options.method || 'GET').toUpperCase() === 'POST') {
+          headers.set('Origin', 'https://caregiversanctuary.org');
+        }
+        const req = new Request(url, {
+          method: options.method || 'GET',
+          headers,
+          body: options.body,
+          signal: options.signal,
+        });
+        return dispatchEdge(req, prodEnv);
+      },
+    });
+    vm.runInContext(
+      'let siteContentItems = [{ id: "ps_home.hero", type_id: "page_section", status: "published", data: "{}" }];\n' +
+        chatSection,
+      browserCtx
+    );
+
+    // 1. Initialize web-job feature in production browser session and send the conversation request
+    await browserCtx.initWebJobFeature();
+    await browserCtx.window.agentSend();
+
+    assert.equal(mapperCalls, 1, 'production draft creation invokes the mapper exactly once');
+    const prodDrafts = prodDb.raw.prepare("SELECT * FROM content_item WHERE status = 'draft'").all();
+    assert.equal(prodDrafts.length, 1);
+    const prodDraft = prodDrafts[0];
+    assert.ok(prodDraft.id.startsWith('cid_'));
+    assert.equal(prodDraft.updated_by, draftOwner('jane@legacy.org'));
+    assert.equal(
+      stagingDb.raw.prepare("SELECT count(*) AS n FROM content_item WHERE status = 'draft'").get().n,
+      0,
+      'staging DB remains completely isolated before the preview link is opened'
+    );
+    const prodLiveBefore = JSON.parse(
+      prodDb.raw.prepare("SELECT data FROM content_item WHERE id = 'ps_home.hero'").get().data
+    );
+    assert.notEqual(
+      prodLiveBefore.lede,
+      'Supporting every family caregiver across Greater Milwaukee.',
+      'production published content is untouched while draft is unconfirmed'
+    );
+
+    // 2. Inspect the Assistant card rendered in the production browser DOM and extract the staging preview href
+    const cardMsg = messages.find((m) => m.innerHTML && m.innerHTML.includes('preview-staging-link'));
+    assert.ok(cardMsg, 'production Assistant card renders the Open staging preview link');
+    assert.ok(!cardMsg.innerHTML.includes('preview-unavailable-note'));
+    const hrefMatch = cardMsg.innerHTML.match(/href="([^"]+)"[^>]*class="preview-staging-link"/);
+    assert.ok(hrefMatch, 'staging preview link has an href attribute');
+    const stagingPreviewUrl = hrefMatch[1].replace(/&amp;/g, '&');
+    assert.ok(
+      stagingPreviewUrl.startsWith('https://staging.caregiversanctuary.org/api/agent/preview/page?transfer='),
+      'staging preview link points to the Access-protected staging preview endpoint with transfer envelope'
+    );
+
+    // 3. Follow the exact staging preview link in the authenticated browser session against stagingEnv (stagingDb)
+    const stagingPreviewResp = await dispatchEdge(
+      new Request(stagingPreviewUrl, {
+        method: 'GET',
+        headers: { 'Cf-Access-Jwt-Assertion': ownerToken },
+      }),
+      stagingEnv
+    );
+    assert.equal(stagingPreviewResp.status, 200);
+    assert.equal(stagingPreviewResp.headers.get('cache-control'), 'no-store');
+    assert.equal(mapperCalls, 1, 'opening staging preview performs zero AI/mapper or job replay');
+
+    const stagingPreviewHtml = await stagingPreviewResp.text();
+    assert.ok(stagingPreviewHtml.includes('<base href="/">'));
+    assert.ok(stagingPreviewHtml.includes('Supporting every family caregiver across Greater Milwaukee.'));
+    assert.ok(stagingPreviewHtml.includes(`data-source-draft-id="${prodDraft.id}"`));
+
+    // Verify a real authenticated staging draft row was materialized in stagingDb while staging published content stays untouched
+    const stagingDrafts = stagingDb.raw.prepare("SELECT * FROM content_item WHERE status = 'draft'").all();
+    assert.equal(stagingDrafts.length, 1);
+    const stagingDraft = stagingDrafts[0];
+    assert.ok(stagingDraft.id.startsWith('cid_stg_'));
+    assert.equal(stagingDraft.updated_by, draftOwner('jane@legacy.org'));
+    assert.ok(stagingPreviewHtml.includes(`data-preview-draft-id="${stagingDraft.id}"`));
+
+    const stagingAuditRows = stagingDb.raw
+      .prepare("SELECT * FROM audit_log WHERE action = 'content_item.staging_preview_stage'")
+      .all();
+    assert.equal(stagingAuditRows.length, 1);
+    assert.equal(stagingAuditRows[0].actor, 'jane@legacy.org');
+    assert.equal(stagingAuditRows[0].entity_id, stagingDraft.id);
+
+    const stagingLive = JSON.parse(
+      stagingDb.raw.prepare("SELECT data FROM content_item WHERE id = 'ps_home.hero'").get().data
+    );
+    assert.notEqual(
+      stagingLive.lede,
+      'Supporting every family caregiver across Greater Milwaukee.',
+      'staging published content remains untouched by draft preview'
+    );
+
+    // 4. Attempting to confirm the staging preview draft directly on staging is refused (409); production writes stay behind approval of the originating production draft
+    const stagingConfirmAttempt = await dispatchEdge(
+      new Request('https://staging.caregiversanctuary.org/api/agent/confirm', {
+        method: 'POST',
+        headers: {
+          'Cf-Access-Jwt-Assertion': ownerToken,
+          Origin: 'https://staging.caregiversanctuary.org',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          draft_id: stagingDraft.id,
+          preview_version: 'a'.repeat(64),
+        }),
+      }),
+      stagingEnv
+    );
+    assert.equal(stagingConfirmAttempt.status, 409);
+    const stagingConfirmErr = await stagingConfirmAttempt.json();
+    assert.match(stagingConfirmErr.error, /staging transfer preview drafts are preview-only/);
+
+    // 5. Foreign staff member cannot view the staging preview link (403)
+    const foreignStagingResp = await dispatchEdge(
+      new Request(stagingPreviewUrl, {
+        method: 'GET',
+        headers: { 'Cf-Access-Jwt-Assertion': otherToken },
+      }),
+      stagingEnv
+    );
+    assert.equal(foreignStagingResp.status, 403);
+
+    // 6. Click Confirm & publish in the production Staff Assistant DOM to approve that exact preview
+    const draftIdMatch = cardMsg.innerHTML.match(/data-draft-id="([^"]+)"/);
+    const previewVerMatch = cardMsg.innerHTML.match(/data-preview-version="([^"]+)"/);
+    assert.equal(draftIdMatch?.[1], prodDraft.id);
+    assert.ok(previewVerMatch?.[1]);
+
+    const cardState = { innerHTML: cardMsg.innerHTML };
+    const confirmBtn = {
+      disabled: false,
+      getAttribute(name) {
+        if (name === 'data-draft-id') return draftIdMatch[1];
+        if (name === 'data-preview-version') return previewVerMatch[1];
+        return null;
+      },
+      closest() {
+        return cardState;
+      },
+    };
+    await browserCtx.confirmAgentChange(confirmBtn);
+    assert.ok(cardState.innerHTML.includes('Published — logged to the audit trail.'));
+    assert.equal(mapperCalls, 1, 'confirmation does not replay provider or job');
+
+    // Verify production DB published ps_home.hero is now updated and the production draft is archived, while staging published content remains isolated
+    const prodLiveAfter = JSON.parse(
+      prodDb.raw.prepare("SELECT data FROM content_item WHERE id = 'ps_home.hero'").get().data
+    );
+    assert.equal(
+      prodLiveAfter.lede,
+      'Supporting every family caregiver across Greater Milwaukee.'
+    );
+    const prodDraftAfter = prodDb.raw
+      .prepare('SELECT status FROM content_item WHERE id = ?')
+      .get(prodDraft.id);
+    assert.equal(prodDraftAfter.status, 'archived');
+    const stagingLiveAfter = JSON.parse(
+      stagingDb.raw.prepare("SELECT data FROM content_item WHERE id = 'ps_home.hero'").get().data
+    );
+    assert.notEqual(
+      stagingLiveAfter.lede,
+      'Supporting every family caregiver across Greater Milwaukee.'
+    );
   });
 });
