@@ -169,3 +169,97 @@ for (const environment of ['preview', 'development']) {
 test('production mailed login and single-use verification remain intact', async () => {
   await productionCredentials();
 });
+
+test('explicit PORTAL_PREVIEW_MAIL_ENABLED opt-in enables staging caregiver sign-in while preserving ENVIRONMENT=preview, staging DB, and origin guards', async () => {
+  const rows = [];
+  const db = {
+    prepare(sql) {
+      return { bind(...values) {
+        return {
+          async first() {
+            if (sql.includes('COUNT(*)')) return { n: 0 };
+            if (sql.includes('SELECT id, email FROM caregiver')) {
+              return { id: 'staging-caregiver', email: 'caregiver@staging.invalid' };
+            }
+            if (sql.includes('SELECT id FROM caregiver')) {
+              return values[0] === 'staging-caregiver' ? { id: values[0] } : null;
+            }
+            if (sql.includes('FROM portal_token')) {
+              return rows.find(row => row.token_hash === values[0]) ?? null;
+            }
+            throw new Error('Unexpected synthetic first');
+          },
+          async run() {
+            if (sql.includes('INSERT INTO portal_token')) {
+              rows.push({ token_hash: values[0], caregiver_id: values[1], expires_at: values[2], used: 0 });
+              return { meta: { changes: 1 } };
+            }
+            if (sql.includes('UPDATE portal_token')) {
+              const row = rows.find(row => row.token_hash === values[0] && row.used === 0
+                && row.caregiver_id === values[1] && row.caregiver_id === 'staging-caregiver');
+              if (row) row.used = 1;
+              return { meta: { changes: row ? 1 : 0 } };
+            }
+            if (sql.includes('INSERT INTO audit_log')) return { meta: { changes: 1 } };
+            throw new Error('Unexpected synthetic run');
+          },
+        };
+      } };
+    },
+  };
+  const stagingOrigin = 'https://staging.caregiversanctuary.org';
+  const env = {
+    ENVIRONMENT: 'preview',
+    PORTAL_PREVIEW_MAIL_ENABLED: '1',
+    LEGACY_DB: db,
+    PORTAL_TOKEN_SECRET: SECRET,
+    EMAIL_API_KEY: 'synthetic-staging-key',
+  };
+  assert.equal(canSendEmail(env), true);
+  assert.equal(canSendEmail({ ...env, ENVIRONMENT: 'development' }), false);
+
+  const originalFetch = globalThis.fetch;
+  let mailedLink;
+  let sends = 0;
+  globalThis.fetch = async (_url, init) => {
+    sends++;
+    mailedLink = JSON.parse(init.body).text.match(/https:\/\/[^\s]+\/api\/portal\/verify\?token=[A-Za-z0-9_-]+/)[0];
+    return { ok: true, status: 202 };
+  };
+  try {
+    // 1. Off-origin POST /api/portal/login is still refused with 403
+    const badOrigin = await onRequestPost({
+      env,
+      request: new Request(`${stagingOrigin}/api/portal/login`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', Origin: 'https://evil.example' },
+        body: JSON.stringify({ email: 'caregiver@staging.invalid' }),
+      }),
+    });
+    assert.equal(badOrigin.status, 403);
+    assert.equal(sends, 0);
+
+    // 2. Valid staging login sends one magic link on staging origin
+    const login = await onRequestPost({
+      env,
+      request: new Request(`${stagingOrigin}/api/portal/login`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', Origin: stagingOrigin },
+        body: JSON.stringify({ email: 'caregiver@staging.invalid' }),
+      }),
+    });
+    assert.equal(login.status, 200);
+    assert.deepEqual(await login.json(), { ok: true });
+    assert.equal(sends, 1);
+    assert.match(mailedLink, /^https:\/\/staging\.caregiversanctuary\.org\/api\/portal\/verify\?token=[A-Za-z0-9_-]{43}$/);
+
+    // 3. Single-use confirmation succeeds on staging and refuses replay
+    const verify = await confirmPortal({ env, request: new Request(mailedLink) });
+    assert.equal(verify.status, 302);
+    assert.match(verify.headers.get('Set-Cookie'), /^portal_session=/);
+    const reused = await confirmPortal({ env, request: new Request(mailedLink) });
+    assert.equal(reused.status, 400);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
