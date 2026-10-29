@@ -15,10 +15,14 @@ test('Change log and Site content use native default-closed details at the end',
   assert.doesNotMatch(log[1] + content[1], /\bopen(?:\s|=|$)/);
   assert.match(log[2], /<summary><strong>Change log<\/strong><\/summary>/);
   assert.match(content[2], /<summary><strong>Site content<\/strong><\/summary>/);
-  assert.ok(html.indexOf('id="caregiverSearchPanel"') < html.indexOf('id="staffTeamPanel"'));
+  assert.ok(html.indexOf('id="staffTeamPanel"') < html.indexOf('id="caregiverSearchPanel"'));
+  assert.ok(html.indexOf('id="caregiverSearchPanel"') < html.indexOf('id="recentChangesPanel"'));
+  const search = html.match(/<details\b([^>]*id="caregiverSearchPanel"[^>]*)>/);
+  assert.ok(search);
+  assert.doesNotMatch(search[1], /\bopen(?:\s|=|$)/);
   assert.ok(html.indexOf('id="staffTeamPanel"') < html.indexOf('id="recentChangesPanel"'));
   assert.ok(html.indexOf('id="recentChangesPanel"') < html.indexOf('id="siteContentPanel"'));
-  assert.doesNotMatch(html.slice(html.indexOf(content[0]) + content[0].length), /class="panel"/);
+  assert.doesNotMatch(html.slice(html.indexOf(content[0]) + content[0].length, html.indexOf('id="caregiverDetailView"')), /class="panel"/);
   assert.ok(content[2].indexOf('id="siteContentEditor"') < content[2].indexOf('id="siteContentList"'));
   for (const id of ['siteContentList', 'siteContentEditor', 'recentChangesList', 'refreshRecentChangesBtn', 'staffTeamMessage']) {
     assert.equal([...html.matchAll(new RegExp(`id="${id}"`, 'g'))].length, 1, id);
@@ -28,8 +32,9 @@ test('Change log and Site content use native default-closed details at the end',
 test('wording distinguishes staff, selected caregiver records and portal check-ins', () => {
   assert.match(html, /Staff accounts are for the team who manage the Hub/);
   assert.match(html, /Caregivers use the Caregiver Portal for their own membership and wellness information/);
-  assert.match(html, /Results appear after you search; select a name/);
-  assert.match(html, /href="#caregiverSearchQuery">Search caregiver records/);
+  assert.match(html, /Results appear after you search; choose Open\/Edit/);
+  assert.match(html, /data-action="caregiver-back"/);
+  assert.match(html, /id="caregiverDetailView" class="staff-workspace d-none"/);
   assert.match(html, /Only caregivers with recorded check-ins appear in this list/);
   assert.match(html, /adding a staff account does not add a caregiver here/);
   assert.doesNotMatch(html, /100 means doing well/);
@@ -166,4 +171,159 @@ test('normal staff still get read-only team rows, with no add or role/save contr
   runInContext("staffMe = { email: 'member@example.invalid', role: 'staff', status: 'active' }; staffTeam = [{email:'member@example.invalid',display_name:'<Example>',role:'staff',status:'active'}]; renderStaffTeam();", h.context);
   assert.doesNotMatch(h.list.innerHTML, /data-action="staff-save"|submit-add-staff|data-staff-role=/);
   assert.match(h.list.innerHTML, /&lt;Example>/);
+});
+
+
+function focusedCaregiver({ reply, fetchError = false } = {}) {
+  const makeNode = (extra = {}) => {
+    const classes = new Set();
+    return { classes, classList: { add: key => classes.add(key), remove: key => classes.delete(key) },
+      dataset: {}, innerHTML: '', focusCalls: 0, focus() { this.focusCalls++; }, ...extra };
+  };
+  const opener = makeNode({ tagName: 'BUTTON', isConnected: true });
+  const nodes = {
+    staffDashboardView: makeNode(), caregiverDetailView: makeNode(), caregiverRecordPanel: makeNode(),
+    caregiverDetailHeading: makeNode(), staffDashboardHeading: makeNode(),
+    caregiverSearchPanel: makeNode({ open: true }), caregiverSearchQuery: makeNode({ value: 'DEMO' }),
+    caregiverSearchSegment: makeNode({ value: 'general' }), caregiverSearchStatus: makeNode({ value: 'inactive' }),
+    caregiverSearchResultsBody: makeNode({ innerHTML: 'retained results' }),
+  };
+  nodes.caregiverDetailView.classes.add('d-none');
+  const calls = [], scrolls = [];
+  const context = createContext({ document: { getElementById: id => nodes[id], activeElement: opener },
+    window: { scrollY: 456, scrollTo: (...args) => scrolls.push(args) },
+    currentCaregiverId: null, currentGrantId: null, currentSearchOffset: 20,
+    escapeHtml, localDateTimeValue: () => '2026-10-29T09:00', formatContactTime: value => value,
+    console: { error() {} }, fetch: async (url, options) => {
+      calls.push({ url, options });
+      if (fetchError) throw new Error('No read response');
+      return { ok: true, json: async () => reply ? await reply(url) : ({ ok: true,
+        profile: { id: 'cg_demo', first_name: '<Demo>', last_name: 'Example', status: 'inactive', sanctuary_member: 0 },
+        grants: [], registrations: [], notes: [], contact_history: [], followups: [] }) };
+    } });
+  runInContext(source.slice(source.indexOf('// A focused caregiver view'), source.indexOf('async function loadEvents(')), context);
+  return { context, nodes, opener, calls, scrolls };
+}
+
+test('caregiver Open uses a focused read-only view and Back preserves exact search DOM, filters, paging and focus', async () => {
+  const h = focusedCaregiver();
+  const originalResults = h.nodes.caregiverSearchResultsBody;
+  await h.context.viewCaregiver('cg_demo');
+  assert.equal(h.nodes.staffDashboardView.classes.has('d-none'), true);
+  assert.equal(h.nodes.caregiverDetailView.classes.has('d-none'), false);
+  assert.match(h.nodes.caregiverRecordPanel.innerHTML, /Caregiver record — &lt;Demo> Example/);
+  for (const action of ['submit-edit-caregiver', 'submit-add-contact', 'submit-add-note']) assert.match(h.nodes.caregiverRecordPanel.innerHTML, new RegExp(action));
+  assert.equal(h.context.currentCaregiverId, 'cg_demo');
+  assert.equal(h.nodes.caregiverDetailHeading.focusCalls, 1);
+  h.context.backToStaffDashboard();
+  assert.equal(h.nodes.staffDashboardView.classes.has('d-none'), false);
+  assert.equal(h.nodes.caregiverDetailView.classes.has('d-none'), true);
+  assert.equal(h.nodes.caregiverSearchResultsBody, originalResults);
+  assert.equal(originalResults.innerHTML, 'retained results');
+  assert.deepEqual([h.nodes.caregiverSearchQuery.value, h.nodes.caregiverSearchSegment.value, h.nodes.caregiverSearchStatus.value], ['DEMO', 'general', 'inactive']);
+  assert.equal(h.nodes.caregiverSearchPanel.open, true);
+  assert.equal(h.context.currentSearchOffset, 20);
+  assert.equal(h.context.currentCaregiverId, null);
+  assert.equal(h.nodes.caregiverRecordPanel.innerHTML, '');
+  assert.equal(h.opener.focusCalls, 1);
+  assert.deepEqual(h.scrolls[0], [0, 456]);
+  assert.equal(h.calls.length, 1);
+  assert.equal(h.calls[0].url, '/api/staff/caregiver/cg_demo');
+  assert.equal(h.calls[0].options, undefined);
+});
+
+test('Back during a pending caregiver read cannot reopen or populate a stale detail view', async () => {
+  let resolve;
+  const pending = new Promise(done => { resolve = done; });
+  const h = focusedCaregiver({ reply: () => pending });
+  const read = h.context.viewCaregiver('cg_demo');
+  h.context.backToStaffDashboard();
+  resolve({ ok: true, profile: { first_name: 'Late' }, registrations: [], grants: [] });
+  await read;
+  assert.equal(h.nodes.caregiverDetailView.classes.has('d-none'), true);
+  assert.equal(h.nodes.staffDashboardView.classes.has('d-none'), false);
+  assert.equal(h.nodes.caregiverRecordPanel.innerHTML, '');
+  assert.equal(h.context.currentCaregiverId, null);
+});
+
+test('caregiver read failure leaves an accessible error and working Back without mutating records', async () => {
+  const h = focusedCaregiver({ fetchError: true });
+  await h.context.viewCaregiver('cg_demo');
+  assert.match(h.nodes.caregiverRecordPanel.innerHTML, /role="alert"/);
+  h.context.backToStaffDashboard();
+  assert.equal(h.nodes.staffDashboardView.classes.has('d-none'), false);
+  assert.equal(h.calls.length, 1);
+});
+
+test('staff rows offer explicit Edit before showing controls; Cancel is local and never opens a caregiver', () => {
+  const h = team();
+  runInContext("staffMe = {email:'admin@example.invalid',role:'admin',status:'active'}; staffTeam = [{email:'member@example.invalid',display_name:'Example',role:'staff',status:'active'}]; renderStaffTeam();", h.context);
+  assert.match(h.list.innerHTML, /data-action="staff-edit"/);
+  assert.match(h.list.innerHTML, /aria-label="Edit staff account: Example"/);
+  assert.doesNotMatch(h.list.innerHTML, /data-staff-name=|data-action="staff-save"/);
+  const target = { getAttribute: () => 'member@example.invalid' };
+  h.context.staffTeamAction('edit', target);
+  assert.match(h.list.innerHTML, /data-staff-name="member@example.invalid"/);
+  assert.match(h.list.innerHTML, /data-action="staff-save"/);
+  assert.match(h.list.innerHTML, /data-action="staff-deactivate"/);
+  assert.match(h.list.innerHTML, /data-action="staff-cancel"/);
+  assert.doesNotMatch(h.list.innerHTML, /view-caregiver|data-caregiver-id/);
+  h.context.staffTeamAction('cancel', target);
+  assert.doesNotMatch(h.list.innerHTML, /data-staff-name=|data-action="staff-save"/);
+  assert.equal(h.calls.length, 0);
+});
+
+
+test('actual caregiver search renderer offers a named native Open/Edit button with escaped ID and no row-click requirement', async () => {
+  const nodes = Object.fromEntries(['caregiverSearchQuery', 'caregiverSearchSegment', 'caregiverSearchStatus', 'caregiverSearchResultsBody', 'caregiverSearchPagingInfo', 'caregiverSearchPrevBtn', 'caregiverSearchNextBtn'].map(id => [id, { value: '', innerHTML: '', textContent: '' }]));
+  nodes.caregiverSearchQuery.value = 'DEMO';
+  const calls = [];
+  const context = createContext({ document: {getElementById: id => nodes[id]}, URLSearchParams, escapeHtml,
+    currentSearchOffset: 0, totalSearchResults: 0, searchLimit: 10, console: {error() {}},
+    fetch: async (url, options) => { calls.push({url, options}); return {ok:true,json:async()=>({ok:true,total:1,caregivers:[{id:'cg_"demo',first_name:'<Demo>',last_name:'Example',status:'inactive'}]})}; } });
+  runInContext(source.slice(source.indexOf('async function searchCaregivers('), source.indexOf('async function loadStaffConsole(')), context);
+  await context.searchCaregivers(0);
+  assert.match(nodes.caregiverSearchResultsBody.innerHTML, /<button type="button"[^>]+data-action="view-caregiver"[^>]+data-caregiver-id="cg_&quot;demo"/);
+  assert.match(nodes.caregiverSearchResultsBody.innerHTML, /aria-label="Open or edit caregiver: &lt;Demo> Example">Open\/Edit<\/button>/);
+  assert.doesNotMatch(nodes.caregiverSearchResultsBody.innerHTML, /<tr[^>]+data-action/);
+  assert.equal(calls[0].options, undefined);
+  assert.match(calls[0].url, /q=DEMO/);
+});
+
+test('a slower previous caregiver read cannot replace the latest selected caregiver', async () => {
+  let finishA;
+  const pendingA = new Promise(resolve => { finishA = resolve; });
+  const make = name => ({ok:true,profile:{first_name:name,status:'inactive'},registrations:[],grants:[],notes:[],contact_history:[]});
+  const h = focusedCaregiver({reply:url => url.endsWith('/cg_a') ? pendingA : make('Latest')});
+  const first = h.context.viewCaregiver('cg_a');
+  await h.context.viewCaregiver('cg_b');
+  finishA(make('Old'));
+  await first;
+  assert.match(h.nodes.caregiverRecordPanel.innerHTML, /Latest/);
+  assert.doesNotMatch(h.nodes.caregiverRecordPanel.innerHTML, /Old/);
+  assert.equal(h.context.currentCaregiverId, 'cg_b');
+});
+
+test('staff Edit preserves self-access protections and ignores forged nonadmin edit attempts', () => {
+  const h = team();
+  runInContext("staffMe = {email:'admin@example.invalid',role:'admin',status:'active'}; staffTeam = [{email:'admin@example.invalid',display_name:'Admin',role:'admin',status:'active'}];",h.context);
+  h.context.staffTeamAction('edit',{getAttribute:()=> 'admin@example.invalid'});
+  assert.match(h.list.innerHTML,/data-staff-name=/);
+  assert.doesNotMatch(h.list.innerHTML,/data-staff-role=|staff-deactivate|staff-reactivate/);
+  runInContext("staffMe.role='staff'; editingStaffEmail=null; renderStaffTeam();",h.context);
+  h.context.staffTeamAction('edit',{getAttribute:()=> 'admin@example.invalid'});
+  assert.doesNotMatch(h.list.innerHTML,/data-staff-name=|staff-save|staff-edit/);
+  assert.equal(h.calls.length,0);
+});
+
+
+test('focused caregiver Edit opens the existing form and focuses its first field without a write', () => {
+  const field = { calls: 0, focus() { this.calls++; } };
+  const details = {open:false, querySelector: selector => {assert.equal(selector, '[name="first_name"]');return field;}};
+  const context = createContext({document:{getElementById:id => {assert.equal(id,'caregiverEditDetails');return details;}}});
+  runInContext(source.slice(source.indexOf('function openCaregiverEditor('),source.indexOf('function backToStaffDashboard(')),context);
+  context.openCaregiverEditor();
+  assert.equal(details.open,true);
+  assert.equal(field.calls,1);
+  assert.match(source,/data-action="caregiver-edit">Edit caregiver details/);
 });

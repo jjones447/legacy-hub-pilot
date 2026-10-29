@@ -139,7 +139,7 @@ async function searchCaregivers(offset = 0) {
     totalSearchResults = data.total || 0;
 
     if (!data.caregivers || data.caregivers.length === 0) {
-      if (body) body.innerHTML = '<tr><td colspan="4" class="text-center muted small">No caregivers found matching criteria.</td></tr>';
+      if (body) body.innerHTML = '<tr><td colspan="5" class="text-center muted small">No caregivers found matching criteria.</td></tr>';
       if (pagingInfo) pagingInfo.textContent = '0 caregivers';
       if (prevBtn) prevBtn.disabled = true;
       if (nextBtn) nextBtn.disabled = true;
@@ -172,11 +172,12 @@ async function searchCaregivers(offset = 0) {
         const statusBadge = cg.status === 'active' ? 'badge-green' : 'badge-outline';
 
         return `
-          <tr class="cursor-pointer" data-action="view-caregiver" data-caregiver-id="${escapeHtml(cg.id)}">
+          <tr>
             <td><strong>${name}</strong></td>
             <td><span class="small">${contact}</span></td>
             <td><span class="badge ${statusBadge}">${escapeHtml(cg.status || 'unknown')}</span></td>
             <td><span class="small muted">${segmentsStr || 'None'}</span></td>
+            <td><button type="button" class="btn btn-sm btn-outline" data-action="view-caregiver" data-caregiver-id="${escapeHtml(cg.id)}" aria-label="Open or edit caregiver: ${name}">Open/Edit</button></td>
           </tr>
         `;
       }).join('');
@@ -674,10 +675,60 @@ async function resolveFollowup(id, event) {
   }
 }
 
+// A focused caregiver view preserves the mounted dashboard search, filters and paging.
+let caregiverDetailOpen = false;
+let caregiverDetailEpoch = 0;
+let caregiverReturnFocus = null;
+let caregiverDashboardScroll = 0;
+
+function openCaregiverDetail() {
+  const dashboard = document.getElementById('staffDashboardView');
+  const detail = document.getElementById('caregiverDetailView');
+  if (!dashboard || !detail) return;
+  const firstOpen = !caregiverDetailOpen;
+  if (firstOpen) {
+    caregiverReturnFocus = document.activeElement;
+    caregiverDashboardScroll = window.scrollY || 0;
+  }
+  caregiverDetailOpen = true;
+  dashboard.classList.add('d-none');
+  detail.classList.remove('d-none');
+  if (firstOpen) document.getElementById('caregiverBackButton')?.focus();
+}
+
+function openCaregiverEditor() {
+  const editor = document.getElementById('caregiverEditDetails');
+  if (!editor) return;
+  editor.open = true;
+  editor.querySelector('[name="first_name"]')?.focus();
+}
+
+function backToStaffDashboard() {
+  caregiverDetailEpoch++;
+  caregiverDetailOpen = false;
+  document.getElementById('caregiverDetailView')?.classList.add('d-none');
+  document.getElementById('staffDashboardView')?.classList.remove('d-none');
+  const panel = document.getElementById('caregiverRecordPanel');
+  if (panel) { panel.innerHTML = ''; delete panel.dataset.caregiverId; }
+  currentCaregiverId = null;
+  currentGrantId = null;
+  const usableOpener = caregiverReturnFocus && caregiverReturnFocus.isConnected !== false
+    && /^(BUTTON|INPUT|SELECT|TEXTAREA|A|SUMMARY)$/.test(caregiverReturnFocus.tagName || '');
+  const focus = usableOpener ? caregiverReturnFocus : document.getElementById('staffDashboardHeading');
+  focus?.focus({ preventScroll: true });
+  window.scrollTo(0, caregiverDashboardScroll);
+  caregiverReturnFocus = null;
+}
+
 async function viewCaregiver(id) {
+  const epoch = ++caregiverDetailEpoch;
+  openCaregiverDetail();
+  const recordPanel = document.getElementById('caregiverRecordPanel');
+  if (recordPanel) recordPanel.innerHTML = '<p role="status">Loading caregiver record…</p>';
   try {
-    const res = await fetch(`/api/staff/caregiver/${id}`);
+    const res = await fetch(`/api/staff/caregiver/${encodeURIComponent(id)}`);
     const data = await res.json();
+    if (epoch !== caregiverDetailEpoch) return;
     if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to fetch caregiver record');
 
     const panel = document.getElementById('caregiverRecordPanel');
@@ -828,7 +879,8 @@ async function viewCaregiver(id) {
     const nowLocal = localDateTimeValue(new Date());
 
     panel.innerHTML = `
-      <h4>👤 Caregiver record — ${name} ${memberBadge} ${statusBadge}</h4>
+      <h2 id="caregiverDetailHeading" tabindex="-1">Caregiver record — ${name} ${memberBadge} ${statusBadge}</h2>
+      <button type="button" class="btn btn-sm btn-outline mb-16" data-action="caregiver-edit">Edit caregiver details</button>
       <div class="kv-row"><span class="k">Contact Info</span><span class="v">${contactInfo}</span></div>
       <div class="kv-row"><span class="k">Sanctuary member since</span><span class="v">${memberSince}</span></div>
       <div class="kv-row"><span class="k">Caring for</span><span class="v">${caringFor} ${relationship}</span></div>
@@ -896,7 +948,7 @@ async function viewCaregiver(id) {
         </form>
       </details>
 
-      <details class="mt-16">
+      <details class="mt-16" id="caregiverEditDetails">
         <summary class="cursor-pointer note-section-summary"><strong>✏️ Edit Caregiver Details</strong></summary>
         <form data-action="submit-edit-caregiver" class="record-form-panel">
           <div class="form-row-compact">
@@ -972,7 +1024,11 @@ async function viewCaregiver(id) {
         </form>
       </details>
     `;
+    const heading = document.getElementById('caregiverDetailHeading');
+    heading?.focus();
   } catch (e) {
+    if (epoch !== caregiverDetailEpoch) return;
+    if (recordPanel) recordPanel.innerHTML = '<p role="alert">Could not load this caregiver. Return to the dashboard and try opening the record again.</p>';
     console.error(e);
   }
 }
@@ -1714,6 +1770,12 @@ document.addEventListener('click', function (e) {
     const id = Number(target.getAttribute('data-registration-id'));
     const status = target.getAttribute('data-status');
     updateAttendance(id, status, e);
+  } else if (action === 'caregiver-edit') {
+    e.stopPropagation();
+    openCaregiverEditor();
+  } else if (action === 'caregiver-back') {
+    e.stopPropagation();
+    backToStaffDashboard();
   } else if (action === 'view-caregiver') {
     const id = target.getAttribute('data-caregiver-id');
     viewCaregiver(id);
@@ -1780,7 +1842,7 @@ document.addEventListener('click', function (e) {
   } else if (action === 'wellness-show') {
     e.stopPropagation();
     showWellnessChart();
-  } else if (action === 'staff-save' || action === 'staff-deactivate' || action === 'staff-reactivate') {
+  } else if (action === 'staff-edit' || action === 'staff-cancel' || action === 'staff-save' || action === 'staff-deactivate' || action === 'staff-reactivate') {
     e.stopPropagation();
     staffTeamAction(action.replace('staff-', ''), target);
   } else if (action === 'undo-change') {
@@ -2750,6 +2812,7 @@ async function handleUndoChange(auditId, button) {
 
 /* ---------- Staff team (schema 0011) ---------- */
 let staffMe = null;
+let editingStaffEmail = null;
 let staffTeam = [];
 
 async function loadStaffTeam() {
@@ -2785,18 +2848,22 @@ function renderStaffTeam() {
     const isSelf = String(m.email).toLowerCase() === myEmail;
     const active = m.status === 'active';
     const lastSeen = m.last_seen_at ? escapeHtml(m.last_seen_at) : 'never';
-    const nameCell = isAdmin
-      ? `<input type="text" class="staff-search-input" data-staff-name="${email}" value="${escapeHtml(m.display_name || '')}" placeholder="Add a name" maxlength="120">`
+    const editing = isAdmin && editingStaffEmail === m.email;
+    const nameCell = editing
+      ? `<input type="text" class="staff-search-input" data-staff-name="${email}" aria-label="Staff name: ${email}" value="${escapeHtml(m.display_name || '')}" placeholder="Add a name" maxlength="120">`
       : escapeHtml(m.display_name || '');
-    const roleCell = isAdmin && !isSelf
-      ? `<select class="staff-filter-select-sm" data-staff-role="${email}">
+    const roleCell = editing && !isSelf
+      ? `<select class="staff-filter-select-sm" data-staff-role="${email}" aria-label="Staff role: ${email}">
            <option value="staff"${m.role === 'staff' ? ' selected' : ''}>Staff</option>
            <option value="admin"${m.role === 'admin' ? ' selected' : ''}>Admin</option>
          </select>`
       : (m.role === 'admin' ? 'Admin' : 'Staff');
     let actions = '';
-    if (isAdmin) {
-      actions += `<button class="btn btn-sm btn-plum btn-compact-mr" data-action="staff-save" data-email="${email}">Save</button>`;
+    if (isAdmin && !editing) {
+      actions = `<button type="button" class="btn btn-sm btn-outline" data-action="staff-edit" data-email="${email}" aria-label="Edit staff account: ${escapeHtml(m.display_name || m.email)}">Edit</button>`;
+    } else if (editing) {
+      actions += `<button type="button" class="btn btn-sm btn-plum btn-compact-mr" data-action="staff-save" data-email="${email}">Save</button>`;
+      actions += `<button type="button" class="btn btn-sm btn-outline btn-compact-mr" data-action="staff-cancel" data-email="${email}">Cancel</button>`;
       if (!isSelf) {
         actions += active
           ? `<button class="btn btn-sm btn-outline btn-compact-mr" data-action="staff-deactivate" data-email="${email}">Turn off access</button>`
@@ -2881,6 +2948,7 @@ async function saveStaffMember(email, changes, button) {
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.ok) throw new Error(data.error || 'Could not save');
     saved = true;
+    editingStaffEmail = null;
     const refreshed = await loadStaffTeam();
     setStaffTeamMessage(email, refreshed
       ? `Saved changes for ${email}.`
@@ -2904,7 +2972,14 @@ async function saveStaffMember(email, changes, button) {
 function staffTeamAction(kind, target) {
   const email = target.getAttribute('data-email');
   if (!email) return;
-  if (kind === 'save') {
+  if (kind === 'edit' || kind === 'cancel') {
+    if (!staffMe || staffMe.role !== 'admin' || staffMe.status !== 'active') return;
+    if (!staffTeam.some(member => member.email === email)) return;
+    editingStaffEmail = kind === 'edit' ? email : null;
+    renderStaffTeam();
+    const selector = kind === 'edit' ? `[data-staff-name="${CSS.escape(email)}"]` : `[data-action="staff-edit"][data-email="${CSS.escape(email)}"]`;
+    document.querySelector(selector)?.focus?.();
+  } else if (kind === 'save') {
     const nameInput = document.querySelector(`[data-staff-name="${CSS.escape(email)}"]`);
     const roleSelect = document.querySelector(`[data-staff-role="${CSS.escape(email)}"]`);
     const changes = {};

@@ -310,7 +310,7 @@ test('staff console header, plain labels, empty state, and zero demo/sales copy'
   // Title and header brand
   assert.ok(STAFF_HTML.includes('<title>Legacy Hub · Staff console</title>'));
   assert.ok(STAFF_HTML.includes('Legacy Hub<small>Staff console</small>'));
-  assert.ok(STAFF_HTML.includes('<h2>Legacy Hub · Staff console</h2>'));
+  assert.ok(STAFF_HTML.includes('<h2 id="staffDashboardHeading" tabindex="-1">Legacy Hub · Staff console</h2>'));
   assert.ok(STAFF_HTML.includes('id="staffStatusLine"'));
 
   // Sales banner removed
@@ -319,7 +319,7 @@ test('staff console header, plain labels, empty state, and zero demo/sales copy'
   assert.ok(!STAFF_HTML.includes('no spreadsheets'));
 
   // Plain one-line explanations under all 6 panels
-  assert.ok(STAFF_HTML.includes('Search caregiver records by name, contact, status, or segment. Results appear after you search; select a name'));
+  assert.ok(STAFF_HTML.includes('Search caregiver records by name, contact, status, or segment. Results appear after you search; choose Open/Edit'));
   assert.ok(STAFF_HTML.includes('Open follow-ups and action items requiring staff review.'));
   assert.ok(STAFF_HTML.includes('Schedule, manage, and take attendance for community events and respite sessions.'));
   assert.ok(STAFF_HTML.includes('Track grant applications from review through award, course completion, and closeout.'));
