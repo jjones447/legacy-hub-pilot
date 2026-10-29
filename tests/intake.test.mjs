@@ -202,3 +202,87 @@ test('intake limiter stores only a hashed IP, never the raw address', async () =
   const hashed = raw.prepare(`SELECT COUNT(*) AS n FROM audit_log WHERE action = 'intake.submit_ip'`).get();
   assert.equal(hashed.n, 1);
 });
+
+
+test('membership intake handler retains the optional note in its welcome task, not audit or response', async () => {
+  const message = 'Fictional note: group information only.\n<b>Text</b> & "quotes"; no contact requested.';
+  const payload = {
+    kind: 'membership', first_name: 'Demo', email: 'note-only@example.invalid',
+    source: 'site_form:membership', external_ref: 'membership-note', message,
+  };
+  const res = await postIntake({ request: intakeRequest(payload, '203.0.113.21'), env: { LEGACY_DB: db } });
+  assert.equal(res.status, 201);
+  const response = await res.json();
+  assert.equal(response.ok, true);
+  assert.equal(JSON.stringify(response).includes(message), false);
+  const task = raw.prepare(`SELECT * FROM followup WHERE caregiver_id = ?`).get(response.caregiver_id);
+  assert.equal(task.kind, 'membership_welcome');
+  assert.equal(task.status, 'open');
+  assert.equal(task.detail, `Welcome new Sanctuary member\n\n${message}`);
+  assert.equal(task.source, 'site_form:membership');
+  assert.equal(raw.prepare(`SELECT COUNT(*) AS n FROM followup`).get().n, 1);
+  const audit = raw.prepare(`SELECT * FROM audit_log WHERE action = 'intake.membership'`).get();
+  assert.deepEqual(JSON.parse(audit.after_json), {
+    kind: 'membership', external_ref: 'membership-note', event_id: null,
+  });
+  assert.equal(JSON.stringify(raw.prepare(`SELECT * FROM audit_log`).all()).includes('Fictional note'), false);
+});
+
+test('membership without a substantive string note keeps the original welcome detail', async () => {
+  for (const [index, message] of [undefined, '', ' \t\n ', null, 42, { note: 'not a form string' }].entries()) {
+    const res = await handleIntake(db, {
+      kind: 'membership', first_name: 'Demo', email: `blank-${index}@example.invalid`,
+      external_ref: `membership-blank-${index}`, message,
+    });
+    assert.equal(res.status, 201);
+    const task = raw.prepare(`SELECT detail FROM followup WHERE caregiver_id = ?`).get(res.body.caregiver_id);
+    assert.equal(task.detail, 'Welcome new Sanctuary member');
+  }
+});
+
+test('replayed membership with a changed note cannot replace or duplicate the original task', async () => {
+  const payload = {
+    kind: 'membership', first_name: 'Demo', email: 'repeat-note@example.invalid',
+    source: 'site_form:membership', external_ref: 'membership-repeat-note',
+    message: 'Original fictional note',
+  };
+  const first = await handleIntake(db, payload);
+  assert.equal(first.status, 201);
+  const task = raw.prepare(`SELECT * FROM followup`).get();
+  assert.equal(task.detail, 'Welcome new Sanctuary member\n\nOriginal fictional note');
+  const caregiver = raw.prepare(`SELECT * FROM caregiver`).get();
+  const audits = raw.prepare(`SELECT * FROM audit_log ORDER BY id`).all();
+  const repeated = await handleIntake(db, { ...payload, message: 'Replacement must not be saved' });
+  assert.equal(repeated.status, 200);
+  assert.equal(repeated.body.duplicate, true);
+  assert.equal(raw.prepare(`SELECT COUNT(*) AS n FROM followup`).get().n, 1);
+  assert.deepEqual(raw.prepare(`SELECT * FROM followup`).get(), task);
+  assert.deepEqual(raw.prepare(`SELECT * FROM caregiver`).get(), caregiver);
+  assert.deepEqual(raw.prepare(`SELECT * FROM audit_log ORDER BY id`).all(), audits);
+});
+
+test('membership note does not overwrite an existing caregiver profile or membership date', async () => {
+  raw.prepare(`INSERT INTO caregiver (id, first_name, last_name, email, phone, caring_for,
+    relationship, sanctuary_member, member_since, source, status, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run('cg_existing_note', 'Existing', 'Fictional', 'existing-note@example.invalid', '555-0100',
+      'Original nonclinical value', 'Original relationship', 1, '2025-01-02 03:04:05',
+      'original_source', 'inactive', '2025-01-02 03:04:05');
+  const before = raw.prepare(`SELECT * FROM caregiver WHERE id = 'cg_existing_note'`).get();
+  const res = await handleIntake(db, {
+    kind: 'membership', first_name: 'Must not replace', last_name: 'Nor this',
+    email: before.email, phone: '555-0199', caring_for: 'Not a profile update',
+    source: 'site_form:membership', external_ref: 'membership-existing-note',
+    message: 'Fictional follow-up note',
+  });
+  assert.equal(res.status, 201);
+  assert.equal(res.body.caregiver_id, before.id);
+  assert.equal(raw.prepare(`SELECT COUNT(*) AS n FROM caregiver`).get().n, 1);
+  const after = raw.prepare(`SELECT * FROM caregiver WHERE id = ?`).get(before.id);
+  const { updated_at: oldTimestamp, ...originalProfile } = before;
+  const { updated_at: newTimestamp, ...currentProfile } = after;
+  assert.deepEqual(currentProfile, originalProfile);
+  assert.notEqual(newTimestamp, oldTimestamp);
+  assert.equal(raw.prepare(`SELECT detail FROM followup WHERE caregiver_id = ?`).get(before.id).detail,
+    'Welcome new Sanctuary member\n\nFictional follow-up note');
+});
