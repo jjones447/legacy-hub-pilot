@@ -167,6 +167,7 @@ test('exact call wiring: every action branch calls its expected function and exc
     'resolve-followup': 'resolveFollowup(id, e)',
     'update-attendance': 'updateAttendance(id, status, e)',
     'view-caregiver': 'viewCaregiver(id)',
+    'caregiver-back': 'backToStaffDashboard()',
     'select-event': 'selectEvent(id, title)',
     'search-caregivers': 'searchCaregivers(0)',
     'search-prev': 'searchPrev()',
