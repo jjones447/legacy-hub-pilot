@@ -455,7 +455,8 @@ test('7. conversation-first untargeted request auto-resolves ps_home.hero and re
   assert.equal(draftJson.target_label, 'Homepage — Hero Banner');
   assert.equal(draftJson.page_path, '/index.html');
   assert.equal(draftJson.preview_path, `/index.html?preview_draft=${draftJson.draft_id}`);
-  assert.equal(draftJson.staging_preview_url, `https://staging.caregiversanctuary.org/index.html?preview_draft=${draftJson.draft_id}`);
+  assert.ok(draftJson.staging_preview_url.startsWith(`https://staging.caregiversanctuary.org/index.html?preview_draft=${draftJson.draft_id}&preview_version=`));
+  assert.ok(draftJson.staging_preview_url.includes('&preview_envelope='));
 
   // Inspect structured preview endpoint GET /api/agent/preview?draft_id=...
   const previewRes = await getAgent({
@@ -468,7 +469,8 @@ test('7. conversation-first untargeted request auto-resolves ps_home.hero and re
   assert.equal(previewJson.draft_id, draftJson.draft_id);
   assert.equal(previewJson.draft_of, 'ps_home.hero');
   assert.equal(previewJson.after.lede, 'Supporting every family caregiver across Greater Milwaukee.');
-  assert.equal(previewJson.staging_preview_url, `https://staging.caregiversanctuary.org/index.html?preview_draft=${draftJson.draft_id}`);
+  assert.ok(previewJson.staging_preview_url.startsWith(`https://staging.caregiversanctuary.org/index.html?preview_draft=${draftJson.draft_id}&preview_version=`));
+  assert.ok(previewJson.staging_preview_url.includes('&preview_envelope='));
 });
 
 test('8. conversation-first untargeted request auto-resolves ps_form.membership and returns modal staging preview link', async () => {
@@ -504,7 +506,10 @@ test('8. conversation-first untargeted request auto-resolves ps_form.membership 
   const draftJson = await draftRes.json();
   assert.equal(draftJson.ok, true);
   assert.equal(draftJson.resolved_target_id, 'ps_form.membership');
-  assert.equal(draftJson.staging_preview_url, `https://staging.caregiversanctuary.org/index.html?preview_draft=${draftJson.draft_id}#membershipModal`);
+  assert.equal(draftJson.preview_path, `/index.html?preview_draft=${draftJson.draft_id}#membershipModal`);
+  assert.ok(draftJson.staging_preview_url.startsWith(`https://staging.caregiversanctuary.org/index.html?preview_draft=${draftJson.draft_id}&preview_version=`));
+  assert.ok(draftJson.staging_preview_url.includes('&preview_envelope='));
+  assert.ok(draftJson.staging_preview_url.endsWith('#membershipModal'));
 });
 
 test('9. ambiguous untargeted request returns clarification_needed with candidate targets and zero DB writes or LLM calls', async () => {

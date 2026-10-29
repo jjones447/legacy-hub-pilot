@@ -18,6 +18,20 @@ function file(path) {
 
 function d1(db) {
   return {
+    batchCalls: 0,
+    async batch(statements) {
+      this.batchCalls++;
+      db.exec('BEGIN');
+      try {
+        const results = [];
+        for (const statement of statements) results.push({ success: true, meta: await statement.run() });
+        db.exec('COMMIT');
+        return results;
+      } catch (error) {
+        db.exec('ROLLBACK');
+        throw error;
+      }
+    },
     prepare(sql) {
       return {
         bind(...params) {

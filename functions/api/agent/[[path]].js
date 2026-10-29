@@ -31,20 +31,23 @@ export async function onRequestGet({ request, env }) {
       }
       const afterData = typeof item.data === 'string' ? JSON.parse(item.data) : item.data;
       let beforeData = {};
+      let targetRow = null;
       if (item.draft_of) {
-        const target = await env.LEGACY_DB
-          .prepare('SELECT id, type_id, data, status FROM content_item WHERE id = ?')
+        targetRow = await env.LEGACY_DB
+          .prepare('SELECT id, type_id, data, status, updated_by, updated_at FROM content_item WHERE id = ?')
           .bind(item.draft_of)
           .first();
-        if (target && target.data) {
-          beforeData = typeof target.data === 'string' ? JSON.parse(target.data) : target.data;
+        if (targetRow && targetRow.data) {
+          beforeData = typeof targetRow.data === 'string' ? JSON.parse(targetRow.data) : targetRow.data;
         }
       }
+      const binding = await confirmationBinding(env.LEGACY_DB, 'content', item, url.origin, targetRow);
       const previewInfo = buildContentPreviewInfo({
         draftId: item.id,
         targetId: item.draft_of || item.id,
         typeId: item.type_id,
         itemData: afterData,
+        previewVersion: binding.version,
         requestUrl: request.url,
         env,
       });
@@ -55,6 +58,7 @@ export async function onRequestGet({ request, env }) {
         type_id: item.type_id,
         status: item.status,
         updated_at: item.updated_at,
+        preview_version: binding.version,
         ...previewInfo,
         before: beforeData,
         after: afterData,
@@ -646,6 +650,7 @@ export async function onRequestPost({ request, env, data, redactErrors = false, 
         targetId: draft_of || draft_id,
         typeId: resolvedTypeId,
         itemData: draftData,
+        previewVersion: binding.version,
         requestUrl: request.url,
         env,
       });

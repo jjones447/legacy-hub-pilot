@@ -13,6 +13,7 @@ import {
   getPublishedSections,
   rewriteContent,
   maybeRewriteContent,
+  buildContentPreviewInfo,
 } from '../functions/_content.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -452,4 +453,71 @@ test('preview_draft query parameter overlays unconfirmed draft wording with non-
   assert.ok(normalHtml.includes('Published Live Hero Title'));
   assert.ok(!normalHtml.includes('Proposed Staging Preview Hero Title'));
   assert.ok(!normalHtml.includes('data-preview-draft-id="cid_preview_draft_1"'));
+});
+
+test('staging_preview_url renders draft wording and preview_version across separate databases without mutating staging D1', async () => {
+  const committedHtml = loadHtml('programs.html');
+  // Staging DB only has published rows, NOT the draft row created in production DB
+  const stagingDb = new FakeD1([
+    {
+      id: 'ps_programs.hero',
+      type_id: 'page_section',
+      status: 'published',
+      data: JSON.stringify({
+        section_key: 'programs.hero',
+        title: 'Published Staging Programs Title',
+        lede: 'Published Staging Programs Lede',
+        cta_label: 'Join Free',
+      }),
+    },
+  ]);
+
+  const previewInfo = buildContentPreviewInfo({
+    draftId: 'cid_cross_db_draft_99',
+    targetId: 'ps_programs.hero',
+    typeId: 'page_section',
+    itemData: {
+      section_key: 'programs.hero',
+      title: 'Cross-DB Staging Preview Title',
+      lede: 'Cross-DB Staging Preview Lede',
+      cta_label: 'Join Today',
+    },
+    previewVersion: 'a1b2c3d4e5f60123456789abcdefa1b2c3d4e5f60123456789abcdef12345678',
+    requestUrl: 'https://legacy-hub-5qo.pages.dev/api/agent/draft',
+  });
+
+  const next = async () =>
+    new Response(committedHtml, {
+      status: 200,
+      headers: { 'content-type': 'text/html; charset=utf-8' },
+    });
+
+  // 1. Opening staging_preview_url on staging DB renders the draft and displays both draft_id and preview_version
+  const previewUrlNoHash = previewInfo.staging_preview_url.split('#')[0];
+  const resp = await onRequest({
+    request: new Request(previewUrlNoHash, { method: 'GET' }),
+    next,
+    env: { LEGACY_DB: stagingDb },
+  });
+  assert.equal(resp.status, 200);
+  assert.equal(resp.headers.get('cache-control'), 'no-store');
+  const html = await resp.text();
+  assert.ok(html.includes('Cross-DB Staging Preview Title'));
+  assert.ok(html.includes('data-preview-draft-id="cid_cross_db_draft_99"'));
+  assert.ok(html.includes('data-preview-version="a1b2c3d4e5f60123456789abcdefa1b2c3d4e5f60123456789abcdef12345678"'));
+  assert.ok(html.includes('a1b2c3d4e5f6'));
+
+  // 2. Tampering with preview_version refuses the cross-DB envelope and serves published content
+  const tamperedUrl = previewUrlNoHash.replace(
+    'a1b2c3d4e5f60123456789abcdefa1b2c3d4e5f60123456789abcdef12345678',
+    'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+  );
+  const tamperedResp = await onRequest({
+    request: new Request(tamperedUrl, { method: 'GET' }),
+    next,
+    env: { LEGACY_DB: stagingDb },
+  });
+  const tamperedHtml = await tamperedResp.text();
+  assert.ok(tamperedHtml.includes('Published Staging Programs Title'));
+  assert.ok(!tamperedHtml.includes('Cross-DB Staging Preview Title'));
 });

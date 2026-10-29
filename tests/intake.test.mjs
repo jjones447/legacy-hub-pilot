@@ -12,6 +12,20 @@ const SCHEMA = readFileSync(new URL('../schema/0001_init.sql', import.meta.url),
 // Minimal D1-shaped adapter over node:sqlite.
 function d1(db) {
   return {
+    batchCalls: 0,
+    async batch(statements) {
+      this.batchCalls++;
+      db.exec('BEGIN');
+      try {
+        const results = [];
+        for (const statement of statements) results.push({ success: true, meta: await statement.run() });
+        db.exec('COMMIT');
+        return results;
+      } catch (error) {
+        db.exec('ROLLBACK');
+        throw error;
+      }
+    },
     prepare(sql) {
       return {
         bind(...params) {
@@ -285,4 +299,119 @@ test('membership note does not overwrite an existing caregiver profile or member
   assert.notEqual(newTimestamp, oldTimestamp);
   assert.equal(raw.prepare(`SELECT detail FROM followup WHERE caregiver_id = ?`).get(before.id).detail,
     'Welcome new Sanctuary member\n\nFictional follow-up note');
+});
+
+
+function intakeSnapshot() {
+  return Object.fromEntries(['caregiver', 'followup', 'audit_log'].map(table => [table, raw.prepare(`SELECT * FROM ${table} ORDER BY id`).all()]));
+}
+
+function seedAtomicCaregiver() {
+  raw.prepare(`INSERT INTO caregiver (id, first_name, last_name, email, status, source, sanctuary_member, member_since, updated_at)
+    VALUES ('cg_atomic_existing', 'Existing', 'DEMO', 'atomic@example.invalid', 'inactive', 'original_demo', 0, NULL, '2020-01-02 03:04:05')`).run();
+}
+
+for (const kind of ['membership', 'support_request']) {
+  for (const existing of [false, true]) {
+    test(`${kind}: original audit failure after task rolls back ${existing ? 'existing inactive' : 'new'} caregiver and retry creates one complete chain`, async (t) => {
+      if (existing) seedAtomicCaregiver();
+      const before = intakeSnapshot();
+      const ref = `atomic-${kind}-${existing ? 'existing' : 'new'}`;
+      const payload = {kind,first_name:'Changed must not overwrite',email:'atomic@example.invalid',source:`site_form:${kind}`,external_ref:ref,message:'Fictional original note'};
+      raw.exec(`CREATE TEMP TRIGGER fail_original_intake_audit BEFORE INSERT ON audit_log
+        WHEN NEW.action = 'intake.${kind}' BEGIN
+          SELECT CASE WHEN EXISTS (SELECT 1 FROM followup WHERE external_ref = '${ref}')
+            THEN RAISE(ABORT, 'FICTIONAL_FAULT_AFTER_TASK') ELSE RAISE(ABORT, 'FAULT_BEFORE_TASK') END;
+        END;`);
+      await assert.rejects(handleIntake(db,payload),/FICTIONAL_FAULT_AFTER_TASK/);
+      const afterFailure = intakeSnapshot();
+      raw.exec('DROP TRIGGER fail_original_intake_audit');
+      const retry = await handleIntake(db,payload);
+      if (retry.body.duplicate) t.diagnostic(`PARTIAL_BASELINE: tasksAfterFault=${afterFailure.followup.length}, auditsAfterFault=${afterFailure.audit_log.length}, retry=${retry.status}/duplicate with no original audit`);
+      assert.deepEqual(afterFailure,before,'audit failure must restore the entire pre-request business state');
+      assert.equal(retry.status,201,'a rolled-back attempt cannot consume its key');
+      const after = intakeSnapshot();
+      assert.equal(after.caregiver.length,1);
+      assert.equal(after.followup.length,1);
+      assert.equal(after.audit_log.length,1);
+      const caregiver = after.caregiver[0], task = after.followup[0], audit = after.audit_log[0];
+      assert.equal(task.caregiver_id,caregiver.id);
+      assert.equal(task.external_ref,ref);
+      assert.equal(task.kind,kind==='membership'?'membership_welcome':'support_request');
+      assert.equal(task.detail,kind==='membership'?'Welcome new Sanctuary member\n\nFictional original note':'Fictional original note');
+      assert.equal(audit.entity,'caregiver');
+      assert.equal(audit.entity_id,caregiver.id);
+      assert.equal(audit.action,`intake.${kind}`);
+      assert.equal(audit.actor,payload.source);
+      assert.equal(JSON.parse(audit.after_json).external_ref,ref);
+      if(existing) {
+        assert.equal(caregiver.id,'cg_atomic_existing');
+        assert.equal(caregiver.status,'inactive');
+        assert.equal(caregiver.first_name,'Existing');
+        assert.equal(caregiver.source,'original_demo');
+      }
+      const duplicate = await handleIntake(db,{...payload,message:'Must not replace the original'});
+      assert.equal(duplicate.status,200);
+      assert.equal(duplicate.body.duplicate,true);
+      assert.deepEqual(intakeSnapshot(),after);
+      assert.equal(db.batchCalls,2,'one failed and one healthy transaction, no duplicate transaction');
+    });
+  }
+
+  test(`${kind}: task failure also rolls back existing caregiver timestamp and membership state`, async () => {
+    seedAtomicCaregiver();
+    const before=intakeSnapshot();
+    raw.exec(`CREATE TEMP TRIGGER fail_intake_task BEFORE INSERT ON followup BEGIN SELECT RAISE(ABORT,'FICTIONAL_TASK_FAILURE'); END;`);
+    await assert.rejects(handleIntake(db,{kind,first_name:'DEMO',email:'atomic@example.invalid',external_ref:`task-${kind}`}),/FICTIONAL_TASK_FAILURE/);
+    assert.deepEqual(intakeSnapshot(),before);
+  });
+}
+
+test('handler counts a failed attempt and later duplicate in IP limit while only healthy business writes commit', async () => {
+  seedAtomicCaregiver();
+  const payload={kind:'membership',first_name:'DEMO',email:'atomic@example.invalid',external_ref:'atomic-http',source:'site_form:membership',message:'Fictional note'};
+  raw.exec(`CREATE TEMP TRIGGER fail_http_intake_audit BEFORE INSERT ON audit_log WHEN NEW.action='intake.membership' BEGIN SELECT RAISE(ABORT,'FICTIONAL_HTTP_AUDIT_FAILURE'); END;`);
+  await assert.rejects(postIntake({request:intakeRequest(payload,'203.0.113.90'),env:{LEGACY_DB:db}}),/FICTIONAL_HTTP_AUDIT_FAILURE/);
+  assert.equal(raw.prepare('SELECT COUNT(*) AS n FROM followup').get().n,0);
+  assert.equal(raw.prepare(`SELECT sanctuary_member FROM caregiver WHERE id='cg_atomic_existing'`).get().sanctuary_member,0);
+  raw.exec('DROP TRIGGER fail_http_intake_audit');
+  const healthy=await postIntake({request:intakeRequest(payload,'203.0.113.90'),env:{LEGACY_DB:db}});
+  assert.equal(healthy.status,201);
+  const duplicate=await postIntake({request:intakeRequest(payload,'203.0.113.90'),env:{LEGACY_DB:db}});
+  assert.equal(duplicate.status,200);assert.equal((await duplicate.json()).duplicate,true);
+  assert.equal(raw.prepare(`SELECT COUNT(*) AS n FROM audit_log WHERE action='intake.submit_ip'`).get().n,3);
+  assert.equal(raw.prepare(`SELECT COUNT(*) AS n FROM audit_log WHERE action='intake.membership'`).get().n,1);
+  assert.equal(raw.prepare('SELECT COUNT(*) AS n FROM followup').get().n,1);
+});
+
+test('historical partial task remains a duplicate without manufactured audit or profile repair', async () => {
+  seedAtomicCaregiver();
+  raw.prepare(`INSERT INTO followup (caregiver_id,kind,source,external_ref) VALUES ('cg_atomic_existing','support_request','site_form:support','historical-partial')`).run();
+  const before=intakeSnapshot();
+  const duplicate=await handleIntake(db,{kind:'support_request',first_name:'DEMO',email:'atomic@example.invalid',source:'site_form:support',external_ref:'historical-partial'});
+  assert.equal(duplicate.status,200);assert.equal(duplicate.body.duplicate,true);
+  assert.deepEqual(intakeSnapshot(),before);assert.equal(db.batchCalls,0);
+});
+
+
+test('lost acknowledgement after a committed intake batch leaves one complete chain for duplicate readback', async () => {
+  const originalBatch=db.batch.bind(db);
+  db.batch=async statements => {await originalBatch(statements);throw new Error('FICTIONAL_COMMITTED_ACK_LOST');};
+  const payload={kind:'support_request',first_name:'DEMO',email:'ack@example.invalid',source:'site_form:support_group',external_ref:'atomic-ack',message:'Fictional support-group interest'};
+  await assert.rejects(handleIntake(db,payload),/FICTIONAL_COMMITTED_ACK_LOST/);
+  const committed=intakeSnapshot();
+  assert.equal(committed.caregiver.length,1);assert.equal(committed.followup.length,1);assert.equal(committed.audit_log.length,1);
+  db.batch=originalBatch;
+  const duplicate=await handleIntake(db,payload);
+  assert.equal(duplicate.status,200);assert.equal(duplicate.body.duplicate,true);
+  assert.deepEqual(intakeSnapshot(),committed);
+});
+
+test('unqualified batch acknowledgement fails without a sequential-write fallback or success response', async () => {
+  const before=intakeSnapshot();
+  for(const result of [undefined,[],[{success:false}],Array(3).fill({success:true})]) {
+    const broken={...db,batch:async()=>result};
+    await assert.rejects(handleIntake(broken,{kind:'membership',first_name:'DEMO',email:'unqualified@example.invalid',external_ref:'unqualified'}),/intake batch did not confirm all mutations/);
+    assert.deepEqual(intakeSnapshot(),before);
+  }
 });

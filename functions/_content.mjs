@@ -528,20 +528,86 @@ export function getContentTargetMeta(targetId, typeId, itemData = null) {
   return { id, type_id: typeId || 'content', page_path: '/index.html', anchor: '', label: id || typeId || 'Website Content' };
 }
 
-export function buildContentPreviewInfo({ draftId, targetId, typeId, itemData = null, requestUrl = '', env = {} }) {
+function encodePreviewEnvelope(envelopeObj) {
+  try {
+    const jsonStr = JSON.stringify(envelopeObj);
+    const bytes = new TextEncoder().encode(jsonStr);
+    let bin = '';
+    for (const b of bytes) bin += String.fromCharCode(b);
+    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  } catch {
+    return '';
+  }
+}
+
+function decodePreviewEnvelope(encoded, expectedDraftId, expectedVersion = null) {
+  try {
+    if (typeof encoded !== 'string' || !encoded || encoded.length > 16384 || !/^[A-Za-z0-9_-]+$/.test(encoded)) {
+      return null;
+    }
+    const base64 = encoded.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((encoded.length + 3) % 4);
+    const bin = atob(base64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const parsed = JSON.parse(new TextDecoder().decode(bytes));
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    if (parsed.id !== expectedDraftId || parsed.status !== 'draft') return null;
+    const draftOf = typeof parsed.draft_of === 'string' ? parsed.draft_of : '';
+    if (!draftOf || !Object.prototype.hasOwnProperty.call(SECTION_PREVIEW_MAP, draftOf)) return null;
+    if (expectedVersion && parsed.preview_version && parsed.preview_version !== expectedVersion) return null;
+    if (!parsed.data || typeof parsed.data !== 'object' || Array.isArray(parsed.data)) return null;
+    if (findDisallowedHtml(parsed.data)) return null;
+    return {
+      id: parsed.id,
+      type_id: parsed.type_id || 'page_section',
+      draft_of: draftOf,
+      status: 'draft',
+      preview_version: typeof parsed.preview_version === 'string' ? parsed.preview_version : null,
+      data: parsed.data,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function buildContentPreviewInfo({ draftId, targetId, typeId, itemData = null, previewVersion = null, requestUrl = '', env = {} }) {
   const meta = getContentTargetMeta(targetId, typeId, itemData);
-  const encodedDraft = draftId ? `?preview_draft=${encodeURIComponent(draftId)}` : '';
-  const previewPath = `${meta.page_path}${encodedDraft}${meta.anchor || ''}`;
+  const params = new URLSearchParams();
+  if (draftId) params.set('preview_draft', draftId);
+  if (previewVersion && typeof previewVersion === 'string') {
+    params.set('preview_version', previewVersion);
+  }
+  const baseQuery = draftId ? `?preview_draft=${encodeURIComponent(draftId)}` : '';
+  const previewPath = `${meta.page_path}${baseQuery}${meta.anchor || ''}`;
+
+  let crossDbQuery = baseQuery;
+  if (draftId && itemData && typeof itemData === 'object' && Object.prototype.hasOwnProperty.call(SECTION_PREVIEW_MAP, meta.id)) {
+    const envToken = encodePreviewEnvelope({
+      id: draftId,
+      draft_of: meta.id,
+      type_id: meta.type_id || 'page_section',
+      status: 'draft',
+      preview_version: previewVersion || null,
+      data: itemData,
+    });
+    if (envToken) {
+      params.set('preview_envelope', envToken);
+      crossDbQuery = `?${params.toString()}`;
+    }
+  } else if (draftId && previewVersion) {
+    crossDbQuery = `?${params.toString()}`;
+  }
+
   const stagingOrigin = (typeof env?.STAGING_PREVIEW_ORIGIN === 'string' && env.STAGING_PREVIEW_ORIGIN.trim())
     ? env.STAGING_PREVIEW_ORIGIN.trim().replace(/\/+$/, '')
     : 'https://staging.caregiversanctuary.org';
-  const stagingPreviewUrl = `${stagingOrigin}${previewPath}`;
+  const stagingPreviewUrl = `${stagingOrigin}${meta.page_path}${crossDbQuery}${meta.anchor || ''}`;
   let previewUrl = stagingPreviewUrl;
   try {
     if (requestUrl) {
       const parsed = new URL(requestUrl);
       if (parsed.hostname && parsed.hostname !== 'caregiversanctuary.org' && parsed.hostname !== 'www.caregiversanctuary.org') {
-        previewUrl = `${parsed.origin}${previewPath}`;
+        previewUrl = `${parsed.origin}${meta.page_path}${crossDbQuery}${meta.anchor || ''}`;
       }
     }
   } catch {}
@@ -579,13 +645,16 @@ async function getDraftPreviewRow(env, draftId) {
   return null;
 }
 
-async function injectDraftPreviewBanner(response, draftRow, targetLabel) {
+async function injectDraftPreviewBanner(response, draftRow, targetLabel, previewVersion = null) {
   const html = await response.text();
   const safeDraftId = escapeHtml(draftRow.id);
   const safeTarget = escapeHtml(targetLabel || draftRow.draft_of || draftRow.type_id || 'content');
+  const safeVer = previewVersion ? escapeHtml(previewVersion) : '';
+  const shortVer = previewVersion ? ` · version <code>${escapeHtml(String(previewVersion).slice(0, 12))}</code>` : '';
+  const verAttr = safeVer ? ` data-preview-version="${safeVer}"` : '';
   const bannerHtml =
-    `<div class="staging-draft-preview-banner" data-preview-draft-id="${safeDraftId}" role="status" aria-live="polite">` +
-    `<strong>Staging Draft Preview</strong> (<code>${safeDraftId}</code> · ${safeTarget}) — ` +
+    `<div class="staging-draft-preview-banner" data-preview-draft-id="${safeDraftId}"${verAttr} role="status" aria-live="polite">` +
+    `<strong>Staging Draft Preview</strong> (<code>${safeDraftId}</code>${shortVer} · ${safeTarget}) — ` +
     `This proposed wording is a draft preview and is <strong>not yet published</strong> to the live site. ` +
     `Return to the Staff Assistant to click <em>Confirm &amp; publish</em> or <em>Discard</em>.` +
     `</div>`;
@@ -630,10 +699,15 @@ export async function maybeRewriteContent(context, response) {
     }
 
     const previewDraftId = url.searchParams.get('preview_draft');
+    const previewVersionParam = url.searchParams.get('preview_version');
+    const previewEnvelopeParam = url.searchParams.get('preview_envelope');
     const publishedSections = await getPublishedSections(env);
 
     if (previewDraftId && /^(?:cid_|ci_)[A-Za-z0-9_-]{1,128}$/.test(previewDraftId)) {
-      const draftRow = await getDraftPreviewRow(env, previewDraftId);
+      let draftRow = await getDraftPreviewRow(env, previewDraftId);
+      if (!draftRow && previewEnvelopeParam) {
+        draftRow = decodePreviewEnvelope(previewEnvelopeParam, previewDraftId, previewVersionParam);
+      }
       if (draftRow && draftRow.status === 'draft') {
         const draftData = typeof draftRow.data === 'string' ? JSON.parse(draftRow.data) : draftRow.data;
         const baseSections = publishedSections ? { ...publishedSections } : {};
@@ -651,7 +725,8 @@ export async function maybeRewriteContent(context, response) {
           ? await rewriteContent(response, baseSections)
           : response;
         const meta = getContentTargetMeta(targetId, draftRow.type_id, draftData);
-        return await injectDraftPreviewBanner(rewritten, draftRow, meta.label);
+        const effectiveVersion = draftRow.preview_version || previewVersionParam || null;
+        return await injectDraftPreviewBanner(rewritten, draftRow, meta.label, effectiveVersion);
       }
     }
 
