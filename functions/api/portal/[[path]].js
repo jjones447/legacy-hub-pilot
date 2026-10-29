@@ -1,6 +1,6 @@
 // GET/POST /api/portal/[[path]] — Magic-link authentication and gated caregiver portal API endpoints (slice 09).
 import { checkIpRequestLimit, IP_LIMITS } from '../_shared.mjs';
-import { canSendEmail, sendEmail, signInEmail } from '../../_lib/email.js';
+import { canSendEmail, isPreviewMailOptIn, sendEmail, signInEmail } from '../../_lib/email.js';
 import { QUESTIONS, validateCheckin, recordCheckin, caregiverHistory, isCheckinDue, CHECKIN_EVERY_DAYS } from '../../_lib/wellness.js';
 
 async function getHmacSha256(message, secret) {
@@ -59,7 +59,9 @@ function json(obj, status = 200) {
 // Public pages and the separate staff Access routes are unaffected. This is not
 // production session revocation, and the retired dev-link flag cannot bypass it.
 function previewPortalDisabled(env) {
-  return env.ENVIRONMENT === 'preview' || env.ENVIRONMENT === 'development';
+  if (env.ENVIRONMENT === 'development') return true;
+  if (env.ENVIRONMENT === 'preview') return !isPreviewMailOptIn(env);
+  return false;
 }
 
 function previewUnavailable() {

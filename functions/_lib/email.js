@@ -6,9 +6,17 @@ export const EMAIL_FROM = 'Caregiver Sanctuary <no-reply@caregiversanctuary.org>
 export const EMAIL_REPLY_TO = 'info@legacyhomehealthservices.org';
 const RESEND_URL = 'https://api.resend.com/emails';
 
+export function isPreviewMailOptIn(env) {
+  if (!env || env.ENVIRONMENT !== 'preview') return false;
+  const flag = String(env.PORTAL_PREVIEW_MAIL_ENABLED ?? env.PREVIEW_MAIL_ENABLED ?? '').trim().toLowerCase();
+  return flag === '1' || flag === 'true';
+}
+
 export function canSendEmail(env) {
   if (!env || !String(env.EMAIL_API_KEY || '').trim()) return false;
-  return env.ENVIRONMENT !== 'preview' && env.ENVIRONMENT !== 'development';
+  if (env.ENVIRONMENT === 'development') return false;
+  if (env.ENVIRONMENT === 'preview') return isPreviewMailOptIn(env);
+  return true;
 }
 
 function escapeHtml(value) {
