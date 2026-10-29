@@ -2482,11 +2482,14 @@ window.agentSend = async function () {
       : effectiveArea;
     const areaLabel = { content: '📚 Content Update', form: '📝 Form Copy Update', grant: '🎁 Grant Transition', caregiver: '👤 Caregiver Update', event: '📅 Event Update' }[displayArea];
     const idAttribute = (isContent ? `data-draft-id="${escapeHtml(data.draft_id)}"` : `data-change-id="${escapeHtml(data.change_id)}"`) + ` data-preview-version="${escapeHtml(data.preview_version)}"`;
-    const stagingPreviewHref = isContent ? (data.staging_preview_url || data.preview_url || data.preview_path || '') : '';
-    const localPreviewHref = isContent ? (data.preview_path || '') : '';
+    const stagingPreviewSupported = isContent && data.staging_preview_supported !== false;
+    const stagingPreviewHref = stagingPreviewSupported ? (data.staging_preview_url || data.preview_url || data.preview_path || '') : '';
+    const localPreviewHref = stagingPreviewSupported ? (data.preview_path || '') : '';
     const stagingPreviewHtml = stagingPreviewHref
       ? `<p class="small draft-staging-preview-row"><a href="${escapeHtml(stagingPreviewHref)}" target="_blank" rel="noopener noreferrer" class="preview-staging-link">Open staging preview ↗</a>${localPreviewHref && localPreviewHref !== stagingPreviewHref ? ` · <a href="${escapeHtml(localPreviewHref)}" target="_blank" rel="noopener noreferrer">Preview on this host ↗</a>` : ''} <span class="muted">(unconfirmed draft <code>${escapeHtml(data.draft_id)}</code>)</span></p>`
-      : '';
+      : (isContent && data.preview_unavailable_reason
+          ? `<p class="small muted draft-staging-preview-unavailable" data-preview-unavailable="true">${escapeHtml(data.preview_unavailable_reason)}</p>`
+          : '');
 
     botDiv.innerHTML = `
       Here's what will change:

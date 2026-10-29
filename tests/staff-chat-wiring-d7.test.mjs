@@ -293,3 +293,42 @@ test('discard without retained server version stays on HOLD without sending', as
   await h.send();
   assert.equal(h.calls.length, 0);
 });
+
+test('assistant card renders staging preview link only when staging_preview_supported is true and shows unavailable notice when false', async () => {
+  const supported = harness({
+    reply: {
+      ok: true,
+      draft_id: 'cid_supported_1',
+      resolved_target_id: 'ps_home.hero',
+      preview_version: 'b'.repeat(64),
+      staging_preview_supported: true,
+      staging_preview_url: `https://staging.caregiversanctuary.org/index.html?preview_draft=cid_supported_1&preview_version=${'b'.repeat(64)}`,
+      preview_url: `https://staging.caregiversanctuary.org/index.html?preview_draft=cid_supported_1&preview_version=${'b'.repeat(64)}`,
+      preview_path: `/index.html?preview_draft=cid_supported_1&preview_version=${'b'.repeat(64)}`,
+      confirmation_preview: { before: { title: 'Old' }, after: { title: 'New' } },
+      draft: { id: 'cid_supported_1', type_id: 'page_section', draft_of: 'ps_home.hero', status: 'draft', data: { title: 'New' } },
+    },
+  });
+  await supported.send('content', '');
+  assert.match(supported.messages.at(-1).innerHTML, /Open staging preview/);
+
+  const unsupported = harness({
+    reply: {
+      ok: true,
+      draft_id: 'cid_unsupported_2',
+      resolved_target_id: 'resource_one',
+      preview_version: 'c'.repeat(64),
+      staging_preview_supported: false,
+      staging_preview_url: null,
+      preview_url: null,
+      preview_path: null,
+      preview_unavailable_reason: 'Rendered page preview is not supported for resource; review the proposed before/after fields in the Assistant card.',
+      confirmation_preview: { before: { title: 'Old Res' }, after: { title: 'New Res' } },
+      draft: { id: 'cid_unsupported_2', type_id: 'resource', draft_of: 'resource_one', status: 'draft', data: { title: 'New Res' } },
+    },
+  });
+  await unsupported.send('content', 'resource_one');
+  assert.doesNotMatch(unsupported.messages.at(-1).innerHTML, /Open staging preview/);
+  assert.match(unsupported.messages.at(-1).innerHTML, /data-preview-unavailable="true"/);
+  assert.match(unsupported.messages.at(-1).innerHTML, /not supported for resource/);
+});

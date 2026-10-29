@@ -11,30 +11,40 @@ import { onRequestPost as postTranscribe } from './transcribe.js';
 import { confirmationActor, draftOwner, ownsDraft, confirmationBinding, confirmationAudit, matchesPersistedPreview } from '../../_lib/agent-confirmation.mjs';
 import { createWebJob, enabled as webJobsEnabled } from '../../_lib/assistant-web-jobs.mjs';
 
-export async function onRequestGet({ request, env }) {
+export async function onRequestGet({ request, env, data }) {
   try {
     const url = new URL(request.url);
     const pathSegments = url.pathname.split('/').filter(Boolean); // ['api', 'agent', 'drafts' | 'changes' | 'preview']
 
     const action = pathSegments[2];
     if (action === 'preview') {
+      const actor = confirmationActor(data);
+      if (!actor) {
+        return json({ ok: false, error: 'human preview context not qualified' }, 403);
+      }
       const draftId = url.searchParams.get('draft_id');
       if (!draftId) {
         return json({ ok: false, error: 'draft_id is required' }, 400);
       }
       const item = await env.LEGACY_DB
-        .prepare('SELECT id, type_id, data, status, draft_of, updated_by, updated_at FROM content_item WHERE id = ?')
+        .prepare('SELECT * FROM content_item WHERE id = ?')
         .bind(draftId)
         .first();
       if (!item) {
         return json({ ok: false, error: 'draft not found' }, 404);
+      }
+      if (item.status !== 'draft') {
+        return json({ ok: false, error: `cannot preview item in status ${item.status}` }, 409);
+      }
+      if (!ownsDraft(item.updated_by, actor)) {
+        return json({ ok: false, error: 'only the verified initiating staff member can preview this draft' }, 403);
       }
       const afterData = typeof item.data === 'string' ? JSON.parse(item.data) : item.data;
       let beforeData = {};
       let targetRow = null;
       if (item.draft_of) {
         targetRow = await env.LEGACY_DB
-          .prepare('SELECT id, type_id, data, status, updated_by, updated_at FROM content_item WHERE id = ?')
+          .prepare('SELECT * FROM content_item WHERE id = ?')
           .bind(item.draft_of)
           .first();
         if (targetRow && targetRow.data) {
@@ -42,6 +52,9 @@ export async function onRequestGet({ request, env }) {
         }
       }
       const binding = await confirmationBinding(env.LEGACY_DB, 'content', item, url.origin, targetRow);
+      if (url.searchParams.has('preview_version') && url.searchParams.get('preview_version') !== binding.version) {
+        return json({ ok: false, error: 'preview version missing or changed; preview refused' }, 409);
+      }
       const previewInfo = buildContentPreviewInfo({
         draftId: item.id,
         targetId: item.draft_of || item.id,
@@ -50,6 +63,7 @@ export async function onRequestGet({ request, env }) {
         previewVersion: binding.version,
         requestUrl: request.url,
         env,
+        authorized: true,
       });
       return json({
         ok: true,
@@ -521,7 +535,7 @@ export async function onRequestPost({ request, env, data, redactErrors = false, 
         let publishedItems = [];
         try {
           const pubRes = await env.LEGACY_DB
-            .prepare("SELECT id, type_id, data, status, updated_by, updated_at FROM content_item WHERE status = 'published' ORDER BY id")
+            .prepare("SELECT * FROM content_item WHERE status = 'published' ORDER BY id")
             .all();
           publishedItems = pubRes.results || [];
         } catch {
@@ -644,22 +658,25 @@ export async function onRequestPost({ request, env, data, redactErrors = false, 
       else await draftInsert.run();
 
       const savedDraft = await env.LEGACY_DB.prepare('SELECT * FROM content_item WHERE id = ?').bind(draft_id).first();
+      const actor = confirmationActor(data);
       const binding = await confirmationBinding(env.LEGACY_DB, 'content', savedDraft, url.origin, currentItem);
+      const effectivePreviewVersion = actor && ownsDraft(savedDraft?.updated_by, actor) ? binding.version : null;
       const previewInfo = buildContentPreviewInfo({
         draftId: draft_id,
         targetId: draft_of || draft_id,
         typeId: resolvedTypeId,
         itemData: draftData,
-        previewVersion: binding.version,
+        previewVersion: effectivePreviewVersion,
         requestUrl: request.url,
         env,
+        authorized: Boolean(effectivePreviewVersion),
       });
       return json({
         ok: true,
         draft_id,
         resolved_target_id: draft_of || draft_id,
         ...previewInfo,
-        preview_version: confirmationActor(data) ? binding.version : null,
+        preview_version: effectivePreviewVersion,
         confirmation_preview: { before: currentData || {}, after: draftData },
         draft: {
           id: draft_id,

@@ -10,6 +10,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { onRequest } from '../functions/_middleware.js';
 import { _resetContentCache } from '../functions/_content.mjs';
 import { onRequestGet as getAgent } from '../functions/api/agent/[[path]].js';
+import { setVerifiedAccessStaffActor } from '../functions/_lib/agent-confirmation.mjs';
 import { postAgentFixture as postAgent } from './helpers/confirmed-agent.mjs';
 import { seedPageSections } from '../scripts/seed-page-sections.mjs';
 
@@ -418,7 +419,7 @@ test('6. options with apostrophes render with literal single quotes, matching bu
   assert.ok(html.includes('<option value="Don\'t know yet">Don\'t know yet</option>'));
 });
 
-test('7. conversation-first untargeted request auto-resolves ps_home.hero and returns staging preview URL + GET /api/agent/preview metadata', async () => {
+test('7. conversation-first untargeted request auto-resolves ps_home.hero and returns staging preview URL + GET /api/agent/preview metadata with owner/version gates', async () => {
   const raw = new DatabaseSync(':memory:');
   raw.exec(SCHEMA_1);
   raw.exec(SCHEMA_3);
@@ -428,6 +429,7 @@ test('7. conversation-first untargeted request auto-resolves ps_home.hero and re
   await seedPageSections({ db: raw });
 
   const env = {
+    ENVIRONMENT: 'preview',
     LEGACY_DB: d1(raw),
     AGENT_MAPPER_BACKEND: ({ current }) => ({
       ok: true,
@@ -454,26 +456,56 @@ test('7. conversation-first untargeted request auto-resolves ps_home.hero and re
   assert.equal(draftJson.resolved_target_id, 'ps_home.hero');
   assert.equal(draftJson.target_label, 'Homepage — Hero Banner');
   assert.equal(draftJson.page_path, '/index.html');
-  assert.equal(draftJson.preview_path, `/index.html?preview_draft=${draftJson.draft_id}`);
-  assert.ok(draftJson.staging_preview_url.startsWith(`https://staging.caregiversanctuary.org/index.html?preview_draft=${draftJson.draft_id}&preview_version=`));
-  assert.ok(draftJson.staging_preview_url.includes('&preview_envelope='));
+  assert.equal(draftJson.staging_preview_supported, true);
+  assert.equal(draftJson.preview_path, `/index.html?preview_draft=${draftJson.draft_id}&preview_version=${draftJson.preview_version}`);
+  assert.equal(draftJson.staging_preview_url, `https://staging.caregiversanctuary.org/index.html?preview_draft=${draftJson.draft_id}&preview_version=${draftJson.preview_version}`);
+  assert.ok(!draftJson.staging_preview_url.includes('preview_envelope'));
 
-  // Inspect structured preview endpoint GET /api/agent/preview?draft_id=...
-  const previewRes = await getAgent({
+  // 1. Unauthenticated GET /api/agent/preview is refused (403)
+  const unauthPreviewRes = await getAgent({
     request: new Request(`https://staging.caregiversanctuary.org/api/agent/preview?draft_id=${draftJson.draft_id}`),
     env,
+    data: {},
+  });
+  assert.equal(unauthPreviewRes.status, 403);
+
+  // 2. Foreign owner GET /api/agent/preview is refused (403)
+  const foreignData = {};
+  setVerifiedAccessStaffActor(foreignData, 'other_staff@example.org');
+  const foreignPreviewRes = await getAgent({
+    request: new Request(`https://staging.caregiversanctuary.org/api/agent/preview?draft_id=${draftJson.draft_id}`),
+    env,
+    data: foreignData,
+  });
+  assert.equal(foreignPreviewRes.status, 403);
+
+  // 3. Verified owner GET /api/agent/preview succeeds and returns matching preview_version
+  const ownerData = {};
+  setVerifiedAccessStaffActor(ownerData, 'staff_manager@example.org');
+  const previewRes = await getAgent({
+    request: new Request(`https://staging.caregiversanctuary.org/api/agent/preview?draft_id=${draftJson.draft_id}&preview_version=${draftJson.preview_version}`),
+    env,
+    data: ownerData,
   });
   assert.equal(previewRes.status, 200);
   const previewJson = await previewRes.json();
   assert.equal(previewJson.ok, true);
   assert.equal(previewJson.draft_id, draftJson.draft_id);
   assert.equal(previewJson.draft_of, 'ps_home.hero');
+  assert.equal(previewJson.preview_version, draftJson.preview_version);
   assert.equal(previewJson.after.lede, 'Supporting every family caregiver across Greater Milwaukee.');
-  assert.ok(previewJson.staging_preview_url.startsWith(`https://staging.caregiversanctuary.org/index.html?preview_draft=${draftJson.draft_id}&preview_version=`));
-  assert.ok(previewJson.staging_preview_url.includes('&preview_envelope='));
+  assert.equal(previewJson.staging_preview_url, `https://staging.caregiversanctuary.org/index.html?preview_draft=${draftJson.draft_id}&preview_version=${draftJson.preview_version}`);
+
+  // 4. Stale preview_version on GET /api/agent/preview is refused (409)
+  const stalePreviewRes = await getAgent({
+    request: new Request(`https://staging.caregiversanctuary.org/api/agent/preview?draft_id=${draftJson.draft_id}&preview_version=${'0'.repeat(64)}`),
+    env,
+    data: ownerData,
+  });
+  assert.equal(stalePreviewRes.status, 409);
 });
 
-test('8. conversation-first untargeted request auto-resolves ps_form.membership and returns modal staging preview link', async () => {
+test('8. conversation-first untargeted request auto-resolves ps_form.membership and returns modal staging preview link in preview environment (and reports unavailable in production)', async () => {
   const raw = new DatabaseSync(':memory:');
   raw.exec(SCHEMA_1);
   raw.exec(SCHEMA_3);
@@ -482,7 +514,8 @@ test('8. conversation-first untargeted request auto-resolves ps_form.membership 
   raw.exec(SCHEMA_10);
   await seedPageSections({ db: raw });
 
-  const env = {
+  const previewEnv = {
+    ENVIRONMENT: 'preview',
     LEGACY_DB: d1(raw),
     AGENT_MAPPER_BACKEND: ({ current }) => ({
       ok: true,
@@ -493,7 +526,7 @@ test('8. conversation-first untargeted request auto-resolves ps_form.membership 
     }),
   };
 
-  const draftReq = new Request('http://localhost/api/agent/draft', {
+  const draftReq = new Request('https://staging.caregiversanctuary.org/api/agent/draft', {
     method: 'POST',
     headers: { 'x-dev-actor': 'staff_manager@example.org' },
     body: JSON.stringify({
@@ -501,18 +534,91 @@ test('8. conversation-first untargeted request auto-resolves ps_form.membership 
     }),
   });
 
-  const draftRes = await postAgent({ request: draftReq, env });
+  const draftRes = await postAgent({ request: draftReq, env: previewEnv });
   assert.equal(draftRes.status, 200);
   const draftJson = await draftRes.json();
   assert.equal(draftJson.ok, true);
   assert.equal(draftJson.resolved_target_id, 'ps_form.membership');
-  assert.equal(draftJson.preview_path, `/index.html?preview_draft=${draftJson.draft_id}#membershipModal`);
-  assert.ok(draftJson.staging_preview_url.startsWith(`https://staging.caregiversanctuary.org/index.html?preview_draft=${draftJson.draft_id}&preview_version=`));
-  assert.ok(draftJson.staging_preview_url.includes('&preview_envelope='));
-  assert.ok(draftJson.staging_preview_url.endsWith('#membershipModal'));
+  assert.equal(draftJson.staging_preview_supported, true);
+  assert.equal(draftJson.preview_path, `/index.html?preview_draft=${draftJson.draft_id}&preview_version=${draftJson.preview_version}#membershipModal`);
+  assert.equal(draftJson.staging_preview_url, `https://staging.caregiversanctuary.org/index.html?preview_draft=${draftJson.draft_id}&preview_version=${draftJson.preview_version}#membershipModal`);
+
+  // When created in production (without ENVIRONMENT='preview'), staging_preview_supported is false and staging_preview_url is null
+  const prodDraftReq = new Request('https://legacy-hub-5qo.pages.dev/api/agent/draft', {
+    method: 'POST',
+    headers: { 'x-dev-actor': 'staff_manager@example.org' },
+    body: JSON.stringify({
+      request: 'Update the membership form button label to Join Free Today',
+    }),
+  });
+  const prodDraftRes = await postAgent({
+    request: prodDraftReq,
+    env: { ...previewEnv, ENVIRONMENT: undefined },
+  });
+  assert.equal(prodDraftRes.status, 200);
+  const prodDraftJson = await prodDraftRes.json();
+  assert.equal(prodDraftJson.ok, true);
+  assert.equal(prodDraftJson.staging_preview_supported, false);
+  assert.equal(prodDraftJson.staging_preview_url, null);
+  assert.equal(prodDraftJson.preview_url, null);
+  assert.equal(prodDraftJson.preview_path, null);
+  assert.ok(prodDraftJson.preview_unavailable_reason.includes('separate isolated databases'));
 });
 
-test('9. ambiguous untargeted request returns clarification_needed with candidate targets and zero DB writes or LLM calls', async () => {
+test('9. non-page_section drafts (resource) return staging_preview_supported: false and null preview links', async () => {
+  const raw = new DatabaseSync(':memory:');
+  raw.exec(SCHEMA_1);
+  raw.exec(SCHEMA_3);
+  raw.exec(SCHEMA_4);
+  raw.exec(SCHEMA_9);
+  raw.exec(SCHEMA_10);
+  await seedPageSections({ db: raw });
+
+  raw.prepare(`
+    INSERT INTO content_item (id, type_id, data, status, draft_of, updated_by, updated_at)
+    VALUES ('res_dementia_guide', 'resource', ?, 'published', NULL, 'seed', '2026-10-01 00:00:00')
+  `).run(JSON.stringify({
+    title: 'Dementia Caregiver Guide',
+    category: 'education',
+    description: 'Original resource summary.',
+    link_or_file: 'https://caregiversanctuary.org/resources',
+  }));
+
+  const env = {
+    ENVIRONMENT: 'preview',
+    LEGACY_DB: d1(raw),
+    AGENT_MAPPER_BACKEND: () => ({
+      ok: true,
+      change: {
+        title: 'Dementia Caregiver Guide',
+        category: 'education',
+        description: 'Updated resource summary.',
+        link_or_file: 'https://caregiversanctuary.org/resources',
+      },
+    }),
+  };
+
+  const draftReq = new Request('https://staging.caregiversanctuary.org/api/agent/draft', {
+    method: 'POST',
+    headers: { 'x-dev-actor': 'staff_manager@example.org' },
+    body: JSON.stringify({
+      type_id: 'resource',
+      target_id: 'res_dementia_guide',
+      request: 'Update the Dementia Caregiver Guide summary',
+    }),
+  });
+  const draftRes = await postAgent({ request: draftReq, env });
+  assert.equal(draftRes.status, 200);
+  const draftJson = await draftRes.json();
+  assert.equal(draftJson.ok, true);
+  assert.equal(draftJson.staging_preview_supported, false);
+  assert.equal(draftJson.staging_preview_url, null);
+  assert.equal(draftJson.preview_url, null);
+  assert.equal(draftJson.preview_path, null);
+  assert.ok(draftJson.preview_unavailable_reason.includes('not supported'));
+});
+
+test('10. ambiguous untargeted request returns clarification_needed with candidate targets and zero DB writes or LLM calls', async () => {
   const raw = new DatabaseSync(':memory:');
   raw.exec(SCHEMA_1);
   raw.exec(SCHEMA_3);

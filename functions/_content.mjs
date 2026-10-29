@@ -4,6 +4,7 @@
 //
 // Hard fallback: if LEGACY_DB is undefined, D1 query errors, key/field is missing,
 // or type is unexpected, the response passes through untouched.
+import { confirmationActor, ownsDraft, confirmationBinding } from './_lib/agent-confirmation.mjs';
 
 export function escapeHtml(str) {
   if (str == null) return '';
@@ -528,121 +529,135 @@ export function getContentTargetMeta(targetId, typeId, itemData = null) {
   return { id, type_id: typeId || 'content', page_path: '/index.html', anchor: '', label: id || typeId || 'Website Content' };
 }
 
-function encodePreviewEnvelope(envelopeObj) {
-  try {
-    const jsonStr = JSON.stringify(envelopeObj);
-    const bytes = new TextEncoder().encode(jsonStr);
-    let bin = '';
-    for (const b of bytes) bin += String.fromCharCode(b);
-    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  } catch {
-    return '';
-  }
+function normalizePreviewPagePath(path) {
+  let p = typeof path === 'string' ? path.trim() : '';
+  if (!p || p === '/') return '/index';
+  if (p.length > 1 && p.endsWith('/')) p = p.slice(0, -1);
+  if (p.endsWith('.html')) p = p.slice(0, -5);
+  return p || '/index';
 }
 
-function decodePreviewEnvelope(encoded, expectedDraftId, expectedVersion = null) {
-  try {
-    if (typeof encoded !== 'string' || !encoded || encoded.length > 16384 || !/^[A-Za-z0-9_-]+$/.test(encoded)) {
-      return null;
-    }
-    const base64 = encoded.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((encoded.length + 3) % 4);
-    const bin = atob(base64);
-    const bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    const parsed = JSON.parse(new TextDecoder().decode(bytes));
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
-    if (parsed.id !== expectedDraftId || parsed.status !== 'draft') return null;
-    const draftOf = typeof parsed.draft_of === 'string' ? parsed.draft_of : '';
-    if (!draftOf || !Object.prototype.hasOwnProperty.call(SECTION_PREVIEW_MAP, draftOf)) return null;
-    if (expectedVersion && parsed.preview_version && parsed.preview_version !== expectedVersion) return null;
-    if (!parsed.data || typeof parsed.data !== 'object' || Array.isArray(parsed.data)) return null;
-    if (findDisallowedHtml(parsed.data)) return null;
-    return {
-      id: parsed.id,
-      type_id: parsed.type_id || 'page_section',
-      draft_of: draftOf,
-      status: 'draft',
-      preview_version: typeof parsed.preview_version === 'string' ? parsed.preview_version : null,
-      data: parsed.data,
-    };
-  } catch {
-    return null;
-  }
-}
-
-export function buildContentPreviewInfo({ draftId, targetId, typeId, itemData = null, previewVersion = null, requestUrl = '', env = {} }) {
+export function isSupportedPageSectionPreviewTarget(targetId, typeId, itemData = null) {
   const meta = getContentTargetMeta(targetId, typeId, itemData);
-  const params = new URLSearchParams();
-  if (draftId) params.set('preview_draft', draftId);
-  if (previewVersion && typeof previewVersion === 'string') {
-    params.set('preview_version', previewVersion);
-  }
-  const baseQuery = draftId ? `?preview_draft=${encodeURIComponent(draftId)}` : '';
-  const previewPath = `${meta.page_path}${baseQuery}${meta.anchor || ''}`;
+  return Boolean(
+    meta &&
+    meta.type_id === 'page_section' &&
+    typeof meta.id === 'string' &&
+    Object.prototype.hasOwnProperty.call(SECTION_PREVIEW_MAP, meta.id)
+  );
+}
 
-  let crossDbQuery = baseQuery;
-  if (draftId && itemData && typeof itemData === 'object' && Object.prototype.hasOwnProperty.call(SECTION_PREVIEW_MAP, meta.id)) {
-    const envToken = encodePreviewEnvelope({
-      id: draftId,
-      draft_of: meta.id,
-      type_id: meta.type_id || 'page_section',
-      status: 'draft',
-      preview_version: previewVersion || null,
-      data: itemData,
-    });
-    if (envToken) {
-      params.set('preview_envelope', envToken);
-      crossDbQuery = `?${params.toString()}`;
-    }
-  } else if (draftId && previewVersion) {
-    crossDbQuery = `?${params.toString()}`;
+export function buildContentPreviewInfo({
+  draftId,
+  targetId,
+  typeId,
+  itemData = null,
+  previewVersion = null,
+  requestUrl = '',
+  env = {},
+  authorized = true,
+}) {
+  const meta = getContentTargetMeta(targetId, typeId, itemData);
+  if (!isSupportedPageSectionPreviewTarget(targetId, typeId, itemData)) {
+    return {
+      target_label: meta.label,
+      page_path: meta.page_path || null,
+      preview_path: null,
+      staging_preview_url: null,
+      preview_url: null,
+      staging_preview_supported: false,
+      preview_unavailable_reason: `Rendered page preview is not supported for ${meta.type_id || 'this content type'}; review the proposed before/after fields in the Assistant card.`,
+    };
   }
 
-  const stagingOrigin = (typeof env?.STAGING_PREVIEW_ORIGIN === 'string' && env.STAGING_PREVIEW_ORIGIN.trim())
+  if (!env || env.ENVIRONMENT !== 'preview') {
+    return {
+      target_label: meta.label,
+      page_path: meta.page_path,
+      preview_path: null,
+      staging_preview_url: null,
+      preview_url: null,
+      staging_preview_supported: false,
+      preview_unavailable_reason: 'Staging page preview is unavailable for drafts created outside the staging preview environment because production and staging use separate isolated databases.',
+    };
+  }
+
+  if (!authorized || !draftId || typeof previewVersion !== 'string' || !/^[0-9a-f]{64}$/i.test(previewVersion)) {
+    return {
+      target_label: meta.label,
+      page_path: meta.page_path,
+      preview_path: null,
+      staging_preview_url: null,
+      preview_url: null,
+      staging_preview_supported: false,
+      preview_unavailable_reason: 'Rendered page preview requires a verified staff session and exact draft version.',
+    };
+  }
+
+  const query = `?preview_draft=${encodeURIComponent(draftId)}&preview_version=${encodeURIComponent(previewVersion)}`;
+  const previewPath = `${meta.page_path}${query}${meta.anchor || ''}`;
+
+  const fallbackStagingOrigin = (typeof env?.STAGING_PREVIEW_ORIGIN === 'string' && env.STAGING_PREVIEW_ORIGIN.trim())
     ? env.STAGING_PREVIEW_ORIGIN.trim().replace(/\/+$/, '')
     : 'https://staging.caregiversanctuary.org';
-  const stagingPreviewUrl = `${stagingOrigin}${meta.page_path}${crossDbQuery}${meta.anchor || ''}`;
-  let previewUrl = stagingPreviewUrl;
+  let origin = fallbackStagingOrigin;
   try {
     if (requestUrl) {
       const parsed = new URL(requestUrl);
-      if (parsed.hostname && parsed.hostname !== 'caregiversanctuary.org' && parsed.hostname !== 'www.caregiversanctuary.org') {
-        previewUrl = `${parsed.origin}${meta.page_path}${crossDbQuery}${meta.anchor || ''}`;
+      if (parsed.origin && parsed.origin !== 'null' && parsed.hostname !== 'caregiversanctuary.org' && parsed.hostname !== 'www.caregiversanctuary.org') {
+        origin = parsed.origin;
       }
     }
   } catch {}
+  const previewUrl = `${origin}${previewPath}`;
+
   return {
     target_label: meta.label,
     page_path: meta.page_path,
     preview_path: previewPath,
-    staging_preview_url: stagingPreviewUrl,
+    staging_preview_url: previewUrl,
     preview_url: previewUrl,
+    staging_preview_supported: true,
+    preview_unavailable_reason: null,
   };
 }
 
-async function getDraftPreviewRow(env, draftId) {
+async function getContentItemById(env, itemId) {
   if (!env || !env.LEGACY_DB || typeof env.LEGACY_DB.prepare !== 'function') return null;
-  if (typeof draftId !== 'string' || !/^(?:cid_|ci_)[A-Za-z0-9_-]{1,128}$/.test(draftId)) return null;
+  if (typeof itemId !== 'string' || !itemId) return null;
   try {
     const stmt = env.LEGACY_DB.prepare(
-      "SELECT id, type_id, data, status, draft_of, updated_at FROM content_item WHERE id = ? AND status = 'draft'"
+      'SELECT * FROM content_item WHERE id = ?'
     );
     if (typeof stmt.bind === 'function') {
-      const bound = stmt.bind(draftId);
+      const bound = stmt.bind(itemId);
       if (typeof bound.first === 'function') {
         return await bound.first();
       }
       if (typeof bound.all === 'function') {
         const { results } = await bound.all();
-        return Array.isArray(results) ? (results.find((r) => r.id === draftId && r.status === 'draft') || null) : null;
+        return Array.isArray(results) ? (results.find((r) => r.id === itemId) || null) : null;
       }
     }
     if (typeof stmt.all === 'function') {
       const { results } = await stmt.all();
-      return Array.isArray(results) ? (results.find((r) => r.id === draftId && r.status === 'draft') || null) : null;
+      return Array.isArray(results) ? (results.find((r) => r.id === itemId) || null) : null;
     }
   } catch {}
   return null;
+}
+
+function previewFailClosed(status, error, message) {
+  return new Response(
+    JSON.stringify({ ok: false, error, message }),
+    {
+      status,
+      headers: {
+        'content-type': 'application/json; charset=utf-8',
+        'cache-control': 'no-store',
+      },
+    }
+  );
 }
 
 async function injectDraftPreviewBanner(response, draftRow, targetLabel, previewVersion = null) {
@@ -671,16 +686,10 @@ async function injectDraftPreviewBanner(response, draftRow, targetLabel, preview
 }
 
 export async function maybeRewriteContent(context, response) {
+  let isPreviewRequest = false;
   try {
     const { request, env } = context;
     if (!request || request.method !== 'GET') {
-      return response;
-    }
-    if (!response || response.status !== 200) {
-      return response;
-    }
-    const contentType = response.headers.get('content-type');
-    if (contentType && !contentType.includes('text/html')) {
       return response;
     }
 
@@ -694,49 +703,103 @@ export async function maybeRewriteContent(context, response) {
       return response;
     }
 
+    isPreviewRequest = url.searchParams.has('preview_draft') || url.searchParams.has('preview_version');
+
+    if (isPreviewRequest) {
+      if (!env || env.ENVIRONMENT !== 'preview') {
+        return previewFailClosed(403, 'preview_environment_required', 'Draft page preview is only available in the explicit staging preview environment.');
+      }
+      if (!env.LEGACY_DB || typeof env.LEGACY_DB.prepare !== 'function') {
+        return previewFailClosed(503, 'preview_db_unavailable', 'Preview database is unavailable.');
+      }
+      const actor = confirmationActor(context?.data);
+      if (!actor) {
+        return previewFailClosed(403, 'preview_unauthorized', 'Draft page preview requires a verified active staff identity.');
+      }
+      const previewDraftId = url.searchParams.get('preview_draft');
+      const previewVersionParam = url.searchParams.get('preview_version');
+      if (!previewDraftId || !/^(?:cid_|ci_)[A-Za-z0-9_-]{1,128}$/.test(previewDraftId)) {
+        return previewFailClosed(400, 'invalid_preview_draft', 'A valid preview_draft ID is required.');
+      }
+      if (!previewVersionParam || !/^[0-9a-f]{64}$/i.test(previewVersionParam)) {
+        return previewFailClosed(409, 'preview_version_required', 'Current exact preview_version is required to render a draft preview.');
+      }
+
+      const draftRow = await getContentItemById(env, previewDraftId);
+      if (!draftRow) {
+        return previewFailClosed(404, 'preview_draft_not_found', 'Draft was not found in this environment database; production and staging use separate isolated databases.');
+      }
+      if (draftRow.status !== 'draft') {
+        return previewFailClosed(409, 'preview_draft_not_active', `Draft is in status ${draftRow.status} and can no longer be previewed.`);
+      }
+      if (!ownsDraft(draftRow.updated_by, actor)) {
+        return previewFailClosed(403, 'preview_forbidden_owner', 'Only the verified initiating staff member who owns this draft can preview it.');
+      }
+
+      const targetId = typeof draftRow.draft_of === 'string' ? draftRow.draft_of : '';
+      if (draftRow.type_id !== 'page_section' || !targetId || !Object.prototype.hasOwnProperty.call(SECTION_PREVIEW_MAP, targetId)) {
+        return previewFailClosed(422, 'preview_unsupported_type', `Rendered page preview is not supported for ${draftRow.type_id || 'this content type'}.`);
+      }
+
+      const expectedPagePath = SECTION_PREVIEW_MAP[targetId].page_path;
+      if (normalizePreviewPagePath(path) !== normalizePreviewPagePath(expectedPagePath)) {
+        return previewFailClosed(409, 'preview_page_mismatch', `Draft ${draftRow.id} targets ${expectedPagePath}, not ${path}.`);
+      }
+
+      const targetRow = await getContentItemById(env, targetId);
+      const binding = await confirmationBinding(env.LEGACY_DB, 'content', draftRow, url.origin, targetRow);
+      if (!binding || binding.version !== previewVersionParam) {
+        return previewFailClosed(409, 'preview_version_mismatch', 'Preview version is stale or does not match the current draft and target state.');
+      }
+
+      if (!response || response.status !== 200) {
+        return previewFailClosed(502, 'preview_upstream_unavailable', 'Target page response is unavailable for preview.');
+      }
+      const contentType = response.headers.get('content-type');
+      if (contentType && !contentType.includes('text/html')) {
+        return previewFailClosed(422, 'preview_non_html_target', 'Target route is not an HTML page.');
+      }
+
+      const draftData = typeof draftRow.data === 'string' ? JSON.parse(draftRow.data) : draftRow.data;
+      if (!draftData || typeof draftData !== 'object' || Array.isArray(draftData) || findDisallowedHtml(draftData)) {
+        return previewFailClosed(422, 'preview_invalid_data', 'Draft payload failed preview validation.');
+      }
+
+      const publishedSections = await getPublishedSections(env);
+      const baseSections = publishedSections ? { ...publishedSections } : {};
+      const sectionKey = targetId.slice(3);
+      baseSections[sectionKey] = {
+        ...(baseSections[sectionKey] || {}),
+        ...draftData,
+      };
+      const rewritten = await rewriteContent(response, baseSections);
+      const meta = getContentTargetMeta(targetId, draftRow.type_id, draftData);
+      return await injectDraftPreviewBanner(rewritten, draftRow, meta.label, binding.version);
+    }
+
+    if (!response || response.status !== 200) {
+      return response;
+    }
+    const contentType = response.headers.get('content-type');
+    if (contentType && !contentType.includes('text/html')) {
+      return response;
+    }
+
     if (!env || !env.LEGACY_DB) {
       return response;
     }
 
-    const previewDraftId = url.searchParams.get('preview_draft');
-    const previewVersionParam = url.searchParams.get('preview_version');
-    const previewEnvelopeParam = url.searchParams.get('preview_envelope');
     const publishedSections = await getPublishedSections(env);
-
-    if (previewDraftId && /^(?:cid_|ci_)[A-Za-z0-9_-]{1,128}$/.test(previewDraftId)) {
-      let draftRow = await getDraftPreviewRow(env, previewDraftId);
-      if (!draftRow && previewEnvelopeParam) {
-        draftRow = decodePreviewEnvelope(previewEnvelopeParam, previewDraftId, previewVersionParam);
-      }
-      if (draftRow && draftRow.status === 'draft') {
-        const draftData = typeof draftRow.data === 'string' ? JSON.parse(draftRow.data) : draftRow.data;
-        const baseSections = publishedSections ? { ...publishedSections } : {};
-        const targetId = draftRow.draft_of || draftRow.id || '';
-        const sectionKey = targetId.startsWith('ps_')
-          ? targetId.slice(3)
-          : (typeof draftData?.section_key === 'string' ? draftData.section_key : '');
-        if (sectionKey && draftData && typeof draftData === 'object') {
-          baseSections[sectionKey] = {
-            ...(baseSections[sectionKey] || {}),
-            ...draftData,
-          };
-        }
-        const rewritten = Object.keys(baseSections).length > 0
-          ? await rewriteContent(response, baseSections)
-          : response;
-        const meta = getContentTargetMeta(targetId, draftRow.type_id, draftData);
-        const effectiveVersion = draftRow.preview_version || previewVersionParam || null;
-        return await injectDraftPreviewBanner(rewritten, draftRow, meta.label, effectiveVersion);
-      }
-    }
-
     if (!publishedSections || Object.keys(publishedSections).length === 0) {
       return response;
     }
 
     return await rewriteContent(response, publishedSections);
   } catch {
-    // Hard fallback: never break a page if rewrite fails
+    if (isPreviewRequest) {
+      return previewFailClosed(500, 'preview_error', 'Draft preview failed closed.');
+    }
+    // Hard fallback: never break a public page if rewrite fails
     return response;
   }
 }

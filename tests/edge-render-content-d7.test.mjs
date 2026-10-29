@@ -15,6 +15,11 @@ import {
   maybeRewriteContent,
   buildContentPreviewInfo,
 } from '../functions/_content.mjs';
+import {
+  confirmationBinding,
+  setVerifiedAccessStaffActor,
+  draftOwner,
+} from '../functions/_lib/agent-confirmation.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -25,19 +30,49 @@ function loadHtml(relPath) {
 }
 
 class FakeD1 {
-  constructor(rows = []) {
+  constructor(rows = [], staffRows = []) {
     this.rows = rows;
+    this.staffRows = staffRows;
     this.queryCount = 0;
     this.shouldThrow = false;
   }
   prepare(sql) {
+    const self = this;
+    const matchRow = (params = []) => {
+      if (self.shouldThrow) {
+        throw new Error('D1 query error');
+      }
+      if (/FROM\s+staff_member/i.test(sql)) {
+        const emailParam = String(params[0] || '').toLowerCase();
+        return self.staffRows.find((s) => String(s.email || '').toLowerCase() === emailParam) || null;
+      }
+      if (/FROM\s+content_item\s+WHERE\s+id\s*=\s*\?/i.test(sql)) {
+        const idParam = params[0];
+        return self.rows.find((r) => r.id === idParam) || null;
+      }
+      return null;
+    };
     return {
+      bind(...params) {
+        return {
+          first: async () => matchRow(params),
+          run: async () => ({ success: true }),
+          all: async () => {
+            self.queryCount++;
+            if (self.shouldThrow) throw new Error('D1 query error');
+            const single = matchRow(params);
+            return { results: single ? [single] : [] };
+          },
+        };
+      },
+      first: async () => matchRow([]),
+      run: async () => ({ success: true }),
       all: async () => {
-        this.queryCount++;
-        if (this.shouldThrow) {
+        self.queryCount++;
+        if (self.shouldThrow) {
           throw new Error('D1 query error');
         }
-        return { results: this.rows };
+        return { results: self.rows.filter((r) => !r.status || r.status === 'published') };
       },
     };
   }
@@ -399,125 +434,475 @@ test('multiple sections rewrite cleanly on programs and request-support pages', 
   }
 });
 
-test('preview_draft query parameter overlays unconfirmed draft wording with non-published banner and no-store header without mutating published cache', async () => {
-  const committedHtml = loadHtml('index.html');
-  const db = new FakeD1([
-    {
+const PREVIEW_TEAM = 'legacy-preview.cloudflareaccess.com';
+const PREVIEW_ISS = `https://${PREVIEW_TEAM}`;
+const PREVIEW_AUD = 'preview_aud_tag';
+let _previewKeyPair = null;
+let _previewJwk = null;
+
+async function ensurePreviewKeys() {
+  if (_previewKeyPair) return { keyPair: _previewKeyPair, jwk: _previewJwk };
+  _previewKeyPair = await crypto.subtle.generateKey(
+    { name: 'RSASSA-PKCS1-v1_5', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' },
+    true,
+    ['sign', 'verify']
+  );
+  _previewJwk = await crypto.subtle.exportKey('jwk', _previewKeyPair.publicKey);
+  _previewJwk.kid = 'preview-k1';
+  return { keyPair: _previewKeyPair, jwk: _previewJwk };
+}
+
+function b64urlBytes(bytes) {
+  const b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  let bin = '';
+  for (const x of b) bin += String.fromCharCode(x);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+async function makePreviewAccessJwt({ email = 'jane@legacy.org', common_name, expOffsetSec = 3600 } = {}) {
+  const { keyPair } = await ensurePreviewKeys();
+  const enc = new TextEncoder();
+  const header = { alg: 'RS256', kid: 'preview-k1', typ: 'JWT' };
+  const payload = {
+    aud: PREVIEW_AUD,
+    iss: PREVIEW_ISS,
+    exp: Math.floor(Date.now() / 1000) + expOffsetSec,
+    ...(email ? { email } : {}),
+    ...(common_name ? { common_name } : {}),
+  };
+  const h = b64urlBytes(enc.encode(JSON.stringify(header)));
+  const p = b64urlBytes(enc.encode(JSON.stringify(payload)));
+  const sig = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', keyPair.privateKey, enc.encode(`${h}.${p}`));
+  return `${h}.${p}.${b64urlBytes(new Uint8Array(sig))}`;
+}
+
+async function withPreviewJwks(fn) {
+  const { jwk } = await ensurePreviewKeys();
+  const prevFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    if (String(url).includes('/cdn-cgi/access/certs')) {
+      return { ok: true, json: async () => ({ keys: [jwk] }) };
+    }
+    return prevFetch(url, opts);
+  };
+  try {
+    return await fn();
+  } finally {
+    globalThis.fetch = prevFetch;
+  }
+}
+
+test('preview_draft query parameter overlays unconfirmed draft wording with non-published banner and no-store header for verified owner in preview environment without mutating published cache', async () => {
+  await withPreviewJwks(async () => {
+    const committedHtml = loadHtml('index.html');
+    const publishedTarget = {
       id: 'ps_home.hero',
       type_id: 'page_section',
       status: 'published',
+      draft_of: null,
+      updated_by: 'seed',
+      updated_at: '2026-10-01 00:00:00',
       data: JSON.stringify({
         section_key: 'home.hero',
         title: 'Published Live Hero Title',
         lede: 'Published Live Hero Lede',
       }),
-    },
-    {
+    };
+    const draftRow = {
       id: 'cid_preview_draft_1',
       type_id: 'page_section',
       status: 'draft',
       draft_of: 'ps_home.hero',
+      updated_by: draftOwner('jane@legacy.org'),
+      updated_at: '2026-10-29 15:00:00',
       data: JSON.stringify({
         section_key: 'home.hero',
         title: 'Proposed Staging Preview Hero Title',
         lede: 'Proposed Staging Preview Hero Lede',
       }),
-    },
-  ]);
+    };
+    const db = new FakeD1(
+      [publishedTarget, draftRow],
+      [{ email: 'jane@legacy.org', display_name: 'Jane', role: 'staff', status: 'active' }]
+    );
+    const binding = await confirmationBinding(db, 'content', draftRow, 'https://staging.caregiversanctuary.org', publishedTarget);
+    const token = await makePreviewAccessJwt({ email: 'jane@legacy.org' });
 
-  const next = async () =>
-    new Response(committedHtml, {
-      status: 200,
-      headers: { 'content-type': 'text/html; charset=utf-8' },
+    const next = async () =>
+      new Response(committedHtml, {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      });
+
+    const env = {
+      ENVIRONMENT: 'preview',
+      CF_ACCESS_TEAM_DOMAIN: PREVIEW_TEAM,
+      CF_ACCESS_AUD: PREVIEW_AUD,
+      LEGACY_DB: db,
+    };
+
+    // 1. Authenticated owner request with exact preview_version renders draft overlay + banner
+    const previewReq = new Request(
+      `https://staging.caregiversanctuary.org/index.html?preview_draft=cid_preview_draft_1&preview_version=${binding.version}`,
+      {
+        method: 'GET',
+        headers: { 'Cf-Access-Jwt-Assertion': token },
+      }
+    );
+    const previewResp = await onRequest({ request: previewReq, next, env });
+    assert.equal(previewResp.status, 200);
+    assert.equal(previewResp.headers.get('cache-control'), 'no-store');
+    const previewHtml = await previewResp.text();
+    assert.ok(previewHtml.includes('Proposed Staging Preview Hero Title'));
+    assert.ok(previewHtml.includes('Proposed Staging Preview Hero Lede'));
+    assert.ok(previewHtml.includes('data-preview-draft-id="cid_preview_draft_1"'));
+    assert.ok(previewHtml.includes(`data-preview-version="${binding.version}"`));
+    assert.ok(previewHtml.includes('not yet published'));
+
+    // 2. Subsequent normal public request without ?preview_draft serves untouched published content
+    const normalReq = new Request('https://staging.caregiversanctuary.org/index.html', {
+      method: 'GET',
     });
-
-  // 1. Request with ?preview_draft=cid_preview_draft_1 renders draft overlay + banner
-  const previewReq = new Request('https://staging.caregiversanctuary.org/index.html?preview_draft=cid_preview_draft_1', {
-    method: 'GET',
+    const normalResp = await onRequest({ request: normalReq, next, env });
+    assert.equal(normalResp.status, 200);
+    const normalHtml = await normalResp.text();
+    assert.ok(normalHtml.includes('Published Live Hero Title'));
+    assert.ok(!normalHtml.includes('Proposed Staging Preview Hero Title'));
+    assert.ok(!normalHtml.includes('data-preview-draft-id="cid_preview_draft_1"'));
   });
-  const previewResp = await onRequest({ request: previewReq, next, env: { LEGACY_DB: db } });
-  assert.equal(previewResp.status, 200);
-  assert.equal(previewResp.headers.get('cache-control'), 'no-store');
-  const previewHtml = await previewResp.text();
-  assert.ok(previewHtml.includes('Proposed Staging Preview Hero Title'));
-  assert.ok(previewHtml.includes('Proposed Staging Preview Hero Lede'));
-  assert.ok(previewHtml.includes('data-preview-draft-id="cid_preview_draft_1"'));
-  assert.ok(previewHtml.includes('not yet published'));
-
-  // 2. Subsequent normal request without ?preview_draft serves untouched published content
-  const normalReq = new Request('https://staging.caregiversanctuary.org/index.html', {
-    method: 'GET',
-  });
-  const normalResp = await onRequest({ request: normalReq, next, env: { LEGACY_DB: db } });
-  const normalHtml = await normalResp.text();
-  assert.ok(normalHtml.includes('Published Live Hero Title'));
-  assert.ok(!normalHtml.includes('Proposed Staging Preview Hero Title'));
-  assert.ok(!normalHtml.includes('data-preview-draft-id="cid_preview_draft_1"'));
 });
 
-test('staging_preview_url renders draft wording and preview_version across separate databases without mutating staging D1', async () => {
-  const committedHtml = loadHtml('programs.html');
-  // Staging DB only has published rows, NOT the draft row created in production DB
-  const stagingDb = new FakeD1([
-    {
+test('two-isolated-DB boundary: production-created draft reports staging preview unavailable and missing draft on staging DB fails closed (404) without falling back to live content', async () => {
+  await withPreviewJwks(async () => {
+    const committedHtml = loadHtml('programs.html');
+    // Production DB (3c06) has the draft, while Staging DB (42be) only has published rows
+    const prodPublished = {
       id: 'ps_programs.hero',
       type_id: 'page_section',
       status: 'published',
+      draft_of: null,
+      updated_by: 'seed',
+      updated_at: '2026-10-01 00:00:00',
       data: JSON.stringify({
         section_key: 'programs.hero',
-        title: 'Published Staging Programs Title',
-        lede: 'Published Staging Programs Lede',
+        title: 'Published Programs Title',
+        lede: 'Published Programs Lede',
         cta_label: 'Join Free',
       }),
-    },
-  ]);
+    };
+    const prodDraft = {
+      id: 'cid_prod_only_draft_99',
+      type_id: 'page_section',
+      status: 'draft',
+      draft_of: 'ps_programs.hero',
+      updated_by: draftOwner('jane@legacy.org'),
+      updated_at: '2026-10-29 15:10:00',
+      data: JSON.stringify({
+        section_key: 'programs.hero',
+        title: 'Production-Only Draft Title',
+        lede: 'Production-Only Draft Lede',
+        cta_label: 'Join Today',
+      }),
+    };
+    const prodDb = new FakeD1(
+      [prodPublished, prodDraft],
+      [{ email: 'jane@legacy.org', display_name: 'Jane', role: 'staff', status: 'active' }]
+    );
+    const stagingDb = new FakeD1(
+      [prodPublished],
+      [{ email: 'jane@legacy.org', display_name: 'Jane', role: 'staff', status: 'active' }]
+    );
 
-  const previewInfo = buildContentPreviewInfo({
-    draftId: 'cid_cross_db_draft_99',
-    targetId: 'ps_programs.hero',
-    typeId: 'page_section',
-    itemData: {
-      section_key: 'programs.hero',
-      title: 'Cross-DB Staging Preview Title',
-      lede: 'Cross-DB Staging Preview Lede',
-      cta_label: 'Join Today',
-    },
-    previewVersion: 'a1b2c3d4e5f60123456789abcdefa1b2c3d4e5f60123456789abcdef12345678',
-    requestUrl: 'https://legacy-hub-5qo.pages.dev/api/agent/draft',
-  });
+    const prodBinding = await confirmationBinding(
+      prodDb,
+      'content',
+      prodDraft,
+      'https://legacy-hub-5qo.pages.dev',
+      prodPublished
+    );
 
-  const next = async () =>
-    new Response(committedHtml, {
-      status: 200,
-      headers: { 'content-type': 'text/html; charset=utf-8' },
+    // 1. buildContentPreviewInfo on production (ENVIRONMENT !== 'preview') reports unavailable and never emits a fake staging link
+    const prodPreviewInfo = buildContentPreviewInfo({
+      draftId: prodDraft.id,
+      targetId: 'ps_programs.hero',
+      typeId: 'page_section',
+      itemData: JSON.parse(prodDraft.data),
+      previewVersion: prodBinding.version,
+      requestUrl: 'https://legacy-hub-5qo.pages.dev/api/agent/draft',
+      env: { LEGACY_DB: prodDb },
+      authorized: true,
     });
+    assert.equal(prodPreviewInfo.staging_preview_supported, false);
+    assert.equal(prodPreviewInfo.staging_preview_url, null);
+    assert.equal(prodPreviewInfo.preview_url, null);
+    assert.equal(prodPreviewInfo.preview_path, null);
+    assert.ok(prodPreviewInfo.preview_unavailable_reason.includes('separate isolated databases'));
 
-  // 1. Opening staging_preview_url on staging DB renders the draft and displays both draft_id and preview_version
-  const previewUrlNoHash = previewInfo.staging_preview_url.split('#')[0];
-  const resp = await onRequest({
-    request: new Request(previewUrlNoHash, { method: 'GET' }),
-    next,
-    env: { LEGACY_DB: stagingDb },
-  });
-  assert.equal(resp.status, 200);
-  assert.equal(resp.headers.get('cache-control'), 'no-store');
-  const html = await resp.text();
-  assert.ok(html.includes('Cross-DB Staging Preview Title'));
-  assert.ok(html.includes('data-preview-draft-id="cid_cross_db_draft_99"'));
-  assert.ok(html.includes('data-preview-version="a1b2c3d4e5f60123456789abcdefa1b2c3d4e5f60123456789abcdef12345678"'));
-  assert.ok(html.includes('a1b2c3d4e5f6'));
+    // 2. Attempting to open ?preview_draft=cid_prod_only_draft_99 on staging DB (where the draft does not exist) fails closed with 404 and NEVER renders unchanged live content
+    const token = await makePreviewAccessJwt({ email: 'jane@legacy.org' });
+    const next = async () =>
+      new Response(committedHtml, {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      });
 
-  // 2. Tampering with preview_version refuses the cross-DB envelope and serves published content
-  const tamperedUrl = previewUrlNoHash.replace(
-    'a1b2c3d4e5f60123456789abcdefa1b2c3d4e5f60123456789abcdef12345678',
-    'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
-  );
-  const tamperedResp = await onRequest({
-    request: new Request(tamperedUrl, { method: 'GET' }),
-    next,
-    env: { LEGACY_DB: stagingDb },
+    const crossDbResp = await onRequest({
+      request: new Request(
+        `https://staging.caregiversanctuary.org/programs.html?preview_draft=${prodDraft.id}&preview_version=${prodBinding.version}`,
+        {
+          method: 'GET',
+          headers: { 'Cf-Access-Jwt-Assertion': token },
+        }
+      ),
+      next,
+      env: {
+        ENVIRONMENT: 'preview',
+        CF_ACCESS_TEAM_DOMAIN: PREVIEW_TEAM,
+        CF_ACCESS_AUD: PREVIEW_AUD,
+        LEGACY_DB: stagingDb,
+      },
+    });
+    assert.equal(crossDbResp.status, 404);
+    assert.equal(crossDbResp.headers.get('cache-control'), 'no-store');
+    const errBody = await crossDbResp.json();
+    assert.equal(errBody.ok, false);
+    assert.equal(errBody.error, 'preview_draft_not_found');
   });
-  const tamperedHtml = await tamperedResp.text();
-  assert.ok(tamperedHtml.includes('Published Staging Programs Title'));
-  assert.ok(!tamperedHtml.includes('Cross-DB Staging Preview Title'));
+});
+
+test('preview_draft security gates: unauthenticated, foreign-owner, non-preview environment, stale version, and discarded/archived drafts all fail closed', async () => {
+  await withPreviewJwks(async () => {
+    const committedHtml = loadHtml('index.html');
+    const publishedTarget = {
+      id: 'ps_home.hero',
+      type_id: 'page_section',
+      status: 'published',
+      draft_of: null,
+      updated_by: 'seed',
+      updated_at: '2026-10-01 00:00:00',
+      data: JSON.stringify({
+        section_key: 'home.hero',
+        title: 'Live Hero Title',
+        lede: 'Live Hero Lede',
+      }),
+    };
+    const activeDraft = {
+      id: 'cid_gate_draft_1',
+      type_id: 'page_section',
+      status: 'draft',
+      draft_of: 'ps_home.hero',
+      updated_by: draftOwner('jane@legacy.org'),
+      updated_at: '2026-10-29 15:20:00',
+      data: JSON.stringify({
+        section_key: 'home.hero',
+        title: 'Gated Draft Hero Title',
+        lede: 'Gated Draft Hero Lede',
+      }),
+    };
+    const discardedDraft = {
+      ...activeDraft,
+      id: 'cid_gate_discarded_2',
+      status: 'archived',
+      updated_by: 'staff_jane@legacy.org',
+    };
+    const db = new FakeD1(
+      [publishedTarget, activeDraft, discardedDraft],
+      [
+        { email: 'jane@legacy.org', display_name: 'Jane', role: 'staff', status: 'active' },
+        { email: 'other@legacy.org', display_name: 'Other', role: 'staff', status: 'active' },
+      ]
+    );
+    const binding = await confirmationBinding(db, 'content', activeDraft, 'https://staging.caregiversanctuary.org', publishedTarget);
+    const discardedBinding = await confirmationBinding(db, 'content', discardedDraft, 'https://staging.caregiversanctuary.org', publishedTarget);
+
+    const next = async () =>
+      new Response(committedHtml, {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      });
+
+    const previewEnv = {
+      ENVIRONMENT: 'preview',
+      CF_ACCESS_TEAM_DOMAIN: PREVIEW_TEAM,
+      CF_ACCESS_AUD: PREVIEW_AUD,
+      LEGACY_DB: db,
+    };
+    const validPreviewUrl = `https://staging.caregiversanctuary.org/index.html?preview_draft=${activeDraft.id}&preview_version=${binding.version}`;
+
+    // 1. Unauthenticated (no Access JWT) -> 403 fail closed (even with ALLOW_DEV_CONSOLE='1')
+    const unauthResp = await onRequest({
+      request: new Request(validPreviewUrl, { method: 'GET' }),
+      next,
+      env: { ...previewEnv, ALLOW_DEV_CONSOLE: '1' },
+    });
+    assert.equal(unauthResp.status, 403);
+    assert.ok(!(await unauthResp.text()).includes('Live Hero Title'));
+
+    // 2. Service token (no human staff email) -> 403 fail closed
+    const serviceToken = await makePreviewAccessJwt({ email: null, common_name: 'service-bot' });
+    const serviceResp = await onRequest({
+      request: new Request(validPreviewUrl, {
+        method: 'GET',
+        headers: { 'Cf-Access-Jwt-Assertion': serviceToken },
+      }),
+      next,
+      env: previewEnv,
+    });
+    assert.equal(serviceResp.status, 403);
+
+    // 3. Non-preview environment (production) -> 403 fail closed
+    const ownerToken = await makePreviewAccessJwt({ email: 'jane@legacy.org' });
+    const prodEnvResp = await onRequest({
+      request: new Request(validPreviewUrl, {
+        method: 'GET',
+        headers: { 'Cf-Access-Jwt-Assertion': ownerToken },
+      }),
+      next,
+      env: {
+        CF_ACCESS_TEAM_DOMAIN: PREVIEW_TEAM,
+        CF_ACCESS_AUD: PREVIEW_AUD,
+        LEGACY_DB: db,
+      },
+    });
+    assert.equal(prodEnvResp.status, 403);
+
+    // 4. Foreign owner (other@legacy.org trying to preview jane@legacy.org's draft) -> 403 fail closed
+    const otherToken = await makePreviewAccessJwt({ email: 'other@legacy.org' });
+    const foreignResp = await onRequest({
+      request: new Request(validPreviewUrl, {
+        method: 'GET',
+        headers: { 'Cf-Access-Jwt-Assertion': otherToken },
+      }),
+      next,
+      env: previewEnv,
+    });
+    assert.equal(foreignResp.status, 403);
+    const foreignErr = await foreignResp.json();
+    assert.equal(foreignErr.error, 'preview_forbidden_owner');
+
+    // 5. Missing preview_version -> 409 fail closed
+    const missingVerResp = await onRequest({
+      request: new Request(`https://staging.caregiversanctuary.org/index.html?preview_draft=${activeDraft.id}`, {
+        method: 'GET',
+        headers: { 'Cf-Access-Jwt-Assertion': ownerToken },
+      }),
+      next,
+      env: previewEnv,
+    });
+    assert.equal(missingVerResp.status, 409);
+    assert.equal((await missingVerResp.json()).error, 'preview_version_required');
+
+    // 6. Stale / tampered preview_version -> 409 fail closed (never falls back to live content)
+    const staleVerUrl = validPreviewUrl.replace(binding.version, '0'.repeat(64));
+    const staleResp = await onRequest({
+      request: new Request(staleVerUrl, {
+        method: 'GET',
+        headers: { 'Cf-Access-Jwt-Assertion': ownerToken },
+      }),
+      next,
+      env: previewEnv,
+    });
+    assert.equal(staleResp.status, 409);
+    const staleText = await staleResp.text();
+    assert.ok(staleText.includes('preview_version_mismatch'));
+    assert.ok(!staleText.includes('Live Hero Title'));
+
+    // 7. Discarded / archived draft -> 409 fail closed
+    const discardedResp = await onRequest({
+      request: new Request(
+        `https://staging.caregiversanctuary.org/index.html?preview_draft=${discardedDraft.id}&preview_version=${discardedBinding.version}`,
+        {
+          method: 'GET',
+          headers: { 'Cf-Access-Jwt-Assertion': ownerToken },
+        }
+      ),
+      next,
+      env: previewEnv,
+    });
+    assert.equal(discardedResp.status, 409);
+    assert.equal((await discardedResp.json()).error, 'preview_draft_not_active');
+  });
+});
+
+test('non-page_section drafts (resource, faq, partner) return honest unsupported handoff and fail closed (422) if ?preview_draft is requested directly', async () => {
+  await withPreviewJwks(async () => {
+    const committedResourcesHtml = loadHtml('resources.html');
+    const publishedResource = {
+      id: 'res_caregiver_guide',
+      type_id: 'resource',
+      status: 'published',
+      draft_of: null,
+      updated_by: 'seed',
+      updated_at: '2026-10-01 00:00:00',
+      data: JSON.stringify({
+        title: 'Caregiver Guide',
+        category: 'Guides',
+        summary: 'Original summary.',
+        url: 'https://caregiversanctuary.org/guide',
+      }),
+    };
+    const resourceDraft = {
+      id: 'cid_resource_draft_1',
+      type_id: 'resource',
+      status: 'draft',
+      draft_of: 'res_caregiver_guide',
+      updated_by: draftOwner('jane@legacy.org'),
+      updated_at: '2026-10-29 15:25:00',
+      data: JSON.stringify({
+        title: 'Updated Caregiver Guide',
+        category: 'Guides',
+        summary: 'Updated summary.',
+        url: 'https://caregiversanctuary.org/guide',
+      }),
+    };
+    const db = new FakeD1(
+      [publishedResource, resourceDraft],
+      [{ email: 'jane@legacy.org', display_name: 'Jane', role: 'staff', status: 'active' }]
+    );
+    const binding = await confirmationBinding(db, 'content', resourceDraft, 'https://staging.caregiversanctuary.org', publishedResource);
+
+    for (const [typeId, targetId] of [['resource', 'res_caregiver_guide'], ['faq', 'faq_what_is_sanctuary'], ['partner', 'partner_milwaukee_aging']]) {
+      const info = buildContentPreviewInfo({
+        draftId: 'cid_non_ps_1',
+        targetId,
+        typeId,
+        itemData: { title: 'Test' },
+        previewVersion: binding.version,
+        requestUrl: 'https://staging.caregiversanctuary.org/api/agent/draft',
+        env: { ENVIRONMENT: 'preview', LEGACY_DB: db },
+        authorized: true,
+      });
+      assert.equal(info.staging_preview_supported, false);
+      assert.equal(info.staging_preview_url, null);
+      assert.equal(info.preview_url, null);
+      assert.equal(info.preview_path, null);
+      assert.ok(info.preview_unavailable_reason.includes('not supported'));
+    }
+
+    // Direct request to /resources.html?preview_draft=cid_resource_draft_1 fails closed with 422 instead of showing a false banner
+    const ownerToken = await makePreviewAccessJwt({ email: 'jane@legacy.org' });
+    const next = async () =>
+      new Response(committedResourcesHtml, {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      });
+    const resp = await onRequest({
+      request: new Request(
+        `https://staging.caregiversanctuary.org/resources.html?preview_draft=${resourceDraft.id}&preview_version=${binding.version}`,
+        {
+          method: 'GET',
+          headers: { 'Cf-Access-Jwt-Assertion': ownerToken },
+        }
+      ),
+      next,
+      env: {
+        ENVIRONMENT: 'preview',
+        CF_ACCESS_TEAM_DOMAIN: PREVIEW_TEAM,
+        CF_ACCESS_AUD: PREVIEW_AUD,
+        LEGACY_DB: db,
+      },
+    });
+    assert.equal(resp.status, 422);
+    assert.equal((await resp.json()).error, 'preview_unsupported_type');
+  });
 });
