@@ -1,4 +1,28 @@
 
+/* Muted hero playback is optional: reduced-motion visitors keep native Play. */
+function initializeMotionVideo() {
+  if (typeof window === 'undefined' || !window.matchMedia) return;
+  const videos = document.querySelectorAll('video[data-motion-autoplay]');
+  if (!videos.length) return;
+  const preference = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const applyPreference = () => {
+    for (const video of videos) {
+      video.autoplay = !preference.matches;
+      if (preference.matches) {
+        video.pause();
+      } else {
+        video.muted = true;
+        // Browser/data-saving policies may still require the native Play control.
+        const playback = video.play();
+        if (playback && playback.catch) playback.catch(() => {});
+      }
+    }
+  };
+  applyPreference();
+  preference.addEventListener('change', applyPreference);
+}
+initializeMotionVideo();
+
 /* ---------- Live intake forms ---------- */
 const INTAKE_ENDPOINT = '/api/intake';
 

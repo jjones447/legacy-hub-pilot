@@ -33,6 +33,7 @@ export const UNIT_TEST_FILES = Object.freeze([
   'cr1-home-copy.test.mjs',
   'cr3-resource-hub-ia.test.mjs',
   'cr4-sanctuary-programs.test.mjs',
+  'hero-motion.test.mjs',
   'csp-enforcement-guard.test.mjs',
   'edge-render-content-d7.test.mjs',
   'edge-rewrite-manifest.test.mjs',
