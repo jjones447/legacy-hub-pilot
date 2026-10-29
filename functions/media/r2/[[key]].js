@@ -3,6 +3,7 @@
 // and ETag from object.httpEtag.
 
 import { getManifest } from '../../_media.mjs';
+import { isEventPhotoKey, readEventPhoto } from '../../_lib/event-photos.js';
 
 const MIME_TYPES = {
   jpg: 'image/jpeg',
@@ -58,6 +59,15 @@ export async function onRequestGet(context) {
   }
 
   try {
+    // Event attachments are independently gated by the CURRENT published reference.
+    // Removed, replaced and draft attachments stay private; gallery sync is unchanged.
+    if (isEventPhotoKey(key)) {
+      const event = await env.LEGACY_DB?.prepare(
+        "SELECT id, photo_key FROM event WHERE photo_key = ? AND publish_state = 'published' LIMIT 1"
+      ).bind(key).first();
+      return event ? await readEventPhoto(env, event)
+        : new Response(null, { status: 404, headers: { 'cache-control': 'no-store' } });
+    }
     // The bucket also holds manifest.json (Drive IDs and sync identity) and
     // removed media objects. Only current manifest references are public.
     const manifest = await getManifest(env);

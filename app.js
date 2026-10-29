@@ -734,6 +734,15 @@ function renderPublicEvents(events, grid, now) {
     card.className = 'card event-card';
     const body = document.createElement('div');
     body.className = 'flex-1';
+    if (typeof event.photo_key === 'string' && /^event-photos\/[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}\.(jpg|png|webp)$/.test(event.photo_key)) {
+      const photo = document.createElement('img');
+      photo.className = 'event-photo';
+      photo.src = '/media/r2/' + event.photo_key;
+      photo.alt = typeof event.photo_alt === 'string' && event.photo_alt ? event.photo_alt : 'Photo for ' + event.title;
+      photo.loading = 'lazy';
+      photo.decoding = 'async';
+      body.appendChild(photo);
+    }
     const badge = document.createElement('span');
     badge.className = 'badge badge-plum';
     badge.textContent = labels[event.type] || 'Event';

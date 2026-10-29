@@ -210,7 +210,7 @@ export async function onRequestGet({ request, env }) {
            OR action LIKE 'caregiver.%'
            OR (entity IN ('content_item', 'caregiver') AND action = 'undo')
            OR action LIKE '%.undo'
-           OR (entity = 'event' AND action IN ('event.create', 'event.update', 'event.publish', 'event.unpublish', 'event.archive'))
+           OR (entity = 'event' AND action IN ('event.create', 'event.update', 'event.publish', 'event.unpublish', 'event.archive', 'event.photo.updated'))
            OR (entity = 'staff_member' AND action IN ('staff.created', 'staff.updated', 'staff.first_sign_in'))
         ORDER BY id DESC
         LIMIT 50
@@ -234,6 +234,7 @@ export async function onRequestGet({ request, env }) {
       }
 
       const nonRestorableActions = [
+        'event.photo.updated',
         'caregiver.contact_added',
         'caregiver.note_added',
         'undo'
@@ -268,6 +269,7 @@ export async function onRequestGet({ request, env }) {
       const { results } = await env.LEGACY_DB.prepare(`
         SELECT e.id, e.title, e.type, e.starts_at, e.ends_at, e.location, e.capacity,
                e.recurring, e.publish_state, e.created_at, e.updated_at, e.description, e.registration_url,
+               e.photo_key, e.photo_alt,
                COUNT(r.id) AS registered_count
         FROM event e
         LEFT JOIN registration r ON e.id = r.event_id AND r.status IN ('registered', 'attended')
@@ -597,6 +599,7 @@ export async function onRequestPost({ request, env }) {
 
       // Refusal 2: non-restorable actions (grant transitions, contact appends, note additions, undo)
       const nonRestorableActions = [
+        'event.photo.updated',
         'caregiver.contact_added',
         'caregiver.note_added',
         'undo'

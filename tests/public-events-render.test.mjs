@@ -36,6 +36,20 @@ test('current published API data builds real registration controls using its exa
   assert.equal(button(grid).disabled, false);
 });
 
+test('event cards render only the internal photo namespace with plain alt text and lazy loading', () => {
+  const { grid, context } = setup();
+  const key = 'event-photos/00000000-0000-4000-8000-000000000000.png';
+  context.renderPublicEvents([event({ photo_key: key, photo_alt: '<script>plain description</script>' })], grid, now);
+  const photo = descendants(grid).find(item => item.tagName === 'img');
+  assert.equal(photo.src, '/media/r2/' + key);
+  assert.equal(photo.alt, '<script>plain description</script>');
+  assert.equal(photo.loading, 'lazy'); assert.equal(photo.decoding, 'async');
+  for (const unsafe of ['https://other.example/photo.png', 'event-photos/../manifest.json', 'gallery/private.png', 'event-photos/bad.svg']) {
+    context.renderPublicEvents([event({ photo_key: unsafe })], grid, now);
+    assert.equal(descendants(grid).some(item => item.tagName === 'img'), false);
+  }
+});
+
 test('external registration uses the exact HTTPS link with safe tab isolation and plain description', () => {
   const { grid, context } = setup();
   const url = 'https://events.example.org/register?campaign=one&day=2';
