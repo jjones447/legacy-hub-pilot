@@ -970,6 +970,26 @@ footer a:hover { color: #fff; }
 .cursor-pointer-underline { cursor: pointer; text-decoration: underline; }
 .d-none-py-44 { display: none; padding: 44px 0; }
 .portal-head-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 26px; }
+
+/* Portal records and display-only examples stay distinct and responsive. */
+#dashView .portal-summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+#dashView .portal-summary-grid > .panel { min-width: 0; }
+#dashView .kv-row { gap: 16px; }
+#dashView .kv-row .v { min-width: 0; text-align: right; overflow-wrap: anywhere; }
+#dashView .portal-wellness-section { width: 100%; margin: 24px 0; }
+#dashView #portalWellnessHistory, #dashView #portalWellnessSample { padding: 16px 20px; border: 1px solid #dfd2c7; border-radius: var(--radius); }
+#dashView #portalWellnessHistory > summary, #dashView #portalWellnessSample > summary { font: 600 16px/1.5 var(--font-body); color: var(--ink); cursor: pointer; }
+#dashView #portalWellnessHistory > p, #dashView #portalWellnessSample > p { margin: 12px 0 16px; }
+#dashView #portalWellnessHistoryRows, #dashView #portalWellnessSampleRows { font: 400 15px/1.7 var(--font-body); }
+#dashView #portalWellnessHistoryRows ol, #dashView #portalWellnessSampleRows ol { padding-inline-start: 24px; margin: 12px 0; }
+#dashView #portalWellnessHistoryRows li, #dashView #portalWellnessSampleRows li { font-size: 15px; margin: 4px 0; }
+#dashView #portalWellnessTrend svg { max-width: 640px; height: 160px; }
+#dashView #portalWellnessSample > .portal-summary-grid { margin-top: 16px; }
+@media (max-width: 700px) {
+  #dashView .portal-summary-grid { grid-template-columns: minmax(0, 1fr); }
+  #dashView #portalWellnessHistory, #dashView #portalWellnessSample { padding: 14px 16px; }
+  #dashView #portalWellnessTrend svg { height: auto; }
+}
 .fs-30 { font-size: 30px; }
 .grid-autofit-320 { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
 .mt-16-util { margin-top: 16px; }

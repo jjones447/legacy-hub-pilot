@@ -7,7 +7,7 @@
 <meta name="description" content="Your events, your grant and your resources, in one place.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=f11dd7cdd828">
+<link rel="stylesheet" href="styles.css?v=339c96fa58ba">
 <link rel="icon" href="favicon.ico" sizes="32x32">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -155,29 +155,15 @@
     </div>
     <p class="small mt-8 d-none" id="portalLogoutStatus" role="alert"></p>
 
-    <div class="card-grid grid-autofit-320">
+    <div class="portal-summary-grid">
 
-      <div class="panel m-0" id="portalWellnessTile">
-        <h4>💛 My Wellness</h4>
-        <p class="small muted m-0" id="portalWellnessSummary">Loading…</p>
-        <p class="small muted mt-8" id="portalWellnessExplanation">Your four answers carry equal weight in a 0–100 score. Less stress raises the score; higher ratings for sleep, support and time for yourself raise it too. The optional note does not affect this score. This is a personal check-in, not a clinical assessment.</p>
-        <p class="small mt-16 mb-8"><strong>Recent check-in scores</strong></p>
-        <p class="small muted m-0" id="portalWellnessTrendHint">A trend appears after two check-ins.</p>
-        <div id="portalWellnessTrend" class="wellness-trend"></div>
-        <details class="mt-16" id="portalWellnessHistory">
-          <summary>View my saved check-in history</summary>
-          <p class="small muted">Your latest 24 saved check-ins, oldest to newest.</p>
-          <div id="portalWellnessHistoryRows">Your saved history will appear here.</div>
-        </details>
-        <details class="mt-16" id="portalWellnessSample">
-          <summary>Preview sample wellness history</summary>
-          <p class="small"><strong>SAMPLE DATA</strong> — fictional scores to show how the chart and history work. These are not your check-ins and are never saved to your health record.</p>
-          <div id="portalWellnessSampleTrend" class="wellness-trend"></div>
-          <div id="portalWellnessSampleRows"></div>
-        </details>
-        <button type="button" class="btn btn-plum btn-sm mt-16" data-action="wellness-open" id="portalWellnessBtn">Take a 1-minute check-in</button>
-        <div id="portalWellnessForm" class="d-none mt-16"></div>
-        <p class="small mt-8 m-0" id="portalWellnessMsg" role="status"></p>
+      <div class="panel m-0">
+        <h4>📅 My Events</h4>
+        <p class="small muted">Your registrations are listed here. Browse all events opens the public calendar.</p>
+        <div id="portalEventsList">
+          <p class="small muted m-0">No registered events yet.</p>
+        </div>
+        <a href="events.html" class="btn btn-outline btn-sm mt-16 d-inline-block">Browse all events</a>
       </div>
 
       <div class="panel m-0">
@@ -187,15 +173,6 @@
         <div class="kv-row"><span class="k">Requested for</span><span class="v" id="portalGrantRequestedFor">—</span></div>
         <div class="kv-row"><span class="k">Award &amp; care package</span><span class="v" id="portalGrantAward">—</span></div>
         <a href="request-support.html" class="btn btn-outline btn-sm mt-16 d-inline-block">Questions? Contact us</a>
-      </div>
-
-      <div class="panel m-0">
-        <h4>📅 My Events</h4>
-        <p class="small muted">Your registrations are listed here. Browse all events opens the public calendar.</p>
-        <div id="portalEventsList">
-          <p class="small muted m-0">No registered events yet.</p>
-        </div>
-        <a href="events.html" class="btn btn-outline btn-sm mt-16 d-inline-block">Browse all events</a>
       </div>
 
       <div class="panel m-0">
@@ -212,6 +189,61 @@
       </div>
 
     </div>
+
+      <div class="panel portal-wellness-section" id="portalWellnessTile">
+        <h4>💛 My Wellness</h4>
+        <p class="small muted m-0" id="portalWellnessSummary">Loading…</p>
+        <p class="small muted mt-8" id="portalWellnessExplanation">Your four answers carry equal weight in a 0–100 score. Less stress raises the score; higher ratings for sleep, support and time for yourself raise it too. The optional note does not affect this score. This is a personal check-in, not a clinical assessment.</p>
+        <p class="small mt-16 mb-8"><strong>Recent check-in scores</strong></p>
+        <p class="small muted m-0" id="portalWellnessTrendHint">A trend appears after two check-ins.</p>
+        <div id="portalWellnessTrend" class="wellness-trend"></div>
+        <details class="mt-16" id="portalWellnessHistory">
+          <summary>View my saved check-in history</summary>
+          <p class="small muted">Your latest 24 saved check-ins, oldest to newest.</p>
+          <div id="portalWellnessHistoryRows">Your saved history will appear here.</div>
+        </details>
+        <button type="button" class="btn btn-plum btn-sm mt-16" data-action="wellness-open" id="portalWellnessBtn">Take a 1-minute check-in</button>
+        <div id="portalWellnessForm" class="d-none mt-16"></div>
+        <p class="small mt-8 m-0" id="portalWellnessMsg" role="status"></p>
+      </div>
+
+    <details class="mt-16" id="portalWellnessSample">
+      <summary>Preview a filled-out portal (sample data)</summary>
+      <p class="small"><strong>SAMPLE DATA — fictional portal preview.</strong> All events, applications, attendance and scores below are illustrations. These are not your check-ins and are never saved to your health record. Nothing here registers you, submits an application, awards a grant or makes a payment.</p>
+      <div class="portal-summary-grid">
+        <div class="panel m-0" data-portal-sample="events">
+          <h4>SAMPLE · My Events</h4>
+          <p><strong>Example Memory Social</strong> <span class="badge badge-amber">Sample registration</span></p>
+          <p class="small muted">Example Thursday, 2:00–3:30 p.m. · Sample community room</p>
+          <p class="mt-16"><strong>Example Caregiver Wellness Session</strong> <span class="badge badge-amber">Sample registration</span></p>
+          <p class="small muted">Example Saturday, 10:00–11:00 a.m. · Sample online session</p>
+        </div>
+        <div class="panel m-0" data-portal-sample="grant">
+          <h4>SAMPLE · My Wellness Grant</h4>
+          <div class="kv-row"><span class="k">Membership</span><span class="v">Sample member</span></div>
+          <div class="kv-row"><span class="k">Application</span><span class="v">Sample — in review</span></div>
+          <div class="kv-row"><span class="k">Requested for</span><span class="v">Fictional restorative wellness activity</span></div>
+          <div class="kv-row"><span class="k">Award &amp; care package</span><span class="v">No actual award or payment</span></div>
+        </div>
+        <div class="panel m-0" data-portal-sample="socials">
+          <h4>SAMPLE · My Memory Socials</h4>
+          <div class="kv-row"><span class="k">Attended</span><span class="v">2 fictional sample visits</span></div>
+          <div class="kv-row"><span class="k">Last visit</span><span class="v">Example last month</span></div>
+          <div class="kv-row"><span class="k">Next up</span><span class="v">Example Memory Social · sample Thursday</span></div>
+        </div>
+        <div class="panel m-0" data-portal-sample="resources">
+          <h4>SAMPLE · Resource library</h4>
+          <p class="small muted">The real Resource Hub is a shared public library. This preview does not invent personal saved resources.</p>
+          <a href="resources.html">Browse the shared Resource Hub</a>
+        </div>
+      </div>
+      <div class="mt-24" data-portal-sample="wellness">
+        <h4>SAMPLE · My Wellness</h4>
+        <p class="small muted">Fictional scores illustrate the chart and history; they are not a clinical assessment or a record of improvement.</p>
+        <div id="portalWellnessSampleTrend" class="wellness-trend"></div>
+        <div id="portalWellnessSampleRows"></div>
+      </div>
+    </details>
 
   </div>
 </section>
