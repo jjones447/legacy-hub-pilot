@@ -287,3 +287,16 @@ test('support-group delegated request reaches its own shared staff task and orig
   assert.equal(raw.prepare(`SELECT COUNT(*) AS n FROM registration`).get().n, 0);
   assert.equal(raw.prepare(`SELECT COUNT(*) AS n FROM grant_application`).get().n, 0);
 });
+
+
+test('support-group dialog overrides the global margin reset with scoped native viewport centering', () => {
+  const styles = file('styles.css');
+  const dialog = styles.match(/#supportGroupInterestModal\s*\{([^}]+)\}/)?.[1];
+  assert.ok(dialog, 'native dialog needs scoped geometry after the global reset');
+  assert.match(dialog, /margin:\s*auto/);
+  assert.match(dialog, /border:\s*0/);
+  assert.match(dialog, /width:\s*calc\(100% - 40px\)/);
+  assert.match(dialog, /max-height:\s*calc\(100vh - 40px\)/);
+  assert.match(dialog, /max-height:\s*calc\(100dvh - 40px\)/);
+  assert.match(styles, /#supportGroupInterestModal::backdrop\s*\{[^}]*rgba\(43,\s*35,\s*51,\s*0\.55\)/);
+});
