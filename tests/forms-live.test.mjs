@@ -194,13 +194,16 @@ test('delegated intake submits keep status, event identity and retry keys on the
     status = 503;
     listeners.submit({ target: form, currentTarget: document, preventDefault() {} });
     assert.equal(form.regions['[type="submit"]'].disabled, true, `${id} disables its own button`);
+    assert.equal(form.regions['[data-intake-routing]'].style.display, 'none', `${id} hides joining/routing details while pending`);
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(form.regions['[data-intake-error]'].style.display, 'block', `${id} shows its own failure`);
+    assert.equal(form.regions['[data-intake-routing]'].style.display, 'none', `${id} hides joining/routing details after failure`);
     const failed = requests.at(-1).body;
     status = 200;
     listeners.submit({ target: form, currentTarget: document, preventDefault() {} });
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(form.regions['[data-intake-success]'].style.display, 'block', `${id} shows its own success`);
+    assert.equal(form.regions['[data-intake-routing]'].style.display, 'block', `${id} reveals details only after acknowledgment`);
     assert.equal(form.regions['[data-intake-error]'].style.display, 'none');
     assert.equal(form.regions['[type="submit"]'].disabled, false);
     assert.equal(requests.at(-1).body.external_ref, failed.external_ref);
@@ -222,12 +225,17 @@ test('support-group interest is a named native dialog with only name/email and t
   assert.match(dialog, /<label for="supportGroupEmail">Email<\/label>/);
   assert.match(dialog, /type="email" autocomplete="email" required/);
   assert.match(dialog, /data-action="close-support-group-interest" aria-label="Close support-group interest form"/);
-  assert.match(dialog, /does not register you for a session or send a joining link automatically/);
+  assert.match(dialog, /After your request is saved/);
+  assert.match(dialog, /does not register you for a session or send reminders/);
   assert.match(dialog, /consent to Legacy using your name and email to find or create your caregiver record/);
   assert.match(dialog, /does not subscribe you to reminders/);
   assert.match(dialog, /data-intake-success role="status" aria-live="polite"/);
   assert.match(dialog, /data-intake-error role="alert" aria-live="assertive"/);
-  assert.doesNotMatch(dialog, /<textarea|meet\.google|event_id|type="date"/);
+  assert.doesNotMatch(dialog, /<textarea|event_id|type="date"/);
+  const joiningRegion = dialog.match(/<div class="routing-note" data-intake-routing>([\s\S]*?)<\/div>/)?.[1];
+  assert.match(joiningRegion, /href="https:\/\/meet\.google\.com\/dmc-orwi-afk" target="_blank" rel="noopener noreferrer"/);
+  assert.match(joiningRegion, /does not confirm a date, time or place/);
+  assert.equal((dialog.match(/meet\.google\.com/g) || []).length, 1);
   assert.match(file('programs-events.html'), /href="programs\.html#support-group">Request support-group joining details/);
   assert.match(page, /href="events\.html"[^>]*data-cs="programs.support_group.panel_cta_label"/);
 });
@@ -300,6 +308,39 @@ test('support-group delegated request reaches its own shared staff task and orig
   assert.equal(raw.prepare(`SELECT COUNT(*) AS n FROM audit_log WHERE action = 'intake.support_request'`).get().n, 1);
   assert.equal(raw.prepare(`SELECT COUNT(*) AS n FROM registration`).get().n, 0);
   assert.equal(raw.prepare(`SELECT COUNT(*) AS n FROM grant_application`).get().n, 0);
+  context.openSupportGroupInterest(opener);
+  assert.equal(regions['[data-intake-routing]'].style.display, 'none', 'reopening does not expose an old success/link');
+});
+
+test('support-group joining details stay hidden for failed, missing or unreadable acknowledgments', async () => {
+  const app = file('app.js');
+  const source = app.slice(0, app.indexOf('/* ---------- Resource hub:'));
+  const regions = Object.fromEntries(['[data-intake-success]', '[data-intake-routing]', '[data-intake-error]', '[type="submit"]']
+    .map(selector => [selector, { style: { display: 'none' }, disabled: false, textContent: '' }]));
+  const form = { id: 'supportGroupInterestForm', querySelector: selector => regions[selector] };
+  const nodes = { supportGroupInterestForm: form, supportGroupName: { value: 'Fictional Name' },
+    supportGroupEmail: { value: 'fictional@example.invalid' } };
+  const context = { document: { getElementById: id => nodes[id] },
+    crypto: { randomUUID: () => 'fictional-ack-check' },
+    sessionStorage: { getItem: () => 'fictional-ack-check', setItem() {} }, fetch: null };
+  vm.runInNewContext(source, context);
+  const failures = [
+    async () => { throw new Error('synthetic network failure'); },
+    async () => ({ ok: true, status: 200, json: async () => ({ ok: false }) }),
+    async () => ({ ok: true, status: 200, json: async () => ({}) }),
+    async () => ({ ok: true, status: 200, json: async () => { throw new Error('invalid JSON'); } }),
+    async () => ({ ok: false, status: 503, json: async () => ({ ok: true }) }),
+  ];
+  for (const response of failures) {
+    context.setFormState(form, 'success'); // an earlier success must not leak into a new request
+    context.fetch = response;
+    context.submitSupportGroupInterest({ preventDefault() {} });
+    assert.equal(regions['[data-intake-routing]'].style.display, 'none');
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(regions['[data-intake-error]'].style.display, 'block');
+    assert.equal(regions['[data-intake-success]'].style.display, 'none');
+    assert.equal(regions['[data-intake-routing]'].style.display, 'none');
+  }
 });
 
 
