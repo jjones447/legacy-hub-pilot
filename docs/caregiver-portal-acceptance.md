@@ -338,3 +338,34 @@ throughout, because the tests call handlers directly and never exercise the midd
 
 Worth confirming with Shanelle only that the portal still matters to her at all, since it has not
 come up in her recent notes and everything she has asked for lately has been public-site work.
+
+## Membership continuation source correction (October 30)
+
+The current requested journey includes portal continuation; this supersedes the
+earlier suggestion above to reconfirm whether the portal is wanted.
+
+The membership modal now reveals **Continue to your portal** only after the
+intake endpoint acknowledges a save (including an earlier duplicate request).
+The link is the same-origin `/portal`, without email or tokens in its URL. The
+existing signed session or secure emailed-link verification still controls
+access. Membership submission neither signs the person in nor requests email.
+
+The form shows pending feedback immediately and focuses its success/error result.
+Storage/preparation failures are reported before any request starts; no substitute
+retry identity is generated. A 20-second UI deadline makes a stalled request
+explicitly uncertain without cancelling it or sending another request. Network
+failure, server errors and malformed success also remain uncertain. The button
+stays disabled across modal reopen; a late acknowledgment may resolve the same
+request. Recognized validation/access/route/size/type/rate-limit refusals allow an
+explicit corrected submission with the existing key; timeout, conflict and unknown
+statuses remain uncertain. Successful duplicate responses describe the earlier request,
+not a claim that newly edited details were saved. No key rotation or automatic
+resubmission is introduced.
+
+This addresses demonstrated source gaps, not a diagnosis of any specific live
+report. Production mail configuration and staging portal-mail opt-in are separate;
+this change modifies neither. Source/unit/template checks do not prove deployment,
+rendering, a saved live request, email delivery or verified portal entry. Release
+owners must qualify the installed package and the existing authorized synthetic
+journey before making those claims. Unknown existing submissions require
+reconciliation, not replay. [pc2-codex-42]

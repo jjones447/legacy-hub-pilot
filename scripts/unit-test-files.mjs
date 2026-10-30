@@ -2,6 +2,7 @@
 // requires an explicit source/review change here; filenames alone do not prove
 // absence of runtime effects. The separately gated workerd harness is excluded.
 export const UNIT_TEST_FILES = Object.freeze([
+  'membership-continuation.test.mjs',
   'agent-conversation.test.mjs',
   'canonical-hosts.test.mjs',
   'event-photos.test.mjs',

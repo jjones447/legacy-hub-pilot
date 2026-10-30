@@ -182,7 +182,7 @@ test('delegated intake submits keep status, event identity and retry keys on the
     querySelector: selector => forms.membershipForm.querySelector(selector),
   };
   vm.runInNewContext(source, {
-    document, crypto: { randomUUID: () => `fictional-ref-${++serial}` },
+    document, setTimeout, clearTimeout, crypto: { randomUUID: () => `fictional-ref-${++serial}` },
     sessionStorage: { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value) },
     fetch: async (url, options) => {
       requests.push({ url, body: JSON.parse(options.body) });
@@ -191,7 +191,7 @@ test('delegated intake submits keep status, event identity and retry keys on the
   });
   for (const [id] of cases) {
     const form = forms[id];
-    status = 503;
+    status = id === 'membershipForm' ? 400 : 503;
     listeners.submit({ target: form, currentTarget: document, preventDefault() {} });
     assert.equal(form.regions['[type="submit"]'].disabled, true, `${id} disables its own button`);
     assert.equal(form.regions['[data-intake-routing]'].style.display, 'none', `${id} hides joining/routing details while pending`);
@@ -205,7 +205,7 @@ test('delegated intake submits keep status, event identity and retry keys on the
     assert.equal(form.regions['[data-intake-success]'].style.display, 'block', `${id} shows its own success`);
     assert.equal(form.regions['[data-intake-routing]'].style.display, 'block', `${id} reveals details only after acknowledgment`);
     assert.equal(form.regions['[data-intake-error]'].style.display, 'none');
-    assert.equal(form.regions['[type="submit"]'].disabled, false);
+    assert.equal(form.regions['[type="submit"]'].disabled, id === 'membershipForm');
     assert.equal(requests.at(-1).body.external_ref, failed.external_ref);
     if (id === 'regForm') assert.equal(failed.event_id, 'qa-fictional-event');
   }
