@@ -247,13 +247,13 @@
       "derived_from": "media/client-oct16/sanctuary-video-1.mp4",
       "derived_from_sha256": "c89ad85131b74d6190b7c8bb5a99a7ad46c8bca1c2562778c51c4ead008e0c11",
       "mime_type": "video/mp4",
-      "bytes": 13473699,
-      "sha256": "661e96c197551233bd48a95166a7033de488cf96df11c87c45c6f4cdb1e39ff9",
+      "bytes": 13044551,
+      "sha256": "c45882317691c09ecf6a1b427dcf989bc73f724f68f695045bf7074292f82cd7",
       "target_path": "media/client-oct16/sanctuary-video-1-trimmed.mp4",
-      "purpose": "Sanctuary header video with the feet/legs-only and table close-up moments removed (Shanelle, Slack 2026-10-30)",
+      "purpose": "Sanctuary header video with the feet/legs-only and table close-up moments removed (Shanelle, Slack 2026-10-30; second pass removes the seated legs-and-chair shot)",
       "width": 720,
       "height": 1280,
-      "duration_seconds": 48.533333,
+      "duration_seconds": 47.133333,
       "edit": {
         "removed_seconds": [
           [
@@ -262,7 +262,7 @@
           ],
           [
             33.5,
-            39.0
+            40.4
           ]
         ],
         "video_codec": "H.264 Main (libx264 crf 23, preset medium)",
