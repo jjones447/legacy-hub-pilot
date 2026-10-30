@@ -1,6 +1,27 @@
 # Staging surface — historical preview runbook
 
-## Current-use guard — October 13, 2026
+## Canonical user-facing addresses — October 30
+
+[pc2-codex-41] Use `https://caregiversanctuary.org` for production and
+`https://staging.caregiversanctuary.org` for staging, with `/staff` for staff and
+`/portal` for caregivers on the matching environment. Staff Access and caregiver
+email sign-in remain separate on these normal domains.
+
+The provider alias `legacy-hub-5qo.pages.dev` belongs to the same Pages project.
+The October30 source redirects ordinary GET/HEAD page visits on that alias and
+`staging.legacy-hub-5qo.pages.dev` to their matching canonical domains, preserving
+path and query. API/webhook traffic, asset requests, deployment-specific preview
+hosts and origin-bound protected draft previews retain their existing routes.
+No DNS, Access policy, binding or credential changes are part of that redirect.
+See the existing delivery ledger for installed/browser verification.
+
+`staging.legacy-hub.pages.dev` and `legacy-hub.pages.dev` are historical addresses,
+not current entry points. The former was observed to stop at Cloudflare Access
+before the app. An application redirect does not claim to remove that upstream
+Access screen. Replace saved walkthrough links with the canonical domains; do
+not remove protection or infer staging identity from an old hostname.
+
+## Historical Current-use guard — October 13, 2026
 
 [pc2-codex-41] This remains a historical preview runbook. The current private
 caregiver guide names `https://legacy-hub-5qo.pages.dev/portal` as the production

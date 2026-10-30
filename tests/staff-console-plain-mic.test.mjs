@@ -328,7 +328,7 @@ test('staff console header, plain labels, empty state, and zero demo/sales copy'
 
   // Assistant plain labels
   assert.ok(STAFF_HTML.includes('id="chatEmptyState"'));
-  assert.ok(STAFF_HTML.includes('Tell me what to change, for example: Add a support group on October 15 at 6 PM on Google Meet.'));
+  assert.ok(STAFF_HTML.includes('Hi! What would you like to talk about?'));
   assert.ok(!STAFF_HTML.includes('draft → preview → confirm'));
   assert.ok(STAFF_JS.includes("Here's what will change:"));
   assert.ok(!STAFF_JS.includes('Mapped your request to a structured content change'));

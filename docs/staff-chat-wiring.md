@@ -1,5 +1,31 @@
 # Staff chat source correction
 
+## Conversation and explicit guided modification — October 30
+
+[pc2-codex-41] Jacob's actual `You there?` feedback exposed that the old
+conversation-first label still sent every message to the drafting endpoint.
+The Assistant now starts in ordinary conversation. The unchecked **Guided
+modification** control keeps optional area/content selectors hidden. Checking it
+uses the existing draft, protected preview, explicit confirmation and discard
+flow; simply talking cannot draft, save or publish.
+
+This reuses the staff console, verified Access actor and configured Workers AI
+or gateway backend. The new `/api/agent/chat` action has no database or editing
+tools, accepts bounded user/assistant history, and returns plain text with
+no-store caching. Conversation history stays in the current page's memory and
+is lost on reload. It is not the Slack conversation, persistent memory, or a
+live lookup of caregiver/donation records. Provider failures are redacted and
+do not fall through to editing. No binding, provider, schema or secret changed.
+
+Existing preview/confirmation safeguards remain. Meaningful local tests exercise
+the greeting, follow-up history, absence of data writes, caller verification,
+untrusted history, request limits and failure behavior; the browser wiring tests
+exercise conversation versus guided routing and escaped reply rendering.
+Source checks and deployed browser acceptance are recorded separately in the
+[same delivery ledger](https://github.com/jjones447/legacy-caregiver-hub/issues/54#issuecomment-6401340678).
+This extends proven lower-level chat tooling; no new service or workflow platform
+is needed for this bounded conversational capability.
+
 [pc2-codex-13] October 4, 2026. This is a Phase 1 D7 frontend correction candidate, not installed or client acceptance evidence.
 
 The previous Content branch returned a canned preview without calling an API or obtaining a draft ID. Event requests sent a null target even when an event was selected. The shell had no Forms choice. Existing API tests did not execute these browser functions.

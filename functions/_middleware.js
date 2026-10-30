@@ -228,6 +228,20 @@ export async function onRequest(context) {
     isProtectedPreviewRender ||
     (isRewritableRoute(path) &&
       (url.searchParams.has('preview_draft') || url.searchParams.has('preview_version')));
+  // Retire human-facing provider aliases without redirecting webhook/API traffic
+  // or origin-bound protected draft previews. The destination enforces its own
+  // normal staff/caregiver authentication; no session or access is transferred.
+  const canonicalHost = {
+    'legacy-hub-5qo.pages.dev': 'caregiversanctuary.org',
+    'staging.legacy-hub-5qo.pages.dev': 'staging.caregiversanctuary.org',
+  }[url.hostname];
+  const isPage = !/\.[a-z0-9]+$/i.test(path) || /\.html$/i.test(path);
+  if (canonicalHost && isPage && !matchesPrefix(path, '/api') && !isDraftPreview && ['GET', 'HEAD'].includes(request.method)) {
+    const destination = new URL(url);
+    destination.protocol = 'https:';
+    destination.host = canonicalHost;
+    return withSecurityHeaders(new Response(null, { status: 308, headers: { Location: destination.href } }), url.hostname, path, request.method);
+  }
   const isConsole =
     CONSOLE_API_PREFIXES.some((p) => matchesPrefix(path, p)) ||
     CONSOLE_PAGE_SET.has(normalizePagePath(path));
