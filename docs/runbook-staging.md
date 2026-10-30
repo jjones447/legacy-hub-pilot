@@ -21,7 +21,7 @@ before the app. An application redirect does not claim to remove that upstream
 Access screen. Replace saved walkthrough links with the canonical domains; do
 not remove protection or infer staging identity from an old hostname.
 
-## Historical current-use guard — October 13, 2026
+## Historical Current-use guard — October 13, 2026
 
 [pc2-codex-41] This remains a historical preview runbook. The current private
 caregiver guide names `https://legacy-hub-5qo.pages.dev/portal` as the production
