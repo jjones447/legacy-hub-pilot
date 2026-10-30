@@ -61,3 +61,33 @@ photo/audit objects as a rollback shortcut. Record exact source/artifact, stagin
 production and user-visible proof separately in the existing private project ledger.
 
 Authored by [pc2-codex-42].
+
+## Live staging acceptance — October 30, 2026
+
+[pc2-codex-42] At 05:19 UTC, the ordinary authenticated staging staff editor
+uploaded the existing approved Legacy logo to the empty photo field of the
+staging Virtual Support Group event. The caption is **Legacy logo — staging
+example**; it is a brand illustration, not a photograph of an event. The upload
+used the existing media store. Event details, publication state and registration
+count remained unchanged. No production record or archived fixture was changed,
+and no notification, new account, service, bucket or credential was created.
+
+- Upload returned HTTP 200 and original `event.photo.updated` audit **149**.
+  The staff preview decoded at **1050 × 600** and displayed **Photo saved**.
+- Reloading the staff console and opening **Change log** showed the photo update.
+  Its API readback retained the same audit ID and photo association, with no
+  unsupported Undo action.
+- The published-events API returned the saved association and caption. The public
+  staging media URL returned HTTP 200, `image/png`, `Cache-Control: no-store`,
+  and the exact uploaded bytes: **50,135 bytes**, SHA-256
+  `698ae0dd91cfc5364cb51835ebbe67940a2b703b518d31822ce9ef8b0f3241a4`.
+- The staging brand example remains saved for staff use. There was one upload;
+  no replacement, deletion, replay or event lifecycle cycle was performed.
+
+**Acceptance limit:** all six published staging events at this check had ended
+by October 28. The public upcoming-events renderer correctly omitted those past
+events. Staff preview, audit, API association and public media delivery are live
+verified; a photo displayed in a current upcoming-event card still needs an
+actual future event. Dates were not invented or shifted to manufacture that
+proof. Source/isolated DOM tests cover the card rendering, separately from this
+live evidence. No physical-device or client acceptance is implied.
