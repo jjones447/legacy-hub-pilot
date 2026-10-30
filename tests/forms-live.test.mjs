@@ -253,7 +253,7 @@ test('support-group sign-up is a named native dialog with only name/email, then 
   assert.doesNotMatch(panel, /November 25/);
 });
 
-test('support-group delegated request reaches its own shared staff task and original audit without membership or registration', async () => {
+test('support-group delegated request reaches its own shared staff task and original audit without membership or registration', { timeout: 5000 }, async () => {
   const app = file('app.js');
   const source = app.slice(0, app.indexOf('/* ---------- Resource hub:'))
     + app.slice(app.indexOf('function openRegister('), app.indexOf("document.addEventListener('click'"))
@@ -275,6 +275,7 @@ test('support-group delegated request reaches its own shared staff task and orig
     supportGroupEmail: { value: 'group-interest@example.invalid' } };
   regions['[data-intake-routing] a[href^="https://meet.google.com/"]'] = { getAttribute: () => 'https://meet.google.com/dmc-orwi-afk' };
   const assigned = [];
+  let responseGate = Promise.resolve();
   const context = {
     window: { location: { assign: url => assigned.push(url) } },
     document: { activeElement: opener, getElementById: id => nodes[id],
@@ -283,6 +284,7 @@ test('support-group delegated request reaches its own shared staff task and orig
     sessionStorage: { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value) },
     fetch: async (url, options) => {
       requests.push({ url, payload: JSON.parse(options.body) });
+      await responseGate;
       return postIntake({ request: new Request('https://example.invalid/api/intake', {
         method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': '203.0.113.30' },
         body: options.body,
@@ -290,15 +292,33 @@ test('support-group delegated request reaches its own shared staff task and orig
     },
   };
   vm.runInNewContext(source, context);
+  const originalSetFormState = context.setFormState;
+  let completed;
+  context.setFormState = (...args) => {
+    originalSetFormState(...args);
+    if (args[1] === 'success' || args[1] === 'error') completed?.();
+  };
+  async function submitAndWait() {
+    let release;
+    responseGate = new Promise(resolve => { release = resolve; });
+    const settled = new Promise(resolve => { completed = resolve; });
+    listeners.submit({ target: form, currentTarget: context.document, preventDefault() {} });
+    assert.equal(regions['[type="submit"]'].disabled, true);
+    // Prove one event-loop turn is NOT a completion signal: the real intake
+    // response is deliberately still held. Wait for the actual UI terminal state.
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(regions['[data-intake-success]'].style.display, 'none');
+    release();
+    await settled;
+    assert.equal(regions['[data-intake-success]'].style.display, 'block');
+  }
   context.openSupportGroupInterest(opener);
   assert.equal(dialog.open, true);
   assert.equal(inputFocus, 1);
   context.closeSupportGroupInterest();
   assert.equal(dialog.open, false);
   assert.equal(openerFocus, 1);
-  listeners.submit({ target: form, currentTarget: context.document, preventDefault() {} });
-  assert.equal(regions['[type="submit"]'].disabled, true);
-  await new Promise(resolve => setImmediate(resolve));
+  await submitAndWait();
   assert.equal(regions['[data-intake-success]'].style.display, 'block');
   assert.deepEqual(assigned, ['https://meet.google.com/dmc-orwi-afk'], 'a saved sign-up goes straight to Google Meet');
   assert.deepEqual(requests[0].payload, {
@@ -318,8 +338,7 @@ test('support-group delegated request reaches its own shared staff task and orig
   assert.equal(audit.actor, 'site_form:support_group');
   assert.equal(audit.entity_id, caregiver.id);
   assert.deepEqual(JSON.parse(audit.after_json), { kind: 'support_request', external_ref: 'fictional-support-group-ref', event_id: null });
-  listeners.submit({ target: form, currentTarget: context.document, preventDefault() {} });
-  await new Promise(resolve => setImmediate(resolve));
+  await submitAndWait();
   assert.equal(requests[1].payload.external_ref, requests[0].payload.external_ref);
   assert.equal(raw.prepare(`SELECT COUNT(*) AS n FROM followup`).get().n, 1);
   assert.equal(raw.prepare(`SELECT COUNT(*) AS n FROM audit_log WHERE action = 'intake.support_request'`).get().n, 1);
