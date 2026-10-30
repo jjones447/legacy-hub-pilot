@@ -401,6 +401,7 @@ test('support-group: clicking a session date shows it in the form and saves it w
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(posted[0].message, 'Signed up for the Virtual Caregiver Support Group — Wednesday, November 11 · 5–6 PM');
   assert.equal(posted[0].session_date, '2026-11-11');
+  assert.deepEqual(assigned, ['https://meet.google.com/dmc-orwi-afk'], 'one redirect per successful sign-up');
   // A second date in the same tab is its own sign-up: a different idempotency key.
   dialog.open = false;
   context.openSupportGroupInterest(opener('18'));
@@ -408,13 +409,14 @@ test('support-group: clicking a session date shows it in the form and saves it w
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(posted[1].session_date, '2026-11-18');
   assert.notEqual(posted[1].external_ref, posted[0].external_ref, 'each date has its own sign-up identity');
+  assert.deepEqual(assigned, ['https://meet.google.com/dmc-orwi-afk', 'https://meet.google.com/dmc-orwi-afk'], 'one redirect per successful sign-up');
   // Re-submitting the same date reuses its key (server-side duplicate, no second sign-up).
   dialog.open = false;
   context.openSupportGroupInterest(opener('11'));
   context.submitSupportGroupInterest({ preventDefault() {} });
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(posted[2].external_ref, posted[0].external_ref);
-  assert.deepEqual(assigned, ['https://meet.google.com/dmc-orwi-afk']);
+  assert.deepEqual(assigned, ['https://meet.google.com/dmc-orwi-afk', 'https://meet.google.com/dmc-orwi-afk', 'https://meet.google.com/dmc-orwi-afk'], 'one redirect per successful (or duplicate-acknowledged) sign-up');
   // Opening from the general button clears any earlier date.
   dialog.open = false;
   context.openSupportGroupInterest({ getAttribute: () => null, focus() {} });
