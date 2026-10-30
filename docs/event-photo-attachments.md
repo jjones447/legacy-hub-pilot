@@ -87,7 +87,17 @@ and no notification, new account, service, bucket or credential was created.
 **Acceptance limit:** all six published staging events at this check had ended
 by October 28. The public upcoming-events renderer correctly omitted those past
 events. Staff preview, audit, API association and public media delivery are live
-verified; a photo displayed in a current upcoming-event card still needs an
-actual future event. Dates were not invented or shifted to manufacture that
-proof. Source/isolated DOM tests cover the card rendering, separately from this
-live evidence. No physical-device or client acceptance is implied.
+verified. A naturally upcoming client event still needs an actual future date.
+Dates were not invented or shifted to manufacture that proof. No physical-device
+or client acceptance is implied.
+
+At 05:23 UTC, a separate owned staging public-page tab used Playwright's fixed
+browser date **2026-07-08T12:00:00Z**, immediately before the existing event, to
+qualify installed card rendering. At **1280px** and **390px**, the actual Events
+page, events API and saved media each returned HTTP 200. The Virtual Support Group
+card displayed the exact caption and decoded 1050 × 600 logo within the viewport,
+using `object-fit: contain`; visual inspection confirmed the complete brand image.
+No API response, DOM content or media was mocked, and no server date, event date,
+status or registration was changed. The temporary tab was closed afterwards.
+This completes **controlled browser-date installed rendering** evidence; it does
+not claim that the real calendar contains an upcoming event.
