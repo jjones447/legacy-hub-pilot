@@ -241,6 +241,13 @@ function openSupportGroupInterest(opener) {
   document.getElementById('supportGroupName').focus();
 }
 
+// Programs & Events links to programs.html#join-support-group to open the sign-up form directly.
+(function () {
+  if (typeof window === 'undefined' || !window.location || window.location.hash !== '#join-support-group') return;
+  const opener = document.getElementById('join-support-group');
+  if (opener && typeof openSupportGroupInterest === 'function') openSupportGroupInterest(opener);
+})();
+
 function closeSupportGroupInterest() {
   const dialog = document.getElementById('supportGroupInterestModal');
   if (dialog && dialog.open) dialog.close();

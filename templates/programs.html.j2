@@ -54,8 +54,13 @@
 {%- for r in sections["programs.support_group"].rows %}
         <div class="kv-row program-fact"><span class="k">{{ r.k }}</span><span class="v">{{ r.v }}</span></div>
 {%- endfor %}
-        <a href="events.html" class="btn btn-plum btn-sm mt-16 d-inline-block" data-cs="programs.support_group.panel_cta_label">{{ sections["programs.support_group"].panel_cta_label }}</a>
-        <button type="button" class="btn btn-outline btn-sm mt-16" data-action="open-support-group-interest" aria-haspopup="dialog" aria-controls="supportGroupInterestModal">Join the Support Group</button>
+        <h4 class="mt-16">{{ sections["programs.support_group"].sessions_heading }}</h4>
+        <ul class="support-group-sessions">
+{%- for d in sections["programs.support_group"].sessions %}
+          <li>{{ d }}</li>
+{%- endfor %}
+        </ul>
+        <button type="button" id="join-support-group" class="btn btn-coral btn-sm mt-16" data-action="open-support-group-interest" aria-haspopup="dialog" aria-controls="supportGroupInterestModal">Join an upcoming session</button>
         <p class="small muted mt-16">Sign up with your name and email, then you'll go straight to the group on Google Meet.</p>
       </div>
       <div>

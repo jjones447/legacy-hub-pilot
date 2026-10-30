@@ -1398,3 +1398,8 @@ main ul.measure-620 { margin: 16px 0; padding-left: 24px; }
   top: 0;
   z-index: 9999;
 }
+
+/* Programs: upcoming support-group sessions listed in the support-group panel (client request Oct 30). */
+.support-group-sessions { list-style: none; margin: 8px 0 0; padding: 0; }
+.support-group-sessions li { padding: 6px 0; border-bottom: 1px dashed #efdfd3; font-size: 14px; font-weight: 600; }
+.support-group-sessions li:last-child { border-bottom: none; }

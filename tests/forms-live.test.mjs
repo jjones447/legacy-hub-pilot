@@ -236,8 +236,12 @@ test('support-group sign-up is a named native dialog with only name/email, then 
   assert.match(joiningRegion, /href="https:\/\/meet\.google\.com\/dmc-orwi-afk" target="_blank" rel="noopener noreferrer"/);
   assert.match(joiningRegion, /If Google Meet doesn't open/);
   assert.equal((dialog.match(/meet\.google\.com/g) || []).length, 1);
-  assert.match(file('programs-events.html'), /href="programs\.html#support-group">Join the Support Group/);
-  assert.match(page, /href="events\.html"[^>]*data-cs="programs.support_group.panel_cta_label"/);
+  assert.match(file('programs-events.html'), /href="programs\.html#join-support-group">Join an upcoming session<\/a>/);
+  const panel = page.match(/<section class="section-sand" id="support-group">[\s\S]*?<\/section>/)?.[0];
+  assert.equal((panel.match(/class="btn /g) || []).length, 1, 'the support group has exactly one button');
+  assert.match(panel, /id="join-support-group"[^>]*data-action="open-support-group-interest"[^>]*>Join an upcoming session<\/button>/);
+  assert.match(panel, /<li>Wednesday, November 4 · 5–6 PM<\/li>\s*<li>Wednesday, November 11 · 5–6 PM<\/li>\s*<li>Wednesday, November 18 · 5–6 PM<\/li>/);
+  assert.doesNotMatch(panel, /November 25/);
 });
 
 test('support-group delegated request reaches its own shared staff task and original audit without membership or registration', async () => {

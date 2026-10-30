@@ -73,7 +73,7 @@
       ],
       "panel_heading": "Membership includes",
       "rows": [
-        {"k": "Virtual Support Group", "v": "Schedule pending"},
+        {"k": "Virtual Support Group", "v": "Every Wednesday, 5–6 PM"},
         {"k": "Wellness Grants", "v": "Members eligible"},
         {"k": "Memory Socials", "v": "Drop-in respite"},
         {"k": "Caregiver events", "v": "Wellness · connection · education"},
@@ -83,17 +83,22 @@
     "programs.support_group": {
       "panel_heading": "Virtual Support Group",
       "rows": [
-        {"k": "When", "v": "Schedule pending — dates and times to be confirmed"},
+        {"k": "When", "v": "Every Wednesday, 5–6 PM"},
         {"k": "Where", "v": "Online — Google Meet"},
         {"k": "Facilitation", "v": "Alzheimer's Association-certified"},
         {"k": "Cost", "v": "Free"}
       ],
       "panel_cta_label": "View Events",
       "eyebrow": "Virtual Support Group",
-      "heading": "A judgment-free hour that's just for you",
+      "heading": "Virtual Caregiver Support Group",
       "paragraphs": [
-        "Caregivers gather online to talk honestly about the journey — the hard parts, the wins, and everything in between. Certified facilitation, zero judgment, real connection.",
-        "Session and registration details will be shared when confirmed."
+        "Connect with other caregivers who understand the journey. Our weekly virtual support group offers a welcoming space to share experiences, find encouragement, and receive support from others navigating caregiving."
+      ],
+      "sessions_heading": "Upcoming sessions",
+      "sessions": [
+        "Wednesday, November 4 · 5–6 PM",
+        "Wednesday, November 11 · 5–6 PM",
+        "Wednesday, November 18 · 5–6 PM"
       ]
     },
     "programs.grants": {
