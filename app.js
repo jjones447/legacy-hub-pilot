@@ -385,7 +385,11 @@ function submitRegister(e) {
     relationship: document.getElementById('regRole').value,
   };
 
-  postIntake(form, payload).then(function () {
+  postIntake(form, payload).then(function (result) {
+    const success = form.querySelector('[data-intake-success]');
+    if (success) success.textContent = result.confirmation_email === 'submitted'
+      ? 'Registration saved. Your confirmation email has been submitted. Check your inbox and spam folder.'
+      : 'Registration saved. We could not confirm the email was sent. Please contact Legacy for the details; do not register again.';
     setFormState(form, 'success');
   }).catch(function (err) {
     if (err.message === 'event_full') {
