@@ -319,7 +319,7 @@ test('staff console header, plain labels, empty state, and zero demo/sales copy'
   assert.ok(!STAFF_HTML.includes('no spreadsheets'));
 
   // Plain one-line explanations under all 6 panels
-  assert.ok(STAFF_HTML.includes('Search caregiver records by name, contact, status, or segment. Results appear after you search; choose Open/Edit'));
+  assert.ok(STAFF_HTML.includes('Search caregiver records by name, contact, status, or segment. Choose Open/Edit'));
   assert.ok(STAFF_HTML.includes('Open follow-ups and action items requiring staff review.'));
   assert.ok(STAFF_HTML.includes('Schedule, manage, and take attendance for community events and respite sessions.'));
   assert.ok(STAFF_HTML.includes('Track grant applications from review through award, course completion, and closeout.'));
