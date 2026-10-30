@@ -6,7 +6,7 @@
 <title>Legacy Hub · Staff console</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=e2998ba1cffc">
+<link rel="stylesheet" href="styles.css?v=e8a342dc6ec3">
 <link rel="icon" href="favicon.ico" sizes="32x32">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -88,7 +88,7 @@
             </select>
             <button type="button" class="btn btn-sm btn-plum" data-action="search-caregivers">Search people</button>
           </div>
-        <section id="staffTeamPanel" aria-labelledby="staffListHeading">
+        <div role="region" id="staffTeamPanel" aria-labelledby="staffListHeading">
           <div class="flex-between-center mb-12">
             <h4 class="m-0" id="staffListHeading">Staff and admins</h4>
             <button class="btn btn-sm btn-outline" id="refreshStaffTeamBtn">Refresh</button>
@@ -99,8 +99,8 @@
           <div id="staffTeamList">
             <p class="muted small text-center my-20">Loading staff...</p>
           </div>
-        </section>
-        <section id="caregiverSearchPanel" aria-labelledby="caregiverListHeading">
+        </div>
+        <div role="region" id="caregiverSearchPanel" aria-labelledby="caregiverListHeading">
           <h4 id="caregiverListHeading">Caregivers</h4>
           <p class="small muted mb-12" id="caregiverSearchHelp">Search caregiver records by name, contact, status, or segment. Choose Open/Edit to open a focused caregiver view. Back keeps your search and results. Archived records cannot use the caregiver portal; inactive records can still sign in.</p>
           <div class="staff-search-controls">
@@ -135,7 +135,7 @@
               </div>
             </div>
           </div>
-        </section>
+        </div>
         </details>
 
         <div class="panel">
@@ -259,7 +259,7 @@
 
 <script src="app.js?v=da2757b5a75b"></script>
 <script src="nav-v2.js"></script>
-<script src="staff.js?v=8cde6317e73e"></script>
+<script src="staff.js?v=4cf30e3d2ad4"></script>
 </body>
 </html>
 

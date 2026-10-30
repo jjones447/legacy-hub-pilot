@@ -1344,6 +1344,19 @@ main ul.measure-620 { margin: 16px 0; padding-left: 24px; }
 }
 .event-photo-editor { border-top: 1px solid #ddd; margin-top: 20px; padding-top: 12px; }
 
+/* People actions stay in view instead of requiring horizontal table scrolling. */
+#peopleManagementPanel [role="region"] { margin-top: 20px; }
+@media (max-width: 640px) {
+  #peopleManagementPanel table.data,
+  #peopleManagementPanel table.data tbody { display: block; width: 100%; min-width: 0; }
+  #peopleManagementPanel table.data thead { display: none; }
+  #peopleManagementPanel table.data tr { display: block; margin-bottom: 16px; border: 1px solid var(--sand); border-radius: 8px; }
+  #peopleManagementPanel table.data td { display: block; width: 100%; white-space: normal; overflow-wrap: anywhere; }
+  #peopleManagementPanel table.data td[data-label]::before { content: attr(data-label); display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--plum); margin-bottom: 4px; }
+  #peopleManagementPanel table.data input,
+  #peopleManagementPanel table.data select { max-width: 100%; }
+}
+
 .staging-draft-preview-banner {
   background: #fff8e6;
   color: #3a2318;

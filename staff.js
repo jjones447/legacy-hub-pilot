@@ -177,11 +177,11 @@ async function searchCaregivers(offset = 0) {
 
         return `
           <tr>
-            <td><strong>${name}</strong></td>
-            <td><span class="small">${contact}</span></td>
-            <td><span class="badge ${statusBadge}">${escapeHtml(cg.status || 'unknown')}</span></td>
-            <td><span class="small muted">${segmentsStr || 'None'}</span></td>
-            <td><button type="button" class="btn btn-sm btn-outline" data-action="view-caregiver" data-caregiver-id="${escapeHtml(cg.id)}" aria-label="Open or edit caregiver: ${name}">Open/Edit</button></td>
+            <td data-label="Caregiver"><strong>${name}</strong></td>
+            <td data-label="Contact"><span class="small">${contact}</span></td>
+            <td data-label="Record status"><span class="badge ${statusBadge}">${escapeHtml(cg.status || 'unknown')}</span></td>
+            <td data-label="Segments"><span class="small muted">${segmentsStr || 'None'}</span></td>
+            <td data-label="Actions"><button type="button" class="btn btn-sm btn-outline" data-action="view-caregiver" data-caregiver-id="${escapeHtml(cg.id)}" aria-label="Open or edit caregiver: ${name}">Open/Edit</button></td>
           </tr>
         `;
       }).join('');
@@ -3016,6 +3016,7 @@ async function handleUndoChange(auditId, button) {
 let staffMe = null;
 let editingStaffEmail = null;
 let staffTeam = [];
+let staffTeamError = null;
 
 async function loadStaffTeam() {
   const list = document.getElementById('staffTeamList');
@@ -3027,9 +3028,13 @@ async function loadStaffTeam() {
     if (!teamRes.ok || !teamData.ok) throw new Error(teamData.error || 'Failed to load staff');
     staffMe = meData.me;
     staffTeam = teamData.team || [];
+    staffTeamError = null;
     renderStaffTeam();
     return true;
   } catch (e) {
+    staffTeamError = e.message;
+    staffMe = null;
+    staffTeam = [];
     if (list) list.innerHTML = `<p class="muted small text-center my-20">Error loading staff: ${escapeHtml(e.message)}</p>`;
     return false;
   }
@@ -3038,6 +3043,10 @@ async function loadStaffTeam() {
 function renderStaffTeam() {
   const container = document.getElementById('staffTeamList');
   if (!container) return;
+  if (staffTeamError) {
+    container.innerHTML = `<p role="alert">Could not load staff: ${escapeHtml(staffTeamError)}. Use Refresh to check access.</p>`;
+    return;
+  }
   const query = String(document.getElementById('caregiverSearchQuery')?.value || '').trim().toLowerCase();
   const role = document.getElementById('peopleRoleFilter')?.value || 'all';
   const members = staffTeam.filter(m => (!['staff', 'admin'].includes(role) || m.role === role)
@@ -3074,10 +3083,10 @@ function renderStaffTeam() {
     }
     rows += `
       <tr>
-        <td>${nameCell}<div class="small muted">${email}${isSelf ? ' (you)' : ''}</div></td>
-        <td>${roleCell}</td>
-        <td><span class="badge ${active ? 'badge-green' : 'badge-amber'}">${active ? 'Active' : 'Access off'}</span><div class="small muted">Last seen: ${lastSeen}</div></td>
-        <td>${actions}<p class="small muted mt-8" data-staff-row-message="${email}"></p></td>
+        <td data-label="Person">${nameCell}<div class="small muted">${email}${isSelf ? ' (you)' : ''}</div></td>
+        <td data-label="Role">${roleCell}</td>
+        <td data-label="Access"><span class="badge ${active ? 'badge-green' : 'badge-amber'}">${active ? 'Active' : 'Access off'}</span><div class="small muted">Last seen: ${lastSeen}</div></td>
+        <td data-label="Actions">${actions}<p class="small muted mt-8" data-staff-row-message="${email}"></p></td>
       </tr>`;
   }
   container.innerHTML = `${isAdmin ? `

@@ -393,3 +393,13 @@ test('failed caregiver search clears stale results and disables misleading pagin
   assert.equal(h.nodes.caregiverSearchNextBtn.disabled,true);
   assert.equal(h.nodes.caregiverSearchPrevBtn.disabled,true);
 });
+
+
+test('a failed staff refresh cannot revive stale admin controls when filtering',async()=>{
+  const h=team({refreshOk:false});
+  runInContext("staffMe={email:'old@example.invalid',role:'admin',status:'active'};staffTeam=[{email:'old@example.invalid',display_name:'Stale Admin',role:'admin',status:'active'}];",h.context);
+  assert.equal(await h.context.loadStaffTeam(),false);
+  h.context.renderStaffTeam();
+  assert.match(h.list.innerHTML,/Could not load staff/);
+  assert.doesNotMatch(h.list.innerHTML,/Stale Admin|staff-edit|submit-add-staff/);
+});
