@@ -72,7 +72,8 @@ test('pages.dev alias gets X-Robots-Tag noindex,nofollow', async () => {
   const request = new Request('https://legacy-hub-5qo.pages.dev/index.html');
   const next = async () => new Response('public ok', { status: 200 });
   const resp = await onRequest({ request, next, env: {} });
-  assert.equal(resp.status, 200);
+  assert.equal(resp.status, 308);
+  assert.equal(resp.headers.get('Location'), 'https://caregiversanctuary.org/index.html');
   assert.equal(resp.headers.get('X-Robots-Tag'), 'noindex, nofollow');
 });
 
