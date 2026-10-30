@@ -1164,8 +1164,14 @@ function renderNewEventForm() {
         <input type="checkbox" id="newEventRecurring" name="recurring">
         <label for="newEventRecurring">Recurring event</label>
       </div>
+      <div class="field mb-8">
+        <label class="form-label-small" for="newEventPhoto">Event photo (optional)</label>
+        <input type="file" id="newEventPhoto" name="photo" accept="image/jpeg,image/png,image/webp" class="editor-input">
+        <label class="form-label-small" for="newEventPhotoAlt">Short photo description (optional)</label>
+        <input type="text" id="newEventPhotoAlt" name="photo_alt" maxlength="300" class="editor-input">
+        <p class="small muted">JPEG, PNG or WebP, up to 5 MB. It appears on the public event card once the event is published. You can also add or change it later with Edit.</p>
+      </div>
       <div id="newEventError" class="form-error-banner d-none"></div>
-      <p class="small muted">After creating the draft, choose Edit to add an event photo.</p>
       <div class="editor-actions">
         <button type="submit" class="btn btn-sm btn-plum">Create Draft Event</button>
         <button type="button" class="btn btn-sm btn-outline" data-action="cancel-new-event">Cancel</button>
@@ -1222,6 +1228,16 @@ async function submitCreateEvent(form) {
     capacity: form.capacity.value ? parseInt(form.capacity.value, 10) : null,
     recurring: form.recurring ? form.recurring.checked : false
   };
+  const photo = form.photo && form.photo.files ? form.photo.files[0] : null;
+  const photoAlt = form.photo_alt ? form.photo_alt.value.trim() : '';
+  // Check the optional photo before creating anything, so a bad file never leaves a half-done event.
+  if (photo && (!['image/jpeg', 'image/png', 'image/webp'].includes(photo.type) || photo.size > 5 * 1024 * 1024)) {
+    if (errBox) {
+      errBox.textContent = 'Choose a JPEG, PNG or WebP photo up to 5 MB, or leave the photo empty.';
+      errBox.classList.remove('d-none');
+    }
+    return;
+  }
 
   try {
     const res = await fetch('/api/staff/event', {
@@ -1243,6 +1259,8 @@ async function submitCreateEvent(form) {
     if (container) container.classList.add('d-none');
     await loadEvents();
     await loadRecentChanges();
+    const newId = data.event && data.event.id;
+    if (photo && newId) await uploadNewEventPhoto(newId, photo, photoAlt);
   } catch (e) {
     if (errBox) {
       errBox.textContent = e.message || 'Error creating event';
@@ -1271,6 +1289,42 @@ function eventPhotoEditor(ev) {
         ${ev.photo_key ? `<button type="submit" name="photo_action" value="remove" class="btn btn-sm btn-outline"${blocked ? ' disabled' : ''}>Remove photo</button>` : ''}
       </div>
     </form>`;
+}
+
+// Attach the photo chosen on the Add Event form to the just-created draft, through the same
+// event-photo endpoint and pending/uncertain rules as Edit. The result shows in the Edit view.
+async function uploadNewEventPhoto(id, file, alt) {
+  if (eventPhotoPending.has(id) || eventPhotoUncertain.has(id)) return;
+  eventPhotoPending.add(id);
+  let responseReceived = false;
+  let note = 'Event created. Photo saved.';
+  try {
+    const body = new FormData();
+    body.set('request_id', crypto.randomUUID());
+    body.set('expected_photo_key', '');
+    body.set('photo', file);
+    body.set('alt', alt || '');
+    const response = await fetch('/api/staff/event-photo/' + encodeURIComponent(id), { method: 'POST', body });
+    const data = await response.json();
+    responseReceived = true;
+    if (!response.ok || !data.ok) {
+      if (data.uncertain || data.saved || response.status >= 500) eventPhotoUncertain.add(id);
+      throw new Error(data.message || 'The event was created, but the photo was not saved. Use Upload photo below to try again.');
+    }
+    await loadEvents();
+    await loadRecentChanges();
+  } catch (error) {
+    // A failed response can follow a successful write. Never silently replay it.
+    if (!responseReceived) eventPhotoUncertain.add(id);
+    note = eventPhotoUncertain.has(id)
+      ? 'The event was created, but the photo save could not be confirmed. Reload the page to check the event before trying again.'
+      : error.message;
+  } finally {
+    eventPhotoPending.delete(id);
+  }
+  openEditEvent(id);
+  const message = document.querySelector('[data-photo-message]');
+  if (message) message.textContent = note;
 }
 
 async function submitEventPhoto(form, removed = false) {
