@@ -1,6 +1,6 @@
 // Transactional email through Resend (https://resend.com/docs/api-reference/emails/send-email).
-// Production only: the key (EMAIL_API_KEY) is set only on the production environment, and
-// canSendEmail() also refuses preview/development, so staging can never email a real caregiver.
+// Preview requires an explicit opt-in. Confirmation mail additionally restricts
+// preview recipients; portal sign-in retains its existing policy.
 
 export const EMAIL_FROM = 'Caregiver Sanctuary <no-reply@caregiversanctuary.org>';
 export const EMAIL_REPLY_TO = 'info@legacyhomehealthservices.org';
@@ -46,13 +46,15 @@ export function signInEmail(link) {
 }
 
 /** Send one email. Returns { ok, status } and never throws; callers log failures without details. */
-export async function sendEmail(env, { to, subject, text, html }, fetchImpl = fetch) {
+export async function sendEmail(env, { to, subject, text, html, idempotencyKey, timeoutMs }, fetchImpl = fetch) {
   if (!canSendEmail(env)) return { ok: false, status: 0 };
   try {
     const res = await fetchImpl(RESEND_URL, {
       method: 'POST',
       // Trim: a key stored with a trailing newline (e.g. piped from PowerShell) breaks the header.
-      headers: { authorization: `Bearer ${String(env.EMAIL_API_KEY).trim()}`, 'content-type': 'application/json' },
+      headers: { authorization: `Bearer ${String(env.EMAIL_API_KEY).trim()}`, 'content-type': 'application/json',
+        ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}) },
+      ...(timeoutMs ? { signal: AbortSignal.timeout(timeoutMs) } : {}),
       body: JSON.stringify({ from: EMAIL_FROM, reply_to: EMAIL_REPLY_TO, to: [typeof to === 'string' ? to.trim() : to], subject, text, html }),
     });
     return { ok: res.ok, status: res.status };

@@ -74,9 +74,9 @@ export async function handleIntake(db, body) {
       );
   }
 
-  // Membership/support business mutations and their original audit commit together.
-  // Keep the existing event/grant workflow and request-limit accounting unchanged.
-  const atomic = body.kind === 'membership' || body.kind === 'support_request';
+  // Registration and its confirmation task/audit must also commit together before
+  // the HTTP handler can attempt any external email. Grant behavior is unchanged.
+  const atomic = ['membership', 'support_request', 'event_registration'].includes(body.kind);
   const writes = atomic ? [caregiverWrite] : null;
   if (!atomic) await caregiverWrite.run();
 
@@ -96,14 +96,12 @@ export async function handleIntake(db, body) {
         return { status: 409, body: { ok: false, error: 'event_full' } };
       }
     }
-    await db
+    writes.push(db
       .prepare(`INSERT INTO registration (caregiver_id, event_id, source, external_ref) VALUES (?, ?, ?, ?)`)
-      .bind(caregiverId, body.event_id, source, body.external_ref)
-      .run();
-    await db
+      .bind(caregiverId, body.event_id, source, body.external_ref));
+    writes.push(db
       .prepare(`INSERT INTO followup (caregiver_id, kind, detail, source, external_ref) VALUES (?, 'event_confirmation', ?, ?, ?)`)
-      .bind(caregiverId, `Confirm registration for ${body.event_id}`, source, body.external_ref + ':fu')
-      .run();
+      .bind(caregiverId, `Confirm registration for ${body.event_id}`, source, body.external_ref + ':fu'));
   } else if (body.kind === 'membership') {
     writes.push(db
       .prepare(`UPDATE caregiver SET sanctuary_member = 1, member_since = COALESCE(member_since, ?), updated_at = ? WHERE id = ?`)
