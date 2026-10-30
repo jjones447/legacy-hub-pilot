@@ -128,8 +128,10 @@ test('phone layout wraps compose, target controls, long previews and preserves t
 test('plain selector/help distinguishes browser preview path from separate Slack and handoff path', () => {
   assert.match(js, /label\.textContent = 'Existing content to change:'/);
   assert.match(js, /Choose existing content to edit…/);
-  assert.match(html, /browser chat to preview an edit before you confirm it/);
-  assert.match(html, /Slack is a separate entry point; this panel does not show the Slack conversation/);
+  assert.match(html, /Conversation does not change records or the website/);
+  assert.match(html, /Slack is a separate conversation/);
+  assert.match(html, /id="chatGuidedMode"/);
+  assert.doesNotMatch(html.match(/<input[^>]*id="chatGuidedMode"[^>]*>/)[0], /\bchecked\b/);
   assert.doesNotMatch(html, /can't break the site/);
   assert.match(js, /document\.getElementById\('chatContentTarget'\)/);
   assert.match(js, /function initAssistantHandoff\(/);

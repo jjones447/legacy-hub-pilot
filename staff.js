@@ -2020,6 +2020,13 @@ function initStaffAssistantDisclosure() {
 let lastClarificationRequest = '';
 
 function initStaffChatTargets() {
+  const guided = document.getElementById('chatGuidedMode');
+  guided?.addEventListener('change', () => {
+    const targeting = document.getElementById('chatAdvancedTargeting');
+    if (targeting) targeting.hidden = !guided.checked;
+    const input = document.getElementById('chatInput');
+    if (input) input.placeholder = guided.checked ? 'Describe the change you want…' : 'Message Legacy Assistant…';
+  });
   const area = document.getElementById('chatAreaSelect');
   if (!area) return;
   if (!Array.from(area.options).some(option => option.value === 'form')) {
@@ -2404,6 +2411,37 @@ async function awaitCurrentWebJob(initial, pendingNode, until = Date.now() + 600
   throw new Error('Job refresh stopped. Nothing confirmed; have an administrator inspect it before another request.');
 }
 
+// This browser session only; never persist a conversation across staff sign-ins.
+let agentConversation = [];
+async function sendAgentConversation(text, body) {
+  agentWebJobPending = true;
+  const reply = document.createElement('div');
+  reply.className = 'msg bot';
+  reply.setAttribute?.('role', 'status');
+  reply.textContent = 'Thinking…';
+  body.appendChild(reply);
+  body.scrollTop = body.scrollHeight;
+  try {
+    const response = await fetch('/api/agent/chat', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: text, history: agentConversation }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok || typeof data.reply !== 'string') {
+      reply.textContent = data.error || 'Conversation is temporarily unavailable. Please try again later.';
+      return;
+    }
+    reply.textContent = data.reply;
+    agentConversation.push({ role: 'user', content: text }, { role: 'assistant', content: data.reply.slice(0, 4000) });
+    while (agentConversation.length > 10 || agentConversation.reduce((n, turn) => n + turn.content.length, 0) > 16000) agentConversation.splice(0, 2);
+  } catch {
+    reply.textContent = 'The conversation could not connect. Please try again. No changes were made.';
+  } finally {
+    agentWebJobPending = false;
+    body.scrollTop = body.scrollHeight;
+  }
+}
+
 window.agentSend = async function () {
   if (agentWebJobIdentityUnavailable) { showAgentUnavailable(); return; }
   if (agentConfirmationHold || agentConfirmationPending || agentWebJobPending || agentWebJobRecoveryPending) return;
@@ -2419,6 +2457,13 @@ window.agentSend = async function () {
   userDiv.className = 'msg user';
   userDiv.textContent = text;
   body.appendChild(userDiv);
+
+  // Older cached markup has no mode control and retains its guided behavior.
+  // Current markup starts with an explicitly unchecked conversation control.
+  if (document.getElementById('chatGuidedMode')?.checked === false) {
+    await sendAgentConversation(text, body);
+    return;
+  }
 
   const areaSelect = document.getElementById('chatAreaSelect');
   const selectedArea = areaSelect ? areaSelect.value : 'auto';

@@ -47,8 +47,9 @@
           <h3 id="staffAssistantHeading">Legacy Assistant · browser chat</h3>
           <button type="button" id="staffAssistantClose" class="staff-assistant-close">Close assistant</button>
         </div>
-        <p id="staffAssistantHelp" class="small staff-assistant-help">Describe what you want to change in plain English—use this browser chat to preview an edit before you confirm it. Slack is a separate entry point; this panel does not show the Slack conversation.</p>
-        <details id="chatAdvancedTargeting" class="chat-advanced-targeting">
+        <p id="staffAssistantHelp" class="small staff-assistant-help">Ask a question, talk through an idea, or just say hello. Conversation does not change records or the website. Turn on Guided modification when you want an edit preview. Slack is a separate conversation.</p>
+        <label class="small staff-assistant-help"><input type="checkbox" id="chatGuidedMode" aria-controls="chatAdvancedTargeting"> Guided modification — preview a specific change</label>
+        <details id="chatAdvancedTargeting" class="chat-advanced-targeting" hidden>
           <summary class="small muted">Advanced targeting (optional)</summary>
           <div class="chat-area-bar">
             <label for="chatAreaSelect" class="chat-area-label">Area:</label>
@@ -62,10 +63,10 @@
           </div>
         </details>
         <div class="chat-body" id="chatBody">
-          <div class="chat-empty-state" id="chatEmptyState">Tell me what to change, for example: Add a support group on October 15 at 6 PM on Google Meet. You can also ask to change homepage copy or form wording directly.</div>
+          <div class="chat-empty-state" id="chatEmptyState">Hi! What would you like to talk about?</div>
         </div>
         <div class="chat-input-row">
-          <input id="chatInput" type="text" aria-label="Message to Legacy Assistant" aria-describedby="staffAssistantHelp" placeholder='Describe the change you want…'>
+          <input id="chatInput" type="text" maxlength="4000" aria-label="Message to Legacy Assistant" aria-describedby="staffAssistantHelp" placeholder="Message Legacy Assistant…">
           <button type="button" class="btn-mic" id="micBtn" data-action="agent-mic" aria-label="Record voice note" title="Speak message">🎤</button>
           <button type="button" data-action="agent-send">Send</button>
         </div>
@@ -268,7 +269,7 @@
 
 <script src="app.js?v=33043ae9e4bf"></script>
 <script src="nav-v2.js"></script>
-<script src="staff.js?v=97673d23beb2"></script>
+<script src="staff.js?v=bd42667b94d0"></script>
 </body>
 </html>
 

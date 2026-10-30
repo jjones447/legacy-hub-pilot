@@ -10,6 +10,7 @@ import { _resetContentCache, findDisallowedHtml, buildContentPreviewInfo, render
 import { onRequestPost as postTranscribe } from './transcribe.js';
 import { confirmationActor, draftOwner, ownsDraft, confirmationBinding, confirmationAudit, matchesPersistedPreview } from '../../_lib/agent-confirmation.mjs';
 import { createWebJob, enabled as webJobsEnabled } from '../../_lib/assistant-web-jobs.mjs';
+import { converse } from './_conversation.mjs';
 
 export async function onRequestGet({ request, env, data }) {
   try {
@@ -140,6 +141,36 @@ export async function onRequestPost({ request, env, data, redactErrors = false, 
   try {
     const url = new URL(request.url);
     const pathSegments = url.pathname.split('/').filter(Boolean); // ['api', 'agent', ...]
+
+    if (url.pathname === '/api/agent/chat') {
+      if (!confirmationActor(data)) return json({ ok: false, error: 'verified staff conversation required' }, 403);
+      const reader = request.body?.getReader();
+      const chunks = [];
+      let length = 0;
+      if (reader) {
+        while (true) {
+          const chunk = await reader.read();
+          if (chunk.done) break;
+          length += chunk.value.byteLength;
+          if (length > 24000) {
+            await reader.cancel();
+            return json({ ok: false, error: 'Conversation request too large' }, 413);
+          }
+          chunks.push(chunk.value);
+        }
+      }
+      const bytes = new Uint8Array(length);
+      let offset = 0;
+      for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+      const raw = new TextDecoder().decode(bytes);
+      let body;
+      try { body = JSON.parse(raw); } catch { return json({ ok: false, error: 'Invalid conversation request' }, 400); }
+      const result = await converse({ body, ai: env.AI, model: env.AGENT_MODEL || undefined,
+        gatewayUrl: env.EMP_LLM_GATEWAY_URL, gatewayKey: env.EMP_LLM_GATEWAY_KEY, backend: env.AGENT_MAPPER_BACKEND });
+      const response = json({ ok: result.status === 200, ...(result.reply ? { reply: result.reply } : { error: result.error }) }, result.status);
+      response.headers.set('Cache-Control', 'no-store');
+      return response;
+    }
 
     if (webJobsEnabled(env) && ['/api/agent/draft','/api/agent/change/draft'].includes(url.pathname)) {
       return createWebJob({ request, env, data });

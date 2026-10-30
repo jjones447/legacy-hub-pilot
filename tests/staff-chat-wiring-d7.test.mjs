@@ -17,13 +17,14 @@ const items = [
   { id: 'ps_form.draft', type_id: 'page_section', status: 'draft', data: '{}' },
 ];
 
-function harness({ area = 'content', target = 'resource_one', event = 'event_one', reply, httpOK = true, failFetch = false, storage = new Map(), fetchReply } = {}) {
+function harness({ guided = true, area = 'content', target = 'resource_one', event = 'event_one', reply, httpOK = true, failFetch = false, storage = new Map(), fetchReply } = {}) {
   const calls = [], messages = [], nodes = {};
   const create = () => ({ dataset: {}, children: [], innerHTML: '', value: '', options: [],
     appendChild(child) { this.children.push(child); if (child.id) nodes[child.id] = child; if (child.value) this.options.push(child); },
     addEventListener(name, callback) { this[name] = callback; },
   });
   nodes.chatInput = { value: 'Update the title' };
+  nodes.chatGuidedMode = { checked: guided, addEventListener(name, fn) { this[name] = fn; } };
   nodes.chatBody = { appendChild: child => messages.push(child) };
   nodes.chatAreaSelect = { value: area, options: ['content', 'grant', 'caregiver', 'event'].map(value => ({ value })),
     parentElement: create(), appendChild(child) { this.options.push(child); }, addEventListener(name, fn) { this[name] = fn; } };
@@ -37,6 +38,19 @@ function harness({ area = 'content', target = 'resource_one', event = 'event_one
   vm.runInContext(`let siteContentItems = ${JSON.stringify(items)};\n${code}`, context);
   return { context, calls, nodes, messages, send: () => context.window.agentSend(), html: () => messages.map(m => m.innerHTML || m.textContent || '').join('') };
 }
+
+test('ordinary conversation bypasses target resolution and retains bounded follow-up history', async () => {
+  const h = harness({ guided: false, area: 'auto', target: '', reply: { ok: true, reply: '<Hi!> What is on your mind?' } });
+  h.nodes.chatInput.value = 'You there?';
+  await h.send();
+  assert.deepEqual(h.calls, [{ url: '/api/agent/chat', body: { message: 'You there?', history: [] } }]);
+  assert.equal(h.messages.at(-1).textContent, '<Hi!> What is on your mind?');
+  assert.equal(h.messages.at(-1).innerHTML, '');
+  h.nodes.chatInput.value = 'What can we talk about?';
+  await h.send();
+  assert.equal(h.calls[1].body.history.length, 2);
+  assert.doesNotMatch(h.html(), /Which section|Confirm &amp; publish|Here.s what will change/);
+});
 
 test('Content drafts the explicitly selected published item through the existing API', async () => {
   const h = harness(); await h.send();
