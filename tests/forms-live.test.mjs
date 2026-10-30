@@ -236,7 +236,7 @@ test('support-group interest is a named native dialog with only name/email and t
   assert.match(joiningRegion, /href="https:\/\/meet\.google\.com\/dmc-orwi-afk" target="_blank" rel="noopener noreferrer"/);
   assert.match(joiningRegion, /does not confirm a date, time or place/);
   assert.equal((dialog.match(/meet\.google\.com/g) || []).length, 1);
-  assert.match(file('programs-events.html'), /href="programs\.html#support-group">Request support-group joining details/);
+  assert.match(file('programs-events.html'), /href="programs\.html#support-group">Get the support-group joining link/);
   assert.match(page, /href="events\.html"[^>]*data-cs="programs.support_group.panel_cta_label"/);
 });
 
