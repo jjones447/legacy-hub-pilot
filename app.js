@@ -8,18 +8,33 @@ function initializeMotionVideo() {
   const applyPreference = () => {
     for (const video of videos) {
       video.autoplay = !preference.matches;
+      // Native controls (and their Play button) only when motion is reduced or autoplay is refused.
+      video.controls = preference.matches;
       if (preference.matches) {
         video.pause();
       } else {
         video.muted = true;
         // Browser/data-saving policies may still require the native Play control.
         const playback = video.play();
-        if (playback && playback.catch) playback.catch(() => {});
+        if (playback && playback.catch) playback.catch(() => { video.controls = true; });
       }
     }
   };
   applyPreference();
   preference.addEventListener('change', applyPreference);
+  // Without visible controls, a click or tap still pauses and resumes the moving video.
+  for (const video of videos) {
+    if (typeof video.addEventListener !== 'function') continue;
+    video.addEventListener('click', () => {
+      if (video.controls) return;
+      if (video.paused) {
+        const playback = video.play();
+        if (playback && playback.catch) playback.catch(() => { video.controls = true; });
+      } else {
+        video.pause();
+      }
+    });
+  }
 }
 initializeMotionVideo();
 

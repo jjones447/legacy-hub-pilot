@@ -309,7 +309,7 @@ test('O26-02/03/04: Sanctuary, About, and Get Involved place hero text over supp
   const sanctuaryHero = sanctuaryHtml.match(/<section class="hero has-media client-video-hero[^"]*">([\s\S]*?)<\/section>/)?.[1];
   assert.ok(sanctuaryHero, 'Sanctuary hero section must exist');
   assert.doesNotMatch(sanctuaryHero, /caregiver-sanctuary-logo\.png|client-sanctuary-wordmark|client-video-layout|client-video-panel/);
-  assert.match(sanctuaryHero, /<video class="hero-media" controls muted loop playsinline data-motion-autoplay preload="metadata" width="720" height="1280" aria-label="Caregiver Sanctuary community video">/);
+  assert.match(sanctuaryHero, /<video class="hero-media" muted loop playsinline data-motion-autoplay preload="metadata" width="720" height="1280" aria-label="Caregiver Sanctuary community video">/);
   assert.doesNotMatch(sanctuaryHero, /\sautoplay(?:\s|>)/, 'motion preference is checked before playback');
   assert.match(sanctuaryHero, /<source src="media\/client-oct16\/sanctuary-video-1\.mp4#t=0\.1" type="video\/mp4">/);
   assert.match(sanctuaryHero, /<div class="hero-scrim" aria-hidden="true"><\/div>\s*<div class="container hero-content">/);
@@ -335,7 +335,7 @@ test('O26-02/03/04: Sanctuary, About, and Get Involved place hero text over supp
   assert.match(getInvolvedHero, /<div class="hero-scrim" aria-hidden="true"><\/div>\s*<div class="container hero-content">/);
 
   const css = loadFile('styles.css');
-  assert.match(css, /\.hero\.has-media\.client-video-hero\s+\.hero-media\s*\{[^}]*position:\s*absolute;[^}]*object-fit:\s*contain/);
+  assert.match(css, /\.hero\.has-media\.client-video-hero\s+\.hero-media\s*\{[^}]*position:\s*absolute;[^}]*object-fit:\s*cover/);
   assert.match(css, /\.hero\.has-media\.client-video-hero\s+\.hero-scrim\s*\{[^}]*display:\s*block;[^}]*pointer-events:\s*none/);
   assert.match(css, /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]*?\.hero\.has-media\.client-video-hero\s+\.hero-media/);
 });

@@ -28,14 +28,16 @@ test('a reduced-motion visitor gets native playback controls without automatic p
   assert.equal(video.controls, true);
 });
 
-test('ordinary playback starts muted and stops when reduced motion is enabled', () => {
+test('ordinary playback starts muted without the native Play overlay, and stops when reduced motion is enabled', () => {
   const h = mount();
   assert.equal(h.video.plays, 1);
   assert.equal(h.video.muted, true);
   assert.equal(h.video.autoplay, true);
+  assert.equal(h.video.controls, false);
   h.setReduced(true);
   assert.equal(h.video.pauses, 1);
   assert.equal(h.video.autoplay, false);
+  assert.equal(h.video.controls, true);
 });
 
 test('a browser autoplay refusal is handled and leaves manual controls available', async () => {
