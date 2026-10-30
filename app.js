@@ -125,11 +125,26 @@ function submitSupport(e) {
   return false;
 }
 
+const membershipSubmissions = new WeakMap();
+
+function showMembershipState(form, state, focusResult) {
+  membershipSubmissions.set(form, state);
+  setFormState(form, state.phase === 'unknown' ? 'error' : state.phase, state.message);
+  const pending = form.querySelector('[data-membership-pending]');
+  if (pending) pending.hidden = state.phase !== 'pending';
+  const submit = form.querySelector('[type="submit"]');
+  if (submit) submit.disabled = ['pending', 'unknown', 'success'].includes(state.phase);
+  form.ariaBusy = state.phase === 'pending' ? 'true' : 'false';
+  const result = form.querySelector(state.phase === 'success' ? '[data-intake-success]' : '[data-intake-error]');
+  if (state.phase === 'success' && result) result.textContent = state.message;
+  if (focusResult && result && typeof result.focus === 'function') result.focus();
+}
+
 function openMembership() {
   const modal = document.getElementById('membershipModal');
   const form = document.getElementById('membershipForm');
-  if (form) setFormState(form, 'idle');
   if (modal) modal.classList.add('open');
+  if (form) showMembershipState(form, membershipSubmissions.get(form) || { phase: 'idle' });
 }
 
 function closeMembership() {
@@ -205,25 +220,84 @@ function submitCoachingInterest(e) {
   return false;
 }
 
+const PORTAL_HANDOFF_KEY = 'legacy-portal-handoff';
+const PORTAL_HANDOFF_MAX_AGE_MS = 10 * 60 * 1000;
+
+function handOffMembershipToPortal(email) {
+  try {
+    if (!email || !email.includes('@')) return;
+    sessionStorage.setItem(PORTAL_HANDOFF_KEY, JSON.stringify({ email: email, at: Date.now() }));
+    if (typeof window !== 'undefined' && window.location && typeof window.location.assign === 'function') {
+      window.location.assign('/portal');
+    }
+  } catch (err) { /* stay on the saved-membership message; the continuation link still works */ }
+}
+
+// Read and remove the one-time membership hand-off. Returns the email or null.
+function takePortalHandoff(now) {
+  try {
+    const raw = sessionStorage.getItem(PORTAL_HANDOFF_KEY);
+    if (!raw) return null;
+    sessionStorage.removeItem(PORTAL_HANDOFF_KEY);
+    const data = JSON.parse(raw);
+    const age = (now || Date.now()) - Number(data && data.at);
+    if (!data || typeof data.email !== 'string' || !data.email.includes('@') || !(age >= 0 && age <= PORTAL_HANDOFF_MAX_AGE_MS)) return null;
+    return data.email.trim();
+  } catch (err) {
+    return null;
+  }
+}
+
 function submitMembership(e) {
   e.preventDefault();
   const form = document.getElementById('membershipForm');
-  const name = splitName(document.getElementById('memName').value);
-  const payload = {
-    kind: 'membership',
-    source: 'site_form:membership',
-    external_ref: intakeExternalRef(form, 'membership'),
-    first_name: name.first_name,
-    last_name: name.last_name,
-    email: document.getElementById('memEmail').value.trim(),
-    caring_for: document.getElementById('memCaringFor').value,
-    message: document.getElementById('memNote').value,
-  };
-
-  postIntake(form, payload).then(function () {
-    setFormState(form, 'success');
-  }).catch(function () {
-    setFormState(form, 'error', "We couldn't send this form just now. Please email us and we'll take it from there.");
+  if (!form || ['pending', 'unknown', 'success'].includes(membershipSubmissions.get(form)?.phase)) return false;
+  let payload;
+  try {
+    const name = splitName(document.getElementById('memName').value);
+    payload = {
+      kind: 'membership',
+      source: 'site_form:membership',
+      external_ref: intakeExternalRef(form, 'membership'),
+      first_name: name.first_name,
+      last_name: name.last_name,
+      email: document.getElementById('memEmail').value.trim(),
+      caring_for: document.getElementById('memCaringFor').value,
+      message: document.getElementById('memNote').value,
+    };
+  } catch {
+    // No request has started. In particular, do not silently replace a failed
+    // persistent retry key with a new identity and risk a duplicate later.
+    showMembershipState(form, { phase: 'error', message: "We couldn't prepare this form. It has not been sent. Please contact Legacy for help." }, true);
+    return false;
+  }
+  showMembershipState(form, { phase: 'pending' });
+  const uncertain = () => showMembershipState(form, {
+    phase: 'unknown', message: "We can't confirm whether your membership request was saved. Please don't submit it again. Contact Legacy so we can check it for you."
+  }, true);
+  // This is a UI deadline, not a cancellation or permission to replay a write.
+  // A late response can still establish the original request's outcome.
+  const timer = setTimeout(uncertain, 20000);
+  Promise.resolve().then(() => postIntake(form, payload)).then(function (result) {
+    showMembershipState(form, { phase: 'success', message: result.duplicate
+      ? 'A membership request was already received from this browser session. Continue to the portal and sign in with the email used for that request. Contact Legacy if you need to change it.'
+      : 'Your membership request is saved. Taking you to your portal to request your secure sign-in link…' }, true);
+    // Requested by Legacy (Oct 30): after a NEW membership is saved, go straight to the portal
+    // sign-in with the email filled in and one sign-in link requested. The email travels in
+    // sessionStorage only (never in the URL), and the portal never signs anyone in without
+    // the emailed link.
+    if (!result.duplicate) handOffMembershipToPortal(payload.email);
+  }).catch(function (error) {
+    // Timeout/conflict and unrecognized statuses are not proof that no write
+    // occurred. Only recognized request refusals permit a deliberate retry.
+    if ([400, 401, 403, 404, 405, 413, 415, 422, 429].includes(error.status)) {
+      showMembershipState(form, { phase: 'error', message: "We couldn't accept this form. Please check your details or contact Legacy for help." }, true);
+    } else {
+      // A dropped response or server fault can follow a committed write.
+      uncertain();
+    }
+  }).finally(function () {
+    clearTimeout(timer);
   });
   return false;
 }
@@ -231,6 +305,7 @@ function submitMembership(e) {
 /* ---------- Virtual support group: sign up (saved for staff), then go to Google Meet ---------- */
 let supportGroupInterestOpener = null;
 let supportGroupSession = '';
+let supportGroupSessionDate = null;
 
 function openSupportGroupInterest(opener) {
   const dialog = document.getElementById('supportGroupInterestModal');
@@ -240,6 +315,9 @@ function openSupportGroupInterest(opener) {
   // A clicked session date (data-session) is shown in the form and saved with the sign-up.
   const session = opener && typeof opener.getAttribute === 'function' ? opener.getAttribute('data-session') : '';
   supportGroupSession = typeof session === 'string' ? session.trim().slice(0, 120) : '';
+  // Structured date (YYYY-MM-DD) for the backend; null for general joining without a date.
+  const sessionDate = opener && typeof opener.getAttribute === 'function' ? opener.getAttribute('data-session-date') : null;
+  supportGroupSessionDate = supportGroupSession && typeof sessionDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(sessionDate) ? sessionDate : null;
   const note = document.getElementById('supportGroupSession');
   if (note) {
     note.textContent = supportGroupSession ? 'Session: ' + supportGroupSession : '';
@@ -305,7 +383,10 @@ function submitSupportGroupInterest(e) {
   const payload = {
     kind: 'support_request',
     source: 'site_form:support_group',
-    external_ref: intakeExternalRef(form, 'support_request'),
+    // One sign-up identity per selected date (and one for general joining), so signing up
+    // for a second date in the same tab is a new sign-up, not a duplicate of the first.
+    external_ref: intakeExternalRef(form, 'support_request', supportGroupSessionDate),
+    session_date: supportGroupSessionDate,
     first_name: name.first_name,
     last_name: name.last_name,
     email: document.getElementById('supportGroupEmail').value.trim(),
@@ -385,7 +466,11 @@ function submitRegister(e) {
     relationship: document.getElementById('regRole').value,
   };
 
-  postIntake(form, payload).then(function () {
+  postIntake(form, payload).then(function (result) {
+    const success = form.querySelector('[data-intake-success]');
+    if (success) success.textContent = result.confirmation_email === 'submitted'
+      ? 'Registration saved. Your confirmation email has been submitted. Check your inbox and spam folder.'
+      : 'Registration saved. We could not confirm the email was sent. Please contact Legacy for the details; do not register again.';
     setFormState(form, 'success');
   }).catch(function (err) {
     if (err.message === 'event_full') {
@@ -414,28 +499,49 @@ function checkPortalSession() {
   const dashView = document.getElementById('dashView');
   if (!loginView || !dashView) return; // not on portal page
 
+  // Only a confirmed signed-out answer (HTTP 401) may start the one automatic sign-in
+  // link request from a membership hand-off. A signed-in session discards the hand-off;
+  // an unavailable or unreadable session check only prefills the email (manual send).
   fetch('/api/portal/me')
     .then(function (res) {
       if (res.status === 200) {
-        return res.json();
+        return res.json().then(function (data) { return { outcome: data && data.ok ? 'signed_in' : 'unavailable', data: data }; });
       }
-      throw new Error('unauthorized');
+      return { outcome: res.status === 401 ? 'signed_out' : 'unavailable' };
     })
-    .then(function (data) {
-      if (data.ok) {
-        renderPortalData(data);
+    .then(function (result) {
+      if (result.outcome === 'signed_in') {
+        takePortalHandoff(); // discard: an existing session wins, nothing is sent
+        renderPortalData(result.data);
         loadWellness();
         loginView.style.display = 'none';
         dashView.style.display = 'block';
       } else {
         dashView.style.display = 'none';
         loginView.style.display = 'block';
+        continueMembershipHandoff(result.outcome === 'signed_out' ? 'auto' : 'manual');
       }
     })
     .catch(function () {
       dashView.style.display = 'none';
       loginView.style.display = 'block';
+      continueMembershipHandoff('manual');
     });
+}
+
+function continueMembershipHandoff(mode) {
+  const email = takePortalHandoff();
+  const input = document.getElementById('loginEmail');
+  if (!email || !input) return;
+  input.value = email;
+  const welcome = document.getElementById('membershipWelcome');
+  if (welcome) {
+    welcome.textContent = mode === 'auto'
+      ? 'Welcome to the Caregiver Sanctuary! Your membership request is saved. We’re requesting a secure sign-in link for the email below; its status appears under the button.'
+      : 'Welcome to the Caregiver Sanctuary! Your membership request is saved. We couldn’t check your sign-in just now, so select “Send me a sign-in link” when you’re ready.';
+    welcome.hidden = false;
+  }
+  if (mode === 'auto') submitPortalLogin();
 }
 
 function submitPortalLogin(e) {
@@ -565,18 +671,29 @@ function portalLogout() {
 }
 
 function renderPortalData(data) {
+  const profile = data.profile || {};
   const welcome = document.getElementById('portalWelcome');
   if (welcome) {
-    welcome.textContent = 'Welcome back, ' + (data.profile.first_name || 'Member');
+    const first = typeof profile.first_name === 'string' ? profile.first_name.trim() : '';
+    welcome.textContent = first ? 'Welcome to Your Sanctuary, ' + first + '!' : 'Welcome to Your Sanctuary!';
   }
+
+  // My Profile & Intake: read-only account details (updates/intake are not built yet).
+  const setText = function (id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value ? String(value) : '—';
+  };
+  setText('portalProfileName', [profile.first_name, profile.last_name].filter(Boolean).join(' '));
+  setText('portalProfileEmail', profile.email);
+  setText('portalProfilePhone', profile.phone);
 
   // Membership status
   const memberStatus = document.getElementById('portalMembershipStatus');
   if (memberStatus) {
-    if (data.profile.sanctuary_member === 1) {
+    if (profile.sanctuary_member === 1) {
       memberStatus.innerHTML = '<span class="badge badge-green">Sanctuary member</span>';
     } else {
-      memberStatus.innerHTML = '<span class="badge badge-gray">Non-member</span>';
+      memberStatus.innerHTML = '<span class="badge badge-gray">Not yet a member</span>';
     }
   }
 
@@ -606,52 +723,37 @@ function renderPortalData(data) {
     }
   }
 
-  // Events list
+  // My Events: the account's registrations (any published event type, including Memory
+  // Socials and support group sessions), grouped into upcoming and past.
   const eventsList = document.getElementById('portalEventsList');
+  const nowDate = new Date();
+  const timed = (data.events || []).map(function (e) {
+    return { event: e, time: publicEventTime(e.starts_at, nowDate, 'America/Chicago') };
+  });
+  const upcoming = timed.filter(function (x) { return x.time && x.time.future; })
+    .sort(function (a, b) { return a.time.instant - b.time.instant; });
+  const past = timed.filter(function (x) { return !(x.time && x.time.future); })
+    .sort(function (a, b) { return (b.time ? b.time.instant : -Infinity) - (a.time ? a.time.instant : -Infinity); });
   if (eventsList) {
     eventsList.innerHTML = '';
-    if (data.events && data.events.length > 0) {
-      data.events.forEach(function (e) {
-        const item = document.createElement('div');
-        item.className = 'timeline-item';
-        let dotColor = 'var(--ink-soft)';
-        if (e.type === 'support_group') dotColor = 'var(--green)';
-        else if (e.type === 'memory_social') dotColor = 'var(--amber)';
-        else if (e.type === 'wellness') dotColor = 'var(--plum)';
-
-        // Built as DOM nodes, not an HTML string. e.title and e.location are free text
-        // authored in the staff console, and concatenating them into innerHTML made the
-        // caregiver portal a stored-XSS sink. Everywhere else in this file already uses
-        // textContent; these were the outliers.
-        const dot = document.createElement('div');
-        dot.className = 'timeline-dot';
-        dot.style.background = dotColor;
-
-        const title = document.createElement('strong');
-        title.textContent = e.title || 'Event';
-
-        const badge = document.createElement('span');
-        badge.className = 'badge badge-green';
-        badge.textContent = e.registration_status || '';
-
-        const when = document.createElement('div');
-        when.className = 'when';
-        when.textContent = (e.starts_at || '') + ' · ' + (e.location || 'Online');
-
-        const body = document.createElement('div');
-        body.appendChild(title);
-        body.appendChild(document.createTextNode(' '));
-        body.appendChild(badge);
-        body.appendChild(when);
-
-        item.appendChild(dot);
-        item.appendChild(body);
-        eventsList.appendChild(item);
-      });
-    } else {
+    if (timed.length === 0) {
       eventsList.innerHTML = '<p class="small muted m-0">No registered events yet.</p>';
+    } else {
+      [['Upcoming', upcoming], ['Past', past]].forEach(function (group) {
+        if (!group[1].length) return;
+        const section = document.createElement('div');
+        section.className = 'portal-events-group';
+        const heading = document.createElement('h5');
+        heading.textContent = group[0];
+        section.appendChild(heading);
+        group[1].forEach(function (entry) { section.appendChild(portalEventItem(entry.event)); });
+        eventsList.appendChild(section);
+      });
     }
   }
+  const nextRegistered = upcoming.find(function (x) { return x.event.registration_status === 'registered'; });
+  portalHighlightState.nextEvent = nextRegistered ? nextRegistered.event : null;
+  renderPortalHighlights();
 
   // Memory socials count and details
   const socialsCount = document.getElementById('portalSocialsCount');
@@ -678,6 +780,110 @@ function renderPortalData(data) {
   }
 }
 
+
+const PORTAL_EVENT_TYPE_LABELS = { support_group: 'Support Group', memory_social: 'Memory Social', wellness: 'Wellness', caregiver_event: 'Caregiver Event' };
+
+// Built as DOM nodes, not an HTML string: event titles and locations are free text
+// authored in the staff console (stored-XSS hardening).
+function portalEventItem(e) {
+  const item = document.createElement('div');
+  item.className = 'timeline-item';
+  let dotColor = 'var(--ink-soft)';
+  if (e.type === 'support_group') dotColor = 'var(--green)';
+  else if (e.type === 'memory_social') dotColor = 'var(--amber)';
+  else if (e.type === 'wellness') dotColor = 'var(--plum)';
+  const dot = document.createElement('div');
+  dot.className = 'timeline-dot';
+  dot.style.background = dotColor;
+  const title = document.createElement('strong');
+  title.textContent = e.title || 'Event';
+  const badge = document.createElement('span');
+  badge.className = 'badge badge-green';
+  badge.textContent = e.registration_status || '';
+  const when = document.createElement('div');
+  when.className = 'when';
+  const kind = PORTAL_EVENT_TYPE_LABELS[e.type] ? PORTAL_EVENT_TYPE_LABELS[e.type] + ' · ' : '';
+  when.textContent = kind + (e.starts_at || '') + ' · ' + (e.location || 'Online');
+  const body = document.createElement('div');
+  body.appendChild(title);
+  body.appendChild(document.createTextNode(' '));
+  body.appendChild(badge);
+  body.appendChild(when);
+  item.appendChild(dot);
+  item.appendChild(body);
+  return item;
+}
+
+// Dashboard highlights: only information connected to this account (next registered
+// event, a due wellness check-in). Nothing is shown when there is nothing real to show.
+const portalHighlightState = { nextEvent: null, wellnessDue: false };
+
+function renderPortalHighlights() {
+  const box = document.getElementById('portalHighlights');
+  const list = document.getElementById('portalHighlightsList');
+  if (!box || !list) return;
+  list.textContent = '';
+  const add = function (icon, text) {
+    const li = document.createElement('li');
+    const mark = document.createElement('span');
+    mark.setAttribute('aria-hidden', 'true');
+    mark.textContent = icon;
+    const body = document.createElement('span');
+    body.textContent = text;
+    li.appendChild(mark);
+    li.appendChild(body);
+    list.appendChild(li);
+  };
+  const e = portalHighlightState.nextEvent;
+  if (e) add('📅', 'Your next event: ' + (e.title || 'Event') + ' · ' + String(e.starts_at || '').slice(0, 16));
+  if (portalHighlightState.wellnessDue) add('💛', 'It’s time for a quick wellness check-in. See My Wellness below.');
+  box.hidden = list.children.length === 0;
+}
+
+
+// Design preview (client review on the test site, where caregiver sign-in mail is off):
+// /portal?preview=sample shows the real dashboard layout with clearly labeled FICTIONAL
+// information. No session, API request, storage or submit control is used.
+function portalDesignPreviewRequested() {
+  try {
+    return typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('preview') === 'sample';
+  } catch (err) {
+    return false;
+  }
+}
+
+function portalSampleDate(daysFromNow, hhmm) {
+  const d = new Date(Date.now() + daysFromNow * 86400000);
+  return d.toISOString().slice(0, 10) + ' ' + hhmm;
+}
+
+function initPortalDesignPreview() {
+  const loginView = document.getElementById('loginView');
+  const dashView = document.getElementById('dashView');
+  if (!loginView || !dashView) return false;
+  loginView.style.display = 'none';
+  dashView.style.display = 'block';
+  const banner = document.getElementById('portalDesignPreview');
+  if (banner) banner.hidden = false;
+  ['portalLogoutBtn', 'portalWellnessSample'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el) el.hidden = true;
+  });
+  renderPortalData({
+    profile: { first_name: 'Jordan', last_name: 'Example', email: 'jordan@example.invalid', phone: '(000) 000-0000', sanctuary_member: 1 },
+    grants: [],
+    events: [
+      { title: 'Example Memory Social', type: 'memory_social', starts_at: portalSampleDate(3, '14:00'), location: 'Sample community room', registration_status: 'registered' },
+      { title: 'Example Virtual Caregiver Support Group', type: 'support_group', starts_at: portalSampleDate(6, '17:00'), location: 'Online', registration_status: 'registered' },
+      { title: 'Example Family Education Workshop', type: 'caregiver_event', starts_at: portalSampleDate(-9, '18:00'), location: 'Sample community center', registration_status: 'attended' },
+    ],
+  });
+  // No fictional wellness scores; only the due prompt, and no check-in can be submitted.
+  renderWellness({ history: [], due: true });
+  const btn = document.getElementById('portalWellnessBtn');
+  if (btn) btn.classList.add('d-none');
+  return true;
+}
 
 /* ---------- Staff console: governed agent chat mock ---------- */
 function agentConfirm(btn) {
@@ -913,7 +1119,7 @@ function loadLiveEvents() {
 document.addEventListener('DOMContentLoaded', function() {
   initPortalSummaryPreview();
   loadLiveEvents();
-  checkPortalSession();
+  if (!(portalDesignPreviewRequested() && initPortalDesignPreview())) checkPortalSession();
 });
 
 
@@ -1158,6 +1364,10 @@ function renderWellness(data) {
     }
   }
   if (btn) btn.classList.toggle('d-none', !data.due);
+  if (typeof portalHighlightState === 'object' && typeof renderPortalHighlights === 'function') {
+    portalHighlightState.wellnessDue = !!data.due;
+    renderPortalHighlights();
+  }
   const trendHint = document.getElementById('portalWellnessTrendHint');
   if (trendHint) trendHint.textContent = history.length < 2
     ? 'A trend appears after two check-ins.' : 'Scores shown oldest to newest.';
@@ -1182,8 +1392,13 @@ function initPortalSummaryPreview() {
   const preview = document.getElementById('portalWellnessSample');
   const actual = document.getElementById('portalAccountSummary');
   if (!preview || !actual) return;
-  // Display-only examples: no session, storage, API data or check-in changes.
-  const sync = function () { actual.hidden = preview.open; };
+  // Display-only examples: no session, storage, API data or check-in changes. The sample
+  // cards stand in for the other summary cards; the real wellness card stays visible.
+  const sync = function () {
+    Array.prototype.forEach.call(actual.children, function (card) {
+      if (card.id !== 'portalWellnessTile') card.hidden = preview.open;
+    });
+  };
   preview.open = false;
   sync();
   preview.addEventListener('toggle', sync);
