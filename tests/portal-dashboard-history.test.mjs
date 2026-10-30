@@ -38,26 +38,47 @@ function ui(reply = { ok: true, history: [], questions: [], due: false }) {
 }
 const rows = element => element.children[0]?.children.map(row => row.textContent) || [];
 
-test('summary preview is opt-in, resets on reload and returns to real records without requests', () => {
+// Direct child element ids of the real summary grid, read from the actual portal.html markup.
+function summaryGridChildren() {
+  const start = html.indexOf('id="portalAccountSummary"');
+  const body = html.slice(html.indexOf('>', start) + 1);
+  const ids = [];
+  let depth = 0;
+  for (const tag of body.matchAll(/<(\/?)div\b([^>]*)>/g)) {
+    if (tag[1]) { if (depth-- === 0) break; continue; }
+    if (depth++ === 0) ids.push((tag[2].match(/\bid="([^"]+)"/) || [])[1]);
+  }
+  return ids;
+}
+
+test('summary preview is opt-in, resets on reload and keeps the real wellness card visible', () => {
   const h = ui();
   const listeners = {};
   let focused = 0;
+  const cardIds = summaryGridChildren();
+  assert.ok(cardIds.includes('portalWellnessTile'), 'wellness card sits directly in the summary grid');
+  assert.ok(cardIds.length >= 6 && cardIds.every(Boolean));
+  const sampleEnd = html.indexOf('</details>', html.indexOf('id="portalWellnessSample"'));
+  assert.ok(sampleEnd < html.indexOf('id="portalAccountSummary"'), 'real cards are outside the sample disclosure');
+  const cards = cardIds.map(id => ({ id, hidden: id !== 'portalWellnessTile' }));
   h.elements.portalWellnessSample = { open: true, addEventListener(type, callback) { listeners[type] = callback; } };
-  h.elements.portalAccountSummary = { hidden: true };
+  h.elements.portalAccountSummary = { hidden: false, children: cards };
   h.elements.portalPreviewReturn = { addEventListener(type, callback) { listeners.return = callback; } };
   h.elements.portalPreviewToggle = { focus() { focused++; } };
+  const visible = () => cards.filter(card => !card.hidden).map(card => card.id);
   const history = Object.freeze([Object.freeze({ created_at: '2026-10-01', score: 20 }), Object.freeze({ created_at: '2026-10-12', score: 30 })]);
   h.context.renderWellness({ history, due: false });
   const before = JSON.stringify(rows(h.elements.portalWellnessHistoryRows));
   h.context.initPortalSummaryPreview();
   assert.equal(h.elements.portalWellnessSample.open, false);
-  assert.equal(h.elements.portalAccountSummary.hidden, false);
+  assert.deepEqual(visible(), cardIds);
   h.elements.portalWellnessSample.open = true;
   listeners.toggle();
-  assert.equal(h.elements.portalAccountSummary.hidden, true);
+  assert.deepEqual(visible(), ['portalWellnessTile'], 'samples replace the other cards; real check-ins stay');
+  assert.equal(h.elements.portalAccountSummary.hidden, false, 'the grid that holds the real wellness card is never hidden');
   listeners.return();
   assert.equal(h.elements.portalWellnessSample.open, false);
-  assert.equal(h.elements.portalAccountSummary.hidden, false);
+  assert.deepEqual(visible(), cardIds);
   assert.equal(focused, 1);
   assert.equal(JSON.stringify(rows(h.elements.portalWellnessHistoryRows)), before);
   assert.match(h.elements.portalWellnessTrend.children[0].attributes['aria-label'], /20, 30$/);
@@ -150,41 +171,43 @@ test('next social shares public calendar timezone/invalid-date handling rather t
   assert.equal(h.elements.portalSocialsNext.textContent, 'Chicago future · 2026-10-13');
 });
 
-test('tile copy distinguishes account registrations, public calendar/library and all-time attendance', () => {
-  assert.match(html, /Your registrations.*public calendar/);
-  assert.match(html, /Attended \(all time\)/);
-  assert.doesNotMatch(html, /Attended \(2026\)/);
-  assert.match(html, /library is public, not a personalized saved list/);
+test('card copy distinguishes account registrations, the public calendar/library and unbuilt features', () => {
+  assert.match(html, /Events you registered for on the Events page, including Memory Socials, support group sessions/);
+  assert.match(html, /Browse all events/);
+  assert.match(html, /Guides, tools and trusted local help for caregivers in the shared Resource Hub\. This library is public, not a personalized saved list\./);
+  assert.match(html, /Coming soon<\/span> Saving your favorite resources here/);
+  assert.match(html, /Coming soon<\/span> Your past requests and their status will appear here/);
+  assert.match(html, /Coming soon<\/span> Announcements, upcoming opportunities and member benefits/);
 });
 
-
-test('portal events lead the real summary cards and wellness is a separate full-width section below', () => {
-  const gridStart=html.indexOf('id="portalAccountSummary"');
-  const wellness=html.indexOf('id="portalWellnessTile"');
-  const sample=html.indexOf('id="portalWellnessSample"');
-  assert.ok(gridStart>0 && wellness>gridStart && sample<gridStart);
-  const realCards=html.slice(gridStart,wellness);
-  assert.ok(realCards.indexOf('My Events') < realCards.indexOf('My Wellness Grant'));
-  assert.ok(realCards.indexOf('My Wellness Grant') < realCards.indexOf('My Memory Socials'));
-  assert.match(html, /class="panel portal-wellness-section" id="portalWellnessTile"/);
-  const styles=readFileSync(new URL('../styles.css',import.meta.url),'utf8');
-  assert.match(styles, /#dashView \.portal-wellness-section[^}]*width: 100%/);
+test('dashboard cards follow the requested order; wellness is a full-width card; grant and socials cards are gone', () => {
+  const gridStart = html.indexOf('id="portalAccountSummary"');
+  const sample = html.indexOf('id="portalWellnessSample"');
+  assert.ok(gridStart > 0 && sample < gridStart);
+  const grid = html.slice(gridStart, html.indexOf('</section>', gridStart));
+  const order = ['My Profile &amp; Intake', 'My Support', 'My Events', 'My Wellness', 'My Resources', 'Sanctuary Updates &amp; Perks'];
+  const at = order.map(label => grid.indexOf(label));
+  assert.ok(at.every(i => i > 0), JSON.stringify(at));
+  assert.deepEqual([...at].sort((a, b) => a - b), at);
+  assert.doesNotMatch(html, /My Wellness Grant|My Memory Socials|Resource library|portalGrantStatus|portalSocialsCount/);
+  assert.match(html, /class="panel m-0 portal-card portal-wellness-section" id="portalWellnessTile"/);
+  const styles = readFileSync(new URL('../styles.css', import.meta.url), 'utf8');
+  assert.match(styles, /#dashView \.portal-card-grid > \.portal-wellness-section[^}]*grid-column: 1 \/ -1/);
   assert.match(styles, /#dashView #portalWellnessHistory > summary[^}]*16px/);
   assert.match(styles, /#dashView #portalWellnessHistoryRows ol[^}]*padding-inline-start: 24px/);
   assert.match(styles, /@media \(max-width: 700px\)[\s\S]*#dashView \.portal-summary-grid[^}]*grid-template-columns: minmax\(0, 1fr\)/);
 });
 
 test('whole-portal examples remain opt-in, fictional, outside actual records and have no write controls', () => {
-  const match=html.match(/<details([^>]+)id="portalWellnessSample">([\s\S]*?)<\/details>/);
-  assert.ok(match);assert.doesNotMatch(match[1],/\bopen(?:\s|=|$)/);
-  assert.match(match[2],/Preview a filled-out portal \(sample data\)/);
-  for(const area of ['events','grant','socials','resources']) assert.match(match[2],new RegExp(`data-portal-sample="${area}"`));
-  assert.match(match[2],/events, grant and Memory Social visits below are fictional illustrations/);
-  assert.match(match[2],/Nothing here registers you, submits an application, awards a grant or makes a payment/);
-  assert.doesNotMatch(match[2],/<form\b|<input\b|data-action=|href="(?:\/api|https?:)/);
+  const match = html.match(/<details([^>]+)id="portalWellnessSample">([\s\S]*?)<\/details>/);
+  assert.ok(match); assert.doesNotMatch(match[1], /\bopen(?:\s|=|$)/);
+  assert.match(match[2], /Preview a filled-out portal \(sample data\)/);
+  for (const area of ['profile', 'support', 'events', 'resources']) assert.match(match[2], new RegExp(`data-portal-sample="${area}"`));
+  assert.doesNotMatch(match[2], /data-portal-sample="(?:grant|socials)"/);
+  assert.match(match[2], /fictional illustrations, not your records/);
+  assert.match(match[2], /Nothing here registers you or sends a request/);
+  assert.doesNotMatch(match[2], /<form\b|<input\b|data-action=|href="(?:\/api|https?:)/);
   assert.doesNotMatch(match[2], /data-portal-sample="wellness"|portalWellnessSampleTrend|out of 100/);
   assert.equal((match[2].match(/Sample registration/g) || []).length, 3);
-  assert.match(match[2], /Fictional Memory Social visit 1/);
-  assert.match(match[2], /Fictional Memory Social visit 2/);
-  for(const id of ['portalEventsList','portalGrantStatus','portalSocialsCount','portalWellnessHistoryRows','portalWellnessForm']) assert.equal(match[2].includes(`id="${id}"`),false,id);
+  for (const id of ['portalEventsList', 'portalProfileName', 'portalWellnessHistoryRows', 'portalWellnessForm']) assert.equal(match[2].includes(`id="${id}"`), false, id);
 });

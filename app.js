@@ -671,18 +671,29 @@ function portalLogout() {
 }
 
 function renderPortalData(data) {
+  const profile = data.profile || {};
   const welcome = document.getElementById('portalWelcome');
   if (welcome) {
-    welcome.textContent = 'Welcome back, ' + (data.profile.first_name || 'Member');
+    const first = typeof profile.first_name === 'string' ? profile.first_name.trim() : '';
+    welcome.textContent = first ? 'Welcome to Your Sanctuary, ' + first + '!' : 'Welcome to Your Sanctuary!';
   }
+
+  // My Profile & Intake: read-only account details (updates/intake are not built yet).
+  const setText = function (id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value ? String(value) : '—';
+  };
+  setText('portalProfileName', [profile.first_name, profile.last_name].filter(Boolean).join(' '));
+  setText('portalProfileEmail', profile.email);
+  setText('portalProfilePhone', profile.phone);
 
   // Membership status
   const memberStatus = document.getElementById('portalMembershipStatus');
   if (memberStatus) {
-    if (data.profile.sanctuary_member === 1) {
+    if (profile.sanctuary_member === 1) {
       memberStatus.innerHTML = '<span class="badge badge-green">Sanctuary member</span>';
     } else {
-      memberStatus.innerHTML = '<span class="badge badge-gray">Non-member</span>';
+      memberStatus.innerHTML = '<span class="badge badge-gray">Not yet a member</span>';
     }
   }
 
@@ -712,52 +723,37 @@ function renderPortalData(data) {
     }
   }
 
-  // Events list
+  // My Events: the account's registrations (any published event type, including Memory
+  // Socials and support group sessions), grouped into upcoming and past.
   const eventsList = document.getElementById('portalEventsList');
+  const nowDate = new Date();
+  const timed = (data.events || []).map(function (e) {
+    return { event: e, time: publicEventTime(e.starts_at, nowDate, 'America/Chicago') };
+  });
+  const upcoming = timed.filter(function (x) { return x.time && x.time.future; })
+    .sort(function (a, b) { return a.time.instant - b.time.instant; });
+  const past = timed.filter(function (x) { return !(x.time && x.time.future); })
+    .sort(function (a, b) { return (b.time ? b.time.instant : -Infinity) - (a.time ? a.time.instant : -Infinity); });
   if (eventsList) {
     eventsList.innerHTML = '';
-    if (data.events && data.events.length > 0) {
-      data.events.forEach(function (e) {
-        const item = document.createElement('div');
-        item.className = 'timeline-item';
-        let dotColor = 'var(--ink-soft)';
-        if (e.type === 'support_group') dotColor = 'var(--green)';
-        else if (e.type === 'memory_social') dotColor = 'var(--amber)';
-        else if (e.type === 'wellness') dotColor = 'var(--plum)';
-
-        // Built as DOM nodes, not an HTML string. e.title and e.location are free text
-        // authored in the staff console, and concatenating them into innerHTML made the
-        // caregiver portal a stored-XSS sink. Everywhere else in this file already uses
-        // textContent; these were the outliers.
-        const dot = document.createElement('div');
-        dot.className = 'timeline-dot';
-        dot.style.background = dotColor;
-
-        const title = document.createElement('strong');
-        title.textContent = e.title || 'Event';
-
-        const badge = document.createElement('span');
-        badge.className = 'badge badge-green';
-        badge.textContent = e.registration_status || '';
-
-        const when = document.createElement('div');
-        when.className = 'when';
-        when.textContent = (e.starts_at || '') + ' · ' + (e.location || 'Online');
-
-        const body = document.createElement('div');
-        body.appendChild(title);
-        body.appendChild(document.createTextNode(' '));
-        body.appendChild(badge);
-        body.appendChild(when);
-
-        item.appendChild(dot);
-        item.appendChild(body);
-        eventsList.appendChild(item);
-      });
-    } else {
+    if (timed.length === 0) {
       eventsList.innerHTML = '<p class="small muted m-0">No registered events yet.</p>';
+    } else {
+      [['Upcoming', upcoming], ['Past', past]].forEach(function (group) {
+        if (!group[1].length) return;
+        const section = document.createElement('div');
+        section.className = 'portal-events-group';
+        const heading = document.createElement('h5');
+        heading.textContent = group[0];
+        section.appendChild(heading);
+        group[1].forEach(function (entry) { section.appendChild(portalEventItem(entry.event)); });
+        eventsList.appendChild(section);
+      });
     }
   }
+  const nextRegistered = upcoming.find(function (x) { return x.event.registration_status === 'registered'; });
+  portalHighlightState.nextEvent = nextRegistered ? nextRegistered.event : null;
+  renderPortalHighlights();
 
   // Memory socials count and details
   const socialsCount = document.getElementById('portalSocialsCount');
@@ -784,6 +780,110 @@ function renderPortalData(data) {
   }
 }
 
+
+const PORTAL_EVENT_TYPE_LABELS = { support_group: 'Support Group', memory_social: 'Memory Social', wellness: 'Wellness', caregiver_event: 'Caregiver Event' };
+
+// Built as DOM nodes, not an HTML string: event titles and locations are free text
+// authored in the staff console (stored-XSS hardening).
+function portalEventItem(e) {
+  const item = document.createElement('div');
+  item.className = 'timeline-item';
+  let dotColor = 'var(--ink-soft)';
+  if (e.type === 'support_group') dotColor = 'var(--green)';
+  else if (e.type === 'memory_social') dotColor = 'var(--amber)';
+  else if (e.type === 'wellness') dotColor = 'var(--plum)';
+  const dot = document.createElement('div');
+  dot.className = 'timeline-dot';
+  dot.style.background = dotColor;
+  const title = document.createElement('strong');
+  title.textContent = e.title || 'Event';
+  const badge = document.createElement('span');
+  badge.className = 'badge badge-green';
+  badge.textContent = e.registration_status || '';
+  const when = document.createElement('div');
+  when.className = 'when';
+  const kind = PORTAL_EVENT_TYPE_LABELS[e.type] ? PORTAL_EVENT_TYPE_LABELS[e.type] + ' · ' : '';
+  when.textContent = kind + (e.starts_at || '') + ' · ' + (e.location || 'Online');
+  const body = document.createElement('div');
+  body.appendChild(title);
+  body.appendChild(document.createTextNode(' '));
+  body.appendChild(badge);
+  body.appendChild(when);
+  item.appendChild(dot);
+  item.appendChild(body);
+  return item;
+}
+
+// Dashboard highlights: only information connected to this account (next registered
+// event, a due wellness check-in). Nothing is shown when there is nothing real to show.
+const portalHighlightState = { nextEvent: null, wellnessDue: false };
+
+function renderPortalHighlights() {
+  const box = document.getElementById('portalHighlights');
+  const list = document.getElementById('portalHighlightsList');
+  if (!box || !list) return;
+  list.textContent = '';
+  const add = function (icon, text) {
+    const li = document.createElement('li');
+    const mark = document.createElement('span');
+    mark.setAttribute('aria-hidden', 'true');
+    mark.textContent = icon;
+    const body = document.createElement('span');
+    body.textContent = text;
+    li.appendChild(mark);
+    li.appendChild(body);
+    list.appendChild(li);
+  };
+  const e = portalHighlightState.nextEvent;
+  if (e) add('📅', 'Your next event: ' + (e.title || 'Event') + ' · ' + String(e.starts_at || '').slice(0, 16));
+  if (portalHighlightState.wellnessDue) add('💛', 'It’s time for a quick wellness check-in. See My Wellness below.');
+  box.hidden = list.children.length === 0;
+}
+
+
+// Design preview (client review on the test site, where caregiver sign-in mail is off):
+// /portal?preview=sample shows the real dashboard layout with clearly labeled FICTIONAL
+// information. No session, API request, storage or submit control is used.
+function portalDesignPreviewRequested() {
+  try {
+    return typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('preview') === 'sample';
+  } catch (err) {
+    return false;
+  }
+}
+
+function portalSampleDate(daysFromNow, hhmm) {
+  const d = new Date(Date.now() + daysFromNow * 86400000);
+  return d.toISOString().slice(0, 10) + ' ' + hhmm;
+}
+
+function initPortalDesignPreview() {
+  const loginView = document.getElementById('loginView');
+  const dashView = document.getElementById('dashView');
+  if (!loginView || !dashView) return false;
+  loginView.style.display = 'none';
+  dashView.style.display = 'block';
+  const banner = document.getElementById('portalDesignPreview');
+  if (banner) banner.hidden = false;
+  ['portalLogoutBtn', 'portalWellnessSample'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el) el.hidden = true;
+  });
+  renderPortalData({
+    profile: { first_name: 'Jordan', last_name: 'Example', email: 'jordan@example.invalid', phone: '(000) 000-0000', sanctuary_member: 1 },
+    grants: [],
+    events: [
+      { title: 'Example Memory Social', type: 'memory_social', starts_at: portalSampleDate(3, '14:00'), location: 'Sample community room', registration_status: 'registered' },
+      { title: 'Example Virtual Caregiver Support Group', type: 'support_group', starts_at: portalSampleDate(6, '17:00'), location: 'Online', registration_status: 'registered' },
+      { title: 'Example Family Education Workshop', type: 'caregiver_event', starts_at: portalSampleDate(-9, '18:00'), location: 'Sample community center', registration_status: 'attended' },
+    ],
+  });
+  // No fictional wellness scores; only the due prompt, and no check-in can be submitted.
+  renderWellness({ history: [], due: true });
+  const btn = document.getElementById('portalWellnessBtn');
+  if (btn) btn.classList.add('d-none');
+  return true;
+}
 
 /* ---------- Staff console: governed agent chat mock ---------- */
 function agentConfirm(btn) {
@@ -1019,7 +1119,7 @@ function loadLiveEvents() {
 document.addEventListener('DOMContentLoaded', function() {
   initPortalSummaryPreview();
   loadLiveEvents();
-  checkPortalSession();
+  if (!(portalDesignPreviewRequested() && initPortalDesignPreview())) checkPortalSession();
 });
 
 
@@ -1264,6 +1364,10 @@ function renderWellness(data) {
     }
   }
   if (btn) btn.classList.toggle('d-none', !data.due);
+  if (typeof portalHighlightState === 'object' && typeof renderPortalHighlights === 'function') {
+    portalHighlightState.wellnessDue = !!data.due;
+    renderPortalHighlights();
+  }
   const trendHint = document.getElementById('portalWellnessTrendHint');
   if (trendHint) trendHint.textContent = history.length < 2
     ? 'A trend appears after two check-ins.' : 'Scores shown oldest to newest.';
@@ -1288,8 +1392,13 @@ function initPortalSummaryPreview() {
   const preview = document.getElementById('portalWellnessSample');
   const actual = document.getElementById('portalAccountSummary');
   if (!preview || !actual) return;
-  // Display-only examples: no session, storage, API data or check-in changes.
-  const sync = function () { actual.hidden = preview.open; };
+  // Display-only examples: no session, storage, API data or check-in changes. The sample
+  // cards stand in for the other summary cards; the real wellness card stays visible.
+  const sync = function () {
+    Array.prototype.forEach.call(actual.children, function (card) {
+      if (card.id !== 'portalWellnessTile') card.hidden = preview.open;
+    });
+  };
   preview.open = false;
   sync();
   preview.addEventListener('toggle', sync);
