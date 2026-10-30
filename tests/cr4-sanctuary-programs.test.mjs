@@ -311,7 +311,7 @@ test('O26-02/03/04: Sanctuary, About, and Get Involved place hero text over supp
   assert.doesNotMatch(sanctuaryHero, /caregiver-sanctuary-logo\.png|client-sanctuary-wordmark|client-video-layout|client-video-panel/);
   assert.match(sanctuaryHero, /<video class="hero-media" muted loop playsinline data-motion-autoplay preload="metadata" width="720" height="1280" tabindex="0" aria-label="Caregiver Sanctuary community video \(select to pause or play\)">/);
   assert.doesNotMatch(sanctuaryHero, /\sautoplay(?:\s|>)/, 'motion preference is checked before playback');
-  assert.match(sanctuaryHero, /<source src="media\/client-oct16\/sanctuary-video-1-trimmed\.mp4#t=0\.1" type="video\/mp4">/);
+  assert.match(sanctuaryHero, /<source src="media\/client-oct16\/sanctuary-video-1-trimmed\.mp4\?v=[0-9a-f]{12}#t=0\.1" type="video\/mp4">/);
   assert.match(sanctuaryHero, /<div class="hero-scrim" aria-hidden="true"><\/div>\s*<div class="container hero-content">/);
   assert.match(sanctuaryHero, /<h1 class="hero-title-clamp">Caregiver Sanctuary<\/h1>/);
   assert.match(sanctuaryHero, /<a class="btn btn-coral" href="programs\.html">Join Caregiver Sanctuary<\/a>/);
