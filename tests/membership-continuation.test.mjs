@@ -157,3 +157,78 @@ test('all generated membership forms offer a same-origin continuation without em
   const membership = source.slice(source.indexOf('function submitMembership'), source.indexOf('/* ---------- Virtual support group:'));
   assert.doesNotMatch(membership, /portal\/login|portal_session|location\.(?:assign|href)|localStorage/);
 });
+
+test('a NEW saved membership hands the email to the portal via sessionStorage (never the URL) and navigates to /portal', async () => {
+  const assigned = [];
+  const f = fixture();
+  f.context.window = { location: { assign: url => assigned.push(url) } };
+  f.submit();
+  await settle();
+  assert.deepEqual(assigned, ['/portal'], 'goes straight to the portal sign-in');
+  const handoff = JSON.parse(f.store.get('legacy-portal-handoff'));
+  assert.equal(handoff.email, 'fictional@example.invalid');
+  assert.ok(!assigned[0].includes('@'), 'the email is not placed in the URL');
+  assert.equal(f.calls.length, 1, 'the membership page itself sends no sign-in request');
+});
+
+test('no portal hand-off for a duplicate, a refused or an uncertain membership save', async () => {
+  for (const fetchImpl of [
+    () => Promise.resolve(response(200, { ok: true, duplicate: true })),
+    () => Promise.resolve(response(400, { ok: false, error: 'bad' })),
+    () => Promise.resolve(response(503, { ok: false })),
+  ]) {
+    const assigned = [];
+    const f = fixture({ fetchImpl });
+    f.context.window = { location: { assign: url => assigned.push(url) } };
+    f.submit();
+    await settle();
+    assert.deepEqual(assigned, []);
+    assert.equal(f.store.get('legacy-portal-handoff'), undefined);
+  }
+});
+
+// Portal-side slice: the one-time hand-off helpers plus the portal sign-in functions.
+const between = (start, end) => { const i = app.indexOf(start); const j = app.indexOf(end, i); assert.ok(i >= 0 && j > i, start); return app.slice(i, j); };
+const portalSource = between('const PORTAL_HANDOFF_KEY', 'function submitMembership(')
+  + between('function continueMembershipHandoff()', 'function submitPortalLogin(')
+  + between('function submitPortalLogin(', '\nfunction ', ) ;
+
+test('portal consumes a fresh hand-off once: prefills the email and requests exactly one sign-in link', () => {
+  const store = new Map([['legacy-portal-handoff', JSON.stringify({ email: 'fictional@example.invalid', at: 1000 })]]);
+  const posted = [];
+  const nodes = { loginEmail: { value: '' }, loginStatus: { style: {}, textContent: '', appendChild() {} }, loginBtn: { disabled: false },
+    membershipWelcome: { hidden: true } };
+  const context = {
+    document: { getElementById: id => nodes[id], createElement: () => ({ style: {} }) },
+    sessionStorage: { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, v), removeItem: k => store.delete(k) },
+    Date: { now: () => 1000 + 60 * 1000 },
+    fetch: (url, options) => { posted.push({ url, body: JSON.parse(options.body) }); return new Promise(() => {}); },
+  };
+  vm.runInNewContext(portalSource + '\n;globalThis.__handoff = continueMembershipHandoff;', context);
+  context.__handoff();
+  assert.equal(nodes.loginEmail.value, 'fictional@example.invalid');
+  assert.equal(nodes.membershipWelcome.hidden, false);
+  assert.deepEqual(posted, [{ url: '/api/portal/login', body: { email: 'fictional@example.invalid' } }]);
+  assert.equal(store.has('legacy-portal-handoff'), false, 'the hand-off is one-time');
+  context.__handoff();
+  assert.equal(posted.length, 1, 'a reload does not request another link');
+});
+
+test('a stale or malformed hand-off is discarded without requesting a link', () => {
+  for (const raw of [JSON.stringify({ email: 'fictional@example.invalid', at: 0 }), '{not json', JSON.stringify({ email: 'no-at-sign', at: 1000 })]) {
+    const store = new Map([['legacy-portal-handoff', raw]]);
+    const posted = [];
+    const nodes = { loginEmail: { value: '' }, loginStatus: { style: {} }, loginBtn: {}, membershipWelcome: { hidden: true } };
+    const context = {
+      document: { getElementById: id => nodes[id] },
+      sessionStorage: { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, v), removeItem: k => store.delete(k) },
+      Date: { now: () => 1000 + 11 * 60 * 1000 },
+      fetch: (url) => { posted.push(url); return new Promise(() => {}); },
+    };
+    vm.runInNewContext(portalSource + '\n;globalThis.__handoff = continueMembershipHandoff;', context);
+    context.__handoff();
+    assert.deepEqual(posted, []);
+    assert.equal(nodes.loginEmail.value, '');
+    assert.equal(store.has('legacy-portal-handoff'), false);
+  }
+});
