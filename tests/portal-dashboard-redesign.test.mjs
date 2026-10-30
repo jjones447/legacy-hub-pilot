@@ -105,6 +105,15 @@ test('the next-event highlight is the first future REGISTERED event, even after 
   assert.equal(h.el.portalHighlights.hidden, true);
 });
 
+test('the design preview really hides Sign out: its .btn display rule cannot override [hidden]', () => {
+  const css = readFileSync(new URL('../styles.css', import.meta.url), 'utf8');
+  const button = html.match(/<button[^>]*id="portalLogoutBtn"[^>]*>/)[0];
+  const classes = button.match(/class="([^"]*)"/)[1].split(/\s+/);
+  const displayed = classes.filter(c => new RegExp('(^|\\n)\\.' + c + '\\s*\\{[^}]*\\bdisplay\\s*:').test(css));
+  assert.ok(displayed.includes('btn'), 'the button carries a class that sets display');
+  assert.match(css, /#dashView #portalLogoutBtn\[hidden\]\s*\{\s*display:\s*none;\s*\}/);
+});
+
 test('design preview (?preview=sample) shows the layout with labeled fictional data and makes no requests', () => {
   const h = ui({ search: '?preview=sample' });
   assert.equal(h.context.portalDesignPreviewRequested(), true);

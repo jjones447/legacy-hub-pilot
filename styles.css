@@ -1420,6 +1420,8 @@ main ul.measure-620 { margin: 16px 0; padding-left: 24px; }
 #dashView .portal-design-preview { margin: 0 0 20px; padding: 12px 16px; border-radius: 12px; background: #fff7e6; border: 1px solid #f1d9a8; color: #5c4313; font-size: 15px; }
 #dashView .portal-highlights { margin: 0 0 24px; padding: 18px 22px; border-radius: 16px; background: #fbf3ec; border: 1px solid #efdfd3; }
 #dashView .portal-highlights[hidden] { display: none; }
+/* .btn sets display, which beats the [hidden] default; the design preview hides Sign out. */
+#dashView #portalLogoutBtn[hidden] { display: none; }
 #dashView .portal-highlights h3 { margin: 0 0 10px; font-size: 18px; }
 #dashView .portal-highlights ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
 #dashView .portal-highlights li { display: flex; gap: 10px; align-items: baseline; font-size: 15.5px; line-height: 1.5; }
