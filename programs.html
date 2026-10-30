@@ -158,8 +158,8 @@
         <div class="kv-row program-fact"><span class="k">Facilitation</span><span class="v">Alzheimer's Association-certified</span></div>
         <div class="kv-row program-fact"><span class="k">Cost</span><span class="v">Free</span></div>
         <a href="events.html" class="btn btn-plum btn-sm mt-16 d-inline-block" data-cs="programs.support_group.panel_cta_label">View Events</a>
-        <button type="button" class="btn btn-outline btn-sm mt-16" data-action="open-support-group-interest" aria-haspopup="dialog" aria-controls="supportGroupInterestModal">Get joining link</button>
-        <p class="small muted mt-16">Share your name and email to see the Google Meet link. This is not a session registration or an automatic joining email.</p>
+        <button type="button" class="btn btn-outline btn-sm mt-16" data-action="open-support-group-interest" aria-haspopup="dialog" aria-controls="supportGroupInterestModal">Sign up and join</button>
+        <p class="small muted mt-16">Sign up with your name and email, then you'll go straight to the group on Google Meet.</p>
       </div>
       <div>
         <span class="eyebrow" data-cs="programs.support_group.eyebrow">Virtual Support Group</span>
@@ -239,9 +239,9 @@
 
 <!-- Native dialog supplies keyboard focus containment and Escape-to-close. -->
 <dialog id="supportGroupInterestModal" class="modal" aria-labelledby="supportGroupInterestTitle" aria-describedby="supportGroupInterestDescription">
-  <button type="button" class="modal-close" data-action="close-support-group-interest" aria-label="Close support-group interest form">&#215;</button>
-  <h3 id="supportGroupInterestTitle">Get the virtual support-group joining link</h3>
-  <p class="sub" id="supportGroupInterestDescription">Leave your name and email for Legacy staff. After your request is saved, the Dementia Support Group's Google Meet link will appear here. This does not register you for a session or send reminders.</p>
+  <button type="button" class="modal-close" data-action="close-support-group-interest" aria-label="Close support group sign-up form">&#215;</button>
+  <h3 id="supportGroupInterestTitle">Join the Virtual Caregiver Support Group</h3>
+  <p class="sub" id="supportGroupInterestDescription">Sign up with your name and email. When you submit, we'll take you straight to the group on Google Meet.</p>
   <form id="supportGroupInterestForm" data-action="submit-support-group-interest">
     <div class="field">
       <label for="supportGroupName">Your name</label>
@@ -251,11 +251,11 @@
       <label for="supportGroupEmail">Email</label>
       <input id="supportGroupEmail" name="email" type="email" autocomplete="email" required>
     </div>
-    <p class="privacy-line">By sending this request, you consent to Legacy using your name and email to find or create your caregiver record and follow up about the virtual support group. This does not subscribe you to reminders.</p>
-    <button type="submit" class="btn btn-coral w-100">Get joining link</button>
-    <div class="success-note" data-intake-success role="status" aria-live="polite">Your interest is saved for Legacy staff to review. You are not registered for a session.</div>
+    <p class="privacy-line">By signing up, you consent to Legacy using your name and email to find or create your caregiver record and follow up about the virtual support group. This does not subscribe you to reminders.</p>
+    <button type="submit" class="btn btn-coral w-100">Sign up and join</button>
+    <div class="success-note" data-intake-success role="status" aria-live="polite">You're signed up! Taking you to Google Meet&hellip;</div>
     <div class="error-note" data-intake-error role="alert" aria-live="assertive"></div>
-    <div class="routing-note" data-intake-routing>Your request is in the staff follow-up queue. <a href="https://meet.google.com/dmc-orwi-afk" target="_blank" rel="noopener noreferrer">Open the Dementia Support Group in Google Meet</a>. Check the session time with Legacy before joining; this form does not confirm a date, time or place.</div>
+    <div class="routing-note" data-intake-routing>If Google Meet doesn't open, <a href="https://meet.google.com/dmc-orwi-afk" target="_blank" rel="noopener noreferrer">join the group on Google Meet</a>. Session times are on the <a href="events.html">Events</a> page.</div>
   </form>
 </dialog>
 
@@ -376,7 +376,7 @@
 </footer>
 
 
-<script src="app.js?v=f6e6179788e9"></script>
+<script src="app.js?v=ef8948dae5ea"></script>
 <script src="nav-v2.js"></script>
 </body>
 </html>

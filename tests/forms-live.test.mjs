@@ -214,7 +214,7 @@ test('delegated intake submits keep status, event identity and retry keys on the
 });
 
 
-test('support-group interest is a named native dialog with only name/email and truthful joining scope', () => {
+test('support-group sign-up is a named native dialog with only name/email, then goes to Google Meet', () => {
   const page = file('programs.html');
   const dialog = page.match(/<dialog id="supportGroupInterestModal"[\s\S]*?<\/dialog>/)?.[0];
   assert.ok(dialog);
@@ -224,9 +224,9 @@ test('support-group interest is a named native dialog with only name/email and t
   assert.match(dialog, /<label for="supportGroupName">Your name<\/label>/);
   assert.match(dialog, /<label for="supportGroupEmail">Email<\/label>/);
   assert.match(dialog, /type="email" autocomplete="email" required/);
-  assert.match(dialog, /data-action="close-support-group-interest" aria-label="Close support-group interest form"/);
-  assert.match(dialog, /After your request is saved/);
-  assert.match(dialog, /does not register you for a session or send reminders/);
+  assert.match(dialog, /data-action="close-support-group-interest" aria-label="Close support group sign-up form"/);
+  assert.match(dialog, /Join the Virtual Caregiver Support Group/);
+  assert.match(dialog, /When you submit, we'll take you straight to the group on Google Meet/);
   assert.match(dialog, /consent to Legacy using your name and email to find or create your caregiver record/);
   assert.match(dialog, /does not subscribe you to reminders/);
   assert.match(dialog, /data-intake-success role="status" aria-live="polite"/);
@@ -234,9 +234,9 @@ test('support-group interest is a named native dialog with only name/email and t
   assert.doesNotMatch(dialog, /<textarea|event_id|type="date"/);
   const joiningRegion = dialog.match(/<div class="routing-note" data-intake-routing>([\s\S]*?)<\/div>/)?.[1];
   assert.match(joiningRegion, /href="https:\/\/meet\.google\.com\/dmc-orwi-afk" target="_blank" rel="noopener noreferrer"/);
-  assert.match(joiningRegion, /does not confirm a date, time or place/);
+  assert.match(joiningRegion, /If Google Meet doesn't open/);
   assert.equal((dialog.match(/meet\.google\.com/g) || []).length, 1);
-  assert.match(file('programs-events.html'), /href="programs\.html#support-group">Get the support-group joining link/);
+  assert.match(file('programs-events.html'), /href="programs\.html#support-group">Sign up for the support group/);
   assert.match(page, /href="events\.html"[^>]*data-cs="programs.support_group.panel_cta_label"/);
 });
 
@@ -260,7 +260,10 @@ test('support-group delegated request reaches its own shared staff task and orig
   const nodes = { supportGroupInterestModal: dialog, supportGroupInterestForm: form,
     supportGroupName: { value: 'Demo Group', focus() { inputFocus++; } },
     supportGroupEmail: { value: 'group-interest@example.invalid' } };
+  regions['[data-intake-routing] a[href^="https://meet.google.com/"]'] = { getAttribute: () => 'https://meet.google.com/dmc-orwi-afk' };
+  const assigned = [];
   const context = {
+    window: { location: { assign: url => assigned.push(url) } },
     document: { activeElement: opener, getElementById: id => nodes[id],
       addEventListener: (name, handler) => { listeners[name] = handler; } },
     crypto: { randomUUID: () => 'fictional-support-group-ref' },
@@ -284,10 +287,11 @@ test('support-group delegated request reaches its own shared staff task and orig
   assert.equal(regions['[type="submit"]'].disabled, true);
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(regions['[data-intake-success]'].style.display, 'block');
+  assert.deepEqual(assigned, ['https://meet.google.com/dmc-orwi-afk'], 'a saved sign-up goes straight to Google Meet');
   assert.deepEqual(requests[0].payload, {
     kind: 'support_request', source: 'site_form:support_group',
     external_ref: 'fictional-support-group-ref', first_name: 'Demo', last_name: 'Group',
-    email: 'group-interest@example.invalid', message: 'Virtual support group interest — request joining details',
+    email: 'group-interest@example.invalid', message: 'Signed up for the Virtual Caregiver Support Group',
   });
   const caregiver = raw.prepare(`SELECT * FROM caregiver WHERE email = ?`).get('group-interest@example.invalid');
   assert.equal(caregiver.sanctuary_member, 0);
@@ -296,7 +300,7 @@ test('support-group delegated request reaches its own shared staff task and orig
   assert.equal(queue.queue[0].caregiver_id, caregiver.id);
   assert.equal(queue.queue[0].source, 'site_form:support_group');
   assert.equal(queue.queue[0].kind, 'support_request');
-  assert.equal(queue.queue[0].detail, 'Virtual support group interest — request joining details');
+  assert.equal(queue.queue[0].detail, 'Signed up for the Virtual Caregiver Support Group');
   const audit = raw.prepare(`SELECT * FROM audit_log WHERE action = 'intake.support_request'`).get();
   assert.equal(audit.actor, 'site_form:support_group');
   assert.equal(audit.entity_id, caregiver.id);
@@ -320,7 +324,9 @@ test('support-group joining details stay hidden for failed, missing or unreadabl
   const form = { id: 'supportGroupInterestForm', querySelector: selector => regions[selector] };
   const nodes = { supportGroupInterestForm: form, supportGroupName: { value: 'Fictional Name' },
     supportGroupEmail: { value: 'fictional@example.invalid' } };
-  const context = { document: { getElementById: id => nodes[id] },
+  regions['[data-intake-routing] a[href^="https://meet.google.com/"]'] = { getAttribute: () => 'https://meet.google.com/dmc-orwi-afk' };
+  const assigned = [];
+  const context = { window: { location: { assign: url => assigned.push(url) } }, document: { getElementById: id => nodes[id] },
     crypto: { randomUUID: () => 'fictional-ack-check' },
     sessionStorage: { getItem: () => 'fictional-ack-check', setItem() {} }, fetch: null };
   vm.runInNewContext(source, context);
@@ -341,6 +347,7 @@ test('support-group joining details stay hidden for failed, missing or unreadabl
     assert.equal(regions['[data-intake-success]'].style.display, 'none');
     assert.equal(regions['[data-intake-routing]'].style.display, 'none');
   }
+  assert.deepEqual(assigned, [], 'an unconfirmed sign-up never sends anyone to Google Meet');
 });
 
 

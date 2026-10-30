@@ -228,7 +228,7 @@ function submitMembership(e) {
   return false;
 }
 
-/* ---------- Virtual support group: interest only, not session registration ---------- */
+/* ---------- Virtual support group: sign up (saved for staff), then go to Google Meet ---------- */
 let supportGroupInterestOpener = null;
 
 function openSupportGroupInterest(opener) {
@@ -266,10 +266,15 @@ function submitSupportGroupInterest(e) {
     first_name: name.first_name,
     last_name: name.last_name,
     email: document.getElementById('supportGroupEmail').value.trim(),
-    message: 'Virtual support group interest — request joining details',
+    message: 'Signed up for the Virtual Caregiver Support Group',
   };
   postIntake(form, payload).then(function () {
     setFormState(form, 'success');
+    // Only after the sign-up is saved: take the caregiver straight to the group on Google Meet.
+    const meet = form.querySelector('[data-intake-routing] a[href^="https://meet.google.com/"]');
+    if (meet && typeof window !== 'undefined' && window.location && typeof window.location.assign === 'function') {
+      window.location.assign(meet.getAttribute('href'));
+    }
   }).catch(function () {
     setFormState(form, 'error', "We couldn't save your request just now. Please contact Legacy if you need help.");
   });
