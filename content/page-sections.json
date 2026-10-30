@@ -3,7 +3,7 @@
   "note": "Editable page copy (slice 02.1). Values are HTML fragments rendered verbatim - inline <strong>/<em>/<a> allowed, structure lives in templates/*.j2. The agent edits items here, never templates.",
   "items": {
     "home.hero": {
-      "title": "A place for caregivers to find support, respite, wellness and community",
+      "title": "A place for caregivers to find support, respite, wellness and community.",
       "lede": "We support family caregivers through respite, wellness, education, resources and meaningful community connection, with specialized support for families navigating dementia and other care needs."
     },
     "home.journey": {
