@@ -51,8 +51,10 @@ and stays open until staff resolves it. Provider acceptance is not recipient
 delivery. A lost/ambiguous provider response or outcome-store failure leaves the
 claim for reconciliation. A mail failure still returns successful registration.
 The endpoint adds `confirmation_email: submitted | needs_review | not_sent`.
-The public result must distinguish registration success from email submission;
-the companion UI change is coordinated with the active shared `app.js` owner.
+The ordinary-event on-screen result distinguishes registration success from
+email submission, and tells people to contact Legacy rather than register again
+if mail is unconfirmed. Its narrow `submitRegister` change preserves the separate
+support-group functions owned by the active `app.js` contributor.
 
 Public duplicate submissions read the existing outcome and never send. Old
 registrations are never backfilled. If a process dies between committing a
@@ -91,7 +93,7 @@ Source tests use in-memory SQLite and mocked provider calls, including claim
 acknowledgment loss, concurrent duplicates, outcome persistence failure,
 registration rollback, policy refusal and unchanged portal-mail behavior.
 They are not a real email receipt or deployment. The existing release owner must
-coordinate the shared staging bundle and UI result text, qualify the approved
+coordinate the shared staging bundle, qualify the approved
 test recipient/policy and verify one authorized registration plus actual mailbox
 receipt. No artificial production signup, backfill or unsolicited test send is
 authorized by this document. Requester approval of the specific staging result

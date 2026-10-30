@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
 import { handleIntake } from '../functions/api/_shared.mjs';
 import { onRequestPost } from '../functions/api/intake.js';
 import { confirmRegistration, confirmationMailAllowed, registrationEmail } from '../functions/_lib/registration-email.mjs';
@@ -205,3 +206,24 @@ test('invalid JSON values and full/unpublished events do not create registration
   assert.equal((await onRequestPost({request:request(f.body),env:f.env})).status,404);
   for (const table of ['caregiver','registration','followup']) assert.equal(f.raw.prepare(`SELECT COUNT(*) n FROM ${table}`).get().n,0);
 });
+
+for (const confirmation_email of ['submitted','needs_review','not_sent']) {
+  test(`actual ordinary-event submit handler distinguishes saved registration from ${confirmation_email} email`, async () => {
+    const app = readFileSync(new URL('../app.js',import.meta.url),'utf8');
+    const start = app.indexOf('function submitRegister(');
+    const source = app.slice(start, app.indexOf("document.addEventListener('click'",start));
+    const success = { textContent:'' }, states = [], payloads = [];
+    const form = { dataset:{eventId:'ev_demo'},querySelector:()=>success };
+    const nodes = { regForm:form,regName:{value:'DEMO'},regEmail:{value:'demo@example.invalid'},regRole:{value:'DEMO caregiver'} };
+    const ctx = { document:{getElementById:id=>nodes[id]},splitName:()=>({first_name:'DEMO'}),intakeExternalRef:()=> 'original-key',
+      postIntake:async (target,payload)=>{ assert.equal(target,form);payloads.push(payload);return {ok:true,confirmation_email}; },
+      setFormState:(target,state)=>{assert.equal(target,form);states.push(state);} };
+    vm.runInNewContext(source,ctx);
+    ctx.submitRegister({preventDefault(){}});
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.deepEqual(states,['success']); assert.equal(payloads[0].external_ref,'original-key');
+    assert.match(success.textContent,/Registration saved/);
+    assert.match(success.textContent, confirmation_email==='submitted' ? /submitted.*inbox/ : /contact Legacy.*do not register again/);
+    assert.doesNotMatch(success.textContent,/delivered|payment confirmed/i);
+  });
+}
