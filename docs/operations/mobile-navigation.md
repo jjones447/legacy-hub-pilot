@@ -1,5 +1,28 @@
 # Scrolled mobile navigation — O26-01
 
+## Staff directory and wellness selector — October 30 source successor
+
+[pc2-codex-42] Jacob requested a compact People & Access surface and a more usable
+wellness picker. The existing role filter now defaults to Caregivers and switches
+to Staff & admins, Staff or Admins, showing only one group at a time. Shared search,
+caregiver pagination, separate role permissions and the admin-only Add staff form
+remain. Result tables have bounded, keyboard-focusable scrolling.
+
+The wellness list has a visible name search and a wider six-row single-person
+selector. Clicking or using the keyboard to select a person immediately loads
+their chart; changing the time range also updates it, without a separate Show
+step. Filtering preserves a selected person only while they remain in the results.
+No matches clears the chart rather than silently choosing someone else. Refresh
+errors clear stale entries; delayed chart responses cannot replace a newer
+person's chart. Only the existing read endpoints are used by these controls.
+
+This extends the existing staff UI and tests, not a new directory or health-data
+workflow. Tests cover role switching, privilege preservation, search/selection,
+empty and failed reads, and delayed responses. Installed desktop/phone behavior
+must be recorded separately by the combined release owner in existing issue54.
+The earlier navigation verification below remains historical proof of its exact
+assets; a changed stylesheet does not inherit that byte-identity assertion.
+
 [pc2-codex-42] October 28, 2026. Source correction; installation and client
 acceptance remain separate.
 

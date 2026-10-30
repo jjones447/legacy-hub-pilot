@@ -1,5 +1,29 @@
 # Caregiver Portal — what "done" means
 
+## Populated summary preview — October 30, 2026
+
+[pc2-codex-42] Jacob requested a populated layout example without adding wellness
+check-ins. The existing signed-in sample disclosure now appears before the real
+summary. Opening it shows clearly fictional grant information, three event
+registrations and two Memory Social visits; closing it or choosing **Return to my
+records** restores the actual summary. The preview resets closed on page load.
+Both actual and sample Events panels span the full summary width to fit populated
+event details. The actual wellness section remains below, full width.
+
+This reuses the existing display-only sample foundation. It does not create
+registrations, attendance, awards, health records or payment obligations. There
+are no new API calls or storage writes; ordinary authentication and account reads
+are unchanged. The previous fictional wellness chart/history has been removed.
+Actual wellness history and the normal check-in form remain separate and unchanged.
+
+Source tests cover opt-in/return/reset behavior, absence of fictional scores and
+write controls, preserved real history and existing read failure behavior. The
+release owner must separately verify the reviewed installation at desktop and
+phone widths, including populated Events, preview labels and return behavior.
+Source tests are not deployed or client acceptance evidence. Existing issue54
+and its joined action ledger hold the current delivery status; older notes below
+retain their dated scope.
+
 ## Deliberate sign-in confirmation — October 27, 2026
 
 [pc2-codex-1] Source correction; independent review, installation and intended-host

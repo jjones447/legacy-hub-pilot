@@ -208,9 +208,9 @@ async function searchCaregivers(offset = 0) {
 }
 
 function filterPeopleByRole() {
-  const role = document.getElementById('peopleRoleFilter')?.value || 'all';
+  const role = document.getElementById('peopleRoleFilter')?.value || 'caregiver';
   document.getElementById('staffTeamPanel')?.classList.toggle('d-none', role === 'caregiver');
-  document.getElementById('caregiverSearchPanel')?.classList.toggle('d-none', role === 'staff' || role === 'admin');
+  document.getElementById('caregiverSearchPanel')?.classList.toggle('d-none', role !== 'caregiver');
   editingStaffEmail = null;
   searchCaregivers(0);
 }
@@ -1649,6 +1649,9 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
   const refreshWellnessBtn = document.getElementById('refreshWellnessBtn');
+  document.getElementById('wellnessCaregiverSearch')?.addEventListener('input', filterWellnessCaregivers);
+  document.getElementById('wellnessCaregivers')?.addEventListener('change', showWellnessChart);
+  document.getElementById('wellnessRange')?.addEventListener('change', showWellnessChart);
   if (refreshWellnessBtn) {
     refreshWellnessBtn.addEventListener('click', function () {
       loadWellnessCaregivers();
@@ -3098,10 +3101,11 @@ function renderStaffTeam() {
       <button type="submit" class="btn btn-sm btn-plum">Add staff member</button>
       <p class="small muted" data-add-staff-message role="status" aria-live="polite"></p>
     </form></details>` : ''}
+    <div class="people-results-scroll" tabindex="0" role="region" aria-label="Staff search results">
     <table class="data">
       <thead><tr><th>Person</th><th>Role</th><th>Status</th><th></th></tr></thead>
       <tbody>${rows || '<tr><td colspan="4" class="small muted">No staff match this search and role.</td></tr>'}</tbody>
-    </table>`;
+    </table></div>`;
 }
 
 async function submitAddStaff(form) {
@@ -3207,50 +3211,86 @@ function staffTeamAction(kind, target) {
 
 /* ---------- Caregiver wellness chart (schema 0012) ---------- */
 const WELLNESS_COLORS = ['#7a3b2e', '#d9774a', '#3f7d6e', '#4a6fa5', '#9a6fb0', '#b8860b', '#555555', '#c0392b', '#2e86ab', '#6b8e23'];
+let wellnessCaregivers = [];
+let wellnessListEpoch = 0;
+let wellnessChartEpoch = 0;
+let wellnessListLoading = false;
+
+function filterWellnessCaregivers() {
+  if (wellnessListLoading) return;
+  const select = document.getElementById('wellnessCaregivers');
+  if (!select) return;
+  const chosen = select.value;
+  const query = String(document.getElementById('wellnessCaregiverSearch')?.value || '').trim().toLowerCase();
+  const matches = wellnessCaregivers.filter(c => `${c.first_name || ''} ${c.last_name || ''}`.toLowerCase().includes(query));
+  select.textContent = '';
+  for (const c of matches) {
+    const opt = document.createElement('option');
+    opt.value = c.id;
+    opt.textContent = `${c.first_name || ''} ${c.last_name || ''}`.trim() + ` (${c.checkins} check-ins)`;
+    select.appendChild(opt);
+  }
+  select.value = matches.some(c => c.id === chosen) ? chosen : '';
+  select.disabled = matches.length === 0;
+  const status = document.getElementById('wellnessPickerStatus');
+  if (status) status.textContent = matches.length
+    ? `${matches.length} caregiver${matches.length === 1 ? '' : 's'}. Select a name to show the chart.`
+    : (wellnessCaregivers.length ? 'No caregivers match this search.' : 'No caregivers have recorded check-ins yet.');
+  return showWellnessChart();
+}
 
 async function loadWellnessCaregivers() {
   const select = document.getElementById('wellnessCaregivers');
   if (!select) return;
+  const epoch = ++wellnessListEpoch;
+  wellnessListLoading = true;
+  ++wellnessChartEpoch;
+  select.disabled = true;
+  const chart = document.getElementById('wellnessChart');
+  if (chart) chart.innerHTML = '<p class="muted small text-center my-20">Loading caregivers…</p>';
   try {
     const res = await fetch('/api/staff/wellness');
     const data = await res.json();
+    if (epoch !== wellnessListEpoch) return;
     if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to load');
-    const chosen = new Set([...select.selectedOptions].map((o) => o.value));
-    select.textContent = '';
-    for (const c of data.caregivers || []) {
-      const opt = document.createElement('option');
-      opt.value = c.id;
-      opt.textContent = `${c.first_name || ''} ${c.last_name || ''}`.trim() + ` (${c.checkins})`;
-      if (chosen.has(c.id)) opt.selected = true;
-      select.appendChild(opt);
-    }
-    if (select.options.length && !select.selectedOptions.length) select.options[0].selected = true;
-    if (select.options.length) showWellnessChart();
+    wellnessCaregivers = data.caregivers || [];
+    wellnessListLoading = false;
+    await filterWellnessCaregivers();
   } catch (e) {
-    const chart = document.getElementById('wellnessChart');
+    if (epoch !== wellnessListEpoch) return;
+    wellnessListLoading = false;
+    wellnessCaregivers = [];
+    select.textContent = '';
+    select.disabled = true;
+    const status = document.getElementById('wellnessPickerStatus');
+    if (status) status.textContent = 'Caregiver list unavailable. Use Refresh to check again.';
     if (chart) chart.innerHTML = `<p class="muted small text-center my-20">Error loading wellness: ${escapeHtml(e.message)}</p>`;
   }
 }
 
 async function showWellnessChart() {
+  const epoch = ++wellnessChartEpoch;
   const select = document.getElementById('wellnessCaregivers');
   const range = document.getElementById('wellnessRange');
   const chart = document.getElementById('wellnessChart');
   if (!select || !chart) return;
-  const ids = [...select.selectedOptions].map((o) => o.value);
+  const ids = select.value && !select.disabled && !wellnessListLoading ? [select.value] : [];
   if (ids.length === 0) {
-    chart.innerHTML = '<p class="muted small text-center my-20">Pick at least one caregiver.</p>';
+    chart.innerHTML = '<p class="muted small text-center my-20">Choose a caregiver from the list to show their chart.</p>';
     return;
   }
   const params = new URLSearchParams();
   ids.forEach((id) => params.append('caregiver', id));
   params.set('range', range ? range.value : 'quarter');
+  chart.innerHTML = '<p class="muted small text-center my-20" role="status">Loading the selected caregiver’s chart…</p>';
   try {
     const res = await fetch(`/api/staff/wellness?${params.toString()}`);
     const data = await res.json();
+    if (epoch !== wellnessChartEpoch) return;
     if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to load');
     drawWellnessChart(chart, data);
   } catch (e) {
+    if (epoch !== wellnessChartEpoch) return;
     chart.innerHTML = `<p class="muted small text-center my-20">Error loading wellness: ${escapeHtml(e.message)}</p>`;
   }
 }
