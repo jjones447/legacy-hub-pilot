@@ -231,6 +231,7 @@ function submitMembership(e) {
 /* ---------- Virtual support group: sign up (saved for staff), then go to Google Meet ---------- */
 let supportGroupInterestOpener = null;
 let supportGroupSession = '';
+let supportGroupSessionDate = null;
 
 function openSupportGroupInterest(opener) {
   const dialog = document.getElementById('supportGroupInterestModal');
@@ -240,6 +241,9 @@ function openSupportGroupInterest(opener) {
   // A clicked session date (data-session) is shown in the form and saved with the sign-up.
   const session = opener && typeof opener.getAttribute === 'function' ? opener.getAttribute('data-session') : '';
   supportGroupSession = typeof session === 'string' ? session.trim().slice(0, 120) : '';
+  // Structured date (YYYY-MM-DD) for the backend; null for general joining without a date.
+  const sessionDate = opener && typeof opener.getAttribute === 'function' ? opener.getAttribute('data-session-date') : null;
+  supportGroupSessionDate = supportGroupSession && typeof sessionDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(sessionDate) ? sessionDate : null;
   const note = document.getElementById('supportGroupSession');
   if (note) {
     note.textContent = supportGroupSession ? 'Session: ' + supportGroupSession : '';
@@ -305,7 +309,10 @@ function submitSupportGroupInterest(e) {
   const payload = {
     kind: 'support_request',
     source: 'site_form:support_group',
-    external_ref: intakeExternalRef(form, 'support_request'),
+    // One sign-up identity per selected date (and one for general joining), so signing up
+    // for a second date in the same tab is a new sign-up, not a duplicate of the first.
+    external_ref: intakeExternalRef(form, 'support_request', supportGroupSessionDate),
+    session_date: supportGroupSessionDate,
     first_name: name.first_name,
     last_name: name.last_name,
     email: document.getElementById('supportGroupEmail').value.trim(),
