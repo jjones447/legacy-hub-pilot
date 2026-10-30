@@ -219,7 +219,7 @@ test('support-group sign-up is a named native dialog with only name/email, then 
   const dialog = page.match(/<dialog id="supportGroupInterestModal"[\s\S]*?<\/dialog>/)?.[0];
   assert.ok(dialog);
   assert.match(dialog, /aria-labelledby="supportGroupInterestTitle" aria-describedby="supportGroupInterestDescription"/);
-  assert.match(page, /data-action="open-support-group-interest" data-session="[^"]+" aria-haspopup="dialog" aria-controls="supportGroupInterestModal"/);
+  assert.match(page, /data-action="open-support-group-interest" data-session="[^"]+" data-session-date="\d{4}-\d{2}-\d{2}" aria-haspopup="dialog" aria-controls="supportGroupInterestModal"/);
   assert.equal((dialog.match(/<input /g) || []).length, 2);
   assert.match(dialog, /<label for="supportGroupName">Your name<\/label>/);
   assert.match(dialog, /<label for="supportGroupEmail">Email<\/label>/);
@@ -246,7 +246,7 @@ test('support-group sign-up is a named native dialog with only name/email, then 
     ['2026-12-02', 'December 2'], ['2026-12-09', 'December 9'], ['2026-12-16', 'December 16'], ['2026-12-30', 'December 30']];
   for (const [iso, day] of expected) {
     const date = `Wednesday, ${day} · 5–6 PM`;
-    assert.ok(panel.includes(`<li data-date="${iso}"><button type="button" class="session-link" data-action="open-support-group-interest" data-session="${date}" aria-haspopup="dialog" aria-controls="supportGroupInterestModal">${date}</button></li>`), date);
+    assert.ok(panel.includes(`<li data-date="${iso}"><button type="button" class="session-link" data-action="open-support-group-interest" data-session="${date}" data-session-date="${iso}" aria-haspopup="dialog" aria-controls="supportGroupInterestModal">${date}</button></li>`), date);
   }
   assert.doesNotMatch(panel, /December 23|2026-12-23/);
   assert.match(dialog, /<p class="session-note" id="supportGroupSession" hidden><\/p>/);
@@ -304,7 +304,7 @@ test('support-group delegated request reaches its own shared staff task and orig
   assert.deepEqual(requests[0].payload, {
     kind: 'support_request', source: 'site_form:support_group',
     external_ref: 'fictional-support-group-ref', first_name: 'Demo', last_name: 'Group',
-    email: 'group-interest@example.invalid', message: 'Signed up for the Virtual Caregiver Support Group',
+    email: 'group-interest@example.invalid', message: 'Signed up for the Virtual Caregiver Support Group', session_date: null,
   });
   const caregiver = raw.prepare(`SELECT * FROM caregiver WHERE email = ?`).get('group-interest@example.invalid');
   assert.equal(caregiver.sanctuary_member, 0);
@@ -389,15 +389,31 @@ test('support-group: clicking a session date shows it in the form and saves it w
     supportGroupName: { value: 'Fictional Person', focus() {} }, supportGroupEmail: { value: 'fictional@example.invalid' } };
   const posted = []; const assigned = [];
   const context = { window: { location: { assign: url => assigned.push(url) } }, document: { getElementById: id => nodes[id] },
-    crypto: { randomUUID: () => 'fictional-session-ref' }, sessionStorage: { getItem: () => null, setItem() {} },
+    crypto: { randomUUID: (() => { let n = 0; return () => `fictional-session-ref-${++n}`; })() },
+    sessionStorage: (() => { const m = new Map(); return { getItem: k => m.get(k) ?? null, setItem: (k, v) => m.set(k, v) }; })(),
     fetch: async (url, options) => { posted.push(JSON.parse(options.body)); return { ok: true, status: 201, json: async () => ({ ok: true }) }; } };
   vm.runInNewContext(source, context);
-  context.openSupportGroupInterest({ getAttribute: name => name === 'data-session' ? 'Wednesday, November 11 · 5–6 PM' : null, focus() {} });
+  const opener = date => ({ getAttribute: name => (name === 'data-session' ? `Wednesday, November ${date} · 5–6 PM` : name === 'data-session-date' ? `2026-11-${date}` : null), focus() {} });
+  context.openSupportGroupInterest(opener('11'));
   assert.equal(note.hidden, false);
   assert.equal(note.textContent, 'Session: Wednesday, November 11 · 5–6 PM');
   context.submitSupportGroupInterest({ preventDefault() {} });
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(posted[0].message, 'Signed up for the Virtual Caregiver Support Group — Wednesday, November 11 · 5–6 PM');
+  assert.equal(posted[0].session_date, '2026-11-11');
+  // A second date in the same tab is its own sign-up: a different idempotency key.
+  dialog.open = false;
+  context.openSupportGroupInterest(opener('18'));
+  context.submitSupportGroupInterest({ preventDefault() {} });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(posted[1].session_date, '2026-11-18');
+  assert.notEqual(posted[1].external_ref, posted[0].external_ref, 'each date has its own sign-up identity');
+  // Re-submitting the same date reuses its key (server-side duplicate, no second sign-up).
+  dialog.open = false;
+  context.openSupportGroupInterest(opener('11'));
+  context.submitSupportGroupInterest({ preventDefault() {} });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(posted[2].external_ref, posted[0].external_ref);
   assert.deepEqual(assigned, ['https://meet.google.com/dmc-orwi-afk']);
   // Opening from the general button clears any earlier date.
   dialog.open = false;
