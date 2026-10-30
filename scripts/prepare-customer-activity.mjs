@@ -1,20 +1,31 @@
 // Existing release assembly only. No GitHub fetch, token, deployment or database.
 import { readFileSync, writeFileSync, realpathSync, existsSync } from 'node:fs';
-import { resolve, dirname, join, sep } from 'node:path';
+import { resolve, dirname, join, sep, win32, posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { projectCustomerActivity } from '../functions/_lib/customer-activity.mjs';
 
 const sourceRoot = realpathSync(resolve(dirname(fileURLToPath(import.meta.url)), '..'));
+export function withinDirectory(candidate, parent, platform = process.platform) {
+  const path = platform === 'win32' ? win32 : posix;
+  const normalize = p => platform === 'win32' ? path.resolve(p).toLowerCase() : path.resolve(p);
+  const rel = path.relative(normalize(parent), normalize(candidate));
+  return rel === '' || (!rel.startsWith('..' + path.sep) && rel !== '..' && !path.isAbsolute(rel));
+}
 export function prepareCustomerActivity({ inputPath, reviewedSha256, packageRoot }) {
   if (!/^[a-f0-9]{64}$/.test(reviewedSha256 || '')) throw new Error('exact reviewed snapshot digest required');
-  const bytes = readFileSync(inputPath);
+  const root = realpathSync(packageRoot);
+  const input = realpathSync(inputPath);
+  // Check BOTH lexical location and resolved location. A symlink to an outside
+  // input placed under media, or an outside alias into media, must both refuse.
+  if (withinDirectory(input, root) || withinDirectory(resolve(inputPath), resolve(packageRoot))
+      || withinDirectory(resolve(inputPath), root)) throw new Error('private snapshot must remain outside the entire package');
+  if (withinDirectory(root, sourceRoot)) throw new Error('use a separate isolated package, not this source checkout');
+  const bytes = readFileSync(input);
   if (bytes.length > 100000) throw new Error('snapshot exceeds limit');
   const sha256 = createHash('sha256').update(bytes).digest('hex');
   if (sha256 !== reviewedSha256) throw new Error('snapshot does not match reviewed digest');
   const projected = projectCustomerActivity(JSON.parse(bytes.toString('utf8')));
-  const root = realpathSync(packageRoot);
-  if (root === sourceRoot || root.startsWith(sourceRoot + sep)) throw new Error('use a separate isolated package, not this source checkout');
   for (let parent = root; ; parent = dirname(parent)) {
     if (existsSync(join(parent, '.git'))) throw new Error('package must be outside Git worktrees');
     if (dirname(parent) === parent) break;

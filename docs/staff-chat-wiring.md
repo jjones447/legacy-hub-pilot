@@ -52,6 +52,12 @@ source/projection digests and selected count. Record those with the package
 revision in the **private** release receipt. Then use the existing Functions
 compiler and static-site allowlist. `functions/` is never a static asset folder.
 The tool does not copy or fetch private provenance into the assembled package.
+The raw private input must remain outside the ENTIRE package root, including
+`media/`, which the existing builder publishes. Both lexical and realpath
+containment are refused (including directory aliases and Windows case variants),
+before reading/projecting the input. A refusal is a hard stop for that package,
+not permission to continue the static build. Preserve input and move back to the
+approved private-source location through its owner; the tool never deletes it.
 
 Public source defaults to a null snapshot. Missing/unprepared or malformed
 snapshots yield no release entries; there is no sample data or remote fallback.

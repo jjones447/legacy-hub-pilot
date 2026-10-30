@@ -1,13 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import vm from 'node:vm';
 import { projectCustomerActivity, readCustomerActivity, customerActivity } from '../functions/_lib/customer-activity.mjs';
-import { prepareCustomerActivity } from '../scripts/prepare-customer-activity.mjs';
-import { buildSite } from '../scripts/build-site.mjs';
+import { prepareCustomerActivity, withinDirectory } from '../scripts/prepare-customer-activity.mjs';
+import { buildSite, selectSiteFiles } from '../scripts/build-site.mjs';
 import { onRequestGet } from '../functions/api/staff/[[path]].js';
 
 const digest = value => createHash('sha256').update(value).digest('hex');
@@ -77,6 +77,42 @@ test('existing assembly requires exact reviewed bytes, writes only projection an
     assert.throws(()=>prepareCustomerActivity({inputPath,reviewedSha256:digest(bytes),packageRoot:pkg}));
     assert.equal(readFileSync(target,'utf8'),output);
   } finally {rmSync(root,{recursive:true,force:true});}
+});
+
+test('private input anywhere inside package is refused before projection, including symlink aliases',()=>{
+  const root=mkdtempSync(join(tmpdir(),'fictional-private-location-'));
+  try {
+    const pkg=join(root,'package'),outside=join(root,'private');
+    mkdirSync(join(pkg,'functions/api/staff'),{recursive:true});mkdirSync(join(pkg,'functions/_lib'),{recursive:true});
+    mkdirSync(join(pkg,'media'));mkdirSync(outside);
+    writeFileSync(join(pkg,'functions/api/staff/[[path]].js'),'// fictional');
+    const target=join(pkg,'functions/_lib/customer-activity-snapshot.mjs');writeFileSync(target,'export default null;');
+    const bytes=JSON.stringify(fixture()),reviewedSha256=digest(bytes);
+    const inside=join(pkg,'media','private-input.json');writeFileSync(inside,bytes);
+    // This is the actual published-assets selector: JSON under media WOULD ship.
+    assert.ok(selectSiteFiles(pkg).includes('media/private-input.json'));
+    assert.throws(()=>prepareCustomerActivity({inputPath:inside,reviewedSha256,packageRoot:pkg}),/outside the entire package/);
+    const alias=join(root,'outside-alias-to-package');symlinkSync(pkg,alias,'junction');
+    assert.throws(()=>prepareCustomerActivity({inputPath:join(alias,'media/private-input.json'),reviewedSha256,packageRoot:pkg}),/outside the entire package/);
+    writeFileSync(join(outside,'private-input.json'),bytes);
+    const insideAlias=join(pkg,'private-alias');symlinkSync(outside,insideAlias,'junction');
+    assert.throws(()=>prepareCustomerActivity({inputPath:join(insideAlias,'private-input.json'),reviewedSha256,packageRoot:pkg}),/outside the entire package/);
+    assert.throws(()=>prepareCustomerActivity({inputPath:inside,reviewedSha256,packageRoot:alias}),/outside the entire package/);
+    assert.equal(readFileSync(target,'utf8'),'export default null;');
+    assert.equal(readFileSync(inside,'utf8'),bytes,'refusal does not delete or mutate retained input');
+    // Remove only synthetic bad placement before proving the approved external route.
+    rmSync(inside);rmSync(insideAlias);
+    assert.equal(prepareCustomerActivity({inputPath:join(outside,'private-input.json'),reviewedSha256,packageRoot:pkg}).entries,1);
+    assert.deepEqual(selectSiteFiles(pkg),[]);
+  } finally {rmSync(root,{recursive:true,force:true});}
+});
+
+test('path boundary handles Windows case, drive and sibling prefixes without prefix confusion',()=>{
+  assert.equal(withinDirectory('C:\\Build\\PACKAGE\\media\\input.json','c:\\build\\package','win32'),true);
+  assert.equal(withinDirectory('C:\\Build\\package-other\\input.json','c:\\build\\package','win32'),false);
+  assert.equal(withinDirectory('D:\\Build\\package\\input.json','c:\\build\\package','win32'),false);
+  assert.equal(withinDirectory('\\\\SERVER\\Share\\Package\\media\\input.json','\\\\server\\share\\package','win32'),true);
+  assert.equal(withinDirectory('/package-other/input.json','/package','linux'),false);
 });
 
 test('existing recent-changes API preserves original audit and adds empty safe projection/no-store',async()=>{
