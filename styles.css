@@ -1263,14 +1263,18 @@ footer a:hover { color: #fff; }
   .client-founder-photo { width: min(100%, 360px); margin-inline: auto; }
 }
 
-/* Sanctuary: same size and centred treatment as the home page hero video (client request Oct 30). */
+/* Sanctuary (client requests Oct 30): a tall header with the copy centred, and the video
+   cropped from the top. The top ~40% of this portrait footage is ceiling; the people sit at
+   ~45-85% of the frame height, so the crop is anchored at 65% (checked against sampled frames). */
 .hero.has-media.client-video-hero {
   padding: 84px 0 96px;
+  min-height: min(82vh, 760px);
+  display: flex; align-items: center;
 }
 .hero.has-media.client-video-hero .hero-media {
   position: absolute; inset: 0;
   display: block; width: 100%; height: 100%;
-  object-fit: cover; object-position: center 30%;
+  object-fit: cover; object-position: center 65%;
   z-index: 1; opacity: 0.62;
 }
 .hero.has-media.client-video-hero .hero-scrim {
@@ -1304,11 +1308,12 @@ footer a:hover { color: #fff; }
     min-height: 340px;
   }
   .hero.has-media.client-video-hero {
-    padding: 84px 0 96px;
+    padding: 64px 0 80px;
+    min-height: min(78vh, 640px);
   }
 }
 @media (min-width: 900px) {
-  .hero.has-media.client-video-hero .hero-media { object-position: center 50%; opacity: 0.58; }
+  .hero.has-media.client-video-hero .hero-media { object-position: center 65%; opacity: 0.58; }
   .hero.has-media.client-video-hero .hero-scrim {
     background:
       radial-gradient(ellipse 120% 90% at 50% 45%, rgba(90, 53, 38, 0.34) 0%, rgba(90, 53, 38, 0.52) 70%, rgba(90, 53, 38, 0.72) 100%);
