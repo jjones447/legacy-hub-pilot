@@ -6,7 +6,7 @@
 <title>Legacy Hub · Staff console</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=e2998ba1cffc">
+<link rel="stylesheet" href="styles.css?v=e8a342dc6ec3">
 <link rel="icon" href="favicon.ico" sizes="32x32">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -75,18 +75,68 @@
 
     <div class="staff-workspace">
       <div>
-        <div class="panel" id="staffTeamPanel">
+        <details class="panel" id="peopleManagementPanel">
+          <summary><strong>People &amp; access</strong> <span class="small muted">— staff and caregivers</span></summary>
+          <p class="small muted mb-12">Find a person, choose their record, then edit their details or access. Staff and caregiver records are shown together here, with their permissions kept separate.</p>
+          <div class="staff-search-controls">
+            <input type="search" id="caregiverSearchQuery" placeholder="Search names, email or phone" class="staff-search-input" aria-label="Search people">
+            <select id="peopleRoleFilter" class="staff-search-select" aria-label="Filter people by role">
+              <option value="all">All people</option>
+              <option value="caregiver">Caregivers</option>
+              <option value="staff">Staff</option>
+              <option value="admin">Admins</option>
+            </select>
+            <button type="button" class="btn btn-sm btn-plum" data-action="search-caregivers">Search people</button>
+          </div>
+        <div role="region" id="staffTeamPanel" aria-labelledby="staffListHeading">
           <div class="flex-between-center mb-12">
-            <h4 class="m-0">Staff management</h4>
+            <h4 class="m-0" id="staffListHeading">Staff and admins</h4>
             <button class="btn btn-sm btn-outline" id="refreshStaffTeamBtn">Refresh</button>
           </div>
-          <p class="small muted mb-12">These accounts let your team manage the Hub. Staff can edit content and events. Admins can also add staff, change names and roles, and turn access off. Caregiver portal accounts and wellness check-ins are separate.</p>
+          <p class="small muted mb-12">Staff can edit content and events. Only admins can add staff or change staff names, roles and access. A caregiver record never grants staff access.</p>
           <p class="small muted mb-12">Use an existing @legacyhomehealthservices.org email for sign-in by emailed code. Adding a record here does not create a mailbox or send an invitation. Other email addresses may need the site administrator to allow sign-in first.</p>
           <p class="small muted mb-12" id="staffTeamMessage" role="status" aria-live="polite"></p>
           <div id="staffTeamList">
             <p class="muted small text-center my-20">Loading staff...</p>
           </div>
         </div>
+        <div role="region" id="caregiverSearchPanel" aria-labelledby="caregiverListHeading">
+          <h4 id="caregiverListHeading">Caregivers</h4>
+          <p class="small muted mb-12" id="caregiverSearchHelp">Search caregiver records by name, contact, status, or segment. Choose Open/Edit to open a focused caregiver view. Back keeps your search and results. Archived records cannot use the caregiver portal; inactive records can still sign in.</p>
+          <div class="staff-search-controls">
+            <select id="caregiverSearchSegment" class="staff-search-select" aria-label="Caregiver segment">
+              <option value="">All segments</option>
+              <option value="dementia">Dementia</option>
+              <option value="als">ALS</option>
+              <option value="parkinsons">Parkinson&#39;s</option>
+              <option value="stroke">Stroke</option>
+              <option value="elder_care">Elder Care</option>
+              <option value="general">General</option>
+            </select>
+            <select id="caregiverSearchStatus" class="staff-search-select" aria-label="Caregiver record status">
+              <option value="">All statuses</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+              <option value="archived">Archived</option>
+            </select>
+          </div>
+          <div id="caregiverSearchResultsContainer">
+            <table class="data">
+              <thead><tr><th>Caregiver</th><th>Contact</th><th>Status</th><th>Segments</th><th>Actions</th></tr></thead>
+              <tbody id="caregiverSearchResultsBody">
+                <tr><td colspan="5" class="text-center muted small">Use the search box above to find caregivers.</td></tr>
+              </tbody>
+            </table>
+            <div class="staff-paging-bar" id="caregiverSearchPaginationRow">
+              <span id="caregiverSearchPagingInfo" class="small muted">0 caregivers</span>
+              <div class="staff-btn-group">
+                <button class="btn btn-sm btn-outline" data-action="search-prev" id="caregiverSearchPrevBtn" disabled>Previous</button>
+                <button class="btn btn-sm btn-outline" data-action="search-next" id="caregiverSearchNextBtn" disabled>Next</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        </details>
 
         <div class="panel">
           <h4>📥 Needs attention</h4>
@@ -163,44 +213,7 @@
           </div>
         </div>
 
-        <details class="panel" id="caregiverSearchPanel">
-          <summary><strong>Caregiver search</strong></summary>
-          <p class="small muted mb-12" id="caregiverSearchHelp">Search caregiver records by name, contact, status, or segment. Results appear after you search; choose Open/Edit to open a focused caregiver view. Back keeps your search and results.</p>
-          <div class="staff-search-controls">
-            <input type="text" id="caregiverSearchQuery" placeholder="Search by name, email, phone..." class="staff-search-input" aria-label="Search caregiver records" aria-describedby="caregiverSearchHelp">
-            <select id="caregiverSearchSegment" class="staff-search-select">
-              <option value="">All segments</option>
-              <option value="dementia">Dementia</option>
-              <option value="als">ALS</option>
-              <option value="parkinsons">Parkinson&#39;s</option>
-              <option value="stroke">Stroke</option>
-              <option value="elder_care">Elder Care</option>
-              <option value="general">General</option>
-            </select>
-            <select id="caregiverSearchStatus" class="staff-search-select">
-              <option value="">All statuses</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-              <option value="archived">Archived</option>
-            </select>
-            <button class="btn btn-sm btn-plum" data-action="search-caregivers">Search</button>
-          </div>
-          <div id="caregiverSearchResultsContainer">
-            <table class="data">
-              <thead><tr><th>Caregiver</th><th>Contact</th><th>Status</th><th>Segments</th><th>Actions</th></tr></thead>
-              <tbody id="caregiverSearchResultsBody">
-                <tr><td colspan="5" class="text-center muted small">Use the search box above to find caregivers.</td></tr>
-              </tbody>
-            </table>
-            <div class="staff-paging-bar" id="caregiverSearchPaginationRow">
-              <span id="caregiverSearchPagingInfo" class="small muted">0 caregivers</span>
-              <div class="staff-btn-group">
-                <button class="btn btn-sm btn-outline" data-action="search-prev" id="caregiverSearchPrevBtn" disabled>Previous</button>
-                <button class="btn btn-sm btn-outline" data-action="search-next" id="caregiverSearchNextBtn" disabled>Next</button>
-              </div>
-            </div>
-          </div>
-        </details>
+
 
         <details class="panel" id="recentChangesPanel">
           <summary><strong>Change log</strong></summary>
@@ -246,7 +259,7 @@
 
 <script src="app.js?v=da2757b5a75b"></script>
 <script src="nav-v2.js"></script>
-<script src="staff.js?v=3639de8a66ea"></script>
+<script src="staff.js?v=4cf30e3d2ad4"></script>
 </body>
 </html>
 

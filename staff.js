@@ -100,6 +100,7 @@ let currentGrantId = null;
 let currentSearchOffset = 0;
 const searchLimit = 10;
 let totalSearchResults = 0;
+let caregiverSearchEpoch = 0;
 
 function searchPrev() {
   if (currentSearchOffset > 0) {
@@ -114,6 +115,8 @@ function searchNext() {
 }
 
 async function searchCaregivers(offset = 0) {
+  const epoch = ++caregiverSearchEpoch;
+  renderStaffTeam();
   currentSearchOffset = offset;
   const q = document.getElementById('caregiverSearchQuery')?.value?.trim() || '';
   const segment = document.getElementById('caregiverSearchSegment')?.value?.trim() || '';
@@ -129,6 +132,7 @@ async function searchCaregivers(offset = 0) {
   try {
     const res = await fetch(`/api/staff/caregivers?${params.toString()}`);
     const data = await res.json();
+    if (epoch !== caregiverSearchEpoch) return;
     if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to search caregivers');
 
     const body = document.getElementById('caregiverSearchResultsBody');
@@ -173,11 +177,11 @@ async function searchCaregivers(offset = 0) {
 
         return `
           <tr>
-            <td><strong>${name}</strong></td>
-            <td><span class="small">${contact}</span></td>
-            <td><span class="badge ${statusBadge}">${escapeHtml(cg.status || 'unknown')}</span></td>
-            <td><span class="small muted">${segmentsStr || 'None'}</span></td>
-            <td><button type="button" class="btn btn-sm btn-outline" data-action="view-caregiver" data-caregiver-id="${escapeHtml(cg.id)}" aria-label="Open or edit caregiver: ${name}">Open/Edit</button></td>
+            <td data-label="Caregiver"><strong>${name}</strong></td>
+            <td data-label="Contact"><span class="small">${contact}</span></td>
+            <td data-label="Record status"><span class="badge ${statusBadge}">${escapeHtml(cg.status || 'unknown')}</span></td>
+            <td data-label="Segments"><span class="small muted">${segmentsStr || 'None'}</span></td>
+            <td data-label="Actions"><button type="button" class="btn btn-sm btn-outline" data-action="view-caregiver" data-caregiver-id="${escapeHtml(cg.id)}" aria-label="Open or edit caregiver: ${name}">Open/Edit</button></td>
           </tr>
         `;
       }).join('');
@@ -191,8 +195,24 @@ async function searchCaregivers(offset = 0) {
     if (prevBtn) prevBtn.disabled = offset <= 0;
     if (nextBtn) nextBtn.disabled = offset + searchLimit >= totalSearchResults;
   } catch (e) {
-    console.error(e);
+    if (epoch !== caregiverSearchEpoch) return;
+    const body = document.getElementById('caregiverSearchResultsBody');
+    if (body) body.innerHTML = `<tr><td colspan="5" role="alert">Could not load caregivers: ${escapeHtml(e.message)}. Use Search people to try again.</td></tr>`;
+    const paging = document.getElementById('caregiverSearchPagingInfo');
+    if (paging) paging.textContent = 'Caregiver list unavailable';
+    for (const id of ['caregiverSearchPrevBtn', 'caregiverSearchNextBtn']) {
+      const button = document.getElementById(id);
+      if (button) button.disabled = true;
+    }
   }
+}
+
+function filterPeopleByRole() {
+  const role = document.getElementById('peopleRoleFilter')?.value || 'all';
+  document.getElementById('staffTeamPanel')?.classList.toggle('d-none', role === 'caregiver');
+  document.getElementById('caregiverSearchPanel')?.classList.toggle('d-none', role === 'staff' || role === 'admin');
+  editingStaffEmail = null;
+  searchCaregivers(0);
 }
 
 function filterBySegment(segment) {
@@ -1602,6 +1622,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
   const searchInput = document.getElementById('caregiverSearchQuery');
+  document.getElementById('peopleRoleFilter')?.addEventListener('change', filterPeopleByRole);
   if (searchInput) {
     searchInput.addEventListener('keydown', function (e) {
       if (e.key === 'Enter') {
@@ -2995,6 +3016,7 @@ async function handleUndoChange(auditId, button) {
 let staffMe = null;
 let editingStaffEmail = null;
 let staffTeam = [];
+let staffTeamError = null;
 
 async function loadStaffTeam() {
   const list = document.getElementById('staffTeamList');
@@ -3006,9 +3028,13 @@ async function loadStaffTeam() {
     if (!teamRes.ok || !teamData.ok) throw new Error(teamData.error || 'Failed to load staff');
     staffMe = meData.me;
     staffTeam = teamData.team || [];
+    staffTeamError = null;
     renderStaffTeam();
     return true;
   } catch (e) {
+    staffTeamError = e.message;
+    staffMe = null;
+    staffTeam = [];
     if (list) list.innerHTML = `<p class="muted small text-center my-20">Error loading staff: ${escapeHtml(e.message)}</p>`;
     return false;
   }
@@ -3017,14 +3043,18 @@ async function loadStaffTeam() {
 function renderStaffTeam() {
   const container = document.getElementById('staffTeamList');
   if (!container) return;
-  if (staffTeam.length === 0) {
-    container.innerHTML = '<p class="muted small text-center my-20">No staff have signed in yet.</p>';
+  if (staffTeamError) {
+    container.innerHTML = `<p role="alert">Could not load staff: ${escapeHtml(staffTeamError)}. Use Refresh to check access.</p>`;
     return;
   }
+  const query = String(document.getElementById('caregiverSearchQuery')?.value || '').trim().toLowerCase();
+  const role = document.getElementById('peopleRoleFilter')?.value || 'all';
+  const members = staffTeam.filter(m => (!['staff', 'admin'].includes(role) || m.role === role)
+    && `${m.display_name || ''} ${m.email || ''}`.toLowerCase().includes(query));
   const isAdmin = !!(staffMe && staffMe.role === 'admin' && staffMe.status === 'active');
   const myEmail = staffMe ? String(staffMe.email || '').toLowerCase() : '';
   let rows = '';
-  for (const m of staffTeam) {
+  for (const m of members) {
     const email = escapeHtml(m.email);
     const isSelf = String(m.email).toLowerCase() === myEmail;
     const active = m.status === 'active';
@@ -3053,24 +3083,24 @@ function renderStaffTeam() {
     }
     rows += `
       <tr>
-        <td>${nameCell}<div class="small muted">${email}${isSelf ? ' (you)' : ''}</div></td>
-        <td>${roleCell}</td>
-        <td><span class="badge ${active ? 'badge-green' : 'badge-amber'}">${active ? 'Active' : 'Access off'}</span><div class="small muted">Last seen: ${lastSeen}</div></td>
-        <td>${actions}<p class="small muted mt-8" data-staff-row-message="${email}"></p></td>
+        <td data-label="Person">${nameCell}<div class="small muted">${email}${isSelf ? ' (you)' : ''}</div></td>
+        <td data-label="Role">${roleCell}</td>
+        <td data-label="Access"><span class="badge ${active ? 'badge-green' : 'badge-amber'}">${active ? 'Active' : 'Access off'}</span><div class="small muted">Last seen: ${lastSeen}</div></td>
+        <td data-label="Actions">${actions}<p class="small muted mt-8" data-staff-row-message="${email}"></p></td>
       </tr>`;
   }
   container.innerHTML = `${isAdmin ? `
-    <form data-action="submit-add-staff" class="mb-12">
-      <h5>Add staff member</h5>
+    <details class="mb-12"><summary>Add staff member</summary>
+    <form data-action="submit-add-staff" class="mt-16">
       <label>Name <input name="display_name" class="form-input-compact" maxlength="120" required></label>
       <label>Email <input name="email" type="email" class="form-input-compact" maxlength="254" required></label>
       <label>Role <select name="role" class="form-input-compact"><option value="staff">Staff</option><option value="admin">Admin</option></select></label>
       <button type="submit" class="btn btn-sm btn-plum">Add staff member</button>
       <p class="small muted" data-add-staff-message role="status" aria-live="polite"></p>
-    </form>` : ''}
+    </form></details>` : ''}
     <table class="data">
       <thead><tr><th>Person</th><th>Role</th><th>Status</th><th></th></tr></thead>
-      <tbody>${rows}</tbody>
+      <tbody>${rows || '<tr><td colspan="4" class="small muted">No staff match this search and role.</td></tr>'}</tbody>
     </table>`;
 }
 

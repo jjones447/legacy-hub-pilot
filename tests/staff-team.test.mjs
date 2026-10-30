@@ -125,7 +125,7 @@ test('actual team renderer exposes Add only to active admins and escapes member 
   const member = { email: 'test@example.invalid', display_name: '<script>bad</script>', role: 'staff', status: 'active' };
   for (const me of [{ role: 'admin', status: 'active' }, { role: 'staff', status: 'active' }, { role: 'admin', status: 'deactivated' }]) {
     const container = {};
-    new Function('document', 'staffMe', 'staffTeam', `let editingStaffEmail = null;\n${escapeSource}\n${renderSource}\nrenderStaffTeam();`)({ getElementById: () => container }, me, [member]);
+    new Function('document', 'staffMe', 'staffTeam', `let editingStaffEmail = null; let staffTeamError = null;\n${escapeSource}\n${renderSource}\nrenderStaffTeam();`)({ getElementById: () => container }, me, [member]);
     assert.equal(container.innerHTML.includes('data-action="submit-add-staff"'), me.role === 'admin' && me.status === 'active');
     assert.ok(!container.innerHTML.includes('<script>bad</script>'));
     assert.ok(container.innerHTML.includes('&lt;script&gt;bad&lt;/script&gt;'));

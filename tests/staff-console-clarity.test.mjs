@@ -17,7 +17,7 @@ test('Change log and Site content use native default-closed details at the end',
   assert.match(content[2], /<summary><strong>Site content<\/strong><\/summary>/);
   assert.ok(html.indexOf('id="staffTeamPanel"') < html.indexOf('id="caregiverSearchPanel"'));
   assert.ok(html.indexOf('id="caregiverSearchPanel"') < html.indexOf('id="recentChangesPanel"'));
-  const search = html.match(/<details\b([^>]*id="caregiverSearchPanel"[^>]*)>/);
+  const search = html.match(/<details\b([^>]*id="peopleManagementPanel"[^>]*)>/);
   assert.ok(search);
   assert.doesNotMatch(search[1], /\bopen(?:\s|=|$)/);
   assert.ok(html.indexOf('id="staffTeamPanel"') < html.indexOf('id="recentChangesPanel"'));
@@ -32,7 +32,7 @@ test('Change log and Site content use native default-closed details at the end',
 test('wording distinguishes staff, selected caregiver records and portal check-ins', () => {
   assert.match(html, /Staff accounts are for the team who manage the Hub/);
   assert.match(html, /Caregivers use the Caregiver Portal for their own membership and wellness information/);
-  assert.match(html, /Results appear after you search; choose Open\/Edit/);
+  assert.match(html, /Choose Open\/Edit to open a focused caregiver view/);
   assert.match(html, /data-action="caregiver-back"/);
   assert.match(html, /id="caregiverDetailView" class="staff-workspace d-none"/);
   assert.match(html, /Only caregivers with recorded check-ins appear in this list/);
@@ -82,7 +82,7 @@ test('an unsupported editor schema still refuses an editable form', () => {
   assert.match(result, /id="contentEditorHeading" tabindex="-1"/);
 });
 
-function team({ patch, refreshOk = true } = {}) {
+function team({ patch, refreshOk = true, query = '', roleFilter = 'all' } = {}) {
   const message = { textContent: '', dataset: {} };
   let rowMessage = { textContent: '', dataset: {} };
   let listHtml = '';
@@ -95,7 +95,9 @@ function team({ patch, refreshOk = true } = {}) {
   let recentLoads = 0;
   const context = createContext({
     escapeHtml, CSS: { escape: (value) => value },
-    document: { getElementById: (id) => id === 'staffTeamMessage' ? message : list, querySelector: () => rowMessage },
+    document: { getElementById: (id) => id === 'staffTeamMessage' ? message
+      : id === 'caregiverSearchQuery' ? { value: query }
+      : id === 'peopleRoleFilter' ? { value: roleFilter } : list, querySelector: () => rowMessage },
     fetch: async (url, options) => {
       calls.push({ url, options });
       if (options?.method === 'PATCH') return patch ? patch() : { ok: true, json: async () => ({ ok: true }) };
@@ -279,7 +281,7 @@ test('actual caregiver search renderer offers a named native Open/Edit button wi
   nodes.caregiverSearchQuery.value = 'DEMO';
   const calls = [];
   const context = createContext({ document: {getElementById: id => nodes[id]}, URLSearchParams, escapeHtml,
-    currentSearchOffset: 0, totalSearchResults: 0, searchLimit: 10, console: {error() {}},
+    currentSearchOffset: 0, totalSearchResults: 0, searchLimit: 10, caregiverSearchEpoch: 0, renderStaffTeam() {}, console: {error() {}},
     fetch: async (url, options) => { calls.push({url, options}); return {ok:true,json:async()=>({ok:true,total:1,caregivers:[{id:'cg_"demo',first_name:'<Demo>',last_name:'Example',status:'inactive'}]})}; } });
   runInContext(source.slice(source.indexOf('async function searchCaregivers('), source.indexOf('async function loadStaffConsole(')), context);
   await context.searchCaregivers(0);
@@ -326,4 +328,78 @@ test('focused caregiver Edit opens the existing form and focuses its first field
   assert.equal(details.open,true);
   assert.equal(field.calls,1);
   assert.match(source,/data-action="caregiver-edit">Edit caregiver details/);
+});
+
+
+test('one collapsed People area contains staff and caregiver lists, shared search and role filter', () => {
+  const people = html.match(/<details\b([^>]*id="peopleManagementPanel"[^>]*)>([\s\S]*?)<\/details>/);
+  assert.ok(people);
+  assert.doesNotMatch(people[1], /\bopen(?:\s|=|$)/);
+  for (const id of ['staffTeamPanel', 'caregiverSearchPanel', 'caregiverSearchQuery', 'peopleRoleFilter']) {
+    assert.match(people[2], new RegExp(`id="${id}"`));
+    assert.equal([...html.matchAll(new RegExp(`id="${id}"`, 'g'))].length, 1);
+  }
+  assert.match(people[2], /value="caregiver"/);
+  assert.match(people[2], /value="admin"/);
+  assert.match(people[2], /A caregiver record never grants staff access/);
+  assert.match(people[2], /inactive records can still sign in/);
+});
+
+test('staff filtering combines shared name/email query with exact role without giving edit rights', () => {
+  const h = team({ query: 'EXAMPLE', roleFilter: 'admin' });
+  runInContext("staffMe={email:'reader@example.invalid',role:'staff',status:'active'}; staffTeam=[{email:'admin@example.invalid',display_name:'Found Admin',role:'admin',status:'active'},{email:'staff@example.invalid',display_name:'Hidden Staff',role:'staff',status:'active'},{email:'other@else.invalid',display_name:'Different Admin',role:'admin',status:'active'}];renderStaffTeam();",h.context);
+  assert.match(h.list.innerHTML,/Found Admin/);
+  assert.doesNotMatch(h.list.innerHTML,/Hidden Staff|Different Admin|staff-edit|staff-save|submit-add-staff/);
+  assert.equal(h.calls.length,0);
+});
+
+test('an empty search preserves admin Add staff access without automatically opening the form', () => {
+  const h = team({query:'no matching person'});
+  runInContext("staffMe={email:'admin@example.invalid',role:'admin',status:'active'};staffTeam=[{email:'admin@example.invalid',display_name:'Admin',role:'admin',status:'active'}];renderStaffTeam();",h.context);
+  assert.match(h.list.innerHTML,/No staff match this search and role/);
+  assert.match(h.list.innerHTML,/<details class="mb-12"><summary>Add staff member/);
+  assert.doesNotMatch(h.list.innerHTML,/<details[^>]*\bopen\b/);
+  assert.equal(h.calls.length,0);
+});
+
+function searchHarness(fetch) {
+  const nodes=Object.fromEntries(['caregiverSearchQuery','caregiverSearchSegment','caregiverSearchStatus','caregiverSearchResultsBody','caregiverSearchPagingInfo','caregiverSearchPrevBtn','caregiverSearchNextBtn'].map(id=>[id,{value:'',innerHTML:'',textContent:'',disabled:false}]));
+  const context=createContext({document:{getElementById:id=>nodes[id]},URLSearchParams,escapeHtml,currentSearchOffset:0,totalSearchResults:0,searchLimit:10,caregiverSearchEpoch:0,renderStaffTeam(){},fetch});
+  runInContext(source.slice(source.indexOf('async function searchCaregivers('),source.indexOf('function filterBySegment(')),context);
+  return {nodes,context};
+}
+
+test('a slower search cannot replace results for the latest shared query', async () => {
+  let finish;
+  const slow=new Promise(resolve=>{finish=resolve;});
+  const reply=name=>({ok:true,json:async()=>({ok:true,total:1,caregivers:[{id:name,first_name:name,status:'active'}]})});
+  const h=searchHarness(url=>url.includes('q=old')?slow:Promise.resolve(reply('Current')));
+  h.nodes.caregiverSearchQuery.value='old';
+  const first=h.context.searchCaregivers(0);
+  h.nodes.caregiverSearchQuery.value='new';
+  await h.context.searchCaregivers(0);
+  finish(reply('Stale'));await first;
+  assert.match(h.nodes.caregiverSearchResultsBody.innerHTML,/Current/);
+  assert.doesNotMatch(h.nodes.caregiverSearchResultsBody.innerHTML,/Stale/);
+});
+
+test('failed caregiver search clears stale results and disables misleading paging',async()=>{
+  const h=searchHarness(async()=>{throw new Error('Offline <retry>');});
+  h.nodes.caregiverSearchResultsBody.innerHTML='Old matches';
+  await h.context.searchCaregivers(0);
+  assert.match(h.nodes.caregiverSearchResultsBody.innerHTML,/role="alert"/);
+  assert.match(h.nodes.caregiverSearchResultsBody.innerHTML,/&lt;retry>/);
+  assert.doesNotMatch(h.nodes.caregiverSearchResultsBody.innerHTML,/Old matches/);
+  assert.equal(h.nodes.caregiverSearchNextBtn.disabled,true);
+  assert.equal(h.nodes.caregiverSearchPrevBtn.disabled,true);
+});
+
+
+test('a failed staff refresh cannot revive stale admin controls when filtering',async()=>{
+  const h=team({refreshOk:false});
+  runInContext("staffMe={email:'old@example.invalid',role:'admin',status:'active'};staffTeam=[{email:'old@example.invalid',display_name:'Stale Admin',role:'admin',status:'active'}];",h.context);
+  assert.equal(await h.context.loadStaffTeam(),false);
+  h.context.renderStaffTeam();
+  assert.match(h.list.innerHTML,/Could not load staff/);
+  assert.doesNotMatch(h.list.innerHTML,/Stale Admin|staff-edit|submit-add-staff/);
 });
