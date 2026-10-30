@@ -15,3 +15,164 @@ After installation, verify draft creation with both fields, staff readback, edit
 Retain the prior deployment identifier and package. Roll back code to that qualified deployment if necessary; leave the two additive nullable columns in place. Old code ignores them. Do not drop columns, delete events or registrations, reset the database, or replay customer/provider actions to roll back. Record source, database/migration readback, deployment and browser results separately in the existing private acceptance record.
 
 Engineering source and tests: [pc2-codex-42], October 25, 2026.
+
+## Registration confirmation email — October 30 source increment
+
+Owner/integration: pc2-codex-41; implementation: pc2-codex-42. This extends the
+existing `/api/intake` registration journey, transactional Resend sender,
+`LEGACY_DB` registration/followup tables and append-only audit. No new service,
+provider, secret, schema migration, scheduled job or reminder is introduced.
+Progressive Engineering stage: deterministic application behavior on existing
+proven intake/mail foundations; live delivery remains a separate acceptance step.
+
+New ordinary Hub event registrations commit caregiver, registration, existing
+confirmation staff task and original intake audit together. Only a successful
+new registration can attempt email. The recipient and event facts come from
+persisted records, not duplicate request text. The message includes title,
+start/end time in America/Chicago, stored location, registered status, and
+canonical event/portal URLs. It does not claim payment, attendance or mailbox
+delivery. External organizer registration and existing provider receipts are
+unchanged. Support-group sign-ups use the same delivery state machine, with a
+separate followup identity and confirmation that includes the approved Meet link.
+
+### Support-group client/server contract
+
+The existing support-group form submits `kind: support_request`,
+`source: site_form:support_group`, an optional `session_date: YYYY-MM-DD | null`,
+and one `external_ref` per chosen date per tab session. General joining uses the
+undated key. The client correction is coordinated separately by the existing
+client/shared-staging owner; server deployment must be bundled with that corrected
+client, not the older date-label-only form.
+
+`content/page-sections.json` → `items["programs.support_group"].sessions` is the
+same authoritative, static/readOnly date list rendered by the Programs template.
+The server imports that exact source. It checks actual calendar validity and one
+exact occurrence in the list; regex alone is insufficient. Cancelled dates,
+invented dates and dates supplied on other intake purposes are refused before
+business writes. Omitted/null means general joining, never an inferred date from
+free-text `message`. That valid date/null is added to the ORIGINAL intake audit
+alongside its source/external identity, in the same atomic batch as the task.
+
+After successful new intake, the mail path reads the persisted caregiver and
+original intake audit. It does not trust a changed retry's date, email, label or
+URL. Dated mail includes the authored session label, ISO date, Central time and
+`https://meet.google.com/dmc-orwi-afk`. General joining says every Wednesday,
+5–6 PM Central, explicitly notes no particular-date reservation and advises
+checking the published dates for cancellations. Both include the canonical
+`/programs#support-group` link (staging host for preview), no reminders or
+attendance claim. Existing original task detail is retained before delivery
+status is appended. The normal success-only Meet redirect is unchanged.
+
+The stable key is `legacy-support-group-<environment>-<followup-id>`; claims use
+the followup entity, so they cannot collide with registration IDs. Public
+duplicates cannot send/backfill. The original intake audit is never rewritten to
+add a date to old requests. A missing original record requires staff review.
+
+### Delivery, duplicates and failures
+
+Before any provider call, one atomic insert-if-absent audit records
+`confirmation.claimed` for the persisted registration ID. Its key is
+`legacy-registration-<environment>-<registration-id>`. The existing sender gets
+that same `Idempotency-Key` and a ten-second abort bound. The durable application
+claim, rather than the provider's 24-hour idempotency window, prevents a later
+automatic duplicate. Claim/audit rows are never cleared or relabeled to retry.
+
+Outcome audits are `confirmation.accepted`, `.rejected`, `.unknown` or `.skipped`;
+they contain only the stable key and safe HTTP status, never recipient address,
+message text or credentials. The existing staff followup describes the outcome
+and stays open until staff resolves it. Provider acceptance is not recipient
+delivery. A lost/ambiguous provider response or outcome-store failure leaves the
+claim for reconciliation. A mail failure still returns successful registration.
+The endpoint adds `confirmation_email: submitted | needs_review | not_sent`.
+The ordinary-event on-screen result distinguishes registration success from
+email submission, and tells people to contact Legacy rather than register again
+if mail is unconfirmed. Its narrow `submitRegister` change preserves the separate
+support-group functions owned by the active `app.js` contributor.
+
+Public duplicate submissions read the existing outcome and never send. Old
+registrations are never backfilled. If a process dies between committing a
+registration and attempting mail, its original staff task remains the recovery
+path; a duplicate form submission does not repair it by sending automatically.
+Concurrent requests use the same durable claim; no in-memory/global send lock.
+
+### Safe staff recovery in the existing queue
+
+1. Open the original event-confirmation task in Staff follow-ups. Registration
+   remains saved. Do not submit another registration or clear a claim.
+2. The existing mail custodian reconciles the stable key, recipient and time in
+   the existing provider account. Accepted, pending or unknown delivery must not
+   be treated as safe to resend. A missing local success audit is not proof that
+   the provider did not accept the message.
+3. For a proven rejection or proven pre-send failure, correct the specific cause
+   using existing custody. Any manual one-recipient recovery requires the
+   original authorized request, definitive no-send/nonacceptance evidence and
+   a recorded provider outcome; this code has no bulk/backfill/resend endpoint.
+   If the outcome cannot be resolved, retain the task for the custodian instead
+   of guessing. Resolve/dismiss only the existing task with the normal staff
+   workflow after its actual disposition; preserve registration and audit history.
+
+### Staging and release limits
+
+Existing production uses `EMAIL_API_KEY` with absent `ENVIRONMENT` (or explicit
+`production`). Preview confirmations require their own explicit
+`CONFIRMATION_PREVIEW_MAIL_ENABLED=1` (or `true`) **and** a comma-separated exact
+`CONFIRMATION_PREVIEW_RECIPIENTS` allowlist of approved test mailboxes. Flag and
+recipient matching trim whitespace and ignore case. No wildcard, domain-only
+entry, base-address substitution for a plus alias, or arbitrary caregiver preview
+recipient is allowed. The sender supports one recipient per confirmation and
+refuses arrays or comma-separated recipient arguments. An empty list refuses
+confirmation mail while preserving intake. Development and unknown environment
+labels cannot send confirmations.
+
+The existing sender rechecks this policy for the server-selected `confirmation`
+purpose before any provider call; intake payloads cannot select it. Unrecognized
+purposes fail closed. Existing callers without that purpose, including portal
+sign-in, retain their existing policy. The confirmation switch does not enable
+portal mail or portal login. `PORTAL_PREVIEW_MAIL_ENABLED` / `PREVIEW_MAIL_ENABLED`
+cannot enable confirmations; neither needs to be enabled for this acceptance.
+This corrects a preview-isolation gap found during actual runtime preflight;
+production transactionals are unchanged.
+Configuration values and approved recipient identities belong in existing
+private custody; do not add them to this public runbook or the repository.
+
+For the existing shared-staging owner, after exact source review:
+
+1. Qualify the actual preview deployment, isolated preview D1, existing key
+   presence (never its value), approved QA alias and retained record. Preserve
+   its status, tags and source. Do not recreate an account, strip do-not-contact
+   metadata or change global suppression rules to run this bounded QA exercise.
+2. Add only the two confirmation-specific non-secret preview fields above through
+   the existing deployment configuration path. Keep portal/fallback mail flags
+   unset/off, production unchanged, and preserve all other bindings and settings.
+   Read back the effective configuration on the resulting exact deployment;
+   source declarations alone are not installed-policy evidence.
+3. Before an authorized new QA intake, qualify its fixture/session and unique
+   identity. Mail policy refusal retains a durable claim, so changing config
+   does not authorize replaying a previously skipped intake. The release owner
+   coordinates actual confirmation/receipt and duplicate-refusal verification.
+4. Close the finite test by disabling the confirmation-only switch/removing its
+   temporary recipient list through the same owner path and verifying that
+   portal mail stayed off. Preserve resulting QA records/audits, exclude them
+   from customer reporting and resolve only their own test followups normally.
+   Retain the prior package/configuration for rollback; do not delete claims.
+
+Source tests use in-memory SQLite and mocked provider calls, including claim
+acknowledgment loss, concurrent duplicates, outcome persistence failure,
+registration rollback, policy refusal and unchanged portal-mail behavior. They
+also cover authoritative valid/cancelled/impossible dates, original audited date
+versus changed request text, per-date duplicate boundaries, general joining,
+support-group rollback/recovery, and unchanged success-only Meet navigation.
+They also prove sender-level recipient enforcement, independent preview switches,
+actual portal-login refusal with confirmation enabled, and durable duplicate/
+unknown outcomes under that isolated preview policy.
+They are not a real email receipt or deployment. The existing release owner must
+coordinate the shared staging bundle, qualify the approved
+test recipient/policy and verify one authorized registration plus actual mailbox
+receipt. No artificial production signup, backfill or unsolicited test send is
+authorized by this document. Requester approval of the specific staging result
+precedes production; installed source, receipt and user access are separate.
+Rollback restores the prior qualified code package without deleting claims,
+registrations, staff tasks or audits. Restoring code never authorizes resend.
+
+Primary references: [Resend idempotency](https://resend.com/docs/dashboard/emails/idempotency-keys)
+and [D1 batch transactions](https://developers.cloudflare.com/d1/worker-api/d1-database/).

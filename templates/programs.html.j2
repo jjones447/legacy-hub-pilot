@@ -57,7 +57,7 @@
         <h4 class="mt-16">{{ sections["programs.support_group"].sessions_heading }}</h4>
         <ul class="support-group-sessions" id="supportGroupSessions">
 {%- for s in sections["programs.support_group"].sessions %}
-          <li data-date="{{ s.date }}"><button type="button" class="session-link" data-action="open-support-group-interest" data-session="{{ s.label }}" aria-haspopup="dialog" aria-controls="supportGroupInterestModal">{{ s.label }}</button></li>
+          <li data-date="{{ s.date }}"><button type="button" class="session-link" data-action="open-support-group-interest" data-session="{{ s.label }}" data-session-date="{{ s.date }}" aria-haspopup="dialog" aria-controls="supportGroupInterestModal">{{ s.label }}</button></li>
 {%- endfor %}
         </ul>
         <p class="small muted d-none" id="supportGroupSessionsNone">{{ sections["programs.support_group"].sessions_none }}</p>
