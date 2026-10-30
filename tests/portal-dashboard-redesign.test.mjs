@@ -91,6 +91,20 @@ test('highlights show only real account information and hide when there is none'
   assert.doesNotMatch(html, /intake (?:is )?(?:complete|incomplete)|announcement:|perk:/i, 'no invented intake status, announcements or perks');
 });
 
+test('the next-event highlight is the first future REGISTERED event, even after an earlier attended or no-show entry', () => {
+  const h = ui();
+  h.context.renderPortalData({ profile: {}, grants: [], events: [
+    { title: 'Earlier Attended', type: 'workshop', starts_at: '2026-11-02 10:00', registration_status: 'attended' },
+    { title: 'Earlier No-show', type: 'workshop', starts_at: '2026-11-03 10:00', registration_status: 'no_show' },
+    { title: 'Later Registered', type: 'support_group', starts_at: '2026-11-11 17:00', registration_status: 'registered' }] });
+  assert.equal(h.el.portalHighlights.hidden, false);
+  assert.deepEqual(texts(h.el.portalHighlightsList), ['📅Your next event: Later Registered · 2026-11-11 17:00']);
+  assert.equal(h.el.portalEventsList.children[0].children.length, 4, 'the full upcoming list still shows all three entries');
+  h.context.renderPortalData({ profile: {}, grants: [], events: [
+    { title: 'Only Attended', type: 'workshop', starts_at: '2026-11-02 10:00', registration_status: 'attended' }] });
+  assert.equal(h.el.portalHighlights.hidden, true);
+});
+
 test('design preview (?preview=sample) shows the layout with labeled fictional data and makes no requests', () => {
   const h = ui({ search: '?preview=sample' });
   assert.equal(h.context.portalDesignPreviewRequested(), true);

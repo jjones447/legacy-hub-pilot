@@ -751,7 +751,8 @@ function renderPortalData(data) {
       });
     }
   }
-  portalHighlightState.nextEvent = upcoming.length && upcoming[0].event.registration_status === 'registered' ? upcoming[0].event : null;
+  const nextRegistered = upcoming.find(function (x) { return x.event.registration_status === 'registered'; });
+  portalHighlightState.nextEvent = nextRegistered ? nextRegistered.event : null;
   renderPortalHighlights();
 
   // Memory socials count and details
@@ -1391,8 +1392,13 @@ function initPortalSummaryPreview() {
   const preview = document.getElementById('portalWellnessSample');
   const actual = document.getElementById('portalAccountSummary');
   if (!preview || !actual) return;
-  // Display-only examples: no session, storage, API data or check-in changes.
-  const sync = function () { actual.hidden = preview.open; };
+  // Display-only examples: no session, storage, API data or check-in changes. The sample
+  // cards stand in for the other summary cards; the real wellness card stays visible.
+  const sync = function () {
+    Array.prototype.forEach.call(actual.children, function (card) {
+      if (card.id !== 'portalWellnessTile') card.hidden = preview.open;
+    });
+  };
   preview.open = false;
   sync();
   preview.addEventListener('toggle', sync);
