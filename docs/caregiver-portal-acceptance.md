@@ -348,7 +348,8 @@ The membership modal now reveals **Continue to your portal** only after the
 intake endpoint acknowledges a save (including an earlier duplicate request).
 The link is the same-origin `/portal`, without email or tokens in its URL. The
 existing signed session or secure emailed-link verification still controls
-access. Membership submission neither signs the person in nor requests email.
+access. Membership submission itself neither signs the person in nor requests email;
+for a NEW save, the portal hand-off below requests one link (pilot #291).
 
 The form shows pending feedback immediately and focuses its success/error result.
 Storage/preparation failures are reported before any request starts; no substitute
@@ -369,3 +370,29 @@ rendering, a saved live request, email delivery or verified portal entry. Releas
 owners must qualify the installed package and the existing authorized synthetic
 journey before making those claims. Unknown existing submissions require
 reconciliation, not replay. [pc2-codex-42]
+
+## Membership → portal sign-in hand-off (October 30, pilot #291)
+
+Requested by Legacy (Shanelle, Slack 2026-10-30: “yes lets try that”). Separate
+results, each needing its own evidence:
+
+1. **Save:** the intake endpoint acknowledges a NEW membership (not a duplicate,
+   refusal or uncertain outcome, which keep the #289 behaviour above).
+2. **Navigation:** only then the page stores `{email, at}` once in
+   `sessionStorage['legacy-portal-handoff']` (never in a URL) and goes to `/portal`.
+   If storage or navigation fails, the visible **Continue to your portal** button and
+   the manual sign-in form remain the fallback.
+3. **Link request:** `/portal` consumes the hand-off once (removed on read; ignored
+   if older than ten minutes or malformed). Only a confirmed signed-out
+   `/api/portal/me` answer (HTTP 401) fills the email, shows a status note and calls
+   the existing `submitPortalLogin()` once. A signed-in session discards the hand-off
+   without sending. An unavailable, failed or unreadable session check only fills
+   the email and asks the person to select “Send me a sign-in link”.
+4. **Provider acceptance:** the existing `/api/portal/login` and server mail policy
+   decide whether a message is sent (staging portal mail is off); the page shows the
+   existing status wording and never promises mailbox delivery.
+5. **Possession:** the portal opens only after the person uses the emailed link.
+   No session is created from the stored email.
+
+Source/unit checks do not prove deployment, rendering, a live request, email delivery
+or portal entry. [pc2-claude-ct-2]
