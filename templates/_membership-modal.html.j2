@@ -27,9 +27,13 @@
       </div>
       <p class="privacy-line" data-cs="form.membership.privacy_line">{{ sections["form.membership"].privacy_line }}</p>
       <button type="submit" class="btn btn-coral w-100" data-cs="form.membership.submit_label">{{ sections["form.membership"].submit_label }}</button>
-      <div class="success-note" data-intake-success role="status" aria-live="polite">✓ Membership request received — welcome to The Sanctuary.</div>
-      <div class="error-note" data-intake-error role="alert" aria-live="assertive"></div>
-      <div class="routing-note" data-intake-routing>Behind the scenes: your caregiver record was created or updated and staff follow-up is queued.</div>
+      <p data-membership-pending role="status" aria-live="polite" hidden>Saving your membership request. Please wait; don't submit it again.</p>
+      <div class="success-note" data-intake-success role="status" aria-live="polite" tabindex="-1">Your membership request is saved.</div>
+      <div class="error-note" data-intake-error role="alert" aria-live="assertive" tabindex="-1"></div>
+      <div class="routing-note" data-intake-routing>
+        <a class="btn btn-plum" href="/portal">Continue to your portal</a>
+        <p>For a new membership, this page opens the portal with your email filled in and requests one secure sign-in link for it. If the portal doesn't open, use the button and select “Send me a sign-in link”. If you're already signed in, you'll see your existing portal. Joining never signs you in by itself; your portal opens only from the emailed link.</p>
+      </div>
     </form>
   </div>
 </div>

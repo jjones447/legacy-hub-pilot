@@ -918,3 +918,39 @@ test('Agent mapper: gatewayWorkflowBackend constructs event tools and parses res
     globalThis.fetch = originalFetch;
   }
 });
+
+test('Add Event can attach an optional photo: checked before create, then sent through the event-photo endpoint', async () => {
+  const elements = new Map();
+  const element = id => { if (!elements.has(id)) elements.set(id, { innerHTML: '', textContent: '', classList: { add() {}, remove() {} } }); return elements.get(id); };
+  const calls = [];
+  const context = vm.createContext({
+    document: { getElementById: element, querySelector: () => ({ textContent: '' }) },
+    escapeHtml: value => String(value), staffEvents: [], FormData, crypto: { randomUUID: () => 'req-1' },
+    fetch: async (url, options) => {
+      calls.push({ url, method: options.method, body: options.body });
+      if (url === '/api/staff/event') return { ok: true, json: async () => ({ ok: true, event: { id: 'ev_new' } }) };
+      return { ok: true, json: async () => ({ ok: true, photo_key: 'k', photo_alt: 'alt' }) };
+    },
+    confirm: () => false, alert: message => assert.fail(message),
+  });
+  vm.runInContext(STAFF_JS.slice(STAFF_JS.indexOf('function renderNewEventForm('), STAFF_JS.indexOf('async function selectEvent(')), context);
+  context.loadEvents = async () => {};
+  context.loadRecentChanges = async () => {};
+  context.openEditEvent = () => {};
+  context.renderNewEventForm();
+  assert.match(element('newEventContainer').innerHTML, /id="newEventPhoto" name="photo" accept="image\/jpeg,image\/png,image\/webp"/);
+  const base = { title: { value: 'New' }, type: { value: 'wellness' }, starts_at: { value: '2040-10-27T17:00' }, ends_at: { value: '' },
+    location: { value: '' }, description: { value: '' }, registration_url: { value: '' }, capacity: { value: '' }, recurring: { checked: false }, reset() {} };
+
+  // A file that is not an allowed photo creates nothing.
+  await context.submitCreateEvent({ ...base, photo: { files: [{ type: 'application/pdf', size: 10 }] }, photo_alt: { value: '' } });
+  assert.equal(calls.length, 0);
+
+  // A valid photo: create first, then upload to the new event's photo endpoint.
+  const file = new Blob(['x'], { type: 'image/png' });
+  await context.submitCreateEvent({ ...base, photo: { files: [file] }, photo_alt: { value: ' Group photo ' } });
+  assert.deepEqual(calls.map(c => [c.url, c.method]), [['/api/staff/event', 'POST'], ['/api/staff/event-photo/ev_new', 'POST']]);
+  assert.equal(calls[1].body.get('expected_photo_key'), '');
+  assert.equal(calls[1].body.get('alt'), 'Group photo');
+  assert.equal(calls[1].body.get('request_id'), 'req-1');
+});
