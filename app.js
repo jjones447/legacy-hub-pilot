@@ -281,7 +281,7 @@ function submitMembership(e) {
   Promise.resolve().then(() => postIntake(form, payload)).then(function (result) {
     showMembershipState(form, { phase: 'success', message: result.duplicate
       ? 'A membership request was already received from this browser session. Continue to the portal and sign in with the email used for that request. Contact Legacy if you need to change it.'
-      : 'Your membership request is saved. Taking you to your portal to sign in securely…' }, true);
+      : 'Your membership request is saved. Taking you to your portal to request your secure sign-in link…' }, true);
     // Requested by Legacy (Oct 30): after a NEW membership is saved, go straight to the portal
     // sign-in with the email filled in and one sign-in link requested. The email travels in
     // sessionStorage only (never in the URL), and the portal never signs anyone in without
@@ -488,40 +488,49 @@ function checkPortalSession() {
   const dashView = document.getElementById('dashView');
   if (!loginView || !dashView) return; // not on portal page
 
+  // Only a confirmed signed-out answer (HTTP 401) may start the one automatic sign-in
+  // link request from a membership hand-off. A signed-in session discards the hand-off;
+  // an unavailable or unreadable session check only prefills the email (manual send).
   fetch('/api/portal/me')
     .then(function (res) {
       if (res.status === 200) {
-        return res.json();
+        return res.json().then(function (data) { return { outcome: data && data.ok ? 'signed_in' : 'unavailable', data: data }; });
       }
-      throw new Error('unauthorized');
+      return { outcome: res.status === 401 ? 'signed_out' : 'unavailable' };
     })
-    .then(function (data) {
-      if (data.ok) {
-        renderPortalData(data);
+    .then(function (result) {
+      if (result.outcome === 'signed_in') {
+        takePortalHandoff(); // discard: an existing session wins, nothing is sent
+        renderPortalData(result.data);
         loadWellness();
         loginView.style.display = 'none';
         dashView.style.display = 'block';
       } else {
         dashView.style.display = 'none';
         loginView.style.display = 'block';
-        continueMembershipHandoff();
+        continueMembershipHandoff(result.outcome === 'signed_out' ? 'auto' : 'manual');
       }
     })
     .catch(function () {
       dashView.style.display = 'none';
       loginView.style.display = 'block';
-      continueMembershipHandoff();
+      continueMembershipHandoff('manual');
     });
 }
 
-function continueMembershipHandoff() {
+function continueMembershipHandoff(mode) {
   const email = takePortalHandoff();
   const input = document.getElementById('loginEmail');
   if (!email || !input) return;
   input.value = email;
   const welcome = document.getElementById('membershipWelcome');
-  if (welcome) welcome.hidden = false;
-  submitPortalLogin();
+  if (welcome) {
+    welcome.textContent = mode === 'auto'
+      ? 'Welcome to the Caregiver Sanctuary! Your membership request is saved. We’re requesting a secure sign-in link for the email below; its status appears under the button.'
+      : 'Welcome to the Caregiver Sanctuary! Your membership request is saved. We couldn’t check your sign-in just now, so select “Send me a sign-in link” when you’re ready.';
+    welcome.hidden = false;
+  }
+  if (mode === 'auto') submitPortalLogin();
 }
 
 function submitPortalLogin(e) {

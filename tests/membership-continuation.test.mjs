@@ -151,7 +151,8 @@ test('all generated membership forms offer a same-origin continuation without em
     assert.match(form, /data-intake-success[^>]*tabindex="-1"/);
     assert.match(form, /data-intake-error[^>]*tabindex="-1"/);
     assert.match(form, /data-intake-routing>[\s\S]*href="\/portal"/);
-    assert.match(form, /does not sign you in or send a sign-in email/);
+    assert.match(form, /Joining never signs you in by itself; your portal opens only from the emailed link\./);
+    assert.match(form, /select “Send me a sign-in link”/);
     assert.doesNotMatch(form, /href="\/portal[?#]/);
   }
   const membership = source.slice(source.indexOf('function submitMembership'), source.indexOf('/* ---------- Virtual support group:'));
@@ -187,48 +188,96 @@ test('no portal hand-off for a duplicate, a refused or an uncertain membership s
   }
 });
 
-// Portal-side slice: the one-time hand-off helpers plus the portal sign-in functions.
+// Portal-side slice: the real checkPortalSession dispatch, the one-time hand-off helpers
+// and the existing portal sign-in function (renderPortalData/loadWellness are stubbed).
 const between = (start, end) => { const i = app.indexOf(start); const j = app.indexOf(end, i); assert.ok(i >= 0 && j > i, start); return app.slice(i, j); };
 const portalSource = between('const PORTAL_HANDOFF_KEY', 'function submitMembership(')
-  + between('function continueMembershipHandoff()', 'function submitPortalLogin(')
-  + between('function submitPortalLogin(', '\nfunction ', ) ;
+  + between('function checkPortalSession()', 'function submitPortalLogin(')
+  + between('function submitPortalLogin(', '\nfunction ');
 
-test('portal consumes a fresh hand-off once: prefills the email and requests exactly one sign-in link', () => {
-  const store = new Map([['legacy-portal-handoff', JSON.stringify({ email: 'fictional@example.invalid', at: 1000 })]]);
-  const posted = [];
-  const nodes = { loginEmail: { value: '' }, loginStatus: { style: {}, textContent: '', appendChild() {} }, loginBtn: { disabled: false },
-    membershipWelcome: { hidden: true } };
+function portalFixture({ me, handoff, now = 1000 + 60 * 1000 }) {
+  const store = new Map(handoff === undefined ? [] : [['legacy-portal-handoff', handoff]]);
+  const logins = [], rendered = [];
+  const view = () => ({ style: { display: '' } });
+  const nodes = { loginView: view(), dashView: view(), loginEmail: { value: '' }, loginBtn: { disabled: false },
+    loginStatus: { style: {}, textContent: '', appendChild() {} }, membershipWelcome: { hidden: true, textContent: '' } };
   const context = {
     document: { getElementById: id => nodes[id], createElement: () => ({ style: {} }) },
     sessionStorage: { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, v), removeItem: k => store.delete(k) },
-    Date: { now: () => 1000 + 60 * 1000 },
-    fetch: (url, options) => { posted.push({ url, body: JSON.parse(options.body) }); return new Promise(() => {}); },
+    Date: { now: () => now },
+    renderPortalData: d => rendered.push(d), loadWellness: () => {},
+    fetch: (url, options) => {
+      if (url === '/api/portal/me') return me();
+      logins.push({ url, body: JSON.parse(options.body) }); return new Promise(() => {});
+    },
   };
-  vm.runInNewContext(portalSource + '\n;globalThis.__handoff = continueMembershipHandoff;', context);
-  context.__handoff();
-  assert.equal(nodes.loginEmail.value, 'fictional@example.invalid');
-  assert.equal(nodes.membershipWelcome.hidden, false);
-  assert.deepEqual(posted, [{ url: '/api/portal/login', body: { email: 'fictional@example.invalid' } }]);
-  assert.equal(store.has('legacy-portal-handoff'), false, 'the hand-off is one-time');
-  context.__handoff();
-  assert.equal(posted.length, 1, 'a reload does not request another link');
+  vm.runInNewContext(portalSource, context);
+  return { context, store, logins, rendered, nodes };
+}
+const fresh = JSON.stringify({ email: 'fictional@example.invalid', at: 1000 });
+
+test('portal dispatch: a confirmed signed-out answer (401) prefills and requests exactly one link, once', async () => {
+  const f = portalFixture({ me: () => Promise.resolve(response(401, { ok: false })), handoff: fresh });
+  f.context.checkPortalSession();
+  await settle(); await settle();
+  assert.equal(f.nodes.loginEmail.value, 'fictional@example.invalid');
+  assert.equal(f.nodes.membershipWelcome.hidden, false);
+  assert.match(f.nodes.membershipWelcome.textContent, /requesting a secure sign-in link/);
+  assert.doesNotMatch(f.nodes.membershipWelcome.textContent, /emailing|sent you|check your inbox/i, 'no premature delivery claim');
+  assert.deepEqual(f.logins, [{ url: '/api/portal/login', body: { email: 'fictional@example.invalid' } }]);
+  assert.equal(f.store.has('legacy-portal-handoff'), false);
+  f.context.checkPortalSession(); await settle(); await settle();
+  assert.equal(f.logins.length, 1, 'a reload does not request another link');
 });
 
-test('a stale or malformed hand-off is discarded without requesting a link', () => {
-  for (const raw of [JSON.stringify({ email: 'fictional@example.invalid', at: 0 }), '{not json', JSON.stringify({ email: 'no-at-sign', at: 1000 })]) {
-    const store = new Map([['legacy-portal-handoff', raw]]);
-    const posted = [];
-    const nodes = { loginEmail: { value: '' }, loginStatus: { style: {} }, loginBtn: {}, membershipWelcome: { hidden: true } };
-    const context = {
-      document: { getElementById: id => nodes[id] },
-      sessionStorage: { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, v), removeItem: k => store.delete(k) },
-      Date: { now: () => 1000 + 11 * 60 * 1000 },
-      fetch: (url) => { posted.push(url); return new Promise(() => {}); },
-    };
-    vm.runInNewContext(portalSource + '\n;globalThis.__handoff = continueMembershipHandoff;', context);
-    context.__handoff();
-    assert.deepEqual(posted, []);
-    assert.equal(nodes.loginEmail.value, '');
-    assert.equal(store.has('legacy-portal-handoff'), false);
+test('portal dispatch: an existing signed-in session discards the hand-off and sends nothing (no delayed link later)', async () => {
+  const f = portalFixture({ me: () => Promise.resolve(response(200, { ok: true, caregiver: {} })), handoff: fresh });
+  f.context.checkPortalSession();
+  await settle(); await settle();
+  assert.equal(f.rendered.length, 1);
+  assert.equal(f.logins.length, 0);
+  assert.equal(f.store.has('legacy-portal-handoff'), false, 'consumed on the authenticated outcome');
+  // A later signed-out visit inside ten minutes must not send for the earlier email.
+  f.context.fetch = (url, options) => url === '/api/portal/me' ? Promise.resolve(response(401, { ok: false })) : (f.logins.push(url), new Promise(() => {}));
+  f.context.checkPortalSession(); await settle(); await settle();
+  assert.equal(f.logins.length, 0);
+});
+
+test('portal dispatch: unavailable, failed or unreadable session checks never send automatically', async () => {
+  for (const me of [
+    () => Promise.resolve(response(500, { ok: false })),
+    () => Promise.resolve(response(503, {})),
+    () => Promise.reject(new Error('network')),
+    () => Promise.resolve({ status: 200, ok: true, json: async () => { throw new Error('parse'); } }),
+    () => Promise.resolve(response(200, { ok: false })),
+  ]) {
+    const f = portalFixture({ me, handoff: fresh });
+    f.context.checkPortalSession();
+    await settle(); await settle();
+    assert.equal(f.logins.length, 0);
+    assert.equal(f.nodes.loginEmail.value, 'fictional@example.invalid', 'manual fallback keeps the email filled in');
+    assert.match(f.nodes.membershipWelcome.textContent, /select “Send me a sign-in link”/);
+    assert.equal(f.store.has('legacy-portal-handoff'), false);
   }
+});
+
+test('portal dispatch: stale or malformed hand-offs are discarded without a request', async () => {
+  for (const handoff of [JSON.stringify({ email: 'fictional@example.invalid', at: 0 }), '{not json', JSON.stringify({ email: 'no-at-sign', at: 1000 })]) {
+    const f = portalFixture({ me: () => Promise.resolve(response(401, { ok: false })), handoff, now: 1000 + 11 * 60 * 1000 });
+    f.context.checkPortalSession();
+    await settle(); await settle();
+    assert.equal(f.logins.length, 0);
+    assert.equal(f.nodes.loginEmail.value, '');
+    assert.equal(f.store.has('legacy-portal-handoff'), false);
+  }
+});
+
+test('the hand-off note is real, visible markup: semantic status element with its own visible style', () => {
+  const portal = read('portal.html');
+  assert.match(portal, /<p id="membershipWelcome" class="portal-handoff-note" role="status" aria-live="polite" hidden><\/p>/);
+  const css = read('styles.css');
+  const rule = css.match(/\.portal-handoff-note\s*\{([^}]*)\}/)?.[1];
+  assert.ok(rule, 'portal-handoff-note has a style rule');
+  assert.doesNotMatch(rule, /display\s*:\s*none/, 'un-hiding the element makes it visible');
+  assert.doesNotMatch(portal, /id="membershipWelcome"[^>]*alert-inline-banner/);
 });
