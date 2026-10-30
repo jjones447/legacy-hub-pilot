@@ -6,17 +6,10 @@ import { SUPPORT_GROUP_SOURCE, SUPPORT_GROUP_MEET, supportGroupSession } from '.
 
 const ENTITY = 'registration';
 const ZONE = 'America/Chicago';
-const EMAIL = /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/;
 const escape = value => String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 export function confirmationMailAllowed(env, recipient) {
-  if (!EMAIL.test(recipient) || !canSendEmail(env)) return false;
-  // This project's existing production binding has no ENVIRONMENT variable.
-  // Preserve that convention; preview/development are explicitly marked.
-  if (!env.ENVIRONMENT || env.ENVIRONMENT === 'production') return true;
-  if (env.ENVIRONMENT !== 'preview') return false;
-  const approved = String(env.CONFIRMATION_PREVIEW_RECIPIENTS || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-  return approved.includes(recipient.toLowerCase());
+  return canSendEmail(env, { purpose: 'confirmation', recipient });
 }
 
 // Same site contract as publicEventTime: offset-free timestamps are Legacy wall
@@ -164,7 +157,7 @@ async function deliverConfirmation(env, { entity, id, followupId, recipient: raw
     await db.prepare(`UPDATE followup SET detail = ? WHERE id = ?`).bind(
       detail('Confirmation email outcome requires verification before any resend.'), followupId).run();
     const result = allowed ? await sendEmail(env, {
-      to: recipient, ...email, idempotencyKey: key, timeoutMs: 10000,
+      to: recipient, ...email, idempotencyKey: key, timeoutMs: 10000, purpose: 'confirmation',
     }, fetchImpl) : { ok: false, status: 0 };
     const code = Number.isInteger(result.status) ? result.status : -1;
     const state = result.ok ? 'accepted' : code === 0 ? 'skipped'

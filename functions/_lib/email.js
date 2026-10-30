@@ -1,10 +1,11 @@
 // Transactional email through Resend (https://resend.com/docs/api-reference/emails/send-email).
-// Preview requires an explicit opt-in. Confirmation mail additionally restricts
-// preview recipients; portal sign-in retains its existing policy.
+// Preview confirmation and portal mail have independent opt-ins. Confirmation
+// purpose is selected only by the server caller, never from an intake payload.
 
 export const EMAIL_FROM = 'Caregiver Sanctuary <no-reply@caregiversanctuary.org>';
 export const EMAIL_REPLY_TO = 'info@legacyhomehealthservices.org';
 const RESEND_URL = 'https://api.resend.com/emails';
+const EMAIL = /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/;
 
 export function isPreviewMailOptIn(env) {
   if (!env || env.ENVIRONMENT !== 'preview') return false;
@@ -12,8 +13,17 @@ export function isPreviewMailOptIn(env) {
   return flag === '1' || flag === 'true';
 }
 
-export function canSendEmail(env) {
+export function canSendEmail(env, { purpose, recipient } = {}) {
   if (!env || !String(env.EMAIL_API_KEY || '').trim()) return false;
+  if (purpose !== undefined) {
+    if (purpose !== 'confirmation' || typeof recipient !== 'string' || !EMAIL.test(recipient.trim())) return false;
+    if (!env.ENVIRONMENT || env.ENVIRONMENT === 'production') return true;
+    if (env.ENVIRONMENT !== 'preview') return false;
+    const flag = String(env.CONFIRMATION_PREVIEW_MAIL_ENABLED ?? '').trim().toLowerCase();
+    const approved = String(env.CONFIRMATION_PREVIEW_RECIPIENTS || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+    return (flag === '1' || flag === 'true') && approved.includes(recipient.trim().toLowerCase());
+  }
+  // Existing callers (including portal sign-in) retain their original policy.
   if (env.ENVIRONMENT === 'development') return false;
   if (env.ENVIRONMENT === 'preview') return isPreviewMailOptIn(env);
   return true;
@@ -46,8 +56,8 @@ export function signInEmail(link) {
 }
 
 /** Send one email. Returns { ok, status } and never throws; callers log failures without details. */
-export async function sendEmail(env, { to, subject, text, html, idempotencyKey, timeoutMs }, fetchImpl = fetch) {
-  if (!canSendEmail(env)) return { ok: false, status: 0 };
+export async function sendEmail(env, { to, subject, text, html, idempotencyKey, timeoutMs, purpose }, fetchImpl = fetch) {
+  if (!canSendEmail(env, { purpose, recipient: to })) return { ok: false, status: 0 };
   try {
     const res = await fetchImpl(RESEND_URL, {
       method: 'POST',

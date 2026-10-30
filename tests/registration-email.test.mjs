@@ -7,6 +7,7 @@ import { handleIntake } from '../functions/api/_shared.mjs';
 import { onRequestPost } from '../functions/api/intake.js';
 import { confirmRegistration, confirmSupportGroup, confirmationMailAllowed, registrationEmail, supportGroupEmail } from '../functions/_lib/registration-email.mjs';
 import { supportGroupSession } from '../functions/_lib/support-group-session.mjs';
+import { canSendEmail, sendEmail, signInEmail } from '../functions/_lib/email.js';
 
 const schema = readFileSync(new URL('../schema/0001_init.sql', import.meta.url), 'utf8');
 function fixture() {
@@ -144,17 +145,87 @@ test('event registration, original audit and staff task roll back together on ta
   }
 });
 
-test('preview requires both existing opt-in and exact explicitly approved recipient', async () => {
+test('preview confirmation requires its own opt-in and exact recipient while portal mail stays off', async () => {
   const f = await registered();
   const base = { ...f.env, ENVIRONMENT: 'preview' };
   assert.equal(confirmationMailAllowed(base, f.body.email), false);
   assert.equal(confirmationMailAllowed({ ...base, PORTAL_PREVIEW_MAIL_ENABLED:'1' }, f.body.email), false);
   assert.equal(confirmationMailAllowed({ ...base, CONFIRMATION_PREVIEW_RECIPIENTS:f.body.email }, f.body.email), false);
-  const preview = { ...base, PORTAL_PREVIEW_MAIL_ENABLED:'1', CONFIRMATION_PREVIEW_RECIPIENTS:' DEMO@EXAMPLE.INVALID ' };
+  const preview = { ...base, CONFIRMATION_PREVIEW_MAIL_ENABLED:' true ', CONFIRMATION_PREVIEW_RECIPIENTS:' DEMO@EXAMPLE.INVALID ' };
   assert.equal(confirmationMailAllowed(preview, f.body.email), true);
   assert.equal(confirmationMailAllowed(preview, 'other@example.invalid'), false);
+  assert.equal(canSendEmail(preview), false);
+  assert.deepEqual(await sendEmail(preview, { to:f.body.email, ...signInEmail('https://example.invalid/unused') }, f.send), { ok:false, status:0 });
+  assert.equal(f.fetches.length, 0);
   assert.equal(await confirmRegistration(preview, f.body, true, f.send), 'submitted');
   assert.match(JSON.parse(f.fetches[0].init.body).text, /https:\/\/staging.caregiversanctuary.org\/events/);
+});
+
+test('existing portal/fallback opt-in cannot enable confirmation and confirmation cannot override portal refusal', async () => {
+  const f = fixture();
+  const base = { ...f.env, ENVIRONMENT:'preview', CONFIRMATION_PREVIEW_RECIPIENTS:f.body.email };
+  for (const flags of [{PORTAL_PREVIEW_MAIL_ENABLED:'1'}, {PREVIEW_MAIL_ENABLED:'1'}]) {
+    const env = { ...base, ...flags };
+    assert.equal(canSendEmail(env), true);
+    assert.equal(confirmationMailAllowed(env, f.body.email), false);
+    assert.deepEqual(await sendEmail(env, {to:f.body.email,purpose:'confirmation'}, f.send), {ok:false,status:0});
+  }
+  const isolated = {...base, CONFIRMATION_PREVIEW_MAIL_ENABLED:'1', PORTAL_PREVIEW_MAIL_ENABLED:'false', PREVIEW_MAIL_ENABLED:'1'};
+  assert.equal(canSendEmail(isolated), false);
+  assert.equal(confirmationMailAllowed(isolated, f.body.email), true);
+  assert.equal(f.fetches.length,0);
+});
+
+test('sender itself enforces exact confirmation recipient, rejects multi-recipient and unknown purpose', async () => {
+  const f=fixture();
+  const alias='owner+staging@example.invalid';
+  const env={...f.env,ENVIRONMENT:'preview',CONFIRMATION_PREVIEW_MAIL_ENABLED:'1',CONFIRMATION_PREVIEW_RECIPIENTS:` ${alias}, second@example.invalid `};
+  for(const to of ['owner@example.invalid','other@example.invalid',`${alias},other@example.invalid`,[alias], [alias,'other@example.invalid'], `${alias}\r\nBcc: other@example.invalid`, null]) {
+    assert.deepEqual(await sendEmail(env,{to,purpose:'confirmation'},f.send),{ok:false,status:0});
+  }
+  for(const purpose of [undefined,'portal','bulk','Confirmation','',null]) {
+    assert.deepEqual(await sendEmail(env,{to:alias,purpose},f.send),{ok:false,status:0});
+  }
+  for(const list of ['*','@example.invalid','example.invalid','owner@example.invalid','']) {
+    assert.deepEqual(await sendEmail({...env,CONFIRMATION_PREVIEW_RECIPIENTS:list},{to:alias,purpose:'confirmation'},f.send),{ok:false,status:0});
+  }
+  assert.equal(f.fetches.length,0);
+  for(const to of [alias.toUpperCase(),'second@example.invalid']) {
+    assert.equal((await sendEmail(env,{to,purpose:'confirmation'},f.send)).ok,true);
+    assert.deepEqual(JSON.parse(f.fetches.at(-1).init.body).to,[to]);
+  }
+  assert.equal(f.fetches.length,2);
+});
+
+test('confirmation-only preview gate fails closed without key, valid switch, recipient or preview environment', async () => {
+  const f=fixture();
+  const base={...f.env,ENVIRONMENT:'preview',CONFIRMATION_PREVIEW_MAIL_ENABLED:'1',CONFIRMATION_PREVIEW_RECIPIENTS:f.body.email};
+  const patches=[{EMAIL_API_KEY:''},{EMAIL_API_KEY:'  '},{ENVIRONMENT:'development'},{ENVIRONMENT:'unknown'},
+    ...[undefined,'','false','0','yes'].map(flag=>({CONFIRMATION_PREVIEW_MAIL_ENABLED:flag}))];
+  for(const patch of patches) assert.deepEqual(await sendEmail({...base,...patch},{to:f.body.email,purpose:'confirmation'},f.send),{ok:false,status:0});
+  assert.equal(f.fetches.length,0);
+  // No new switch/allowlist requirement is imposed on existing production.
+  for(const ENVIRONMENT of [undefined,'production']) {
+    assert.equal((await sendEmail({...f.env,ENVIRONMENT},{to:f.body.email,purpose:'confirmation'},f.send)).ok,true);
+    assert.equal((await sendEmail({...f.env,ENVIRONMENT},{to:f.body.email,...signInEmail('https://example.invalid/unused')},f.send)).ok,true);
+  }
+  assert.equal(f.fetches.length,4);
+});
+
+test('confirmation-only preview preserves unknown outcome and durable duplicate refusal with portal mail off', async () => {
+  for(const group of [false,true]) {
+    const f=group?groupFixture():fixture(); await handleIntake(f.db,f.body);
+    const env={...f.env,ENVIRONMENT:'preview',CONFIRMATION_PREVIEW_MAIL_ENABLED:'1',CONFIRMATION_PREVIEW_RECIPIENTS:f.body.email};
+    let attempts=0; const sender=async()=>{attempts++;throw new Error('fictional uncertain provider result');};
+    const confirm=group?confirmSupportGroup:confirmRegistration;
+    assert.equal(await confirm(env,f.body,true,sender),'needs_review');
+    assert.equal(await confirm(env,f.body,false,sender),'needs_review');
+    assert.equal(await confirm(env,f.body,true,sender),'needs_review');
+    assert.equal(attempts,1); assert.equal(canSendEmail(env),false);
+    assert.equal(f.raw.prepare("SELECT COUNT(*) n FROM audit_log WHERE action='confirmation.claimed'").get().n,1);
+    assert.equal(f.raw.prepare("SELECT COUNT(*) n FROM audit_log WHERE action='confirmation.unknown'").get().n,1);
+    assert.equal(f.raw.prepare('SELECT status FROM followup').get().status,'open');
+  }
 });
 
 for (const patch of [{ ENVIRONMENT:'development' }, { ENVIRONMENT:'unknown' }, { EMAIL_API_KEY:'' }, { ENVIRONMENT:'preview', PORTAL_PREVIEW_MAIL_ENABLED:'1' }]) {
@@ -330,7 +401,7 @@ test('support-group mail failure leaves original request/date and an open recove
 test('support-group confirmation uses the same preview allowlist and correct preview URL', async () => {
   for(const permitted of [false,true]) {
     const f=groupFixture(); await handleIntake(f.db,f.body);
-    const env={...f.env,ENVIRONMENT:'preview',PREVIEW_MAIL_ENABLED:'1',CONFIRMATION_PREVIEW_RECIPIENTS:permitted?f.body.email:'different@example.invalid'};
+    const env={...f.env,ENVIRONMENT:'preview',CONFIRMATION_PREVIEW_MAIL_ENABLED:'1',CONFIRMATION_PREVIEW_RECIPIENTS:permitted?f.body.email:'different@example.invalid'};
     assert.equal(await confirmSupportGroup(env,f.body,true,f.send),permitted?'submitted':'needs_review');
     assert.equal(f.fetches.length,permitted?1:0);
     if(permitted) assert.match(JSON.parse(f.fetches[0].init.body).text,/staging.caregiversanctuary.org\/programs#support-group/);

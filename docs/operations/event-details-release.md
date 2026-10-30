@@ -114,13 +114,47 @@ Concurrent requests use the same durable claim; no in-memory/global send lock.
 ### Staging and release limits
 
 Existing production uses `EMAIL_API_KEY` with absent `ENVIRONMENT` (or explicit
-`production`). Preview requires its existing explicit mail opt-in **and** a
-comma-separated exact `CONFIRMATION_PREVIEW_RECIPIENTS` allowlist of approved
-test mailboxes. No wildcard or arbitrary caregiver preview recipient is allowed.
-An empty list refuses confirmation mail while preserving intake. Development
-and unknown environment labels cannot send. Portal sign-in policy is unchanged.
+`production`). Preview confirmations require their own explicit
+`CONFIRMATION_PREVIEW_MAIL_ENABLED=1` (or `true`) **and** a comma-separated exact
+`CONFIRMATION_PREVIEW_RECIPIENTS` allowlist of approved test mailboxes. Flag and
+recipient matching trim whitespace and ignore case. No wildcard, domain-only
+entry, base-address substitution for a plus alias, or arbitrary caregiver preview
+recipient is allowed. The sender supports one recipient per confirmation and
+refuses arrays or comma-separated recipient arguments. An empty list refuses
+confirmation mail while preserving intake. Development and unknown environment
+labels cannot send confirmations.
+
+The existing sender rechecks this policy for the server-selected `confirmation`
+purpose before any provider call; intake payloads cannot select it. Unrecognized
+purposes fail closed. Existing callers without that purpose, including portal
+sign-in, retain their existing policy. The confirmation switch does not enable
+portal mail or portal login. `PORTAL_PREVIEW_MAIL_ENABLED` / `PREVIEW_MAIL_ENABLED`
+cannot enable confirmations; neither needs to be enabled for this acceptance.
+This corrects a preview-isolation gap found during actual runtime preflight;
+production transactionals are unchanged.
 Configuration values and approved recipient identities belong in existing
 private custody; do not add them to this public runbook or the repository.
+
+For the existing shared-staging owner, after exact source review:
+
+1. Qualify the actual preview deployment, isolated preview D1, existing key
+   presence (never its value), approved QA alias and retained record. Preserve
+   its status, tags and source. Do not recreate an account, strip do-not-contact
+   metadata or change global suppression rules to run this bounded QA exercise.
+2. Add only the two confirmation-specific non-secret preview fields above through
+   the existing deployment configuration path. Keep portal/fallback mail flags
+   unset/off, production unchanged, and preserve all other bindings and settings.
+   Read back the effective configuration on the resulting exact deployment;
+   source declarations alone are not installed-policy evidence.
+3. Before an authorized new QA intake, qualify its fixture/session and unique
+   identity. Mail policy refusal retains a durable claim, so changing config
+   does not authorize replaying a previously skipped intake. The release owner
+   coordinates actual confirmation/receipt and duplicate-refusal verification.
+4. Close the finite test by disabling the confirmation-only switch/removing its
+   temporary recipient list through the same owner path and verifying that
+   portal mail stayed off. Preserve resulting QA records/audits, exclude them
+   from customer reporting and resolve only their own test followups normally.
+   Retain the prior package/configuration for rollback; do not delete claims.
 
 Source tests use in-memory SQLite and mocked provider calls, including claim
 acknowledgment loss, concurrent duplicates, outcome persistence failure,
@@ -128,6 +162,9 @@ registration rollback, policy refusal and unchanged portal-mail behavior. They
 also cover authoritative valid/cancelled/impossible dates, original audited date
 versus changed request text, per-date duplicate boundaries, general joining,
 support-group rollback/recovery, and unchanged success-only Meet navigation.
+They also prove sender-level recipient enforcement, independent preview switches,
+actual portal-login refusal with confirmation enabled, and durable duplicate/
+unknown outcomes under that isolated preview policy.
 They are not a real email receipt or deployment. The existing release owner must
 coordinate the shared staging bundle, qualify the approved
 test recipient/policy and verify one authorized registration plus actual mailbox
