@@ -214,19 +214,19 @@ test('delegated intake submits keep status, event identity and retry keys on the
 });
 
 
-test('support-group interest is a named native dialog with only name/email and truthful joining scope', () => {
+test('support-group sign-up is a named native dialog with only name/email, then goes to Google Meet', () => {
   const page = file('programs.html');
   const dialog = page.match(/<dialog id="supportGroupInterestModal"[\s\S]*?<\/dialog>/)?.[0];
   assert.ok(dialog);
   assert.match(dialog, /aria-labelledby="supportGroupInterestTitle" aria-describedby="supportGroupInterestDescription"/);
-  assert.match(page, /data-action="open-support-group-interest" aria-haspopup="dialog" aria-controls="supportGroupInterestModal"/);
+  assert.match(page, /data-action="open-support-group-interest" data-session="[^"]+" aria-haspopup="dialog" aria-controls="supportGroupInterestModal"/);
   assert.equal((dialog.match(/<input /g) || []).length, 2);
   assert.match(dialog, /<label for="supportGroupName">Your name<\/label>/);
   assert.match(dialog, /<label for="supportGroupEmail">Email<\/label>/);
   assert.match(dialog, /type="email" autocomplete="email" required/);
-  assert.match(dialog, /data-action="close-support-group-interest" aria-label="Close support-group interest form"/);
-  assert.match(dialog, /After your request is saved/);
-  assert.match(dialog, /does not register you for a session or send reminders/);
+  assert.match(dialog, /data-action="close-support-group-interest" aria-label="Close support group sign-up form"/);
+  assert.match(dialog, /Join the Virtual Caregiver Support Group/);
+  assert.match(dialog, /When you submit, we'll take you straight to the group on Google Meet/);
   assert.match(dialog, /consent to Legacy using your name and email to find or create your caregiver record/);
   assert.match(dialog, /does not subscribe you to reminders/);
   assert.match(dialog, /data-intake-success role="status" aria-live="polite"/);
@@ -234,10 +234,23 @@ test('support-group interest is a named native dialog with only name/email and t
   assert.doesNotMatch(dialog, /<textarea|event_id|type="date"/);
   const joiningRegion = dialog.match(/<div class="routing-note" data-intake-routing>([\s\S]*?)<\/div>/)?.[1];
   assert.match(joiningRegion, /href="https:\/\/meet\.google\.com\/dmc-orwi-afk" target="_blank" rel="noopener noreferrer"/);
-  assert.match(joiningRegion, /does not confirm a date, time or place/);
+  assert.match(joiningRegion, /If Google Meet doesn't open/);
   assert.equal((dialog.match(/meet\.google\.com/g) || []).length, 1);
-  assert.match(file('programs-events.html'), /href="programs\.html#support-group">Get the support-group joining link/);
-  assert.match(page, /href="events\.html"[^>]*data-cs="programs.support_group.panel_cta_label"/);
+  assert.match(file('programs-events.html'), /<a href="programs\.html#support-group">View upcoming sessions<\/a>/);
+  assert.doesNotMatch(file('programs-events.html'), /Join an upcoming session/);
+  const panel = page.match(/<section class="section-sand" id="support-group">[\s\S]*?<\/section>/)?.[0];
+  assert.equal((panel.match(/class="btn /g) || []).length, 0, 'the dates are the way to join; no separate join button');
+  assert.doesNotMatch(panel, /Join an upcoming session/);
+  assert.match(panel, /data-action="toggle-support-group-sessions" aria-controls="supportGroupSessions" aria-expanded="false" hidden>View upcoming sessions<\/button>/);
+  const expected = [['2026-11-04', 'November 4'], ['2026-11-11', 'November 11'], ['2026-11-18', 'November 18'],
+    ['2026-12-02', 'December 2'], ['2026-12-09', 'December 9'], ['2026-12-16', 'December 16'], ['2026-12-30', 'December 30']];
+  for (const [iso, day] of expected) {
+    const date = `Wednesday, ${day} · 5–6 PM`;
+    assert.ok(panel.includes(`<li data-date="${iso}"><button type="button" class="session-link" data-action="open-support-group-interest" data-session="${date}" aria-haspopup="dialog" aria-controls="supportGroupInterestModal">${date}</button></li>`), date);
+  }
+  assert.doesNotMatch(panel, /December 23|2026-12-23/);
+  assert.match(dialog, /<p class="session-note" id="supportGroupSession" hidden><\/p>/);
+  assert.doesNotMatch(panel, /November 25/);
 });
 
 test('support-group delegated request reaches its own shared staff task and original audit without membership or registration', async () => {
@@ -260,7 +273,10 @@ test('support-group delegated request reaches its own shared staff task and orig
   const nodes = { supportGroupInterestModal: dialog, supportGroupInterestForm: form,
     supportGroupName: { value: 'Demo Group', focus() { inputFocus++; } },
     supportGroupEmail: { value: 'group-interest@example.invalid' } };
+  regions['[data-intake-routing] a[href^="https://meet.google.com/"]'] = { getAttribute: () => 'https://meet.google.com/dmc-orwi-afk' };
+  const assigned = [];
   const context = {
+    window: { location: { assign: url => assigned.push(url) } },
     document: { activeElement: opener, getElementById: id => nodes[id],
       addEventListener: (name, handler) => { listeners[name] = handler; } },
     crypto: { randomUUID: () => 'fictional-support-group-ref' },
@@ -284,10 +300,11 @@ test('support-group delegated request reaches its own shared staff task and orig
   assert.equal(regions['[type="submit"]'].disabled, true);
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(regions['[data-intake-success]'].style.display, 'block');
+  assert.deepEqual(assigned, ['https://meet.google.com/dmc-orwi-afk'], 'a saved sign-up goes straight to Google Meet');
   assert.deepEqual(requests[0].payload, {
     kind: 'support_request', source: 'site_form:support_group',
     external_ref: 'fictional-support-group-ref', first_name: 'Demo', last_name: 'Group',
-    email: 'group-interest@example.invalid', message: 'Virtual support group interest — request joining details',
+    email: 'group-interest@example.invalid', message: 'Signed up for the Virtual Caregiver Support Group',
   });
   const caregiver = raw.prepare(`SELECT * FROM caregiver WHERE email = ?`).get('group-interest@example.invalid');
   assert.equal(caregiver.sanctuary_member, 0);
@@ -296,11 +313,12 @@ test('support-group delegated request reaches its own shared staff task and orig
   assert.equal(queue.queue[0].caregiver_id, caregiver.id);
   assert.equal(queue.queue[0].source, 'site_form:support_group');
   assert.equal(queue.queue[0].kind, 'support_request');
-  assert.equal(queue.queue[0].detail, 'Virtual support group interest — request joining details');
+  assert.ok(queue.queue[0].detail.startsWith('Signed up for the Virtual Caregiver Support Group\n\n'));
+  assert.match(queue.queue[0].detail, /Confirmation email not sent/);
   const audit = raw.prepare(`SELECT * FROM audit_log WHERE action = 'intake.support_request'`).get();
   assert.equal(audit.actor, 'site_form:support_group');
   assert.equal(audit.entity_id, caregiver.id);
-  assert.deepEqual(JSON.parse(audit.after_json), { kind: 'support_request', external_ref: 'fictional-support-group-ref', event_id: null });
+  assert.deepEqual(JSON.parse(audit.after_json), { kind: 'support_request', external_ref: 'fictional-support-group-ref', event_id: null, session_date: null });
   listeners.submit({ target: form, currentTarget: context.document, preventDefault() {} });
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(requests[1].payload.external_ref, requests[0].payload.external_ref);
@@ -320,7 +338,9 @@ test('support-group joining details stay hidden for failed, missing or unreadabl
   const form = { id: 'supportGroupInterestForm', querySelector: selector => regions[selector] };
   const nodes = { supportGroupInterestForm: form, supportGroupName: { value: 'Fictional Name' },
     supportGroupEmail: { value: 'fictional@example.invalid' } };
-  const context = { document: { getElementById: id => nodes[id] },
+  regions['[data-intake-routing] a[href^="https://meet.google.com/"]'] = { getAttribute: () => 'https://meet.google.com/dmc-orwi-afk' };
+  const assigned = [];
+  const context = { window: { location: { assign: url => assigned.push(url) } }, document: { getElementById: id => nodes[id] },
     crypto: { randomUUID: () => 'fictional-ack-check' },
     sessionStorage: { getItem: () => 'fictional-ack-check', setItem() {} }, fetch: null };
   vm.runInNewContext(source, context);
@@ -341,6 +361,7 @@ test('support-group joining details stay hidden for failed, missing or unreadabl
     assert.equal(regions['[data-intake-success]'].style.display, 'none');
     assert.equal(regions['[data-intake-routing]'].style.display, 'none');
   }
+  assert.deepEqual(assigned, [], 'an unconfirmed sign-up never sends anyone to Google Meet');
 });
 
 
@@ -354,4 +375,62 @@ test('support-group dialog overrides the global margin reset with scoped native 
   assert.match(dialog, /max-height:\s*calc\(100vh - 40px\)/);
   assert.match(dialog, /max-height:\s*calc\(100dvh - 40px\)/);
   assert.match(styles, /#supportGroupInterestModal::backdrop\s*\{[^}]*rgba\(43,\s*35,\s*51,\s*0\.55\)/);
+});
+
+test('support-group: clicking a session date shows it in the form and saves it with the sign-up', async () => {
+  const app = file('app.js');
+  const source = app.slice(0, app.indexOf('/* ---------- Resource hub:'));
+  const regions = Object.fromEntries(['[data-intake-success]', '[data-intake-routing]', '[data-intake-error]', '[type="submit"]']
+    .map(selector => [selector, { style: { display: 'none' }, disabled: false, textContent: '' }]));
+  regions['[data-intake-routing] a[href^="https://meet.google.com/"]'] = { getAttribute: () => 'https://meet.google.com/dmc-orwi-afk' };
+  const form = { id: 'supportGroupInterestForm', querySelector: selector => regions[selector] };
+  const note = { textContent: '', hidden: true };
+  const dialog = { open: false, showModal() { this.open = true; }, close() { this.open = false; }, addEventListener() {} };
+  const nodes = { supportGroupInterestModal: dialog, supportGroupInterestForm: form, supportGroupSession: note,
+    supportGroupName: { value: 'Fictional Person', focus() {} }, supportGroupEmail: { value: 'fictional@example.invalid' } };
+  const posted = []; const assigned = [];
+  const context = { window: { location: { assign: url => assigned.push(url) } }, document: { getElementById: id => nodes[id] },
+    crypto: { randomUUID: () => 'fictional-session-ref' }, sessionStorage: { getItem: () => null, setItem() {} },
+    fetch: async (url, options) => { posted.push(JSON.parse(options.body)); return { ok: true, status: 201, json: async () => ({ ok: true }) }; } };
+  vm.runInNewContext(source, context);
+  context.openSupportGroupInterest({ getAttribute: name => name === 'data-session' ? 'Wednesday, November 11 · 5–6 PM' : null, focus() {} });
+  assert.equal(note.hidden, false);
+  assert.equal(note.textContent, 'Session: Wednesday, November 11 · 5–6 PM');
+  context.submitSupportGroupInterest({ preventDefault() {} });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(posted[0].message, 'Signed up for the Virtual Caregiver Support Group — Wednesday, November 11 · 5–6 PM');
+  assert.deepEqual(assigned, ['https://meet.google.com/dmc-orwi-afk']);
+  // Opening from the general button clears any earlier date.
+  dialog.open = false;
+  context.openSupportGroupInterest({ getAttribute: () => null, focus() {} });
+  assert.equal(note.hidden, true);
+  assert.equal(note.textContent, '');
+});
+
+test('support-group dates: past sessions hide, only the next shows until "View upcoming sessions" expands the rest', () => {
+  const app = file('app.js');
+  const source = app.slice(0, app.indexOf('/* ---------- Resource hub:'));
+  const isos = ['2026-11-04', '2026-11-11', '2026-11-18', '2026-12-02', '2026-12-30'];
+  const items = isos.map(iso => ({ hidden: false, getAttribute: name => (name === 'data-date' ? iso : null) }));
+  const list = { querySelectorAll: () => items };
+  const more = { hidden: true, attrs: {}, setAttribute(k, v) { this.attrs[k] = v; }, getAttribute(k) { return this.attrs[k]; } };
+  const none = { classList: { on: true, toggle(_c, force) { this.on = force; } } };
+  const nodes = { supportGroupSessions: list, supportGroupSessionsMore: more, supportGroupSessionsNone: none };
+  const context = { document: { getElementById: id => nodes[id] }, crypto: { randomUUID: () => 'x' }, sessionStorage: { getItem: () => null, setItem() {} } };
+  vm.runInNewContext(source, context);
+  context.applySupportGroupSessions(false, '2026-11-12');
+  assert.deepEqual(items.map(i => i.hidden), [true, true, false, true, true], 'only the next session (Nov 18) shows');
+  assert.equal(more.hidden, false);
+  assert.equal(more.attrs['aria-expanded'], 'false');
+  context.toggleSupportGroupSessions(more);
+  // toggle uses today's real date; re-apply with the fixed date to check expansion
+  context.applySupportGroupSessions(true, '2026-11-12');
+  assert.deepEqual(items.map(i => i.hidden), [true, true, false, false, false], 'expanded shows every upcoming date, never past ones');
+  assert.equal(more.attrs['aria-expanded'], 'true');
+  context.applySupportGroupSessions(false, '2026-12-30');
+  assert.deepEqual(items.map(i => i.hidden), [true, true, true, true, false]);
+  assert.equal(more.hidden, true, 'no "View upcoming sessions" link when only one date is left');
+  context.applySupportGroupSessions(false, '2027-01-01');
+  assert.ok(items.every(i => i.hidden));
+  assert.equal(none.classList.on, false, 'shows "New session dates are coming soon." when none are left');
 });

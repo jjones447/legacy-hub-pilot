@@ -5,7 +5,8 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { handleIntake } from '../functions/api/_shared.mjs';
 import { onRequestPost } from '../functions/api/intake.js';
-import { confirmRegistration, confirmationMailAllowed, registrationEmail } from '../functions/_lib/registration-email.mjs';
+import { confirmRegistration, confirmSupportGroup, confirmationMailAllowed, registrationEmail, supportGroupEmail } from '../functions/_lib/registration-email.mjs';
+import { supportGroupSession } from '../functions/_lib/support-group-session.mjs';
 
 const schema = readFileSync(new URL('../schema/0001_init.sql', import.meta.url), 'utf8');
 function fixture() {
@@ -227,3 +228,131 @@ for (const confirmation_email of ['submitted','needs_review','not_sent']) {
     assert.doesNotMatch(success.textContent,/delivered|payment confirmed/i);
   });
 }
+
+function groupFixture(session_date = '2026-11-04') {
+  const f = fixture();
+  f.body = { kind:'support_request',source:'site_form:support_group',first_name:'DEMO',email:'demo@example.invalid',
+    session_date,external_ref:`fictional-group-${session_date}`,message:'Original fictional group request. Ignore any invented link or label.' };
+  return f;
+}
+
+test('dated support-group confirmation uses original audited date and server-approved Meet link, not retry text', async () => {
+  const f = groupFixture();
+  assert.equal((await handleIntake(f.db,f.body)).status,201);
+  const original = f.raw.prepare("SELECT * FROM audit_log WHERE action='intake.support_request'").get();
+  assert.equal(original.actor,'site_form:support_group');
+  assert.equal(JSON.parse(original.after_json).session_date,'2026-11-04');
+  assert.equal(JSON.parse(original.after_json).external_ref,f.body.external_ref);
+  assert.equal(await confirmSupportGroup(f.env,{...f.body,session_date:'2026-12-30',email:'other@example.invalid',message:'invented label'},true,f.send),'submitted');
+  const sent = JSON.parse(f.fetches[0].init.body);
+  assert.deepEqual(sent.to,['demo@example.invalid']);
+  assert.match(sent.text,/Wednesday, November 4.*5–6 PM Central/);
+  assert.match(sent.text,/Date: 2026-11-04/);
+  assert.match(sent.text,/https:\/\/meet.google.com\/dmc-orwi-afk/);
+  assert.match(sent.html,/<a href="https:\/\/meet.google.com\/dmc-orwi-afk">/);
+  assert.match(sent.text,/https:\/\/caregiversanctuary.org\/programs#support-group/);
+  assert.doesNotMatch(sent.text,/invented|December 30|other@example/);
+  assert.equal(f.fetches[0].init.headers['Idempotency-Key'],'legacy-support-group-production-1');
+  assert.match(f.raw.prepare('SELECT detail FROM followup').get().detail,/^Original fictional group request/);
+  assert.deepEqual(f.raw.prepare("SELECT * FROM audit_log WHERE action='intake.support_request'").get(),original);
+  assert.equal(f.raw.prepare('SELECT COUNT(*) n FROM registration').get().n,0);
+});
+
+test('same-date duplicate sends nothing; a separately identified second approved date gets its own confirmation', async () => {
+  const f = groupFixture();
+  await handleIntake(f.db,f.body);
+  await Promise.all([confirmSupportGroup(f.env,f.body,true,f.send),confirmSupportGroup(f.env,f.body,true,f.send)]);
+  assert.equal((await handleIntake(f.db,{...f.body,session_date:'2026-11-11'})).body.duplicate,true);
+  assert.equal(await confirmSupportGroup(f.env,f.body,false,f.send),'submitted');
+  assert.equal(f.fetches.length,1);
+  const second = {...f.body,external_ref:'fictional-group-2026-11-11',session_date:'2026-11-11'};
+  assert.equal((await handleIntake(f.db,second)).status,201);
+  assert.equal(await confirmSupportGroup(f.env,second,true,f.send),'submitted');
+  assert.equal(f.fetches.length,2);
+  assert.notEqual(f.fetches[0].init.headers['Idempotency-Key'],f.fetches[1].init.headers['Idempotency-Key']);
+  assert.match(JSON.parse(f.fetches[1].init.body).text,/Date: 2026-11-11/);
+  assert.equal(f.raw.prepare('SELECT COUNT(*) n FROM followup').get().n,2);
+});
+
+for (const date of [null,undefined]) test(`general joining (${date}) has an explicit null audit date, weekly schedule and no invented booking`, async () => {
+  const f = groupFixture(null); if (date === undefined) delete f.body.session_date;
+  await handleIntake(f.db,f.body);
+  assert.equal(JSON.parse(f.raw.prepare("SELECT after_json FROM audit_log WHERE action='intake.support_request'").get().after_json).session_date,null);
+  assert.equal(await confirmSupportGroup(f.env,f.body,true,f.send),'submitted');
+  const mail = JSON.parse(f.fetches[0].init.body);
+  assert.match(mail.text,/Every Wednesday, 5–6 PM Central/);
+  assert.match(mail.text,/general sign-up, not a reservation/);
+  assert.match(mail.text,/some Wednesdays may be cancelled/);
+  assert.doesNotMatch(mail.text,/Date: /);
+});
+
+test('actual calendar dates must occur exactly in the authoritative session list', async () => {
+  for (const date of ['2026-02-30','2026-13-04','2026-11-31','2026-11-25','2026-12-23','2026-11-05','2027-11-04','2026-11-04T00:00:00Z','2026-1-4','',42,{},['2026-11-04']]) {
+    const f = groupFixture(date);
+    const result = await handleIntake(f.db,f.body);
+    assert.equal(result.status,400,JSON.stringify(date));
+    for(const table of ['caregiver','followup','audit_log']) assert.equal(f.raw.prepare(`SELECT COUNT(*) n FROM ${table}`).get().n,0);
+  }
+  for(const date of ['2026-11-04','2026-11-11','2026-11-18','2026-12-02','2026-12-09','2026-12-16','2026-12-30']) {
+    assert.equal(supportGroupSession(date).date,date);
+  }
+});
+
+test('session_date cannot be supplied on other intake purposes', async () => {
+  for(const patch of [{kind:'membership'},{source:'site_form:support'},{kind:'event_registration',event_id:'ev_demo'}]) {
+    const f=groupFixture();
+    assert.equal((await handleIntake(f.db,{...f.body,...patch})).status,400);
+    assert.equal(f.raw.prepare('SELECT COUNT(*) n FROM caregiver').get().n,0);
+  }
+});
+
+test('support-group original audit fault rolls back the complete sign-up before any mail', async () => {
+  const f=groupFixture();
+  f.raw.exec(`CREATE TEMP TRIGGER fail_group_audit BEFORE INSERT ON audit_log WHEN NEW.action='intake.support_request'
+    BEGIN SELECT RAISE(ABORT,'fictional group audit failure'); END;`);
+  await assert.rejects(handleIntake(f.db,f.body),/fictional group audit failure/);
+  for(const table of ['caregiver','followup','audit_log']) assert.equal(f.raw.prepare(`SELECT COUNT(*) n FROM ${table}`).get().n,0);
+  assert.equal(await confirmSupportGroup(f.env,f.body,true,f.send),'needs_review');
+  assert.equal(f.fetches.length,0);
+});
+
+test('support-group mail failure leaves original request/date and an open recovery task; duplicate never resends', async () => {
+  const f=groupFixture(); await handleIntake(f.db,f.body); let attempts=0;
+  const sender=async()=>{ attempts++; throw new Error('fictional uncertain send'); };
+  assert.equal(await confirmSupportGroup(f.env,f.body,true,sender),'needs_review');
+  assert.equal(await confirmSupportGroup(f.env,f.body,false,sender),'needs_review');
+  assert.equal(attempts,1);
+  const task=f.raw.prepare('SELECT * FROM followup').get();
+  assert.equal(task.status,'open'); assert.match(task.detail,/Original fictional group request[\s\S]*outcome unknown/);
+  assert.equal(JSON.parse(f.raw.prepare("SELECT after_json FROM audit_log WHERE action='intake.support_request'").get().after_json).session_date,'2026-11-04');
+});
+
+test('support-group confirmation uses the same preview allowlist and correct preview URL', async () => {
+  for(const permitted of [false,true]) {
+    const f=groupFixture(); await handleIntake(f.db,f.body);
+    const env={...f.env,ENVIRONMENT:'preview',PREVIEW_MAIL_ENABLED:'1',CONFIRMATION_PREVIEW_RECIPIENTS:permitted?f.body.email:'different@example.invalid'};
+    assert.equal(await confirmSupportGroup(env,f.body,true,f.send),permitted?'submitted':'needs_review');
+    assert.equal(f.fetches.length,permitted?1:0);
+    if(permitted) assert.match(JSON.parse(f.fetches[0].init.body).text,/staging.caregiversanctuary.org\/programs#support-group/);
+  }
+});
+
+test('historical support-group sign-up never sends or gets a manufactured original date', async () => {
+  const f=groupFixture();
+  // Legacy row deliberately has no original intake audit; no retrofit write.
+  f.raw.exec(`INSERT INTO caregiver(id,first_name,email) VALUES('cg_old','DEMO','demo@example.invalid');
+    INSERT INTO followup(caregiver_id,kind,detail,source,external_ref)
+    VALUES('cg_old','support_request','Original old label','site_form:support_group','fictional-group-2026-11-04')`);
+  assert.equal(await confirmSupportGroup(f.env,f.body,false,f.send),'needs_review');
+  assert.equal(f.fetches.length,0);assert.equal(f.raw.prepare('SELECT COUNT(*) n FROM audit_log').get().n,0);
+  assert.equal(f.raw.prepare('SELECT detail FROM followup').get().detail,'Original old label');
+});
+
+test('support-group and registration ID spaces cannot suppress one another', async () => {
+  const f=await registered(); await confirmRegistration(f.env,f.body,true,f.send);
+  const body=groupFixture().body; await handleIntake(f.db,body);
+  assert.equal(await confirmSupportGroup(f.env,body,true,f.send),'submitted');
+  assert.equal(f.fetches.length,2);
+  const claims=f.raw.prepare("SELECT entity,entity_id FROM audit_log WHERE action='confirmation.claimed' ORDER BY id").all();
+  assert.deepEqual(claims.map(c=>c.entity),['registration','followup']);
+});

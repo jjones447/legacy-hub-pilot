@@ -228,17 +228,60 @@ function submitMembership(e) {
   return false;
 }
 
-/* ---------- Virtual support group: interest only, not session registration ---------- */
+/* ---------- Virtual support group: sign up (saved for staff), then go to Google Meet ---------- */
 let supportGroupInterestOpener = null;
+let supportGroupSession = '';
 
 function openSupportGroupInterest(opener) {
   const dialog = document.getElementById('supportGroupInterestModal');
   const form = document.getElementById('supportGroupInterestForm');
   if (!dialog || !form || dialog.open) return;
   supportGroupInterestOpener = opener || document.activeElement;
+  // A clicked session date (data-session) is shown in the form and saved with the sign-up.
+  const session = opener && typeof opener.getAttribute === 'function' ? opener.getAttribute('data-session') : '';
+  supportGroupSession = typeof session === 'string' ? session.trim().slice(0, 120) : '';
+  const note = document.getElementById('supportGroupSession');
+  if (note) {
+    note.textContent = supportGroupSession ? 'Session: ' + supportGroupSession : '';
+    note.hidden = !supportGroupSession;
+  }
   setFormState(form, 'idle');
   dialog.showModal();
   document.getElementById('supportGroupName').focus();
+}
+
+// Support-group dates: hide past sessions, show only the next one, and let
+// "View upcoming sessions" reveal the rest. Without JavaScript every date stays visible.
+function supportGroupToday() {
+  try {
+    return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
+  } catch (e) {
+    return new Date().toISOString().slice(0, 10);
+  }
+}
+
+function applySupportGroupSessions(expanded, today) {
+  const list = document.getElementById('supportGroupSessions');
+  if (!list) return;
+  const more = document.getElementById('supportGroupSessionsMore');
+  const none = document.getElementById('supportGroupSessionsNone');
+  const day = today || supportGroupToday();
+  const upcoming = Array.from(list.querySelectorAll('li[data-date]')).filter(function (li) {
+    const keep = li.getAttribute('data-date') >= day;
+    li.hidden = !keep;
+    return keep;
+  });
+  upcoming.forEach(function (li, i) { li.hidden = !expanded && i > 0; });
+  if (none) none.classList.toggle('d-none', upcoming.length > 0);
+  if (more) {
+    more.hidden = upcoming.length < 2;
+    more.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+  }
+}
+applySupportGroupSessions(false);
+
+function toggleSupportGroupSessions(button) {
+  applySupportGroupSessions(button.getAttribute('aria-expanded') !== 'true');
 }
 
 function closeSupportGroupInterest() {
@@ -266,10 +309,15 @@ function submitSupportGroupInterest(e) {
     first_name: name.first_name,
     last_name: name.last_name,
     email: document.getElementById('supportGroupEmail').value.trim(),
-    message: 'Virtual support group interest — request joining details',
+    message: 'Signed up for the Virtual Caregiver Support Group' + (supportGroupSession ? ' — ' + supportGroupSession : ''),
   };
   postIntake(form, payload).then(function () {
     setFormState(form, 'success');
+    // Only after the sign-up is saved: take the caregiver straight to the group on Google Meet.
+    const meet = form.querySelector('[data-intake-routing] a[href^="https://meet.google.com/"]');
+    if (meet && typeof window !== 'undefined' && window.location && typeof window.location.assign === 'function') {
+      window.location.assign(meet.getAttribute('href'));
+    }
   }).catch(function () {
     setFormState(form, 'error', "We couldn't save your request just now. Please contact Legacy if you need help.");
   });
@@ -1282,6 +1330,8 @@ document.addEventListener('click', function (e) {
   } else if (action === 'close-coaching-interest') {
     e.preventDefault();
     closeCoachingInterest();
+  } else if (action === 'toggle-support-group-sessions') {
+    toggleSupportGroupSessions(target);
   } else if (action === 'open-support-group-interest') {
     e.preventDefault();
     openSupportGroupInterest(target);

@@ -32,8 +32,41 @@ persisted records, not duplicate request text. The message includes title,
 start/end time in America/Chicago, stored location, registered status, and
 canonical event/portal URLs. It does not claim payment, attendance or mailbox
 delivery. External organizer registration and existing provider receipts are
-unchanged. Support-group sign-ups are a separate intake path; this increment
-does not yet send their session/Meet confirmation.
+unchanged. Support-group sign-ups use the same delivery state machine, with a
+separate followup identity and confirmation that includes the approved Meet link.
+
+### Support-group client/server contract
+
+The existing support-group form submits `kind: support_request`,
+`source: site_form:support_group`, an optional `session_date: YYYY-MM-DD | null`,
+and one `external_ref` per chosen date per tab session. General joining uses the
+undated key. The client correction is coordinated separately by the existing
+client/shared-staging owner; server deployment must be bundled with that corrected
+client, not the older date-label-only form.
+
+`content/page-sections.json` → `items["programs.support_group"].sessions` is the
+same authoritative, static/readOnly date list rendered by the Programs template.
+The server imports that exact source. It checks actual calendar validity and one
+exact occurrence in the list; regex alone is insufficient. Cancelled dates,
+invented dates and dates supplied on other intake purposes are refused before
+business writes. Omitted/null means general joining, never an inferred date from
+free-text `message`. That valid date/null is added to the ORIGINAL intake audit
+alongside its source/external identity, in the same atomic batch as the task.
+
+After successful new intake, the mail path reads the persisted caregiver and
+original intake audit. It does not trust a changed retry's date, email, label or
+URL. Dated mail includes the authored session label, ISO date, Central time and
+`https://meet.google.com/dmc-orwi-afk`. General joining says every Wednesday,
+5–6 PM Central, explicitly notes no particular-date reservation and advises
+checking the published dates for cancellations. Both include the canonical
+`/programs#support-group` link (staging host for preview), no reminders or
+attendance claim. Existing original task detail is retained before delivery
+status is appended. The normal success-only Meet redirect is unchanged.
+
+The stable key is `legacy-support-group-<environment>-<followup-id>`; claims use
+the followup entity, so they cannot collide with registration IDs. Public
+duplicates cannot send/backfill. The original intake audit is never rewritten to
+add a date to old requests. A missing original record requires staff review.
 
 ### Delivery, duplicates and failures
 
@@ -91,7 +124,10 @@ private custody; do not add them to this public runbook or the repository.
 
 Source tests use in-memory SQLite and mocked provider calls, including claim
 acknowledgment loss, concurrent duplicates, outcome persistence failure,
-registration rollback, policy refusal and unchanged portal-mail behavior.
+registration rollback, policy refusal and unchanged portal-mail behavior. They
+also cover authoritative valid/cancelled/impossible dates, original audited date
+versus changed request text, per-date duplicate boundaries, general joining,
+support-group rollback/recovery, and unchanged success-only Meet navigation.
 They are not a real email receipt or deployment. The existing release owner must
 coordinate the shared staging bundle, qualify the approved
 test recipient/policy and verify one authorized registration plus actual mailbox
