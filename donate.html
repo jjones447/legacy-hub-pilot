@@ -184,9 +184,13 @@
       </div>
       <p class="privacy-line" data-cs="form.membership.privacy_line">By joining, you consent to Legacy using these details to create or update your caregiver record and follow up about Sanctuary programs. Please do not include medical record numbers or emergency details.</p>
       <button type="submit" class="btn btn-coral w-100" data-cs="form.membership.submit_label">Join free</button>
-      <div class="success-note" data-intake-success role="status" aria-live="polite">✓ Membership request received — welcome to The Sanctuary.</div>
-      <div class="error-note" data-intake-error role="alert" aria-live="assertive"></div>
-      <div class="routing-note" data-intake-routing>Behind the scenes: your caregiver record was created or updated and staff follow-up is queued.</div>
+      <p data-membership-pending role="status" aria-live="polite" hidden>Saving your membership request. Please wait; don't submit it again.</p>
+      <div class="success-note" data-intake-success role="status" aria-live="polite" tabindex="-1">Your membership request is saved.</div>
+      <div class="error-note" data-intake-error role="alert" aria-live="assertive" tabindex="-1"></div>
+      <div class="routing-note" data-intake-routing>
+        <a class="btn btn-plum" href="/portal">Continue to your portal</a>
+        <p>On the portal page, request a secure sign-in link using the email from your membership request. If you're already signed in, you'll see your existing portal. Submitting this form does not sign you in or send a sign-in email.</p>
+      </div>
     </form>
   </div>
 </div>
@@ -215,7 +219,7 @@
 </footer>
 
 
-<script src="app.js?v=15293570de1a"></script>
+<script src="app.js?v=77282c82c2db"></script>
 <script src="nav-v2.js"></script>
 </body>
 </html>

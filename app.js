@@ -125,11 +125,26 @@ function submitSupport(e) {
   return false;
 }
 
+const membershipSubmissions = new WeakMap();
+
+function showMembershipState(form, state, focusResult) {
+  membershipSubmissions.set(form, state);
+  setFormState(form, state.phase === 'unknown' ? 'error' : state.phase, state.message);
+  const pending = form.querySelector('[data-membership-pending]');
+  if (pending) pending.hidden = state.phase !== 'pending';
+  const submit = form.querySelector('[type="submit"]');
+  if (submit) submit.disabled = ['pending', 'unknown', 'success'].includes(state.phase);
+  form.ariaBusy = state.phase === 'pending' ? 'true' : 'false';
+  const result = form.querySelector(state.phase === 'success' ? '[data-intake-success]' : '[data-intake-error]');
+  if (state.phase === 'success' && result) result.textContent = state.message;
+  if (focusResult && result && typeof result.focus === 'function') result.focus();
+}
+
 function openMembership() {
   const modal = document.getElementById('membershipModal');
   const form = document.getElementById('membershipForm');
-  if (form) setFormState(form, 'idle');
   if (modal) modal.classList.add('open');
+  if (form) showMembershipState(form, membershipSubmissions.get(form) || { phase: 'idle' });
 }
 
 function closeMembership() {
@@ -208,22 +223,48 @@ function submitCoachingInterest(e) {
 function submitMembership(e) {
   e.preventDefault();
   const form = document.getElementById('membershipForm');
-  const name = splitName(document.getElementById('memName').value);
-  const payload = {
-    kind: 'membership',
-    source: 'site_form:membership',
-    external_ref: intakeExternalRef(form, 'membership'),
-    first_name: name.first_name,
-    last_name: name.last_name,
-    email: document.getElementById('memEmail').value.trim(),
-    caring_for: document.getElementById('memCaringFor').value,
-    message: document.getElementById('memNote').value,
-  };
-
-  postIntake(form, payload).then(function () {
-    setFormState(form, 'success');
-  }).catch(function () {
-    setFormState(form, 'error', "We couldn't send this form just now. Please email us and we'll take it from there.");
+  if (!form || ['pending', 'unknown', 'success'].includes(membershipSubmissions.get(form)?.phase)) return false;
+  let payload;
+  try {
+    const name = splitName(document.getElementById('memName').value);
+    payload = {
+      kind: 'membership',
+      source: 'site_form:membership',
+      external_ref: intakeExternalRef(form, 'membership'),
+      first_name: name.first_name,
+      last_name: name.last_name,
+      email: document.getElementById('memEmail').value.trim(),
+      caring_for: document.getElementById('memCaringFor').value,
+      message: document.getElementById('memNote').value,
+    };
+  } catch {
+    // No request has started. In particular, do not silently replace a failed
+    // persistent retry key with a new identity and risk a duplicate later.
+    showMembershipState(form, { phase: 'error', message: "We couldn't prepare this form. It has not been sent. Please contact Legacy for help." }, true);
+    return false;
+  }
+  showMembershipState(form, { phase: 'pending' });
+  const uncertain = () => showMembershipState(form, {
+    phase: 'unknown', message: "We can't confirm whether your membership request was saved. Please don't submit it again. Contact Legacy so we can check it for you."
+  }, true);
+  // This is a UI deadline, not a cancellation or permission to replay a write.
+  // A late response can still establish the original request's outcome.
+  const timer = setTimeout(uncertain, 20000);
+  Promise.resolve().then(() => postIntake(form, payload)).then(function (result) {
+    showMembershipState(form, { phase: 'success', message: result.duplicate
+      ? 'A membership request was already received from this browser session. Continue to the portal and sign in with the email used for that request. Contact Legacy if you need to change it.'
+      : 'Your membership request is saved. Continue to your portal to sign in securely.' }, true);
+  }).catch(function (error) {
+    // Timeout/conflict and unrecognized statuses are not proof that no write
+    // occurred. Only recognized request refusals permit a deliberate retry.
+    if ([400, 401, 403, 404, 405, 413, 415, 422, 429].includes(error.status)) {
+      showMembershipState(form, { phase: 'error', message: "We couldn't accept this form. Please check your details or contact Legacy for help." }, true);
+    } else {
+      // A dropped response or server fault can follow a committed write.
+      uncertain();
+    }
+  }).finally(function () {
+    clearTimeout(timer);
   });
   return false;
 }
@@ -231,6 +272,7 @@ function submitMembership(e) {
 /* ---------- Virtual support group: sign up (saved for staff), then go to Google Meet ---------- */
 let supportGroupInterestOpener = null;
 let supportGroupSession = '';
+let supportGroupSessionDate = null;
 
 function openSupportGroupInterest(opener) {
   const dialog = document.getElementById('supportGroupInterestModal');
@@ -240,6 +282,9 @@ function openSupportGroupInterest(opener) {
   // A clicked session date (data-session) is shown in the form and saved with the sign-up.
   const session = opener && typeof opener.getAttribute === 'function' ? opener.getAttribute('data-session') : '';
   supportGroupSession = typeof session === 'string' ? session.trim().slice(0, 120) : '';
+  // Structured date (YYYY-MM-DD) for the backend; null for general joining without a date.
+  const sessionDate = opener && typeof opener.getAttribute === 'function' ? opener.getAttribute('data-session-date') : null;
+  supportGroupSessionDate = supportGroupSession && typeof sessionDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(sessionDate) ? sessionDate : null;
   const note = document.getElementById('supportGroupSession');
   if (note) {
     note.textContent = supportGroupSession ? 'Session: ' + supportGroupSession : '';
@@ -305,7 +350,10 @@ function submitSupportGroupInterest(e) {
   const payload = {
     kind: 'support_request',
     source: 'site_form:support_group',
-    external_ref: intakeExternalRef(form, 'support_request'),
+    // One sign-up identity per selected date (and one for general joining), so signing up
+    // for a second date in the same tab is a new sign-up, not a duplicate of the first.
+    external_ref: intakeExternalRef(form, 'support_request', supportGroupSessionDate),
+    session_date: supportGroupSessionDate,
     first_name: name.first_name,
     last_name: name.last_name,
     email: document.getElementById('supportGroupEmail').value.trim(),
@@ -385,7 +433,11 @@ function submitRegister(e) {
     relationship: document.getElementById('regRole').value,
   };
 
-  postIntake(form, payload).then(function () {
+  postIntake(form, payload).then(function (result) {
+    const success = form.querySelector('[data-intake-success]');
+    if (success) success.textContent = result.confirmation_email === 'submitted'
+      ? 'Registration saved. Your confirmation email has been submitted. Check your inbox and spam folder.'
+      : 'Registration saved. We could not confirm the email was sent. Please contact Legacy for the details; do not register again.';
     setFormState(form, 'success');
   }).catch(function (err) {
     if (err.message === 'event_full') {
