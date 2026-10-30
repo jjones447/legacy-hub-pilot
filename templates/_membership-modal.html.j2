@@ -27,9 +27,13 @@
       </div>
       <p class="privacy-line" data-cs="form.membership.privacy_line">{{ sections["form.membership"].privacy_line }}</p>
       <button type="submit" class="btn btn-coral w-100" data-cs="form.membership.submit_label">{{ sections["form.membership"].submit_label }}</button>
-      <div class="success-note" data-intake-success role="status" aria-live="polite">✓ Membership request received — welcome to The Sanctuary.</div>
-      <div class="error-note" data-intake-error role="alert" aria-live="assertive"></div>
-      <div class="routing-note" data-intake-routing>Behind the scenes: your caregiver record was created or updated and staff follow-up is queued.</div>
+      <p data-membership-pending role="status" aria-live="polite" hidden>Saving your membership request. Please wait; don't submit it again.</p>
+      <div class="success-note" data-intake-success role="status" aria-live="polite" tabindex="-1">Your membership request is saved.</div>
+      <div class="error-note" data-intake-error role="alert" aria-live="assertive" tabindex="-1"></div>
+      <div class="routing-note" data-intake-routing>
+        <a class="btn btn-plum" href="/portal">Continue to your portal</a>
+        <p>On the portal page, request a secure sign-in link using the email from your membership request. If you're already signed in, you'll see your existing portal. Submitting this form does not sign you in or send a sign-in email.</p>
+      </div>
     </form>
   </div>
 </div>
