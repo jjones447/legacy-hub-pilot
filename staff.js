@@ -1145,6 +1145,7 @@ function renderNewEventForm() {
         <label for="newEventRecurring">Recurring event</label>
       </div>
       <div id="newEventError" class="form-error-banner d-none"></div>
+      <p class="small muted">After creating the draft, choose Edit to add an event photo.</p>
       <div class="editor-actions">
         <button type="submit" class="btn btn-sm btn-plum">Create Draft Event</button>
         <button type="button" class="btn btn-sm btn-outline" data-action="cancel-new-event">Cancel</button>
@@ -1230,6 +1231,78 @@ async function submitCreateEvent(form) {
   }
 }
 
+const eventPhotoPending = new Set();
+const eventPhotoUncertain = new Set();
+
+function eventPhotoEditor(ev) {
+  const blocked = ev.publish_state === 'archived' || eventPhotoPending.has(ev.id) || eventPhotoUncertain.has(ev.id);
+  return `
+    <form data-action="submit-event-photo" data-event-id="${escapeHtml(ev.id)}" data-photo-key="${escapeHtml(ev.photo_key || '')}" class="event-photo-editor">
+      <h3>Event photo</h3>
+      ${ev.photo_key ? `<img class="event-photo-preview" src="/api/staff/event-photo/${encodeURIComponent(ev.id)}" alt="${escapeHtml(ev.photo_alt || 'Event photo')}">` : '<p class="small muted">No photo attached.</p>'}
+      <p class="small muted">Photos appear on the public event card when the event is published. JPEG, PNG or still WebP, up to 5 MB.</p>
+      <label class="editor-label" for="eventPhotoFile">Choose a photo</label>
+      <input id="eventPhotoFile" name="photo" type="file" accept="image/jpeg,image/png,image/webp" class="editor-input"${blocked ? ' disabled' : ''}>
+      <label class="editor-label" for="eventPhotoAlt">Short photo description (optional)</label>
+      <input id="eventPhotoAlt" name="alt" type="text" maxlength="300" class="editor-input" value="${escapeHtml(ev.photo_alt || '')}"${blocked ? ' disabled' : ''}>
+      <p data-photo-message role="status" class="small">${eventPhotoUncertain.has(ev.id) ? 'Reload the page to check the previous save before trying again.' : ev.publish_state === 'archived' ? 'Archived events cannot change photos.' : ''}</p>
+      <div class="editor-actions">
+        <button type="submit" class="btn btn-sm btn-plum"${blocked ? ' disabled' : ''}>${ev.photo_key ? 'Replace photo' : 'Upload photo'}</button>
+        ${ev.photo_key ? `<button type="submit" name="photo_action" value="remove" class="btn btn-sm btn-outline"${blocked ? ' disabled' : ''}>Remove photo</button>` : ''}
+      </div>
+    </form>`;
+}
+
+async function submitEventPhoto(form, removed = false) {
+  const id = form.getAttribute('data-event-id');
+  if (eventPhotoPending.has(id) || eventPhotoUncertain.has(id)) return;
+  const message = form.querySelector('[data-photo-message]');
+  const file = form.querySelector('[name="photo"]').files[0];
+  if (!removed && (!file || !['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024)) {
+    message.textContent = 'Choose a JPEG, PNG or WebP photo up to 5 MB.';
+    return;
+  }
+  eventPhotoPending.add(id);
+  const buttons = Array.from(form.querySelectorAll('button'));
+  buttons.forEach(button => { button.disabled = true; });
+  message.textContent = removed ? 'Removing photo…' : 'Saving photo…';
+  let responseReceived = false;
+  try {
+    const body = new FormData();
+    body.set('request_id', crypto.randomUUID());
+    body.set('expected_photo_key', form.getAttribute('data-photo-key') || '');
+    if (removed) body.set('remove', '1');
+    else {
+      body.set('photo', file);
+      body.set('alt', form.querySelector('[name="alt"]').value.trim());
+    }
+    const response = await fetch('/api/staff/event-photo/' + encodeURIComponent(id), { method: 'POST', body });
+    const data = await response.json();
+    responseReceived = true;
+    if (!response.ok || !data.ok) {
+      if (data.uncertain || data.saved || response.status >= 500) eventPhotoUncertain.add(id);
+      throw new Error(data.message || 'The photo was not saved. Refresh the event before trying again.');
+    }
+    const current = staffEvents.find(event => event.id === id);
+    if (current) { current.photo_key = data.photo_key; current.photo_alt = data.photo_alt; }
+    await loadEvents();
+    await loadRecentChanges();
+    eventPhotoPending.delete(id);
+    openEditEvent(id);
+    const resultMessage = document.querySelector('[data-photo-message]');
+    if (resultMessage) resultMessage.textContent = removed ? 'Photo removed.' : 'Photo saved.';
+  } catch (error) {
+    // A failed response can follow a successful write. Never silently replay it.
+    if (!responseReceived) eventPhotoUncertain.add(id);
+    message.textContent = eventPhotoUncertain.has(id)
+      ? 'The save could not be confirmed. Reload the page to check the event before trying again.'
+      : error.message;
+  } finally {
+    eventPhotoPending.delete(id);
+    if (!eventPhotoUncertain.has(id)) buttons.forEach(button => { button.disabled = false; });
+  }
+}
+
 function openEditEvent(eventId) {
   const ev = staffEvents.find(e => e.id === eventId);
   const container = document.getElementById('editEventContainer');
@@ -1306,6 +1379,7 @@ function openEditEvent(eventId) {
           <button type="button" class="btn btn-sm btn-outline" data-action="cancel-edit-event">Cancel</button>
         </div>
       </form>
+      ${eventPhotoEditor(ev)}
     </div>
   `;
   container.classList.remove('d-none');
@@ -1601,6 +1675,9 @@ document.addEventListener('submit', function (e) {
   } else if (formAction === 'submit-edit-event') {
     e.preventDefault();
     submitEditEvent(form);
+  } else if (formAction === 'submit-event-photo') {
+    e.preventDefault();
+    submitEventPhoto(form, e.submitter?.value === 'remove');
   } else if (formAction === 'submit-add-staff') {
     e.preventDefault();
     submitAddStaff(form);

@@ -244,7 +244,7 @@ test('request text is data, never a URL/model authority; host cannot call human 
 });
 test('explicit candidate schema is excluded from active latest-migration selection',async()=>{
   const {resolveLatestMigration}=await import('../scripts/export-all.mjs');
-  assert.equal(resolveLatestMigration(),'0017_event_details.sql');
+  assert.equal(resolveLatestMigration(),'0018_event_photos.sql');
   assert.ok(readFileSync(new URL('../schema/candidates/0015_assistant_handoff.sql',import.meta.url),'utf8').includes('CREATE TABLE'));
 });
 

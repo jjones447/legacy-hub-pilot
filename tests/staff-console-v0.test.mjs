@@ -139,6 +139,7 @@ test('change log includes event and staff workflows, preserves provenance and ne
 test('actual event create/publish and unchanged staff Save audit appear immediately in change log', async () => {
   raw.exec(SCHEMA_11.split('-- The people already')[0]);
   raw.exec(SCHEMA_17);
+  raw.exec(readFileSync(new URL('../schema/0018_event_photos.sql', import.meta.url), 'utf8'));
   raw.prepare("INSERT INTO staff_member (email, display_name, role) VALUES ('staff@example.org', 'Fictional Admin', 'admin')").run();
   const headers = { 'Cf-Access-Jwt-Assertion': 'header.eyJlbWFpbCI6InN0YWZmQGV4YW1wbGUub3JnIn0.signature' };
   // Existing handler-unit actor seam only, not actual Access middleware authentication.

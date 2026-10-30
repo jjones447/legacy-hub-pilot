@@ -298,7 +298,7 @@ test('4. On-demand export (scripts/export-all.mjs) writes dump files and manifes
     assert.ok(existsSync(join(tempExportDir, 'audit_log.json')));
 
     const manifest = JSON.parse(readFileSync(join(tempExportDir, 'manifest.json'), 'utf8'));
-    assert.equal(manifest.latest_migration, '0017_event_details.sql');
+    assert.equal(manifest.latest_migration, '0018_event_photos.sql');
     assert.equal(manifest.tables.caregiver, 2);
     assert.equal(manifest.tables.grant_application, 2);
     assert.equal(manifest.tables.award, 1);
@@ -472,7 +472,7 @@ test('9. Missing migration history retains conservative fallback; observed newer
   // Adding a source migration is not evidence that it is installed in a DB.
   assert.equal(BAKED_IN_LATEST_MIGRATION, '0012_wellness_checkin.sql');
   assert.ok(schemaFiles.includes(BAKED_IN_LATEST_MIGRATION));
-  assert.equal(newestSchemaFile, '0017_event_details.sql');
+  assert.equal(newestSchemaFile, '0018_event_photos.sql');
   assert.equal(schemaFiles.includes('0013_wellness_journey.sql'), false);
 
   // Missing history stays conservatively at the existing legacy source fallback.
@@ -727,7 +727,7 @@ test('17. Fresh local output without a completion marker retains the existing ex
     assert.equal(result.totalRows, 2);
     assert.deepEqual(readdirSync(outputDir).sort(), ['alpha.json', 'beta.json', 'manifest.json']);
     assert.deepEqual(JSON.parse(readFileSync(join(outputDir, 'manifest.json'), 'utf8')), {
-      version: 1, timestamp: result.manifest.timestamp, latest_migration: '0017_event_details.sql',
+      version: 1, timestamp: result.manifest.timestamp, latest_migration: '0018_event_photos.sql',
       tables: { alpha: 1, beta: 1 }, total_rows: 2
     });
   });

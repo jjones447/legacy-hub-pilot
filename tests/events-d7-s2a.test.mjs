@@ -138,6 +138,7 @@ beforeEach(() => {
   raw.exec('PRAGMA foreign_keys = ON;');
   raw.exec(SCHEMA_1);
   raw.exec(readFileSync(new URL('../schema/0017_event_details.sql', import.meta.url), 'utf8'));
+  raw.exec(readFileSync(new URL('../schema/0018_event_photos.sql', import.meta.url), 'utf8'));
   raw.exec(SCHEMA_2);
   raw.exec(SCHEMA_3);
   raw.exec(SCHEMA_4);

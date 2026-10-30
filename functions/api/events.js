@@ -6,7 +6,7 @@ export async function onRequestGet({ env }) {
     const { results } = await env.LEGACY_DB
       .prepare(`
         SELECT e.id, e.title, e.type, e.starts_at, e.ends_at, e.location, e.capacity,
-               e.description, e.registration_url,
+               e.description, e.registration_url, e.photo_key, e.photo_alt,
                COUNT(r.id) AS registered_count
         FROM event e
         LEFT JOIN registration r ON e.id = r.event_id AND r.status IN ('registered', 'attended')

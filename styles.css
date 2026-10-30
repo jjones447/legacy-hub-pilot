@@ -1333,6 +1333,17 @@ main ul.measure-620 { margin: 16px 0; padding-left: 24px; }
   color: var(--plum);
   text-decoration: underline;
 }
+.event-photo, .event-photo-preview {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: 360px;
+  object-fit: contain;
+  margin-bottom: 12px;
+}
+.event-photo-editor { border-top: 1px solid #ddd; margin-top: 20px; padding-top: 12px; }
+
 .staging-draft-preview-banner {
   background: #fff8e6;
   color: #3a2318;
