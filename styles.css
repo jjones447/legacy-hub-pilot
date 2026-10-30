@@ -1414,3 +1414,19 @@ main ul.measure-620 { margin: 16px 0; padding-left: 24px; }
 
 /* Portal: one-time membership hand-off status (pc2-claude-ct-2, Oct 30). Visible when not [hidden]. */
 .portal-handoff-note { margin: 0 0 12px; padding: 10px 12px; border-radius: 6px; background: #f3f4f6; color: #374151; font-size: 14px; }
+
+/* Caregiver Portal dashboard (client request Oct 30): warm welcome, highlights strip, rounded cards. */
+#dashView .portal-welcome-sub { margin: 6px 0 0; font-size: 17px; color: var(--ink-soft); max-width: 620px; }
+#dashView .portal-design-preview { margin: 0 0 20px; padding: 12px 16px; border-radius: 12px; background: #fff7e6; border: 1px solid #f1d9a8; color: #5c4313; font-size: 15px; }
+#dashView .portal-highlights { margin: 0 0 24px; padding: 18px 22px; border-radius: 16px; background: #fbf3ec; border: 1px solid #efdfd3; }
+#dashView .portal-highlights[hidden] { display: none; }
+#dashView .portal-highlights h3 { margin: 0 0 10px; font-size: 18px; }
+#dashView .portal-highlights ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+#dashView .portal-highlights li { display: flex; gap: 10px; align-items: baseline; font-size: 15.5px; line-height: 1.5; }
+#dashView .portal-card { border-radius: 18px; padding: 24px; box-shadow: 0 2px 10px rgba(90, 53, 38, 0.06); }
+#dashView .portal-card h4 { display: flex; align-items: center; gap: 10px; font-size: 19px; margin: 0 0 14px; }
+#dashView .portal-card-icon { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 50%; background: #f6e9df; font-size: 19px; flex: 0 0 auto; }
+#dashView .portal-card-grid { gap: 26px; }
+#dashView .portal-card-grid > .portal-wellness-section { grid-column: 1 / -1; margin: 0; }
+#dashView .portal-events-group + .portal-events-group { margin-top: 18px; }
+#dashView .portal-events-group h5 { margin: 0 0 8px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-soft); }
