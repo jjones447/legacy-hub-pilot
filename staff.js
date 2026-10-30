@@ -1164,8 +1164,14 @@ function renderNewEventForm() {
         <input type="checkbox" id="newEventRecurring" name="recurring">
         <label for="newEventRecurring">Recurring event</label>
       </div>
+      <div class="field mb-8">
+        <label class="form-label-small" for="newEventPhoto">Event photo (optional)</label>
+        <input type="file" id="newEventPhoto" name="photo" accept="image/jpeg,image/png,image/webp" class="editor-input">
+        <label class="form-label-small" for="newEventPhotoAlt">Short photo description (optional)</label>
+        <input type="text" id="newEventPhotoAlt" name="photo_alt" maxlength="300" class="editor-input">
+        <p class="small muted">JPEG, PNG or WebP, up to 5 MB. It appears on the public event card once the event is published. You can also add or change it later with Edit.</p>
+      </div>
       <div id="newEventError" class="form-error-banner d-none"></div>
-      <p class="small muted">After creating the draft, choose Edit to add an event photo.</p>
       <div class="editor-actions">
         <button type="submit" class="btn btn-sm btn-plum">Create Draft Event</button>
         <button type="button" class="btn btn-sm btn-outline" data-action="cancel-new-event">Cancel</button>
@@ -1222,6 +1228,16 @@ async function submitCreateEvent(form) {
     capacity: form.capacity.value ? parseInt(form.capacity.value, 10) : null,
     recurring: form.recurring ? form.recurring.checked : false
   };
+  const photo = form.photo && form.photo.files ? form.photo.files[0] : null;
+  const photoAlt = form.photo_alt ? form.photo_alt.value.trim() : '';
+  // Check the optional photo before creating anything, so a bad file never leaves a half-done event.
+  if (photo && (!['image/jpeg', 'image/png', 'image/webp'].includes(photo.type) || photo.size > 5 * 1024 * 1024)) {
+    if (errBox) {
+      errBox.textContent = 'Choose a JPEG, PNG or WebP photo up to 5 MB, or leave the photo empty.';
+      errBox.classList.remove('d-none');
+    }
+    return;
+  }
 
   try {
     const res = await fetch('/api/staff/event', {
@@ -1243,6 +1259,8 @@ async function submitCreateEvent(form) {
     if (container) container.classList.add('d-none');
     await loadEvents();
     await loadRecentChanges();
+    const newId = data.event && data.event.id;
+    if (photo && newId) await uploadNewEventPhoto(newId, photo, photoAlt);
   } catch (e) {
     if (errBox) {
       errBox.textContent = e.message || 'Error creating event';
@@ -1271,6 +1289,42 @@ function eventPhotoEditor(ev) {
         ${ev.photo_key ? `<button type="submit" name="photo_action" value="remove" class="btn btn-sm btn-outline"${blocked ? ' disabled' : ''}>Remove photo</button>` : ''}
       </div>
     </form>`;
+}
+
+// Attach the photo chosen on the Add Event form to the just-created draft, through the same
+// event-photo endpoint and pending/uncertain rules as Edit. The result shows in the Edit view.
+async function uploadNewEventPhoto(id, file, alt) {
+  if (eventPhotoPending.has(id) || eventPhotoUncertain.has(id)) return;
+  eventPhotoPending.add(id);
+  let responseReceived = false;
+  let note = 'Event created. Photo saved.';
+  try {
+    const body = new FormData();
+    body.set('request_id', crypto.randomUUID());
+    body.set('expected_photo_key', '');
+    body.set('photo', file);
+    body.set('alt', alt || '');
+    const response = await fetch('/api/staff/event-photo/' + encodeURIComponent(id), { method: 'POST', body });
+    const data = await response.json();
+    responseReceived = true;
+    if (!response.ok || !data.ok) {
+      if (data.uncertain || data.saved || response.status >= 500) eventPhotoUncertain.add(id);
+      throw new Error(data.message || 'The event was created, but the photo was not saved. Use Upload photo below to try again.');
+    }
+    await loadEvents();
+    await loadRecentChanges();
+  } catch (error) {
+    // A failed response can follow a successful write. Never silently replay it.
+    if (!responseReceived) eventPhotoUncertain.add(id);
+    note = eventPhotoUncertain.has(id)
+      ? 'The event was created, but the photo save could not be confirmed. Reload the page to check the event before trying again.'
+      : error.message;
+  } finally {
+    eventPhotoPending.delete(id);
+  }
+  openEditEvent(id);
+  const message = document.querySelector('[data-photo-message]');
+  if (message) message.textContent = note;
 }
 
 async function submitEventPhoto(form, removed = false) {
@@ -2980,6 +3034,8 @@ async function submitDirectContent(form) {
 }
 
 let recentChanges = [];
+let releaseActivity = [];
+let releaseActivityAsOf = null;
 
 async function loadRecentChanges() {
   try {
@@ -2988,6 +3044,8 @@ async function loadRecentChanges() {
     if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to load recent changes');
 
     recentChanges = data.changes || data.recent_changes || [];
+    releaseActivity = Array.isArray(data.release_activity) ? data.release_activity : [];
+    releaseActivityAsOf = data.release_activity_as_of || null;
     renderRecentChanges();
   } catch (e) {
     const list = document.getElementById('recentChangesList');
@@ -2999,12 +3057,34 @@ function renderRecentChanges() {
   const container = document.getElementById('recentChangesList');
   if (!container) return;
 
-  if (recentChanges.length === 0) {
-    container.innerHTML = '<p class="muted small text-center my-20">No changes recorded.</p>';
-    return;
+  const notes = typeof releaseActivity === 'undefined' ? [] : releaseActivity;
+  const labels = {
+    legacy_staff: 'Legacy staff request', xcentric_maintenance: 'X-Centric maintenance',
+    not_established: 'Not established', legacy_assistant: 'Legacy assistant', xcentric_team: 'X-Centric team',
+    requested: 'Requested', in_progress: 'In progress', reviewed: 'Reviewed', merged: 'Code complete',
+    not_deployed: 'Not installed', available: 'Ready to review', verified: 'Verified',
+    pending: 'Awaiting approval', approved: 'Approved', not_required: 'Not required',
+    deployed: 'Installed; verification pending', rolled_back: 'Rolled back',
+  };
+  let html = '<h3>Requested changes and releases</h3><p class="small muted">Selected updates reviewed for Legacy staff. Request origin and who carried out the work are recorded separately. Code completion does not mean a change is live.</p>';
+  if (typeof releaseActivityAsOf !== 'undefined' && releaseActivityAsOf) html += `<p class="small muted">Last reviewed update: ${escapeHtml(releaseActivityAsOf)}</p>`;
+  if (!notes.length) html += '<p class="small muted">No reviewed release updates are available.</p>';
+  for (const note of notes) {
+    html += `<div class="recent-change-row"><div class="recent-change-meta"><div class="recent-change-action">${escapeHtml(note.summary)}</div>`;
+    html += `<div class="recent-change-detail">Requested by: ${escapeHtml(note.requested_by)} · Origin: ${escapeHtml(labels[note.request_origin] || 'Not established')} · Carried out by: ${escapeHtml(labels[note.executor] || 'Not established')}</div>`;
+    for (const [key, title] of [['source','Code'],['staging','Staging'],['approval','Approval'],['production','Production']]) {
+      const m = note.milestones?.[key];
+      html += `<div class="small">${title}: ${escapeHtml(labels[m?.state] || 'Not established')}${m?.at ? ` · ${escapeHtml(m.at)}` : ''}</div>`;
+    }
+    // Defense in depth: accept only plain same-site page paths, never arbitrary links.
+    if (typeof note.evidence_path === 'string' && /^\/[a-z0-9][a-z0-9/_-]*$/.test(note.evidence_path)
+        && !note.evidence_path.includes('//') && !/^\/(api|cdn-cgi)(\/|$)/.test(note.evidence_path)) {
+      html += `<a href="${escapeHtml(note.evidence_path)}">Related page</a>`;
+    }
+    html += '</div></div>';
   }
-
-  let html = '';
+  html += '<h3>Staff activity</h3><p class="small muted">Recent supported staff edits and their original audit records. This is not a complete list of every system action.</p>';
+  if (recentChanges.length === 0) html += '<p class="muted small text-center my-20">No changes recorded.</p>';
   for (const c of recentChanges) {
     const isUndone = c.is_undone;
     const canUndo = c.restorable || c.can_undo;
