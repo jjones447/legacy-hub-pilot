@@ -349,10 +349,13 @@ test('historical support-group sign-up never sends or gets a manufactured origin
 });
 
 test('support-group and registration ID spaces cannot suppress one another', async () => {
-  const f=await registered(); await confirmRegistration(f.env,f.body,true,f.send);
+  const f=fixture();
   const body=groupFixture().body; await handleIntake(f.db,body);
   assert.equal(await confirmSupportGroup(f.env,body,true,f.send),'submitted');
+  await handleIntake(f.db,f.body);
+  assert.equal(await confirmRegistration(f.env,f.body,true,f.send),'submitted');
   assert.equal(f.fetches.length,2);
   const claims=f.raw.prepare("SELECT entity,entity_id FROM audit_log WHERE action='confirmation.claimed' ORDER BY id").all();
-  assert.deepEqual(claims.map(c=>c.entity),['registration','followup']);
+  assert.deepEqual(claims.map(c=>c.entity),['followup','registration']);
+  assert.deepEqual(claims.map(c=>c.entity_id),['1','1']);
 });
