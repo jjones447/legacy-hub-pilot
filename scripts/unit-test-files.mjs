@@ -2,6 +2,9 @@
 // requires an explicit source/review change here; filenames alone do not prove
 // absence of runtime effects. The separately gated workerd harness is excluded.
 export const UNIT_TEST_FILES = Object.freeze([
+  'customer-activity.test.mjs',
+  'membership-continuation.test.mjs',
+  'portal-dashboard-redesign.test.mjs',
   'agent-conversation.test.mjs',
   'canonical-hosts.test.mjs',
   'event-photos.test.mjs',
@@ -52,6 +55,7 @@ export const UNIT_TEST_FILES = Object.freeze([
   'inline-handlers-removed.test.mjs',
   'inline-html-sanitizer-d7-s0b.test.mjs',
   'intake.test.mjs',
+  'registration-email.test.mjs',
   'nav-dropdown-hover.test.mjs',
   'payment-write-atomicity.test.mjs',
   'portal-banner.test.mjs',

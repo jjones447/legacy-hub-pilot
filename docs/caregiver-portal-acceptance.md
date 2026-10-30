@@ -338,3 +338,91 @@ throughout, because the tests call handlers directly and never exercise the midd
 
 Worth confirming with Shanelle only that the portal still matters to her at all, since it has not
 come up in her recent notes and everything she has asked for lately has been public-site work.
+
+## Membership continuation source correction (October 30)
+
+The current requested journey includes portal continuation; this supersedes the
+earlier suggestion above to reconfirm whether the portal is wanted.
+
+The membership modal now reveals **Continue to your portal** only after the
+intake endpoint acknowledges a save (including an earlier duplicate request).
+The link is the same-origin `/portal`, without email or tokens in its URL. The
+existing signed session or secure emailed-link verification still controls
+access. Membership submission itself neither signs the person in nor requests email;
+for a NEW save, the portal hand-off below requests one link (pilot #291).
+
+The form shows pending feedback immediately and focuses its success/error result.
+Storage/preparation failures are reported before any request starts; no substitute
+retry identity is generated. A 20-second UI deadline makes a stalled request
+explicitly uncertain without cancelling it or sending another request. Network
+failure, server errors and malformed success also remain uncertain. The button
+stays disabled across modal reopen; a late acknowledgment may resolve the same
+request. Recognized validation/access/route/size/type/rate-limit refusals allow an
+explicit corrected submission with the existing key; timeout, conflict and unknown
+statuses remain uncertain. Successful duplicate responses describe the earlier request,
+not a claim that newly edited details were saved. No key rotation or automatic
+resubmission is introduced.
+
+This addresses demonstrated source gaps, not a diagnosis of any specific live
+report. Production mail configuration and staging portal-mail opt-in are separate;
+this change modifies neither. Source/unit/template checks do not prove deployment,
+rendering, a saved live request, email delivery or verified portal entry. Release
+owners must qualify the installed package and the existing authorized synthetic
+journey before making those claims. Unknown existing submissions require
+reconciliation, not replay. [pc2-codex-42]
+
+## Membership → portal sign-in hand-off (October 30, pilot #291)
+
+Requested by Legacy (Shanelle, Slack 2026-10-30: “yes lets try that”). Separate
+results, each needing its own evidence:
+
+1. **Save:** the intake endpoint acknowledges a NEW membership (not a duplicate,
+   refusal or uncertain outcome, which keep the #289 behaviour above).
+2. **Navigation:** only then the page stores `{email, at}` once in
+   `sessionStorage['legacy-portal-handoff']` (never in a URL) and goes to `/portal`.
+   If storage or navigation fails, the visible **Continue to your portal** button and
+   the manual sign-in form remain the fallback.
+3. **Link request:** `/portal` consumes the hand-off once (removed on read; ignored
+   if older than ten minutes or malformed). Only a confirmed signed-out
+   `/api/portal/me` answer (HTTP 401) fills the email, shows a status note and calls
+   the existing `submitPortalLogin()` once. A signed-in session discards the hand-off
+   without sending. An unavailable, failed or unreadable session check only fills
+   the email and asks the person to select “Send me a sign-in link”.
+4. **Provider acceptance:** the existing `/api/portal/login` and server mail policy
+   decide whether a message is sent (staging portal mail is off); the page shows the
+   existing status wording and never promises mailbox delivery.
+5. **Possession:** the portal opens only after the person uses the emailed link.
+   No session is created from the stored email.
+
+Source/unit checks do not prove deployment, rendering, a live request, email delivery
+or portal entry. [pc2-claude-ct-2]
+
+## Dashboard redesign: capability map (October 30)
+
+Requested by Legacy (Shanelle, Slack 2026-10-30 20:55Z). The dashboard is reorganized
+into a warm welcome (“Welcome to Your Sanctuary, [First Name]!” plus subtitle), a
+highlights strip and six rounded cards, using only existing account data:
+
+| Card / item | Source today | Status |
+|---|---|---|
+| Welcome name | `/api/portal/me` `profile.first_name` | works |
+| My Profile & Intake | `profile` name, email, phone, membership (read-only) | works read-only; **profile updates and intake forms are not built** (no portal update/intake endpoint) |
+| My Support | link to the existing Request Support form | **request history/status not built** (no portal read of follow-ups; see unmerged #162) |
+| My Events | `/me` `events`: non-cancelled registrations for published events of any type, split upcoming/past (America/Chicago) | works for **event registrations** (Events page), including Memory Social and support-group *events*. Programs-page support-group sign-ups are follow-ups, not registrations, and do **not** appear |
+| My Wellness | `/api/portal/wellness` history, due flag and questions | works (renamed from “My Wellness (check-ins)”) |
+| My Resources | link to the public Resource Hub | works as a link; **saved resources and a Bookmark button are not built** (needs a per-member table, endpoints and UI) |
+| Sanctuary Updates & Perks | none | **not built** (no announcement or benefit source) |
+| Highlight: next registered event | earliest future `registered` registration | works |
+| Highlight: wellness check-in | wellness `due` | works |
+| Highlight: intake reminder, latest announcement | none | **not shown** (no real data; nothing invented) |
+
+Removed from the dashboard: the Wellness Grant card (program restructuring, Phase 2;
+the API still returns grants and staff tools are unchanged) and the separate Memory
+Socials card (Memory Socials now appear inside My Events). The in-dashboard sample
+toggle now mirrors the new cards without grant/socials examples.
+
+**Design review without sign-in:** `/portal?preview=sample` renders the real layout
+with clearly labeled fictional data (banner, no session, no API request, no submit
+control, no fictional wellness scores). This exists because caregiver sign-in mail is
+off on staging. It is not account data and proves only layout, not authenticated use.
+[pc2-claude-ct-2]
