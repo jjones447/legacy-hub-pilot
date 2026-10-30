@@ -250,12 +250,39 @@ function openSupportGroupInterest(opener) {
   document.getElementById('supportGroupName').focus();
 }
 
-// Programs & Events links to programs.html#join-support-group to open the sign-up form directly.
-(function () {
-  if (typeof window === 'undefined' || !window.location || window.location.hash !== '#join-support-group') return;
-  const opener = document.getElementById('join-support-group');
-  if (opener && typeof openSupportGroupInterest === 'function') openSupportGroupInterest(opener);
-})();
+// Support-group dates: hide past sessions, show only the next one, and let
+// "View upcoming sessions" reveal the rest. Without JavaScript every date stays visible.
+function supportGroupToday() {
+  try {
+    return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
+  } catch (e) {
+    return new Date().toISOString().slice(0, 10);
+  }
+}
+
+function applySupportGroupSessions(expanded, today) {
+  const list = document.getElementById('supportGroupSessions');
+  if (!list) return;
+  const more = document.getElementById('supportGroupSessionsMore');
+  const none = document.getElementById('supportGroupSessionsNone');
+  const day = today || supportGroupToday();
+  const upcoming = Array.from(list.querySelectorAll('li[data-date]')).filter(function (li) {
+    const keep = li.getAttribute('data-date') >= day;
+    li.hidden = !keep;
+    return keep;
+  });
+  upcoming.forEach(function (li, i) { li.hidden = !expanded && i > 0; });
+  if (none) none.classList.toggle('d-none', upcoming.length > 0);
+  if (more) {
+    more.hidden = upcoming.length < 2;
+    more.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+  }
+}
+applySupportGroupSessions(false);
+
+function toggleSupportGroupSessions(button) {
+  applySupportGroupSessions(button.getAttribute('aria-expanded') !== 'true');
+}
 
 function closeSupportGroupInterest() {
   const dialog = document.getElementById('supportGroupInterestModal');
@@ -1299,6 +1326,8 @@ document.addEventListener('click', function (e) {
   } else if (action === 'close-coaching-interest') {
     e.preventDefault();
     closeCoachingInterest();
+  } else if (action === 'toggle-support-group-sessions') {
+    toggleSupportGroupSessions(target);
   } else if (action === 'open-support-group-interest') {
     e.preventDefault();
     openSupportGroupInterest(target);

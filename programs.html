@@ -7,7 +7,7 @@
 <meta name="description" content="A free membership community for caregivers of loved ones with dementia in Greater Milwaukee.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=5cbea4dbf4dd">
+<link rel="stylesheet" href="styles.css?v=24528d832db2">
 <link rel="icon" href="favicon.ico" sizes="32x32">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -157,14 +157,19 @@
         <div class="kv-row program-fact"><span class="k">Where</span><span class="v">Online — Google Meet</span></div>
         <div class="kv-row program-fact"><span class="k">Facilitation</span><span class="v">Alzheimer's Association-certified</span></div>
         <div class="kv-row program-fact"><span class="k">Cost</span><span class="v">Free</span></div>
-        <h4 class="mt-16">Upcoming sessions</h4>
-        <ul class="support-group-sessions">
-          <li><button type="button" class="session-link" data-action="open-support-group-interest" data-session="Wednesday, November 4 · 5–6 PM" aria-haspopup="dialog" aria-controls="supportGroupInterestModal">Wednesday, November 4 · 5–6 PM</button></li>
-          <li><button type="button" class="session-link" data-action="open-support-group-interest" data-session="Wednesday, November 11 · 5–6 PM" aria-haspopup="dialog" aria-controls="supportGroupInterestModal">Wednesday, November 11 · 5–6 PM</button></li>
-          <li><button type="button" class="session-link" data-action="open-support-group-interest" data-session="Wednesday, November 18 · 5–6 PM" aria-haspopup="dialog" aria-controls="supportGroupInterestModal">Wednesday, November 18 · 5–6 PM</button></li>
+        <h4 class="mt-16">Next session</h4>
+        <ul class="support-group-sessions" id="supportGroupSessions">
+          <li data-date="2026-11-04"><button type="button" class="session-link" data-action="open-support-group-interest" data-session="Wednesday, November 4 · 5–6 PM" aria-haspopup="dialog" aria-controls="supportGroupInterestModal">Wednesday, November 4 · 5–6 PM</button></li>
+          <li data-date="2026-11-11"><button type="button" class="session-link" data-action="open-support-group-interest" data-session="Wednesday, November 11 · 5–6 PM" aria-haspopup="dialog" aria-controls="supportGroupInterestModal">Wednesday, November 11 · 5–6 PM</button></li>
+          <li data-date="2026-11-18"><button type="button" class="session-link" data-action="open-support-group-interest" data-session="Wednesday, November 18 · 5–6 PM" aria-haspopup="dialog" aria-controls="supportGroupInterestModal">Wednesday, November 18 · 5–6 PM</button></li>
+          <li data-date="2026-12-02"><button type="button" class="session-link" data-action="open-support-group-interest" data-session="Wednesday, December 2 · 5–6 PM" aria-haspopup="dialog" aria-controls="supportGroupInterestModal">Wednesday, December 2 · 5–6 PM</button></li>
+          <li data-date="2026-12-09"><button type="button" class="session-link" data-action="open-support-group-interest" data-session="Wednesday, December 9 · 5–6 PM" aria-haspopup="dialog" aria-controls="supportGroupInterestModal">Wednesday, December 9 · 5–6 PM</button></li>
+          <li data-date="2026-12-16"><button type="button" class="session-link" data-action="open-support-group-interest" data-session="Wednesday, December 16 · 5–6 PM" aria-haspopup="dialog" aria-controls="supportGroupInterestModal">Wednesday, December 16 · 5–6 PM</button></li>
+          <li data-date="2026-12-30"><button type="button" class="session-link" data-action="open-support-group-interest" data-session="Wednesday, December 30 · 5–6 PM" aria-haspopup="dialog" aria-controls="supportGroupInterestModal">Wednesday, December 30 · 5–6 PM</button></li>
         </ul>
-        <button type="button" id="join-support-group" class="btn btn-coral btn-sm mt-16" data-action="open-support-group-interest" aria-haspopup="dialog" aria-controls="supportGroupInterestModal">Join an upcoming session</button>
-        <p class="small muted mt-16">Sign up with your name and email, then you'll go straight to the group on Google Meet.</p>
+        <p class="small muted d-none" id="supportGroupSessionsNone">New session dates are coming soon.</p>
+        <button type="button" class="link-button mt-8" id="supportGroupSessionsMore" data-action="toggle-support-group-sessions" aria-controls="supportGroupSessions" aria-expanded="false" hidden>View upcoming sessions</button>
+        <p class="small muted mt-16">Choose a date, sign up with your name and email, then you'll go straight to the group on Google Meet.</p>
       </div>
       <div>
         <span class="eyebrow" data-cs="programs.support_group.eyebrow">Virtual Support Group</span>
@@ -381,7 +386,7 @@
 </footer>
 
 
-<script src="app.js?v=3a6002d28f43"></script>
+<script src="app.js?v=15293570de1a"></script>
 <script src="nav-v2.js"></script>
 </body>
 </html>

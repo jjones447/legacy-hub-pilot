@@ -94,11 +94,17 @@
       "paragraphs": [
         "Connect with other caregivers who understand the journey. Our weekly virtual support group offers a welcoming space to share experiences, find encouragement, and receive support from others navigating caregiving."
       ],
-      "sessions_heading": "Upcoming sessions",
+      "sessions_heading": "Next session",
+      "sessions_more_label": "View upcoming sessions",
+      "sessions_none": "New session dates are coming soon.",
       "sessions": [
-        "Wednesday, November 4 · 5–6 PM",
-        "Wednesday, November 11 · 5–6 PM",
-        "Wednesday, November 18 · 5–6 PM"
+        {"date": "2026-11-04", "label": "Wednesday, November 4 · 5–6 PM"},
+        {"date": "2026-11-11", "label": "Wednesday, November 11 · 5–6 PM"},
+        {"date": "2026-11-18", "label": "Wednesday, November 18 · 5–6 PM"},
+        {"date": "2026-12-02", "label": "Wednesday, December 2 · 5–6 PM"},
+        {"date": "2026-12-09", "label": "Wednesday, December 9 · 5–6 PM"},
+        {"date": "2026-12-16", "label": "Wednesday, December 16 · 5–6 PM"},
+        {"date": "2026-12-30", "label": "Wednesday, December 30 · 5–6 PM"}
       ]
     },
     "programs.grants": {

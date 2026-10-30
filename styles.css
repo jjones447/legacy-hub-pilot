@@ -1409,3 +1409,5 @@ main ul.measure-620 { margin: 16px 0; padding-left: 24px; }
 }
 .support-group-sessions .session-link:hover, .support-group-sessions .session-link:focus-visible { color: var(--plum, #5a3526); }
 #supportGroupInterestModal .session-note { font-weight: 600; margin: 4px 0 12px; }
+.link-button { background: none; border: 0; padding: 0; font: inherit; font-size: 14px; font-weight: 600; color: var(--plum); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.link-button:hover, .link-button:focus-visible { color: var(--coral-dark); }

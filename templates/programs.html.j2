@@ -55,13 +55,14 @@
         <div class="kv-row program-fact"><span class="k">{{ r.k }}</span><span class="v">{{ r.v }}</span></div>
 {%- endfor %}
         <h4 class="mt-16">{{ sections["programs.support_group"].sessions_heading }}</h4>
-        <ul class="support-group-sessions">
-{%- for d in sections["programs.support_group"].sessions %}
-          <li><button type="button" class="session-link" data-action="open-support-group-interest" data-session="{{ d }}" aria-haspopup="dialog" aria-controls="supportGroupInterestModal">{{ d }}</button></li>
+        <ul class="support-group-sessions" id="supportGroupSessions">
+{%- for s in sections["programs.support_group"].sessions %}
+          <li data-date="{{ s.date }}"><button type="button" class="session-link" data-action="open-support-group-interest" data-session="{{ s.label }}" aria-haspopup="dialog" aria-controls="supportGroupInterestModal">{{ s.label }}</button></li>
 {%- endfor %}
         </ul>
-        <button type="button" id="join-support-group" class="btn btn-coral btn-sm mt-16" data-action="open-support-group-interest" aria-haspopup="dialog" aria-controls="supportGroupInterestModal">Join an upcoming session</button>
-        <p class="small muted mt-16">Sign up with your name and email, then you'll go straight to the group on Google Meet.</p>
+        <p class="small muted d-none" id="supportGroupSessionsNone">{{ sections["programs.support_group"].sessions_none }}</p>
+        <button type="button" class="link-button mt-8" id="supportGroupSessionsMore" data-action="toggle-support-group-sessions" aria-controls="supportGroupSessions" aria-expanded="false" hidden>{{ sections["programs.support_group"].sessions_more_label }}</button>
+        <p class="small muted mt-16">Choose a date, sign up with your name and email, then you'll go straight to the group on Google Meet.</p>
       </div>
       <div>
         <span class="eyebrow" data-cs="programs.support_group.eyebrow">{{ sections["programs.support_group"].eyebrow }}</span>

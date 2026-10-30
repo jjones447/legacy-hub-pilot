@@ -219,7 +219,7 @@ test('support-group sign-up is a named native dialog with only name/email, then 
   const dialog = page.match(/<dialog id="supportGroupInterestModal"[\s\S]*?<\/dialog>/)?.[0];
   assert.ok(dialog);
   assert.match(dialog, /aria-labelledby="supportGroupInterestTitle" aria-describedby="supportGroupInterestDescription"/);
-  assert.match(page, /data-action="open-support-group-interest" aria-haspopup="dialog" aria-controls="supportGroupInterestModal"/);
+  assert.match(page, /data-action="open-support-group-interest" data-session="[^"]+" aria-haspopup="dialog" aria-controls="supportGroupInterestModal"/);
   assert.equal((dialog.match(/<input /g) || []).length, 2);
   assert.match(dialog, /<label for="supportGroupName">Your name<\/label>/);
   assert.match(dialog, /<label for="supportGroupEmail">Email<\/label>/);
@@ -236,13 +236,19 @@ test('support-group sign-up is a named native dialog with only name/email, then 
   assert.match(joiningRegion, /href="https:\/\/meet\.google\.com\/dmc-orwi-afk" target="_blank" rel="noopener noreferrer"/);
   assert.match(joiningRegion, /If Google Meet doesn't open/);
   assert.equal((dialog.match(/meet\.google\.com/g) || []).length, 1);
-  assert.match(file('programs-events.html'), /href="programs\.html#join-support-group">Join an upcoming session<\/a>/);
+  assert.match(file('programs-events.html'), /<a href="programs\.html#support-group">View upcoming sessions<\/a>/);
+  assert.doesNotMatch(file('programs-events.html'), /Join an upcoming session/);
   const panel = page.match(/<section class="section-sand" id="support-group">[\s\S]*?<\/section>/)?.[0];
-  assert.equal((panel.match(/class="btn /g) || []).length, 1, 'the support group has exactly one button');
-  assert.match(panel, /id="join-support-group"[^>]*data-action="open-support-group-interest"[^>]*>Join an upcoming session<\/button>/);
-  for (const date of ['Wednesday, November 4 · 5–6 PM', 'Wednesday, November 11 · 5–6 PM', 'Wednesday, November 18 · 5–6 PM']) {
-    assert.ok(panel.includes(`<li><button type="button" class="session-link" data-action="open-support-group-interest" data-session="${date}" aria-haspopup="dialog" aria-controls="supportGroupInterestModal">${date}</button></li>`), date);
+  assert.equal((panel.match(/class="btn /g) || []).length, 0, 'the dates are the way to join; no separate join button');
+  assert.doesNotMatch(panel, /Join an upcoming session/);
+  assert.match(panel, /data-action="toggle-support-group-sessions" aria-controls="supportGroupSessions" aria-expanded="false" hidden>View upcoming sessions<\/button>/);
+  const expected = [['2026-11-04', 'November 4'], ['2026-11-11', 'November 11'], ['2026-11-18', 'November 18'],
+    ['2026-12-02', 'December 2'], ['2026-12-09', 'December 9'], ['2026-12-16', 'December 16'], ['2026-12-30', 'December 30']];
+  for (const [iso, day] of expected) {
+    const date = `Wednesday, ${day} · 5–6 PM`;
+    assert.ok(panel.includes(`<li data-date="${iso}"><button type="button" class="session-link" data-action="open-support-group-interest" data-session="${date}" aria-haspopup="dialog" aria-controls="supportGroupInterestModal">${date}</button></li>`), date);
   }
+  assert.doesNotMatch(panel, /December 23|2026-12-23/);
   assert.match(dialog, /<p class="session-note" id="supportGroupSession" hidden><\/p>/);
   assert.doesNotMatch(panel, /November 25/);
 });
@@ -398,4 +404,32 @@ test('support-group: clicking a session date shows it in the form and saves it w
   context.openSupportGroupInterest({ getAttribute: () => null, focus() {} });
   assert.equal(note.hidden, true);
   assert.equal(note.textContent, '');
+});
+
+test('support-group dates: past sessions hide, only the next shows until "View upcoming sessions" expands the rest', () => {
+  const app = file('app.js');
+  const source = app.slice(0, app.indexOf('/* ---------- Resource hub:'));
+  const isos = ['2026-11-04', '2026-11-11', '2026-11-18', '2026-12-02', '2026-12-30'];
+  const items = isos.map(iso => ({ hidden: false, getAttribute: name => (name === 'data-date' ? iso : null) }));
+  const list = { querySelectorAll: () => items };
+  const more = { hidden: true, attrs: {}, setAttribute(k, v) { this.attrs[k] = v; }, getAttribute(k) { return this.attrs[k]; } };
+  const none = { classList: { on: true, toggle(_c, force) { this.on = force; } } };
+  const nodes = { supportGroupSessions: list, supportGroupSessionsMore: more, supportGroupSessionsNone: none };
+  const context = { document: { getElementById: id => nodes[id] }, crypto: { randomUUID: () => 'x' }, sessionStorage: { getItem: () => null, setItem() {} } };
+  vm.runInNewContext(source, context);
+  context.applySupportGroupSessions(false, '2026-11-12');
+  assert.deepEqual(items.map(i => i.hidden), [true, true, false, true, true], 'only the next session (Nov 18) shows');
+  assert.equal(more.hidden, false);
+  assert.equal(more.attrs['aria-expanded'], 'false');
+  context.toggleSupportGroupSessions(more);
+  // toggle uses today's real date; re-apply with the fixed date to check expansion
+  context.applySupportGroupSessions(true, '2026-11-12');
+  assert.deepEqual(items.map(i => i.hidden), [true, true, false, false, false], 'expanded shows every upcoming date, never past ones');
+  assert.equal(more.attrs['aria-expanded'], 'true');
+  context.applySupportGroupSessions(false, '2026-12-30');
+  assert.deepEqual(items.map(i => i.hidden), [true, true, true, true, false]);
+  assert.equal(more.hidden, true, 'no "View upcoming sessions" link when only one date is left');
+  context.applySupportGroupSessions(false, '2027-01-01');
+  assert.ok(items.every(i => i.hidden));
+  assert.equal(none.classList.on, false, 'shows "New session dates are coming soon." when none are left');
 });
