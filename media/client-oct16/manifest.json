@@ -240,6 +240,38 @@
           }
         ]
       }
+    },
+    {
+      "original_name": "Video 1.mov",
+      "drive_id": "1pTO3pkBwB-5wUCjlpOOTpODANple649U",
+      "derived_from": "media/client-oct16/sanctuary-video-1.mp4",
+      "derived_from_sha256": "c89ad85131b74d6190b7c8bb5a99a7ad46c8bca1c2562778c51c4ead008e0c11",
+      "mime_type": "video/mp4",
+      "bytes": 13044551,
+      "sha256": "c45882317691c09ecf6a1b427dcf989bc73f724f68f695045bf7074292f82cd7",
+      "target_path": "media/client-oct16/sanctuary-video-1-trimmed.mp4",
+      "purpose": "Sanctuary header video with the feet/legs-only and table close-up moments removed (Shanelle, Slack 2026-10-30; second pass removes the seated legs-and-chair shot)",
+      "width": 720,
+      "height": 1280,
+      "duration_seconds": 47.133333,
+      "edit": {
+        "removed_seconds": [
+          [
+            18.5,
+            26.0
+          ],
+          [
+            33.5,
+            40.4
+          ]
+        ],
+        "video_codec": "H.264 Main (libx264 crf 23, preset medium)",
+        "pixel_format": "yuv420p",
+        "frame_rate": "30/1",
+        "audio": "none (the page plays it muted)",
+        "movflags": "+faststart",
+        "tool": "PyAV (bundled FFmpeg) on pc2-claude-ct-2"
+      }
     }
   ],
   "svg_review": {

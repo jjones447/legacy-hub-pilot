@@ -8,6 +8,9 @@ function initializeMotionVideo() {
   const applyPreference = () => {
     for (const video of videos) {
       video.autoplay = !preference.matches;
+      // Native controls (and their Play button) only when motion is reduced. If the browser
+      // refuses autoplay, the first frame stays and a tap, click, Enter or Space plays it.
+      video.controls = preference.matches;
       if (preference.matches) {
         video.pause();
       } else {
@@ -20,6 +23,23 @@ function initializeMotionVideo() {
   };
   applyPreference();
   preference.addEventListener('change', applyPreference);
+  // Without visible controls, a click, tap, Enter or Space pauses and resumes the video.
+  const toggle = (video) => {
+    if (video.controls) return;
+    if (video.paused) {
+      const playback = video.play();
+      if (playback && playback.catch) playback.catch(() => { video.controls = true; });
+    } else {
+      video.pause();
+    }
+  };
+  for (const video of videos) {
+    if (typeof video.addEventListener !== 'function') continue;
+    video.addEventListener('click', () => toggle(video));
+    video.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggle(video); }
+    });
+  }
 }
 initializeMotionVideo();
 
