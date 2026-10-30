@@ -125,11 +125,26 @@ function submitSupport(e) {
   return false;
 }
 
+const membershipSubmissions = new WeakMap();
+
+function showMembershipState(form, state, focusResult) {
+  membershipSubmissions.set(form, state);
+  setFormState(form, state.phase === 'unknown' ? 'error' : state.phase, state.message);
+  const pending = form.querySelector('[data-membership-pending]');
+  if (pending) pending.hidden = state.phase !== 'pending';
+  const submit = form.querySelector('[type="submit"]');
+  if (submit) submit.disabled = ['pending', 'unknown', 'success'].includes(state.phase);
+  form.ariaBusy = state.phase === 'pending' ? 'true' : 'false';
+  const result = form.querySelector(state.phase === 'success' ? '[data-intake-success]' : '[data-intake-error]');
+  if (state.phase === 'success' && result) result.textContent = state.message;
+  if (focusResult && result && typeof result.focus === 'function') result.focus();
+}
+
 function openMembership() {
   const modal = document.getElementById('membershipModal');
   const form = document.getElementById('membershipForm');
-  if (form) setFormState(form, 'idle');
   if (modal) modal.classList.add('open');
+  if (form) showMembershipState(form, membershipSubmissions.get(form) || { phase: 'idle' });
 }
 
 function closeMembership() {
@@ -205,25 +220,84 @@ function submitCoachingInterest(e) {
   return false;
 }
 
+const PORTAL_HANDOFF_KEY = 'legacy-portal-handoff';
+const PORTAL_HANDOFF_MAX_AGE_MS = 10 * 60 * 1000;
+
+function handOffMembershipToPortal(email) {
+  try {
+    if (!email || !email.includes('@')) return;
+    sessionStorage.setItem(PORTAL_HANDOFF_KEY, JSON.stringify({ email: email, at: Date.now() }));
+    if (typeof window !== 'undefined' && window.location && typeof window.location.assign === 'function') {
+      window.location.assign('/portal');
+    }
+  } catch (err) { /* stay on the saved-membership message; the continuation link still works */ }
+}
+
+// Read and remove the one-time membership hand-off. Returns the email or null.
+function takePortalHandoff(now) {
+  try {
+    const raw = sessionStorage.getItem(PORTAL_HANDOFF_KEY);
+    if (!raw) return null;
+    sessionStorage.removeItem(PORTAL_HANDOFF_KEY);
+    const data = JSON.parse(raw);
+    const age = (now || Date.now()) - Number(data && data.at);
+    if (!data || typeof data.email !== 'string' || !data.email.includes('@') || !(age >= 0 && age <= PORTAL_HANDOFF_MAX_AGE_MS)) return null;
+    return data.email.trim();
+  } catch (err) {
+    return null;
+  }
+}
+
 function submitMembership(e) {
   e.preventDefault();
   const form = document.getElementById('membershipForm');
-  const name = splitName(document.getElementById('memName').value);
-  const payload = {
-    kind: 'membership',
-    source: 'site_form:membership',
-    external_ref: intakeExternalRef(form, 'membership'),
-    first_name: name.first_name,
-    last_name: name.last_name,
-    email: document.getElementById('memEmail').value.trim(),
-    caring_for: document.getElementById('memCaringFor').value,
-    message: document.getElementById('memNote').value,
-  };
-
-  postIntake(form, payload).then(function () {
-    setFormState(form, 'success');
-  }).catch(function () {
-    setFormState(form, 'error', "We couldn't send this form just now. Please email us and we'll take it from there.");
+  if (!form || ['pending', 'unknown', 'success'].includes(membershipSubmissions.get(form)?.phase)) return false;
+  let payload;
+  try {
+    const name = splitName(document.getElementById('memName').value);
+    payload = {
+      kind: 'membership',
+      source: 'site_form:membership',
+      external_ref: intakeExternalRef(form, 'membership'),
+      first_name: name.first_name,
+      last_name: name.last_name,
+      email: document.getElementById('memEmail').value.trim(),
+      caring_for: document.getElementById('memCaringFor').value,
+      message: document.getElementById('memNote').value,
+    };
+  } catch {
+    // No request has started. In particular, do not silently replace a failed
+    // persistent retry key with a new identity and risk a duplicate later.
+    showMembershipState(form, { phase: 'error', message: "We couldn't prepare this form. It has not been sent. Please contact Legacy for help." }, true);
+    return false;
+  }
+  showMembershipState(form, { phase: 'pending' });
+  const uncertain = () => showMembershipState(form, {
+    phase: 'unknown', message: "We can't confirm whether your membership request was saved. Please don't submit it again. Contact Legacy so we can check it for you."
+  }, true);
+  // This is a UI deadline, not a cancellation or permission to replay a write.
+  // A late response can still establish the original request's outcome.
+  const timer = setTimeout(uncertain, 20000);
+  Promise.resolve().then(() => postIntake(form, payload)).then(function (result) {
+    showMembershipState(form, { phase: 'success', message: result.duplicate
+      ? 'A membership request was already received from this browser session. Continue to the portal and sign in with the email used for that request. Contact Legacy if you need to change it.'
+      : 'Your membership request is saved. Taking you to your portal to request your secure sign-in link…' }, true);
+    // Requested by Legacy (Oct 30): after a NEW membership is saved, go straight to the portal
+    // sign-in with the email filled in and one sign-in link requested. The email travels in
+    // sessionStorage only (never in the URL), and the portal never signs anyone in without
+    // the emailed link.
+    if (!result.duplicate) handOffMembershipToPortal(payload.email);
+  }).catch(function (error) {
+    // Timeout/conflict and unrecognized statuses are not proof that no write
+    // occurred. Only recognized request refusals permit a deliberate retry.
+    if ([400, 401, 403, 404, 405, 413, 415, 422, 429].includes(error.status)) {
+      showMembershipState(form, { phase: 'error', message: "We couldn't accept this form. Please check your details or contact Legacy for help." }, true);
+    } else {
+      // A dropped response or server fault can follow a committed write.
+      uncertain();
+    }
+  }).finally(function () {
+    clearTimeout(timer);
   });
   return false;
 }
@@ -421,28 +495,49 @@ function checkPortalSession() {
   const dashView = document.getElementById('dashView');
   if (!loginView || !dashView) return; // not on portal page
 
+  // Only a confirmed signed-out answer (HTTP 401) may start the one automatic sign-in
+  // link request from a membership hand-off. A signed-in session discards the hand-off;
+  // an unavailable or unreadable session check only prefills the email (manual send).
   fetch('/api/portal/me')
     .then(function (res) {
       if (res.status === 200) {
-        return res.json();
+        return res.json().then(function (data) { return { outcome: data && data.ok ? 'signed_in' : 'unavailable', data: data }; });
       }
-      throw new Error('unauthorized');
+      return { outcome: res.status === 401 ? 'signed_out' : 'unavailable' };
     })
-    .then(function (data) {
-      if (data.ok) {
-        renderPortalData(data);
+    .then(function (result) {
+      if (result.outcome === 'signed_in') {
+        takePortalHandoff(); // discard: an existing session wins, nothing is sent
+        renderPortalData(result.data);
         loadWellness();
         loginView.style.display = 'none';
         dashView.style.display = 'block';
       } else {
         dashView.style.display = 'none';
         loginView.style.display = 'block';
+        continueMembershipHandoff(result.outcome === 'signed_out' ? 'auto' : 'manual');
       }
     })
     .catch(function () {
       dashView.style.display = 'none';
       loginView.style.display = 'block';
+      continueMembershipHandoff('manual');
     });
+}
+
+function continueMembershipHandoff(mode) {
+  const email = takePortalHandoff();
+  const input = document.getElementById('loginEmail');
+  if (!email || !input) return;
+  input.value = email;
+  const welcome = document.getElementById('membershipWelcome');
+  if (welcome) {
+    welcome.textContent = mode === 'auto'
+      ? 'Welcome to the Caregiver Sanctuary! Your membership request is saved. We’re requesting a secure sign-in link for the email below; its status appears under the button.'
+      : 'Welcome to the Caregiver Sanctuary! Your membership request is saved. We couldn’t check your sign-in just now, so select “Send me a sign-in link” when you’re ready.';
+    welcome.hidden = false;
+  }
+  if (mode === 'auto') submitPortalLogin();
 }
 
 function submitPortalLogin(e) {

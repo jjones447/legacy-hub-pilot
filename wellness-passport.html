@@ -7,7 +7,7 @@
 <meta name="description" content="A way for caregivers to engage in wellness activities, track restorative moments, and earn community rewards.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=24528d832db2">
+<link rel="stylesheet" href="styles.css?v=5a365152da35">
 <link rel="icon" href="favicon.ico" sizes="32x32">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -188,9 +188,13 @@
       </div>
       <p class="privacy-line" data-cs="form.membership.privacy_line">By joining, you consent to Legacy using these details to create or update your caregiver record and follow up about Sanctuary programs. Please do not include medical record numbers or emergency details.</p>
       <button type="submit" class="btn btn-coral w-100" data-cs="form.membership.submit_label">Join free</button>
-      <div class="success-note" data-intake-success role="status" aria-live="polite">✓ Membership request received — welcome to The Sanctuary.</div>
-      <div class="error-note" data-intake-error role="alert" aria-live="assertive"></div>
-      <div class="routing-note" data-intake-routing>Behind the scenes: your caregiver record was created or updated and staff follow-up is queued.</div>
+      <p data-membership-pending role="status" aria-live="polite" hidden>Saving your membership request. Please wait; don't submit it again.</p>
+      <div class="success-note" data-intake-success role="status" aria-live="polite" tabindex="-1">Your membership request is saved.</div>
+      <div class="error-note" data-intake-error role="alert" aria-live="assertive" tabindex="-1"></div>
+      <div class="routing-note" data-intake-routing>
+        <a class="btn btn-plum" href="/portal">Continue to your portal</a>
+        <p>For a new membership, this page opens the portal with your email filled in and requests one secure sign-in link for it. If the portal doesn't open, use the button and select “Send me a sign-in link”. If you're already signed in, you'll see your existing portal. Joining never signs you in by itself; your portal opens only from the emailed link.</p>
+      </div>
     </form>
   </div>
 </div>
@@ -247,7 +251,7 @@
 </footer>
 
 
-<script src="app.js?v=d0de370fb623"></script>
+<script src="app.js?v=b6d1a39f0a32"></script>
 <script src="nav-v2.js"></script>
 </body>
 </html>
