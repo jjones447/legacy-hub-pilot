@@ -151,6 +151,7 @@ test('exact call wiring: every action branch calls its expected function and exc
     'close-coaching-interest': 'closeCoachingInterest()',
     'open-support-group-interest': 'openSupportGroupInterest(target)',
     'close-support-group-interest': 'closeSupportGroupInterest()',
+    'toggle-support-group-sessions': 'toggleSupportGroupSessions(target)',
     'open-register': 'openRegister(title, eventId)',
     'close-register': 'closeRegister()',
     'toggle-nav': "classList.toggle('open')",

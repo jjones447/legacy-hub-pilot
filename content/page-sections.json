@@ -73,7 +73,7 @@
       ],
       "panel_heading": "Membership includes",
       "rows": [
-        {"k": "Virtual Support Group", "v": "Schedule pending"},
+        {"k": "Virtual Support Group", "v": "Every Wednesday, 5–6 PM"},
         {"k": "Wellness Grants", "v": "Members eligible"},
         {"k": "Memory Socials", "v": "Drop-in respite"},
         {"k": "Caregiver events", "v": "Wellness · connection · education"},
@@ -83,17 +83,28 @@
     "programs.support_group": {
       "panel_heading": "Virtual Support Group",
       "rows": [
-        {"k": "When", "v": "Schedule pending — dates and times to be confirmed"},
+        {"k": "When", "v": "Every Wednesday, 5–6 PM"},
         {"k": "Where", "v": "Online — Google Meet"},
         {"k": "Facilitation", "v": "Alzheimer's Association-certified"},
         {"k": "Cost", "v": "Free"}
       ],
       "panel_cta_label": "View Events",
       "eyebrow": "Virtual Support Group",
-      "heading": "A judgment-free hour that's just for you",
+      "heading": "Virtual Caregiver Support Group",
       "paragraphs": [
-        "Caregivers gather online to talk honestly about the journey — the hard parts, the wins, and everything in between. Certified facilitation, zero judgment, real connection.",
-        "Session and registration details will be shared when confirmed."
+        "Connect with other caregivers who understand the journey. Our weekly virtual support group offers a welcoming space to share experiences, find encouragement, and receive support from others navigating caregiving."
+      ],
+      "sessions_heading": "Next session",
+      "sessions_more_label": "View upcoming sessions",
+      "sessions_none": "New session dates are coming soon.",
+      "sessions": [
+        {"date": "2026-11-04", "label": "Wednesday, November 4 · 5–6 PM"},
+        {"date": "2026-11-11", "label": "Wednesday, November 11 · 5–6 PM"},
+        {"date": "2026-11-18", "label": "Wednesday, November 18 · 5–6 PM"},
+        {"date": "2026-12-02", "label": "Wednesday, December 2 · 5–6 PM"},
+        {"date": "2026-12-09", "label": "Wednesday, December 9 · 5–6 PM"},
+        {"date": "2026-12-16", "label": "Wednesday, December 16 · 5–6 PM"},
+        {"date": "2026-12-30", "label": "Wednesday, December 30 · 5–6 PM"}
       ]
     },
     "programs.grants": {

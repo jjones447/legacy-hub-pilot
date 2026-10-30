@@ -365,6 +365,22 @@
             "type": "string",
             "maxLength": 2000
           }
+        },
+        "sessions_heading": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "sessions_more_label": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "sessions_none": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "sessions": {
+          "type": "array",
+          "readOnly": true
         }
       },
       "required": [

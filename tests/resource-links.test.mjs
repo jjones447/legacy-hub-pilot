@@ -161,15 +161,19 @@ test('(e) pending blog stories have noninteractive coming-soon copy, not fake ar
 });
 
 test('(f) Programs schedule copy comes from canonical sections without unconfirmed dates or reminder promises', () => {
+  // Schedule confirmed by the client (Shanelle, Slack 2026-10-30): weekly, every Wednesday 5-6 PM.
   const sections = JSON.parse(loadHtml('content/page-sections.json')).items;
   const copy = JSON.stringify([sections['programs.membership'], sections['programs.support_group']]);
-  assert.doesNotMatch(copy, /weekly|Wednesdays|Every Wednesday|5:00|6:00|reminders.*come to you/i);
-  assert.equal(sections['programs.support_group'].rows[0].v, 'Schedule pending — dates and times to be confirmed');
+  assert.doesNotMatch(copy, /reminders.*come to you/i);
+  assert.equal(sections['programs.support_group'].rows[0].v, 'Every Wednesday, 5–6 PM');
   assert.equal(sections['programs.support_group'].panel_cta_label, 'View Events');
   const html = loadHtml('programs.html');
-  assert.match(html, /Schedule pending — dates and times to be confirmed/);
-  assert.match(html, /Session and registration details will be shared when confirmed\./);
-  assert.doesNotMatch(html, /Weekly Support Group|Wednesdays|Every Wednesday|reminders.*come to you/);
+  assert.match(html, /<span class="k">When<\/span><span class="v">Every Wednesday, 5–6 PM<\/span>/);
+  assert.match(html, /Our weekly virtual support group offers a welcoming space to share experiences/);
+  assert.match(html, />View upcoming sessions<\/button>/);
+  assert.deepEqual(sections['programs.support_group'].sessions.map(s => s.date),
+    ['2026-11-04', '2026-11-11', '2026-11-18', '2026-12-02', '2026-12-09', '2026-12-16', '2026-12-30']);
+  assert.doesNotMatch(html, /reminders.*come to you/);
   assert.match(loadHtml('templates/programs.html.j2'), /sections\["programs\.support_group"\]\.paragraphs/);
 });
 
