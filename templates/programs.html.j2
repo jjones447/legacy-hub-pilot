@@ -39,7 +39,7 @@
       <div class="visual">
         <h3 class="fs-18-mb-14" data-cs="programs.membership.panel_heading">{{ sections["programs.membership"].panel_heading }}</h3>
 {%- for r in sections["programs.membership"].rows %}
-        <div class="kv-row"><span class="k">{{ r.k }}</span><span class="v">{{ r.v }}</span></div>
+        <div class="kv-row program-fact"><span class="k">{{ r.k }}</span><span class="v">{{ r.v }}</span></div>
 {%- endfor %}
       </div>
     </div>
@@ -52,7 +52,7 @@
       <div class="visual bg-white">
         <h3 class="fs-18-mb-14" data-cs="programs.support_group.panel_heading">{{ sections["programs.support_group"].panel_heading }}</h3>
 {%- for r in sections["programs.support_group"].rows %}
-        <div class="kv-row"><span class="k">{{ r.k }}</span><span class="v">{{ r.v }}</span></div>
+        <div class="kv-row program-fact"><span class="k">{{ r.k }}</span><span class="v">{{ r.v }}</span></div>
 {%- endfor %}
         <a href="events.html" class="btn btn-plum btn-sm mt-16 d-inline-block" data-cs="programs.support_group.panel_cta_label">{{ sections["programs.support_group"].panel_cta_label }}</a>
         <button type="button" class="btn btn-outline btn-sm mt-16" data-action="open-support-group-interest" aria-haspopup="dialog" aria-controls="supportGroupInterestModal">Get joining link</button>
@@ -101,7 +101,7 @@
       <div class="visual bg-white">
         <h3 class="fs-18-mb-14" data-cs="programs.socials.panel_heading">{{ sections["programs.socials"].panel_heading }}</h3>
 {%- for r in sections["programs.socials"].rows %}
-        <div class="kv-row"><span class="k">{{ r.k }}</span><span class="v">{{ r.v }}</span></div>
+        <div class="kv-row program-fact"><span class="k">{{ r.k }}</span><span class="v">{{ r.v }}</span></div>
 {%- endfor %}
         <p class="small muted mt-16" data-cs="programs.socials.panel_note">{{ sections["programs.socials"].panel_note }}</p>
       </div>

@@ -556,6 +556,10 @@ section { padding: 64px 0; }
 .kv-row:last-child { border-bottom: none; }
 .kv-row .k { color: var(--ink-soft); }
 .kv-row .v { font-weight: 600; }
+/* Keep public program-card labels distinct from wrapped values. */
+.program-fact { column-gap: 16px; }
+.program-fact .k { flex-shrink: 0; }
+.program-fact .v { min-width: 0; text-align: right; overflow-wrap: anywhere; }
 
 .timeline-item { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px dashed #efdfd3; font-size: 13.5px; }
 .timeline-item:last-child { border-bottom: none; }
