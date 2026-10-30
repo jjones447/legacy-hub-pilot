@@ -30,3 +30,39 @@ revision and observations; do not repeat forms, staff, data or provider mutation
 Original intake and the current acceptance entry are in the existing private
 Legacy issue54 receipt6447745541 and canonical native plan O26-01. The source PR
 and signed issue54 handoff retain exact revision and publication/readback facts.
+
+## Live verification — October 30, 2026
+
+[pc2-codex-42] The existing correction passed the reported deep-scroll journey
+on both https://staging.caregiversanctuary.org and https://caregiversanctuary.org
+at 05:06 UTC. No further navigation source change was necessary.
+
+The existing PC2 Chromium browser was used with a temporary owned QA tab.
+Home, Programs and Sanctuary each passed at 375x667, 320x568 and 667x375:
+18 page/environment/viewport combinations, all HTTP 200. After scrolling to the
+document bottom, the hamburger opened the fixed menu within the viewport without
+scrolling the document back up. A submenu opened, panel scrolling reached the last
+Donate link, two Escape presses closed submenu then menu and restored hamburger
+focus, and reopening worked at the same document position. Short landscape
+viewports kept the expanded menu bounded and independently scrollable.
+
+Additional checks on both environments passed portrait-to-landscape repositioning,
+return-to-desktop reset and desktop hover dropdowns. An initial staging desktop
+snapshot was taken before the resize event settled; waiting for the actual reset
+condition confirmed the correct behavior on both environments. This was a QA
+synchronization issue, not evidence of a product defect.
+
+The browser-loaded assets were HTTP 200 and byte-identical to the inspected source:
+
+- `nav-v2.js` SHA-256: `6eaaf9322025c957cc94a033695949c622fec752ea572792dadbd85804915fde`.
+- `styles.css` SHA-256: `1a577202a2979af02d7d10918af9663ef2f4de6e43b72209b60a549e176c0218`.
+
+This verifies the installed Chromium viewport journeys, not physical iOS/Safari
+or Shanelle's personal device. No remaining defect was reproduced in this scope;
+a later device-specific report should provide its browser and reproduction.
+No forms, customer data, authentication, deployment or provider settings changed.
+Only the owned temporary tabs were closed.
+
+Progressive engineering: reuse the existing correction, source tests and this
+runbook; bounded browser tooling supplies the missing installed-behavior evidence.
+No new runtime service or navigation implementation is justified by these results.
