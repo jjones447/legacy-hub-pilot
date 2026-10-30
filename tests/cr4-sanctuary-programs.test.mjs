@@ -309,7 +309,7 @@ test('O26-02/03/04: Sanctuary, About, and Get Involved place hero text over supp
   const sanctuaryHero = sanctuaryHtml.match(/<section class="hero has-media client-video-hero[^"]*">([\s\S]*?)<\/section>/)?.[1];
   assert.ok(sanctuaryHero, 'Sanctuary hero section must exist');
   assert.doesNotMatch(sanctuaryHero, /caregiver-sanctuary-logo\.png|client-sanctuary-wordmark|client-video-layout|client-video-panel/);
-  assert.match(sanctuaryHero, /<video class="hero-media" muted loop playsinline data-motion-autoplay preload="metadata" width="720" height="1280" aria-label="Caregiver Sanctuary community video">/);
+  assert.match(sanctuaryHero, /<video class="hero-media" muted loop playsinline data-motion-autoplay preload="metadata" width="720" height="1280" tabindex="0" aria-label="Caregiver Sanctuary community video \(select to pause or play\)">/);
   assert.doesNotMatch(sanctuaryHero, /\sautoplay(?:\s|>)/, 'motion preference is checked before playback');
   assert.match(sanctuaryHero, /<source src="media\/client-oct16\/sanctuary-video-1\.mp4#t=0\.1" type="video\/mp4">/);
   assert.match(sanctuaryHero, /<div class="hero-scrim" aria-hidden="true"><\/div>\s*<div class="container hero-content">/);

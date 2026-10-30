@@ -40,10 +40,10 @@ test('ordinary playback starts muted without the native Play overlay, and stops 
   assert.equal(h.video.controls, true);
 });
 
-test('a browser autoplay refusal is handled and leaves manual controls available', async () => {
+test('a browser autoplay refusal keeps the first frame without the native Play overlay', async () => {
   const { video } = mount({ blocked: true });
   await new Promise(resolve => setImmediate(resolve));
-  assert.equal(video.controls, true);
+  assert.equal(video.controls, false);
   assert.equal(video.plays, 1);
 });
 
@@ -51,4 +51,28 @@ test('pages without the marked video do not start media or register preference h
   const { video } = mount({ present: false });
   assert.equal(video.plays, 0);
   assert.equal(video.pauses, 0);
+});
+
+test('without native controls, a click or Enter/Space toggles playback', () => {
+  const handlers = {};
+  const preference = { matches: false, addEventListener() {} };
+  const video = {
+    controls: true, muted: false, autoplay: false, paused: false, plays: 0, pauses: 0,
+    play() { this.plays++; this.paused = false; return Promise.resolve(); },
+    pause() { this.pauses++; this.paused = true; },
+    addEventListener(type, fn) { handlers[type] = fn; },
+  };
+  runInNewContext(source, {
+    document: { querySelectorAll: () => [video] },
+    window: { matchMedia: () => preference },
+  });
+  assert.equal(video.controls, false);
+  handlers.click();
+  assert.equal(video.pauses, 1);
+  let prevented = false;
+  handlers.keydown({ key: ' ', preventDefault() { prevented = true; } });
+  assert.equal(prevented, true);
+  assert.equal(video.plays, 2);
+  handlers.keydown({ key: 'a', preventDefault() { throw new Error('unexpected'); } });
+  assert.equal(video.plays, 2);
 });
