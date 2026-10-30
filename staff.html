@@ -6,7 +6,7 @@
 <title>Legacy Hub · Staff console</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=1a577202a297">
+<link rel="stylesheet" href="styles.css?v=c24d6ee3d8d8">
 <link rel="icon" href="favicon.ico" sizes="32x32">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -77,18 +77,18 @@
       <div>
         <details class="panel" id="peopleManagementPanel">
           <summary><strong>People &amp; access</strong> <span class="small muted">— staff and caregivers</span></summary>
-          <p class="small muted mb-12">Find a person, choose their record, then edit their details or access. Staff and caregiver records are shown together here, with their permissions kept separate.</p>
+          <p class="small muted mb-12">Choose caregivers or staff, search for a person, then open their record. Each group keeps its own permissions.</p>
           <div class="staff-search-controls">
             <input type="search" id="caregiverSearchQuery" placeholder="Search names, email or phone" class="staff-search-input" aria-label="Search people">
             <select id="peopleRoleFilter" class="staff-search-select" aria-label="Filter people by role">
-              <option value="all">All people</option>
               <option value="caregiver">Caregivers</option>
+              <option value="team">Staff &amp; admins</option>
               <option value="staff">Staff</option>
               <option value="admin">Admins</option>
             </select>
             <button type="button" class="btn btn-sm btn-plum" data-action="search-caregivers">Search people</button>
           </div>
-        <div role="region" id="staffTeamPanel" aria-labelledby="staffListHeading">
+        <div role="region" id="staffTeamPanel" class="d-none" aria-labelledby="staffListHeading">
           <div class="flex-between-center mb-12">
             <h4 class="m-0" id="staffListHeading">Staff and admins</h4>
             <button class="btn btn-sm btn-outline" id="refreshStaffTeamBtn">Refresh</button>
@@ -121,12 +121,14 @@
             </select>
           </div>
           <div id="caregiverSearchResultsContainer">
+            <div class="people-results-scroll" tabindex="0" role="region" aria-label="Caregiver search results">
             <table class="data">
               <thead><tr><th>Caregiver</th><th>Contact</th><th>Status</th><th>Segments</th><th>Actions</th></tr></thead>
               <tbody id="caregiverSearchResultsBody">
                 <tr><td colspan="5" class="text-center muted small">Use the search box above to find caregivers.</td></tr>
               </tbody>
             </table>
+            </div>
             <div class="staff-paging-bar" id="caregiverSearchPaginationRow">
               <span id="caregiverSearchPagingInfo" class="small muted">0 caregivers</span>
               <div class="staff-btn-group">
@@ -198,15 +200,22 @@
             <h4 class="m-0">Caregiver wellness</h4>
             <button class="btn btn-sm btn-outline" id="refreshWellnessBtn">Refresh</button>
           </div>
-          <p class="small muted mb-12">Caregivers submit wellness check-ins through their own portal accounts. Only caregivers with recorded check-ins appear in this list; adding a staff account does not add a caregiver here. This chart summarizes those check-ins, not a diagnosis or a measure of improvement. Choose caregivers and a time range.</p>
+          <p class="small muted mb-12">Caregivers submit wellness check-ins through their own portal accounts. Only caregivers with recorded check-ins appear in this list; adding a staff account does not add a caregiver here. This chart summarizes those check-ins, not a diagnosis or a measure of improvement. Choose a caregiver to show their chart.</p>
           <div class="wellness-controls">
-            <select id="wellnessCaregivers" multiple aria-label="Caregivers"></select>
+            <div class="wellness-picker">
+              <label for="wellnessCaregiverSearch">Find a caregiver</label>
+              <input type="search" id="wellnessCaregiverSearch" class="staff-search-input" placeholder="Search caregiver names" aria-controls="wellnessCaregivers">
+              <label for="wellnessCaregivers" class="small">Choose a caregiver</label>
+              <select id="wellnessCaregivers" size="6" aria-describedby="wellnessPickerStatus"></select>
+              <p id="wellnessPickerStatus" class="small muted" role="status" aria-live="polite">Loading caregivers…</p>
+            </div>
+            <label class="wellness-range" for="wellnessRange">Time range
             <select id="wellnessRange" class="staff-filter-select-sm" aria-label="Time range">
               <option value="month">Last month</option>
               <option value="quarter" selected>Last quarter</option>
               <option value="year">Last year</option>
             </select>
-            <button class="btn btn-sm btn-plum" data-action="wellness-show">Show</button>
+            </label>
           </div>
           <div id="wellnessChart" class="wellness-chart">
             <p class="muted small text-center my-20">No check-ins yet.</p>
@@ -257,9 +266,9 @@
   </div>
 </footer>
 
-<script src="app.js?v=da2757b5a75b"></script>
+<script src="app.js?v=33043ae9e4bf"></script>
 <script src="nav-v2.js"></script>
-<script src="staff.js?v=4cf30e3d2ad4"></script>
+<script src="staff.js?v=97673d23beb2"></script>
 </body>
 </html>
 

@@ -843,6 +843,7 @@ function loadLiveEvents() {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+  initPortalSummaryPreview();
   loadLiveEvents();
   checkPortalSession();
 });
@@ -1058,7 +1059,6 @@ document.addEventListener('submit', function (e) {
 let wellnessQuestions = [];
 
 async function loadWellness() {
-  renderSampleWellness();
   const summary = document.getElementById('portalWellnessSummary');
   if (summary) summary.textContent = 'Loading your saved check-ins…';
   drawWellnessTrend(document.getElementById('portalWellnessTrend'), []);
@@ -1110,20 +1110,20 @@ function renderWellnessHistory(container, history, emptyText) {
   container.appendChild(list);
 }
 
-function renderSampleWellness() {
-  const container = document.getElementById('portalWellnessSampleTrend');
-  if (!container) return;
-  // Display-only examples: never merged with API history or passed to the check-in form.
-  const sample = [
-    { created_at: '2026-06-01', score: 42 },
-    { created_at: '2026-07-01', score: 56 },
-    { created_at: '2026-08-01', score: 50 },
-    { created_at: '2026-09-01', score: 68 },
-    { created_at: '2026-10-01', score: 72 }
-  ];
-  drawWellnessTrend(container, sample.map(function (entry) { return entry.score; }),
-    'SAMPLE DATA, not your saved check-ins. Scores oldest to newest: ');
-  renderWellnessHistory(document.getElementById('portalWellnessSampleRows'), sample, '');
+function initPortalSummaryPreview() {
+  const preview = document.getElementById('portalWellnessSample');
+  const actual = document.getElementById('portalAccountSummary');
+  if (!preview || !actual) return;
+  // Display-only examples: no session, storage, API data or check-in changes.
+  const sync = function () { actual.hidden = preview.open; };
+  preview.open = false;
+  sync();
+  preview.addEventListener('toggle', sync);
+  document.getElementById('portalPreviewReturn')?.addEventListener('click', function () {
+    preview.open = false;
+    sync();
+    document.getElementById('portalPreviewToggle')?.focus();
+  });
 }
 
 function drawWellnessTrend(container, scores, accessibleLabel) {

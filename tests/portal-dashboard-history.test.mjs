@@ -38,22 +38,30 @@ function ui(reply = { ok: true, history: [], questions: [], due: false }) {
 }
 const rows = element => element.children[0]?.children.map(row => row.textContent) || [];
 
-test('sample uses the existing chart renderer without changing saved history or making requests', () => {
+test('summary preview is opt-in, resets on reload and returns to real records without requests', () => {
   const h = ui();
-  const history = Object.freeze([Object.freeze({ created_at: '2026-10-01 12:00:00', score: 20 }),
-    Object.freeze({ created_at: '2026-10-12 12:00:00', score: 30 })]);
+  const listeners = {};
+  let focused = 0;
+  h.elements.portalWellnessSample = { open: true, addEventListener(type, callback) { listeners[type] = callback; } };
+  h.elements.portalAccountSummary = { hidden: true };
+  h.elements.portalPreviewReturn = { addEventListener(type, callback) { listeners.return = callback; } };
+  h.elements.portalPreviewToggle = { focus() { focused++; } };
+  const history = Object.freeze([Object.freeze({ created_at: '2026-10-01', score: 20 }), Object.freeze({ created_at: '2026-10-12', score: 30 })]);
   h.context.renderWellness({ history, due: false });
-  h.context.renderSampleWellness();
-  h.context.renderSampleWellness();
-  assert.deepEqual(rows(h.elements.portalWellnessHistoryRows), ['2026-10-01 — 20 out of 100', '2026-10-12 — 30 out of 100']);
+  const before = JSON.stringify(rows(h.elements.portalWellnessHistoryRows));
+  h.context.initPortalSummaryPreview();
+  assert.equal(h.elements.portalWellnessSample.open, false);
+  assert.equal(h.elements.portalAccountSummary.hidden, false);
+  h.elements.portalWellnessSample.open = true;
+  listeners.toggle();
+  assert.equal(h.elements.portalAccountSummary.hidden, true);
+  listeners.return();
+  assert.equal(h.elements.portalWellnessSample.open, false);
+  assert.equal(h.elements.portalAccountSummary.hidden, false);
+  assert.equal(focused, 1);
+  assert.equal(JSON.stringify(rows(h.elements.portalWellnessHistoryRows)), before);
   assert.match(h.elements.portalWellnessTrend.children[0].attributes['aria-label'], /20, 30$/);
-  const sample = h.elements.portalWellnessSampleTrend.children[0];
-  assert.match(sample.attributes['aria-label'], /^SAMPLE DATA, not your saved check-ins/);
-  assert.equal(h.elements.portalWellnessSampleTrend.children.length, 1);
-  assert.equal(rows(h.elements.portalWellnessSampleRows).length, 5);
-  assert.doesNotMatch(h.elements.portalWellnessSummary.textContent, /sample|42|56|68|72/i);
-  assert.equal(history.length, 2);
-  assert.equal(h.calls.length, 0, 'sample/history rendering cannot fetch or save');
+  assert.equal(h.calls.length, 0);
 });
 
 test('empty real history stays empty beside a separately labeled sample', async () => {
@@ -61,14 +69,14 @@ test('empty real history stays empty beside a separately labeled sample', async 
   await h.context.loadWellness();
   assert.equal(h.elements.portalWellnessHistoryRows.textContent, 'No saved check-ins yet.');
   assert.equal(h.elements.portalWellnessTrend.children.length, 0);
-  assert.equal(h.elements.portalWellnessSampleTrend.children.length, 1);
+  assert.equal(h.elements.portalWellnessSampleTrend.children.length, 0, 'no fictional wellness scores');
   assert.equal(h.calls.length, 1);
   assert.equal(h.calls[0][0], '/api/portal/wellness');
   assert.equal(h.calls[0][1].credentials, 'same-origin');
   assert.equal(h.calls[0][1].method, undefined, 'only the existing history GET');
 });
 
-test('sample can illustrate the UI on a failed history read without inventing saved health records', async () => {
+test('failed history read clears old scores and never creates fictional health records', async () => {
   const h = ui({ ok: false });
   h.context.renderWellness({ history: [{ created_at: '2026-10-01', score: 99 }, { created_at: '2026-10-02', score: 95 }], due: false });
   await h.context.loadWellness();
@@ -76,7 +84,7 @@ test('sample can illustrate the UI on a failed history read without inventing sa
   assert.equal(h.elements.portalWellnessTrend.children.length, 0);
   assert.equal(rows(h.elements.portalWellnessHistoryRows).length, 0);
   assert.equal(h.elements.portalWellnessHistoryRows.textContent, 'Your saved history is not available right now.');
-  assert.equal(h.elements.portalWellnessSampleTrend.children.length, 1);
+  assert.equal(h.elements.portalWellnessSampleTrend.children.length, 0, 'no fictional wellness scores');
   assert.equal(h.calls.length, 1);
 });
 
@@ -96,8 +104,9 @@ test('sample disclosure is caregiver-visible, separate from the real check-in fo
   const sample = html.match(/<details[^>]+id="portalWellnessSample">([\s\S]*?)<\/details>/)?.[1];
   assert.ok(sample);
   assert.match(sample, /SAMPLE DATA/);
-  assert.match(sample, /not your check-ins.*never saved to your health record/);
-  assert.doesNotMatch(sample, /<form|<input|<button|data-action=/);
+  assert.match(sample, /preview adds no check-ins or scores/);
+  assert.doesNotMatch(sample, /<form|<input|data-action=/);
+  assert.match(sample, /id="portalPreviewReturn">Return to my records/);
 });
 
 test('next social ignores past, invalid and nonregistered entries; real account data stays unchanged', () => {
@@ -150,10 +159,10 @@ test('tile copy distinguishes account registrations, public calendar/library and
 
 
 test('portal events lead the real summary cards and wellness is a separate full-width section below', () => {
-  const gridStart=html.indexOf('<div class="portal-summary-grid">');
+  const gridStart=html.indexOf('id="portalAccountSummary"');
   const wellness=html.indexOf('id="portalWellnessTile"');
   const sample=html.indexOf('id="portalWellnessSample"');
-  assert.ok(gridStart>0 && wellness>gridStart && sample>wellness);
+  assert.ok(gridStart>0 && wellness>gridStart && sample<gridStart);
   const realCards=html.slice(gridStart,wellness);
   assert.ok(realCards.indexOf('My Events') < realCards.indexOf('My Wellness Grant'));
   assert.ok(realCards.indexOf('My Wellness Grant') < realCards.indexOf('My Memory Socials'));
@@ -169,9 +178,13 @@ test('whole-portal examples remain opt-in, fictional, outside actual records and
   const match=html.match(/<details([^>]+)id="portalWellnessSample">([\s\S]*?)<\/details>/);
   assert.ok(match);assert.doesNotMatch(match[1],/\bopen(?:\s|=|$)/);
   assert.match(match[2],/Preview a filled-out portal \(sample data\)/);
-  for(const area of ['events','grant','socials','resources','wellness']) assert.match(match[2],new RegExp(`data-portal-sample="${area}"`));
-  assert.match(match[2],/All events, applications, attendance and scores below are illustrations/);
+  for(const area of ['events','grant','socials','resources']) assert.match(match[2],new RegExp(`data-portal-sample="${area}"`));
+  assert.match(match[2],/events, grant and Memory Social visits below are fictional illustrations/);
   assert.match(match[2],/Nothing here registers you, submits an application, awards a grant or makes a payment/);
-  assert.doesNotMatch(match[2],/<form\b|<input\b|<button\b|data-action=|href="(?:\/api|https?:)/);
+  assert.doesNotMatch(match[2],/<form\b|<input\b|data-action=|href="(?:\/api|https?:)/);
+  assert.doesNotMatch(match[2], /data-portal-sample="wellness"|portalWellnessSampleTrend|out of 100/);
+  assert.equal((match[2].match(/Sample registration/g) || []).length, 3);
+  assert.match(match[2], /Fictional Memory Social visit 1/);
+  assert.match(match[2], /Fictional Memory Social visit 2/);
   for(const id of ['portalEventsList','portalGrantStatus','portalSocialsCount','portalWellnessHistoryRows','portalWellnessForm']) assert.equal(match[2].includes(`id="${id}"`),false,id);
 });

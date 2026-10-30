@@ -403,3 +403,123 @@ test('a failed staff refresh cannot revive stale admin controls when filtering',
   assert.match(h.list.innerHTML,/Could not load staff/);
   assert.doesNotMatch(h.list.innerHTML,/Stale Admin|staff-edit|submit-add-staff/);
 });
+
+test('People role choices show exactly one group and retain the shared search', () => {
+  const nodes = { peopleRoleFilter: { value: 'caregiver' } };
+  for (const id of ['staffTeamPanel', 'caregiverSearchPanel']) {
+    nodes[id] = { hidden: false, classList: { toggle(_class, hidden) { nodes[id].hidden = hidden; } } };
+  }
+  let searches = 0;
+  const context = createContext({ document: { getElementById: id => nodes[id] }, editingStaffEmail: 'old', searchCaregivers(offset) { assert.equal(offset, 0); searches++; } });
+  runInContext(source.slice(source.indexOf('function filterPeopleByRole('), source.indexOf('function filterBySegment(')), context);
+  for (const role of ['caregiver', 'team', 'staff', 'admin']) {
+    nodes.peopleRoleFilter.value = role;
+    context.filterPeopleByRole();
+    assert.equal(nodes.staffTeamPanel.hidden, role === 'caregiver');
+    assert.equal(nodes.caregiverSearchPanel.hidden, role !== 'caregiver');
+    assert.equal(context.editingStaffEmail, null);
+  }
+  assert.equal(searches, 4);
+  const filter = html.match(/id="peopleRoleFilter"[\s\S]*?<\/select>/)[0];
+  assert.doesNotMatch(filter, /value="all"/);
+  assert.match(html, /id="staffTeamPanel" class="d-none"/);
+  assert.match(html, /class="people-results-scroll" tabindex="0" role="region" aria-label="Caregiver search results"/);
+});
+
+function wellnessHarness(fetchOverride) {
+  let options = [];
+  let value = '';
+  const select = {
+    disabled: false,
+    get options() { return options; },
+    get value() { return value; },
+    set value(next) { value = options.some(o => o.value === next) ? next : ''; },
+    set textContent(_) { options = []; value = ''; },
+    appendChild(option) { options.push(option); },
+  };
+  const nodes = { wellnessCaregivers: select, wellnessCaregiverSearch: { value: '' }, wellnessRange: { value: 'quarter' }, wellnessPickerStatus: { textContent: '' }, wellnessChart: { innerHTML: '' } };
+  const calls = [];
+  const draws = [];
+  const caregivers = [{ id: 'one', first_name: 'Example', last_name: 'Alpha', checkins: 3 }, { id: 'two', first_name: 'Example', last_name: 'Beta', checkins: 2 }];
+  const reply = data => ({ ok: true, json: async () => ({ ok: true, ...data }) });
+  const context = createContext({
+    document: { getElementById: id => nodes[id], createElement: () => ({}) },
+    URLSearchParams, escapeHtml,
+    drawWellnessChart(_chart, data) { draws.push(data); nodes.wellnessChart.innerHTML = data.label || 'chart'; },
+    fetch: async url => { calls.push(url); return fetchOverride ? fetchOverride(url, reply) : reply({ caregivers }); },
+  });
+  runInContext(source.slice(source.indexOf('let wellnessCaregivers = [];'), source.indexOf('function drawWellnessChart(')), context);
+  return { context, nodes, select, calls, draws, caregivers, reply };
+}
+
+test('wellness name search preserves a visible selection, clears hidden selections and handles no matches', async () => {
+  const h = wellnessHarness();
+  await h.context.loadWellnessCaregivers();
+  assert.equal(h.select.options.length, 2);
+  assert.equal(h.select.value, '');
+  assert.equal(h.calls.length, 1, 'loading a list does not silently choose a person');
+  h.select.value = 'two';
+  h.nodes.wellnessCaregiverSearch.value = 'BETA';
+  await h.context.filterWellnessCaregivers();
+  assert.equal(h.select.options.length, 1);
+  assert.equal(h.select.value, 'two');
+  assert.match(h.calls.at(-1), /caregiver=two&range=quarter/);
+  h.nodes.wellnessCaregiverSearch.value = 'nobody';
+  await h.context.filterWellnessCaregivers();
+  assert.equal(h.select.value, '');
+  assert.equal(h.select.disabled, true);
+  assert.match(h.nodes.wellnessPickerStatus.textContent, /No caregivers match/);
+  assert.match(h.nodes.wellnessChart.innerHTML, /Choose a caregiver/);
+  assert.equal(h.calls.length, 2, 'no result does not fetch an unselected chart');
+  h.nodes.wellnessCaregiverSearch.value = '';
+  await h.context.filterWellnessCaregivers();
+  assert.equal(h.select.disabled, false);
+  assert.equal(h.select.options.length, 2);
+});
+
+test('wellness selection and range changes ignore slower results for the previous person', async () => {
+  let finish;
+  const slow = new Promise(resolve => { finish = resolve; });
+  const h = wellnessHarness((url, reply) => url === '/api/staff/wellness'
+    ? reply({ caregivers: [{ id: 'one' }, { id: 'two' }] })
+    : url.includes('caregiver=one') ? slow : reply({ label: 'Current person' }));
+  await h.context.loadWellnessCaregivers();
+  h.select.value = 'one';
+  const first = h.context.showWellnessChart();
+  h.select.value = 'two';
+  h.nodes.wellnessRange.value = 'month';
+  await h.context.showWellnessChart();
+  finish(h.reply({ label: 'Previous person' }));
+  await first;
+  assert.equal(h.nodes.wellnessChart.innerHTML, 'Current person');
+  assert.equal(h.draws.length, 1);
+  assert.match(h.calls.at(-1), /caregiver=two&range=month/);
+});
+
+test('failed wellness refresh clears stale list and chart without automatic retry', async () => {
+  let fail = false;
+  const h = wellnessHarness((_url, reply) => {
+    if (fail) throw new Error('Offline <error>');
+    return reply({ caregivers: [{ id: 'one' }] });
+  });
+  await h.context.loadWellnessCaregivers();
+  h.select.value = 'one';
+  fail = true;
+  await h.context.loadWellnessCaregivers();
+  assert.equal(h.select.options.length, 0);
+  assert.equal(h.select.disabled, true);
+  assert.match(h.nodes.wellnessPickerStatus.textContent, /list unavailable/);
+  assert.match(h.nodes.wellnessChart.innerHTML, /Offline &lt;error>/);
+  assert.equal(h.calls.length, 2);
+});
+
+test('wellness uses native single selection with immediate change handlers and no Show step', () => {
+  const picker = html.match(/<select id="wellnessCaregivers"[^>]*>/)[0];
+  assert.match(picker, /size="6"/);
+  assert.doesNotMatch(picker, /multiple/);
+  assert.doesNotMatch(html, /data-action="wellness-show"/);
+  for (const id of ['wellnessCaregivers', 'wellnessRange']) {
+    assert.ok(source.includes(`getElementById('${id}')?.addEventListener('change', showWellnessChart)`));
+  }
+  assert.ok(source.includes("getElementById('wellnessCaregiverSearch')?.addEventListener('input', filterWellnessCaregivers)"));
+});
