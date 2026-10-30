@@ -230,12 +230,21 @@ function submitMembership(e) {
 
 /* ---------- Virtual support group: sign up (saved for staff), then go to Google Meet ---------- */
 let supportGroupInterestOpener = null;
+let supportGroupSession = '';
 
 function openSupportGroupInterest(opener) {
   const dialog = document.getElementById('supportGroupInterestModal');
   const form = document.getElementById('supportGroupInterestForm');
   if (!dialog || !form || dialog.open) return;
   supportGroupInterestOpener = opener || document.activeElement;
+  // A clicked session date (data-session) is shown in the form and saved with the sign-up.
+  const session = opener && typeof opener.getAttribute === 'function' ? opener.getAttribute('data-session') : '';
+  supportGroupSession = typeof session === 'string' ? session.trim().slice(0, 120) : '';
+  const note = document.getElementById('supportGroupSession');
+  if (note) {
+    note.textContent = supportGroupSession ? 'Session: ' + supportGroupSession : '';
+    note.hidden = !supportGroupSession;
+  }
   setFormState(form, 'idle');
   dialog.showModal();
   document.getElementById('supportGroupName').focus();
@@ -273,7 +282,7 @@ function submitSupportGroupInterest(e) {
     first_name: name.first_name,
     last_name: name.last_name,
     email: document.getElementById('supportGroupEmail').value.trim(),
-    message: 'Signed up for the Virtual Caregiver Support Group',
+    message: 'Signed up for the Virtual Caregiver Support Group' + (supportGroupSession ? ' — ' + supportGroupSession : ''),
   };
   postIntake(form, payload).then(function () {
     setFormState(form, 'success');

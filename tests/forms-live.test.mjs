@@ -240,7 +240,10 @@ test('support-group sign-up is a named native dialog with only name/email, then 
   const panel = page.match(/<section class="section-sand" id="support-group">[\s\S]*?<\/section>/)?.[0];
   assert.equal((panel.match(/class="btn /g) || []).length, 1, 'the support group has exactly one button');
   assert.match(panel, /id="join-support-group"[^>]*data-action="open-support-group-interest"[^>]*>Join an upcoming session<\/button>/);
-  assert.match(panel, /<li>Wednesday, November 4 · 5–6 PM<\/li>\s*<li>Wednesday, November 11 · 5–6 PM<\/li>\s*<li>Wednesday, November 18 · 5–6 PM<\/li>/);
+  for (const date of ['Wednesday, November 4 · 5–6 PM', 'Wednesday, November 11 · 5–6 PM', 'Wednesday, November 18 · 5–6 PM']) {
+    assert.ok(panel.includes(`<li><button type="button" class="session-link" data-action="open-support-group-interest" data-session="${date}" aria-haspopup="dialog" aria-controls="supportGroupInterestModal">${date}</button></li>`), date);
+  }
+  assert.match(dialog, /<p class="session-note" id="supportGroupSession" hidden><\/p>/);
   assert.doesNotMatch(panel, /November 25/);
 });
 
@@ -365,4 +368,34 @@ test('support-group dialog overrides the global margin reset with scoped native 
   assert.match(dialog, /max-height:\s*calc\(100vh - 40px\)/);
   assert.match(dialog, /max-height:\s*calc\(100dvh - 40px\)/);
   assert.match(styles, /#supportGroupInterestModal::backdrop\s*\{[^}]*rgba\(43,\s*35,\s*51,\s*0\.55\)/);
+});
+
+test('support-group: clicking a session date shows it in the form and saves it with the sign-up', async () => {
+  const app = file('app.js');
+  const source = app.slice(0, app.indexOf('/* ---------- Resource hub:'));
+  const regions = Object.fromEntries(['[data-intake-success]', '[data-intake-routing]', '[data-intake-error]', '[type="submit"]']
+    .map(selector => [selector, { style: { display: 'none' }, disabled: false, textContent: '' }]));
+  regions['[data-intake-routing] a[href^="https://meet.google.com/"]'] = { getAttribute: () => 'https://meet.google.com/dmc-orwi-afk' };
+  const form = { id: 'supportGroupInterestForm', querySelector: selector => regions[selector] };
+  const note = { textContent: '', hidden: true };
+  const dialog = { open: false, showModal() { this.open = true; }, close() { this.open = false; }, addEventListener() {} };
+  const nodes = { supportGroupInterestModal: dialog, supportGroupInterestForm: form, supportGroupSession: note,
+    supportGroupName: { value: 'Fictional Person', focus() {} }, supportGroupEmail: { value: 'fictional@example.invalid' } };
+  const posted = []; const assigned = [];
+  const context = { window: { location: { assign: url => assigned.push(url) } }, document: { getElementById: id => nodes[id] },
+    crypto: { randomUUID: () => 'fictional-session-ref' }, sessionStorage: { getItem: () => null, setItem() {} },
+    fetch: async (url, options) => { posted.push(JSON.parse(options.body)); return { ok: true, status: 201, json: async () => ({ ok: true }) }; } };
+  vm.runInNewContext(source, context);
+  context.openSupportGroupInterest({ getAttribute: name => name === 'data-session' ? 'Wednesday, November 11 · 5–6 PM' : null, focus() {} });
+  assert.equal(note.hidden, false);
+  assert.equal(note.textContent, 'Session: Wednesday, November 11 · 5–6 PM');
+  context.submitSupportGroupInterest({ preventDefault() {} });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(posted[0].message, 'Signed up for the Virtual Caregiver Support Group — Wednesday, November 11 · 5–6 PM');
+  assert.deepEqual(assigned, ['https://meet.google.com/dmc-orwi-afk']);
+  // Opening from the general button clears any earlier date.
+  dialog.open = false;
+  context.openSupportGroupInterest({ getAttribute: () => null, focus() {} });
+  assert.equal(note.hidden, true);
+  assert.equal(note.textContent, '');
 });
