@@ -61,3 +61,43 @@ photo/audit objects as a rollback shortcut. Record exact source/artifact, stagin
 production and user-visible proof separately in the existing private project ledger.
 
 Authored by [pc2-codex-42].
+
+## Live staging acceptance — October 30, 2026
+
+[pc2-codex-42] At 05:19 UTC, the ordinary authenticated staging staff editor
+uploaded the existing approved Legacy logo to the empty photo field of the
+staging Virtual Support Group event. The caption is **Legacy logo — staging
+example**; it is a brand illustration, not a photograph of an event. The upload
+used the existing media store. Event details, publication state and registration
+count remained unchanged. No production record or archived fixture was changed,
+and no notification, new account, service, bucket or credential was created.
+
+- Upload returned HTTP 200 and original `event.photo.updated` audit **149**.
+  The staff preview decoded at **1050 × 600** and displayed **Photo saved**.
+- Reloading the staff console and opening **Change log** showed the photo update.
+  Its API readback retained the same audit ID and photo association, with no
+  unsupported Undo action.
+- The published-events API returned the saved association and caption. The public
+  staging media URL returned HTTP 200, `image/png`, `Cache-Control: no-store`,
+  and the exact uploaded bytes: **50,135 bytes**, SHA-256
+  `698ae0dd91cfc5364cb51835ebbe67940a2b703b518d31822ce9ef8b0f3241a4`.
+- The staging brand example remains saved for staff use. There was one upload;
+  no replacement, deletion, replay or event lifecycle cycle was performed.
+
+**Acceptance limit:** all six published staging events at this check had ended
+by October 28. The public upcoming-events renderer correctly omitted those past
+events. Staff preview, audit, API association and public media delivery are live
+verified. A naturally upcoming client event still needs an actual future date.
+Dates were not invented or shifted to manufacture that proof. No physical-device
+or client acceptance is implied.
+
+At 05:23 UTC, a separate owned staging public-page tab used Playwright's fixed
+browser date **2026-07-08T12:00:00Z**, immediately before the existing event, to
+qualify installed card rendering. At **1280px** and **390px**, the actual Events
+page, events API and saved media each returned HTTP 200. The Virtual Support Group
+card displayed the exact caption and decoded 1050 × 600 logo within the viewport,
+using `object-fit: contain`; visual inspection confirmed the complete brand image.
+No API response, DOM content or media was mocked, and no server date, event date,
+status or registration was changed. The temporary tab was closed afterwards.
+This completes **controlled browser-date installed rendering** evidence; it does
+not claim that the real calendar contains an upcoming event.
