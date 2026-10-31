@@ -1411,3 +1411,6 @@ main ul.measure-620 { margin: 16px 0; padding-left: 24px; }
 #supportGroupInterestModal .session-note { font-weight: 600; margin: 4px 0 12px; }
 .link-button { background: none; border: 0; padding: 0; font: inherit; font-size: 14px; font-weight: 600; color: var(--plum); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .link-button:hover, .link-button:focus-visible { color: var(--coral-dark); }
+
+/* Portal: one-time membership hand-off status (pc2-claude-ct-2, Oct 30). Visible when not [hidden]. */
+.portal-handoff-note { margin: 0 0 12px; padding: 10px 12px; border-radius: 6px; background: #f3f4f6; color: #374151; font-size: 14px; }
