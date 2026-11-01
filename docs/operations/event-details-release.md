@@ -15,3 +15,25 @@ After installation, verify draft creation with both fields, staff readback, edit
 Retain the prior deployment identifier and package. Roll back code to that qualified deployment if necessary; leave the two additive nullable columns in place. Old code ignores them. Do not drop columns, delete events or registrations, reset the database, or replay customer/provider actions to roll back. Record source, database/migration readback, deployment and browser results separately in the existing private acceptance record.
 
 Engineering source and tests: [pc2-codex-42], October 25, 2026.
+
+## Support-group confirmation email — November 1 support-only slice
+
+Owner: pc2-claude-ct-2 (support-only separation of #285, approved by the requester Nov 1;
+manifest legacy-caregiver-hub#54 comment 6564143966). A successful **new** Virtual Caregiver Support
+Group sign-up (`kind: support_request`, `source: site_form:support_group`) attempts one
+confirmation email through the existing Resend sender. It includes the session label/date
+from the authored session list captured in the original intake audit (`session_date`), the
+approved Meet link and the programs page. It uses #285's durable claim, outcome audits
+and follow-up recovery state machine unchanged.
+
+**Not included:** ordinary event registrations get **no** confirmation email and no
+confirmation work (`functions/api/intake.js` dispatches only `isSupportGroup`). The #285
+ordinary-event atomic conversion, registration email helpers and frontend copy hunk are
+excluded. There is no new service, provider, secret, schema or migration.
+
+**Mail policy:** `canSendEmail(env, { purpose: 'confirmation' })` sends in production (or
+without `ENVIRONMENT`) when the existing key is present. Preview needs
+`CONFIRMATION_PREVIEW_MAIL_ENABLED` plus an exact `CONFIRMATION_PREVIEW_RECIPIENTS`
+allowlist. Portal sign-in mail keeps its own original policy. Installing this release
+enables real support-group confirmations in production. That activation is a root-gated
+release decision; source and tests do not authorize it.

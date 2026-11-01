@@ -313,11 +313,12 @@ test('support-group delegated request reaches its own shared staff task and orig
   assert.equal(queue.queue[0].caregiver_id, caregiver.id);
   assert.equal(queue.queue[0].source, 'site_form:support_group');
   assert.equal(queue.queue[0].kind, 'support_request');
-  assert.equal(queue.queue[0].detail, 'Signed up for the Virtual Caregiver Support Group');
+  assert.ok(queue.queue[0].detail.startsWith('Signed up for the Virtual Caregiver Support Group\n\n'));
+  assert.match(queue.queue[0].detail, /Confirmation email not sent/);
   const audit = raw.prepare(`SELECT * FROM audit_log WHERE action = 'intake.support_request'`).get();
   assert.equal(audit.actor, 'site_form:support_group');
   assert.equal(audit.entity_id, caregiver.id);
-  assert.deepEqual(JSON.parse(audit.after_json), { kind: 'support_request', external_ref: 'fictional-support-group-ref', event_id: null });
+  assert.deepEqual(JSON.parse(audit.after_json), { kind: 'support_request', external_ref: 'fictional-support-group-ref', event_id: null, session_date: null });
   listeners.submit({ target: form, currentTarget: context.document, preventDefault() {} });
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(requests[1].payload.external_ref, requests[0].payload.external_ref);
