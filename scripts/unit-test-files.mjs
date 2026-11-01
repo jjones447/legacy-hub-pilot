@@ -61,6 +61,7 @@ export const UNIT_TEST_FILES = Object.freeze([
   'portal-caregiver-status.test.mjs',
   'portal-dashboard-history.test.mjs',
   'portal-dashboard-redesign.test.mjs',
+  'portal-hero-wording.test.mjs',
   'portal-qa-dashboard-samples.test.mjs',
   'portal-login-v0.test.mjs',
   'portal-logout-ui.test.mjs',
