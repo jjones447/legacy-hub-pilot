@@ -246,12 +246,67 @@ async function loadStaffConsole() {
     loadSiteContent(),
     loadRecentChanges(),
     loadStaffTeam(),
-    loadWellnessCaregivers()
+    loadWellnessCaregivers(),
+    loadSubscribers()
   ]);
   if (currentEventId) {
     await loadRegistrations(currentEventId, currentEventTitle);
   }
   updateStatusLine();
+}
+
+// Email list subscribers (schema/0019): read-only list, search and counts.
+// The API never returns unsubscribe tokens; CSV download is a plain link to the staff route.
+let subscribersEpoch = 0;
+
+function formatSubscriberCounts(counts, matching, shown, filtered) {
+  const subscribed = Number(counts?.subscribed || 0);
+  const unsubscribed = Number(counts?.unsubscribed || 0);
+  let text = `${subscribed} subscribed · ${unsubscribed} unsubscribed`;
+  if (filtered) text += ` · ${matching} matching`;
+  if (shown < matching) text += ` (showing the newest ${shown})`;
+  return text;
+}
+
+async function loadSubscribers() {
+  const epoch = ++subscribersEpoch;
+  const body = document.getElementById('subscribersTableBody');
+  const countsLine = document.getElementById('subscribersCounts');
+  const q = String(document.getElementById('subscribersSearchQuery')?.value || '').trim();
+  const status = document.getElementById('subscribersStatusFilter')?.value || '';
+  const params = new URLSearchParams();
+  if (q) params.set('q', q);
+  if (status) params.set('status', status);
+  const query = params.toString();
+  try {
+    const res = await fetch('/api/staff/subscribers' + (query ? `?${query}` : ''));
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to load subscribers');
+    if (epoch !== subscribersEpoch) return;
+    const rows = Array.isArray(data.subscribers) ? data.subscribers : [];
+    if (countsLine) countsLine.textContent = formatSubscriberCounts(data.counts, Number(data.matching || 0), rows.length, !!(q || status));
+    if (!body) return;
+    if (rows.length === 0) {
+      body.innerHTML = `<tr><td colspan="4" class="text-center muted small">${q || status ? 'No subscribers match this search.' : 'No one has joined the email list yet.'}</td></tr>`;
+      return;
+    }
+    body.innerHTML = rows.map(sub => {
+      const badge = sub.status === 'subscribed' ? 'badge-green' : 'badge-outline';
+      const joined = sub.created_at ? escapeHtml(String(sub.created_at).split(' ')[0]) : '';
+      return `
+        <tr>
+          <td data-label="Email">${escapeHtml(sub.email)}</td>
+          <td data-label="First name">${escapeHtml(sub.first_name || '')}</td>
+          <td data-label="Status"><span class="badge ${badge}">${escapeHtml(sub.status)}</span></td>
+          <td data-label="Joined"><span class="small">${joined}</span></td>
+        </tr>
+      `;
+    }).join('');
+  } catch (e) {
+    if (epoch !== subscribersEpoch) return;
+    if (countsLine) countsLine.textContent = 'Subscribers are unavailable right now.';
+    if (body) body.innerHTML = `<tr><td colspan="4" role="alert">Could not load subscribers: ${escapeHtml(e.message)}. Use Search subscribers to try again.</td></tr>`;
+  }
 }
 
 async function loadGrants() {
@@ -1711,6 +1766,15 @@ document.addEventListener('DOMContentLoaded', function () {
       loadWellnessCaregivers();
     });
   }
+  document.getElementById('subscribersSearchBtn')?.addEventListener('click', function () {
+    loadSubscribers();
+  });
+  document.getElementById('subscribersStatusFilter')?.addEventListener('change', function () {
+    loadSubscribers();
+  });
+  document.getElementById('subscribersSearchQuery')?.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') loadSubscribers();
+  });
   const refreshStaffBtn = document.getElementById('refreshStaffTeamBtn');
   if (refreshStaffBtn) {
     refreshStaffBtn.addEventListener('click', function () {
