@@ -6,6 +6,7 @@ import * as eventsDomain from '../../_lib/domain/events.js';
 import { getStaffMember, listStaff, updateStaffMember, createStaffMember } from '../../_lib/staff.js';
 import { staffSeries, caregiversWithCheckins } from '../../_lib/wellness.js';
 import { _resetContentCache } from '../../_content.mjs';
+import { customerActivity } from '../../_lib/customer-activity.mjs';
 
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), {
@@ -257,11 +258,16 @@ export async function onRequestGet({ request, env }) {
         };
       });
 
-      return json({
+      const releases = customerActivity();
+      const response = json({
         ok: true,
         changes: enriched,
-        recent_changes: enriched
+        recent_changes: enriched,
+        release_activity: releases.entries,
+        release_activity_as_of: releases.as_of,
       });
+      response.headers.set('Cache-Control', 'no-store');
+      return response;
     }
 
     if (subRoute === 'events') {
