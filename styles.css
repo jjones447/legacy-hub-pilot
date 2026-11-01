@@ -1432,3 +1432,7 @@ main ul.measure-620 { margin: 16px 0; padding-left: 24px; }
 #dashView .portal-card-grid > .portal-wellness-section { grid-column: 1 / -1; margin: 0; }
 #dashView .portal-events-group + .portal-events-group { margin-top: 18px; }
 #dashView .portal-events-group h5 { margin: 0 0 8px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-soft); }
+/* About: the family photo sits beside "From One Family's Journey…" uncropped (requested Nov 1), not in the hero. */
+.about-story-photo { margin: 0; }
+.about-story-photo img { display: block; width: 100%; height: auto; border-radius: 16px; }
+.about-values-row { margin-top: 40px; }
