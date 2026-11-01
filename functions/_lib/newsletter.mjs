@@ -87,39 +87,27 @@ export async function handleNewsletter(db, body) {
   if (dup) return { status: 200, body: { ok: true, duplicate: true } };
 
   const existing = await db
-    .prepare(`SELECT id, status FROM email_subscriber WHERE email = ?`)
+    .prepare(`SELECT id FROM email_subscriber WHERE email = ?`)
     .bind(email)
     .first();
 
-  // Already on the list: nothing to write, and nothing a stranger could overwrite.
-  if (existing && existing.status === 'subscribed') return { status: 200, body: { ok: true } };
+  // Any existing row, subscribed OR unsubscribed, is left exactly as it is: an anonymous
+  // public request proves nothing about who owns the address, so it can neither overwrite
+  // name/provenance/consent nor undo a deliberate unsubscribe (#302 review P1). The answer
+  // is the same generic ok, so the form still reveals nothing about the list. Re-consent
+  // after an unsubscribe needs an owner-proven path, which phase 1 does not provide.
+  if (existing) return { status: 200, body: { ok: true } };
 
   const now = nowIso();
-  let id;
-  let write;
-  let action;
-  if (existing) {
-    id = existing.id;
-    action = 'newsletter.resubscribe';
-    write = db
-      .prepare(
-        `UPDATE email_subscriber
-            SET status = 'subscribed', unsubscribed_at = NULL, first_name = COALESCE(?, first_name),
-                source = ?, external_ref = ?, consent_text = ?, updated_at = ?
-          WHERE id = ? AND status = 'unsubscribed'`
-      )
-      .bind(firstName, source, externalRef, NEWSLETTER_CONSENT_TEXT, now, id);
-  } else {
-    id = 'sub_' + crypto.randomUUID();
-    action = 'newsletter.subscribe';
-    write = db
-      .prepare(
-        `INSERT INTO email_subscriber
-           (id, email, first_name, status, source, external_ref, consent_text, unsubscribe_token, created_at, updated_at)
-         VALUES (?, ?, ?, 'subscribed', ?, ?, ?, ?, ?, ?)`
-      )
-      .bind(id, email, firstName, source, externalRef, NEWSLETTER_CONSENT_TEXT, newUnsubscribeToken(), now, now);
-  }
+  const id = 'sub_' + crypto.randomUUID();
+  const action = 'newsletter.subscribe';
+  const write = db
+    .prepare(
+      `INSERT INTO email_subscriber
+         (id, email, first_name, status, source, external_ref, consent_text, unsubscribe_token, created_at, updated_at)
+       VALUES (?, ?, ?, 'subscribed', ?, ?, ?, ?, ?, ?)`
+    )
+    .bind(id, email, firstName, source, externalRef, NEWSLETTER_CONSENT_TEXT, newUnsubscribeToken(), now, now);
 
   // The audit row names the subscriber id only: no email address, no token.
   const audit = db
@@ -129,8 +117,8 @@ export async function handleNewsletter(db, body) {
   try {
     confirmBatch(await db.batch([write, audit]), 2);
   } catch (error) {
-    // A concurrent sign-up for the same address (or the same retry key) won the race:
-    // the address is on the list either way.
+    // A concurrent request created a row for this address (or this retry key) first; that
+    // row is left unchanged, and the answer stays the same generic ok.
     if (isUniqueViolation(error)) return { status: 200, body: { ok: true } };
     throw error;
   }
@@ -154,7 +142,13 @@ export async function handleUnsubscribe(db, body) {
         .prepare(`UPDATE email_subscriber SET status = 'unsubscribed', unsubscribed_at = ?, updated_at = ? WHERE id = ? AND status = 'subscribed'`)
         .bind(now, now, row.id),
       db
-        .prepare(`INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json) VALUES ('unsubscribe_link', 'newsletter.unsubscribe', 'email_subscriber', ?, ?, ?)`)
+        // Written only if THIS batch's UPDATE changed the row (changes() is the row count of
+        // the preceding statement in the same atomic batch). A concurrent request whose
+        // earlier SELECT also saw 'subscribed' changes 0 rows here and adds no audit (#302 P2).
+        .prepare(
+          `INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
+           SELECT 'unsubscribe_link', 'newsletter.unsubscribe', 'email_subscriber', ?, ?, ? WHERE changes() = 1`
+        )
         .bind(row.id, JSON.stringify({ status: 'subscribed' }), JSON.stringify({ status: 'unsubscribed' })),
     ]);
     confirmBatch(results, 2);

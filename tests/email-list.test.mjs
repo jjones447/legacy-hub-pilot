@@ -30,15 +30,22 @@ function d1(db) {
   return {
     batchCalls: 0,
     prepare(sql) { return { bind: (...p) => wrap(sql, p), ...wrap(sql, []) }; },
-    async batch(statements) {
+    // D1 runs each batch atomically and one at a time; concurrent callers queue here.
+    queue: Promise.resolve(),
+    batch(statements) {
       this.batchCalls++;
-      db.exec('BEGIN');
-      try {
-        const results = [];
-        for (const statement of statements) results.push(await statement.run());
-        db.exec('COMMIT');
-        return results;
-      } catch (e) { db.exec('ROLLBACK'); throw e; }
+      const run = async () => {
+        db.exec('BEGIN');
+        try {
+          const results = [];
+          for (const statement of statements) results.push(await statement.run());
+          db.exec('COMMIT');
+          return results;
+        } catch (e) { db.exec('ROLLBACK'); throw e; }
+      };
+      const result = this.queue.then(run, run);
+      this.queue = result.catch(() => {});
+      return result;
     },
   };
 }
@@ -219,23 +226,47 @@ test('unsubscribe is rate limited per client address', async () => {
   assert.equal(last.status, 429);
 });
 
-test('re-subscribing an unsubscribed address sets it back to subscribed and keeps one row', async () => {
-  await handleIntake(db, signup({ first_name: 'Before' }));
+test('an anonymous sign-up never undoes an unsubscribe or overwrites the row (review P1)', async () => {
+  await handleIntake(db, signup({ first_name: 'Before', external_ref: 'first-session' }));
   const original = subscribers()[0];
   await publicPost(postUnsubscribe, 'https://site.example/api/unsubscribe', { token: original.unsubscribe_token });
-  assert.equal(subscribers()[0].status, 'unsubscribed');
+  const withdrawn = subscribers()[0];
+  assert.equal(withdrawn.status, 'unsubscribed');
+  const audits = count('audit_log');
 
-  const res = await handleIntake(db, signup({ external_ref: 'later-session', first_name: 'After' }));
+  // A stranger who only knows the address, with a fresh retry key and a different name.
+  const res = await handleIntake(db, signup({ external_ref: 'stranger-session', first_name: 'Stranger' }));
+  const fresh = await handleIntake(db, signup({ email: 'someone.new@example.invalid', external_ref: 'new-person' }));
+  assert.deepEqual(res.body, fresh.body, 'same generic answer as a brand-new sign-up');
   assert.deepEqual(res.body, { ok: true });
-  const rows = subscribers();
-  assert.equal(rows.length, 1);
-  assert.equal(rows[0].id, original.id);
-  assert.equal(rows[0].status, 'subscribed');
-  assert.equal(rows[0].unsubscribed_at, null);
-  assert.equal(rows[0].first_name, 'After');
-  assert.equal(rows[0].external_ref, 'later-session');
-  assert.equal(rows[0].consent_text, NEWSLETTER_CONSENT_TEXT);
-  assert.equal(raw.prepare(`SELECT COUNT(*) AS n FROM audit_log WHERE action = 'newsletter.resubscribe'`).get().n, 1);
+  assert.deepEqual(subscribers().find((r) => r.id === original.id), withdrawn, 'withdrawal, name, provenance and consent all preserved');
+  assert.equal(count('audit_log'), audits + 1, 'only the brand-new sign-up is audited');
+  assert.equal(raw.prepare(`SELECT COUNT(*) AS n FROM audit_log WHERE action = 'newsletter.resubscribe'`).get().n, 0);
+  assert.equal(subscribers().filter((r) => r.email === 'fictional.reader@example.invalid').length, 1);
+});
+
+test('concurrent unsubscribes that both read "subscribed" change the row once and write ONE audit (review P2)', async () => {
+  await handleIntake(db, signup());
+  const { unsubscribe_token: token, id } = subscribers()[0];
+  // Hold both requests at their pre-read until both have read 'subscribed', so the race is real.
+  let arrived = 0, release;
+  const gate = new Promise((r) => { release = r; });
+  const gated = {
+    ...db,
+    batch: (statements) => db.batch(statements),
+    prepare(sql) {
+      const stmt = db.prepare(sql);
+      if (!/SELECT id, status FROM email_subscriber WHERE unsubscribe_token/.test(sql)) return stmt;
+      return { bind: (...p) => { const b = stmt.bind(...p); return { ...b, async first() { const row = await b.first(); if (++arrived === 2) release(); await gate; return row; } }; } };
+    },
+  };
+  const { handleUnsubscribe } = await import('../functions/_lib/newsletter.mjs');
+  const [a, b] = await Promise.all([handleUnsubscribe(gated, { token }), handleUnsubscribe(gated, { token })]);
+  assert.equal(arrived, 2, 'both requests read the row before either wrote');
+  assert.deepEqual(a.body, { ok: true });
+  assert.deepEqual(b.body, { ok: true });
+  assert.equal(subscribers()[0].status, 'unsubscribed');
+  assert.equal(raw.prepare(`SELECT COUNT(*) AS n FROM audit_log WHERE action = 'newsletter.unsubscribe' AND entity_id = ?`).get(id).n, 1);
 });
 
 test('newsletter sign-ups share the public intake IP limit', async () => {
@@ -357,20 +388,46 @@ test('home page email list section: labels, required email, consent line, live s
     const section = html.match(/<section class="home-email-list" id="email-list" aria-labelledby="emailListHeading">([\s\S]*?)<\/section>/)?.[1];
     assert.ok(section, `${path}: email list section`);
     assert.match(section, /<h2 id="emailListHeading"[^>]*>Join our email list<\/h2>/);
-    assert.match(section, /<form id="emailListForm" data-action="submit-email-list">/);
+    assert.match(section, /<form id="emailListForm" data-action="submit-email-list" method="post" action="#email-list">/);
     assert.match(section, /<label for="emailListFirstName">First name <span class="muted small">\(optional\)<\/span><\/label>/);
-    assert.match(section, /<input id="emailListFirstName" name="first_name" type="text" autocomplete="given-name"/);
+    assert.match(section, /<input id="emailListFirstName" type="text" autocomplete="given-name"/);
     assert.doesNotMatch(section.match(/<input id="emailListFirstName"[^>]*>/)[0], /required/);
     assert.match(section, /<label for="emailListEmail">Email address<\/label>/);
-    assert.match(section, /<input id="emailListEmail" name="email" type="email" autocomplete="email" maxlength="254" required aria-required="true">/);
+    assert.match(section, /<input id="emailListEmail" type="email" autocomplete="email" maxlength="254" required aria-required="true">/);
     assert.ok(section.includes(`<p class="privacy-line" id="emailListConsent">${NEWSLETTER_CONSENT_TEXT}</p>`), 'shown consent line is exactly the stored consent text');
-    assert.match(section, /<button type="submit" class="btn btn-coral w-100" aria-describedby="emailListConsent">Join the email list<\/button>/);
+    assert.match(section, /<button type="submit" class="btn btn-coral w-100" aria-describedby="emailListConsent" disabled>Join the email list<\/button>/);
     assert.match(section, /<p data-email-list-pending role="status" aria-live="polite" hidden>/);
     assert.match(section, /class="success-note" data-intake-success role="status" aria-live="polite" tabindex="-1"/);
     assert.match(section, /class="error-note" data-intake-error role="alert" aria-live="assertive" tabindex="-1"/);
   }
   assert.match(read('styles.css'), /\.email-list-card \{[^}]*max-width: 520px/);
   assert.match(read('styles.css'), /@media \(max-width: 600px\) \{ \.email-list-card \{ padding: 22px 18px; \} \}/);
+});
+
+test('without the script, a native submission can carry no personal data and cannot use GET (review P3)', () => {
+  for (const path of ['index.html', 'templates/index.html.j2']) {
+    const html = read(path);
+    const form = html.match(/<form id="emailListForm"[^>]*>([\s\S]*?)<\/form>/);
+    assert.ok(form, `${path}: form`);
+    const open = form[0].match(/<form[^>]*>/)[0];
+    // HTML: a missing/invalid method is GET; the form data set holds only NAMED controls.
+    assert.match(open, /\smethod="post"/i, `${path}: explicit POST, never a URL query`);
+    const controls = [...form[1].matchAll(/<(input|select|textarea|button)\b[^>]*>/g)].map((m) => m[0]);
+    assert.ok(controls.length >= 3);
+    assert.deepEqual(controls.filter((c) => /\sname=/.test(c)), [], `${path}: no named control, so nothing personal is submitted natively`);
+    assert.match(form[1], /<button type="submit"[^>]*\sdisabled>/, `${path}: submit disabled until the script is ready`);
+    assert.match(form[1], /<p class="small muted" data-email-list-not-ready>[^<]*JavaScript[\s\S]*?<\/p>/, `${path}: understandable not-ready message`);
+  }
+});
+
+test('the script enables the sign-up only when it runs, and hides the not-ready note', () => {
+  const b = browser({ extraRegions: ['[data-email-list-not-ready]'] });
+  b.regions['[type="submit"]'].disabled = true;
+  b.regions['[data-email-list-not-ready]'].hidden = false;
+  b.context.initEmailListForm();
+  assert.equal(b.regions['[type="submit"]'].disabled, false);
+  assert.equal(b.regions['[data-email-list-not-ready]'].hidden, true);
+  assert.match(app, /initUnsubscribePage\(window\.location, window\.history\);\n  initEmailListForm\(\);/, "wired at DOMContentLoaded");
 });
 
 test('unsubscribe page has public chrome, noindex, a labelled form and generic outcome copy', () => {

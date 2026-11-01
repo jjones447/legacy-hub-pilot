@@ -319,6 +319,17 @@ function showEmailListState(form, state, focusResult) {
   if (focusResult && result && typeof result.focus === 'function') result.focus();
 }
 
+// The sign-up form ships with its button disabled and no named fields (#302 review P3); it is
+// enabled only once this script is running and the submit dispatcher handles it.
+function initEmailListForm() {
+  const form = typeof document !== 'undefined' && document.getElementById ? document.getElementById('emailListForm') : null;
+  if (!form) return;
+  const submit = form.querySelector('[type="submit"]');
+  const note = form.querySelector('[data-email-list-not-ready]');
+  if (submit) submit.disabled = false;
+  if (note) note.hidden = true;
+}
+
 function submitEmailList(e) {
   e.preventDefault();
   const form = document.getElementById('emailListForm');
@@ -1228,6 +1239,7 @@ function loadLiveEvents() {
 document.addEventListener('DOMContentLoaded', function() {
   initPortalSummaryPreview();
   if (typeof window !== 'undefined') initUnsubscribePage(window.location, window.history);
+  initEmailListForm();
   loadLiveEvents();
   if (!(portalDesignPreviewRequested() && initPortalDesignPreview())) checkPortalSession();
 });
