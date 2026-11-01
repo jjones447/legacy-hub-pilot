@@ -3034,6 +3034,8 @@ async function submitDirectContent(form) {
 }
 
 let recentChanges = [];
+let releaseActivity = [];
+let releaseActivityAsOf = null;
 
 async function loadRecentChanges() {
   try {
@@ -3042,6 +3044,8 @@ async function loadRecentChanges() {
     if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to load recent changes');
 
     recentChanges = data.changes || data.recent_changes || [];
+    releaseActivity = Array.isArray(data.release_activity) ? data.release_activity : [];
+    releaseActivityAsOf = data.release_activity_as_of || null;
     renderRecentChanges();
   } catch (e) {
     const list = document.getElementById('recentChangesList');
@@ -3053,12 +3057,34 @@ function renderRecentChanges() {
   const container = document.getElementById('recentChangesList');
   if (!container) return;
 
-  if (recentChanges.length === 0) {
-    container.innerHTML = '<p class="muted small text-center my-20">No changes recorded.</p>';
-    return;
+  const notes = typeof releaseActivity === 'undefined' ? [] : releaseActivity;
+  const labels = {
+    legacy_staff: 'Legacy staff request', xcentric_maintenance: 'X-Centric maintenance',
+    not_established: 'Not established', legacy_assistant: 'Legacy assistant', xcentric_team: 'X-Centric team',
+    requested: 'Requested', in_progress: 'In progress', reviewed: 'Reviewed', merged: 'Code complete',
+    not_deployed: 'Not installed', available: 'Ready to review', verified: 'Verified',
+    pending: 'Awaiting approval', approved: 'Approved', not_required: 'Not required',
+    deployed: 'Installed; verification pending', rolled_back: 'Rolled back',
+  };
+  let html = '<h3>Requested changes and releases</h3><p class="small muted">Selected updates reviewed for Legacy staff. Request origin and who carried out the work are recorded separately. Code completion does not mean a change is live.</p>';
+  if (typeof releaseActivityAsOf !== 'undefined' && releaseActivityAsOf) html += `<p class="small muted">Last reviewed update: ${escapeHtml(releaseActivityAsOf)}</p>`;
+  if (!notes.length) html += '<p class="small muted">No reviewed release updates are available.</p>';
+  for (const note of notes) {
+    html += `<div class="recent-change-row"><div class="recent-change-meta"><div class="recent-change-action">${escapeHtml(note.summary)}</div>`;
+    html += `<div class="recent-change-detail">Requested by: ${escapeHtml(note.requested_by)} · Origin: ${escapeHtml(labels[note.request_origin] || 'Not established')} · Carried out by: ${escapeHtml(labels[note.executor] || 'Not established')}</div>`;
+    for (const [key, title] of [['source','Code'],['staging','Staging'],['approval','Approval'],['production','Production']]) {
+      const m = note.milestones?.[key];
+      html += `<div class="small">${title}: ${escapeHtml(labels[m?.state] || 'Not established')}${m?.at ? ` · ${escapeHtml(m.at)}` : ''}</div>`;
+    }
+    // Defense in depth: accept only plain same-site page paths, never arbitrary links.
+    if (typeof note.evidence_path === 'string' && /^\/[a-z0-9][a-z0-9/_-]*$/.test(note.evidence_path)
+        && !note.evidence_path.includes('//') && !/^\/(api|cdn-cgi)(\/|$)/.test(note.evidence_path)) {
+      html += `<a href="${escapeHtml(note.evidence_path)}">Related page</a>`;
+    }
+    html += '</div></div>';
   }
-
-  let html = '';
+  html += '<h3>Staff activity</h3><p class="small muted">Recent supported staff edits and their original audit records. This is not a complete list of every system action.</p>';
+  if (recentChanges.length === 0) html += '<p class="muted small text-center my-20">No changes recorded.</p>';
   for (const c of recentChanges) {
     const isUndone = c.is_undone;
     const canUndo = c.restorable || c.can_undo;
