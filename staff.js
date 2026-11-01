@@ -254,9 +254,20 @@ async function loadStaffConsole() {
   updateStatusLine();
 }
 
+// "active" is a view only: the full list is fetched and closed applications are hidden here.
+function grantsRequestUrl(statusFilter) {
+  return statusFilter && statusFilter !== 'active' ? `/api/grants?status=${encodeURIComponent(statusFilter)}` : '/api/grants';
+}
+
+function visibleGrants(grants, statusFilter) {
+  const list = Array.isArray(grants) ? grants : [];
+  return statusFilter === 'active' ? list.filter(g => g.status !== 'closed') : list;
+}
+
 async function loadGrants() {
   const statusFilter = document.getElementById('grantsStatusFilter')?.value || '';
-  const url = statusFilter ? `/api/grants?status=${encodeURIComponent(statusFilter)}` : '/api/grants';
+  const url = grantsRequestUrl(statusFilter);
+  const count = document.getElementById('grantsCount');
   try {
     const res = await fetch(url);
     const data = await res.json();
@@ -264,12 +275,15 @@ async function loadGrants() {
 
     const body = document.getElementById('grantsTableBody');
     if (!body) return;
-    if (!data.grants || data.grants.length === 0) {
-      body.innerHTML = '<tr><td colspan="4" class="text-center muted small">No grant applications found.</td></tr>';
+    const grants = visibleGrants(data.grants, statusFilter);
+    const shown = grants.length === 1 ? '1 application' : `${grants.length} applications`;
+    if (count) count.textContent = statusFilter ? `(${shown} shown)` : `(${shown})`;
+    if (grants.length === 0) {
+      body.innerHTML = '<tr><td colspan="5" class="text-center muted small">No grant applications found.</td></tr>';
       return;
     }
 
-    body.innerHTML = data.grants.map(g => {
+    body.innerHTML = grants.map(g => {
       const first = (g.caregiver_first_name || '').trim();
       const last = (g.caregiver_last_name || '').trim();
       const rawName = `${first} ${last}`.trim() || 'Anonymous';
@@ -295,10 +309,14 @@ async function loadGrants() {
           <td>${escapeHtml(g.requested_for || 'General')}</td>
           <td><span class="badge ${gBadge}">${escapeHtml(label)}</span></td>
           <td><span class="small">${awardText}</span></td>
+          <td><button type="button" class="btn btn-sm btn-outline btn-compact" data-action="view-caregiver" data-caregiver-id="${escapeHtml(g.caregiver_id)}" aria-describedby="grantActionsHelp" aria-label="Open application: ${caregiverName}">Open application</button></td>
         </tr>
       `;
     }).join('');
   } catch (e) {
+    if (count) count.textContent = '(could not load)';
+    const body = document.getElementById('grantsTableBody');
+    if (body) body.innerHTML = '<tr><td colspan="5" class="text-center muted small" role="alert">Could not load grant applications. Reload the page to try again.</td></tr>';
     console.error(e);
   }
 }
@@ -633,7 +651,19 @@ async function archiveNote(id, target) {
 }
 
 
+// Follow-ups: "Mark complete" posts the existing {status:'done'} transition once per item.
+// It sends no email and deletes nothing; failures are shown in the panel, not only the console.
+const followupPending = new Set();
+
+function setNeedsAttentionMessage(text, isError = false) {
+  const message = document.getElementById('needsAttentionMessage');
+  if (!message) return;
+  message.textContent = text;
+  message.classList?.toggle('is-error', isError);
+}
+
 async function loadFollowups() {
+  const count = document.getElementById('needsAttentionCount');
   try {
     const res = await fetch('/api/staff/queue');
     const data = await res.json();
@@ -641,22 +671,27 @@ async function loadFollowups() {
     
     const body = document.getElementById('needsAttentionBody');
     if (!body) return;
-    if (!data.queue || data.queue.length === 0) {
-      body.innerHTML = '<tr><td colspan="3" class="text-center muted small">No follow-ups in queue.</td></tr>';
+    const queue = Array.isArray(data.queue) ? data.queue : [];
+    const openCount = queue.filter(fu => fu.status === 'open').length;
+    if (count) count.textContent = openCount === 0 ? '(nothing open)' : `(${openCount} open)`;
+    noteNeedsAttentionActionable(openCount > 0);
+    if (queue.length === 0) {
+      body.innerHTML = '<tr><td colspan="3" class="text-center muted small">No open follow-ups.</td></tr>';
       return;
     }
     
-    body.innerHTML = data.queue.map(fu => {
+    body.innerHTML = queue.map(fu => {
       const first = (fu.caregiver_first_name || '').trim();
       const last = (fu.caregiver_last_name || '').trim();
       const rawName = `${first} ${last}`.trim() || 'Anonymous';
       const caregiverName = escapeHtml(rawName);
       const badgeClass = fu.status === 'open' ? 'badge-plum' : 'badge-green';
-      const statusText = fu.status === 'open' ? 'Queued' : 'Resolved';
+      const statusText = fu.status === 'open' ? 'Open' : 'Completed';
       
       let actionHtml = '';
       if (fu.status === 'open') {
-        actionHtml = `<button class="btn btn-sm btn-coral btn-compact-ml" data-action="resolve-followup" data-followup-id="${escapeHtml(fu.id)}">Resolve</button>`;
+        const pending = followupPending.has(Number(fu.id));
+        actionHtml = `<button type="button" class="btn btn-sm btn-coral btn-compact-ml" data-action="resolve-followup" data-followup-id="${escapeHtml(fu.id)}" aria-describedby="needsAttentionHelp"${pending ? ' disabled aria-busy="true"' : ''}>${pending ? 'Marking complete…' : 'Mark complete'}</button>`;
       }
       
       return `
@@ -671,27 +706,51 @@ async function loadFollowups() {
       `;
     }).join('');
   } catch (e) {
+    if (count) count.textContent = '(could not load)';
+    const body = document.getElementById('needsAttentionBody');
+    if (body) body.innerHTML = '<tr><td colspan="3" class="text-center muted small" role="alert">Could not load follow-ups. Reload the page to try again.</td></tr>';
     console.error(e);
   }
 }
 
 async function resolveFollowup(id, event) {
   if (event) event.stopPropagation();
+  if (!Number.isInteger(id) || id <= 0 || followupPending.has(id)) return;
+  followupPending.add(id);
+  const button = event?.target?.closest?.('[data-action="resolve-followup"]') || null;
+  if (button) {
+    button.disabled = true;
+    button.setAttribute('aria-busy', 'true');
+    button.textContent = 'Marking complete…';
+  }
+  setNeedsAttentionMessage('Marking the follow-up complete…');
+  let failure = null;
   try {
     const res = await fetch(`/api/staff/followup/${id}/resolve`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'done' })
     });
-    if (res.ok) {
-      await loadFollowups();
-      const panel = document.getElementById('caregiverRecordPanel');
-      if (panel && panel.dataset.caregiverId) {
-        await viewCaregiver(panel.dataset.caregiverId);
-      }
-    }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.ok === false) failure = data.error || `the server answered ${res.status}`;
   } catch (e) {
-    console.error(e);
+    failure = 'the request did not finish';
+  }
+  followupPending.delete(id);
+  if (failure) {
+    if (button) {
+      button.disabled = false;
+      button.removeAttribute('aria-busy');
+      button.textContent = 'Mark complete';
+    }
+    setNeedsAttentionMessage(`Could not mark this follow-up complete: ${failure}. Reload the page to check whether it is still open before trying again.`, true);
+    return;
+  }
+  setNeedsAttentionMessage('Marked complete and removed from the open list. No email was sent.');
+  await loadFollowups();
+  const panel = document.getElementById('caregiverRecordPanel');
+  if (panel && panel.dataset.caregiverId) {
+    await viewCaregiver(panel.dataset.caregiverId);
   }
 }
 
@@ -897,6 +956,10 @@ async function viewCaregiver(id) {
     }
 
     const nowLocal = localDateTimeValue(new Date());
+    const recordStatus = p.status || 'active';
+    const lifecycleButton = recordStatus === 'archived'
+      ? '<button type="button" class="btn btn-sm btn-plum" data-action="caregiver-restore" aria-describedby="caregiverLifecycleHelp">Restore to active</button>'
+      : '<button type="button" class="btn btn-sm btn-outline" data-action="caregiver-archive" aria-describedby="caregiverLifecycleHelp">Archive caregiver</button>';
 
     panel.innerHTML = `
       <h2 id="caregiverDetailHeading" tabindex="-1">Caregiver record — ${name} ${memberBadge} ${statusBadge}</h2>
@@ -911,6 +974,12 @@ async function viewCaregiver(id) {
       <div class="kv-row"><span class="k">Last attended</span><span class="v">${lastAttended}</span></div>
       <div class="kv-row"><span class="k">Total attended</span><span class="v">${socialsCount} event(s)</span></div>
       <div class="kv-row"><span class="k">Staff Notes</span><span class="v"><div class="note-error-msg alert-inline-banner form-error-banner d-none"></div>${notesHtml}</span></div>
+      <div class="caregiver-lifecycle" id="caregiverLifecycle">
+        <span class="k staff-section-title">Record status: ${escapeHtml(recordStatus)}</span>
+        <p class="small muted mt-6" id="caregiverLifecycleHelp">Archive keeps this caregiver's profile, registrations, grants, notes and history; nothing is deleted. An archived caregiver cannot sign in to the Caregiver Portal. Archiving does not close their open follow-ups, and the record still appears when you search All statuses. Restore to active lets them sign in again.</p>
+        ${lifecycleButton}
+        <p class="small caregiver-lifecycle-message" id="caregiverLifecycleMessage" role="status" aria-live="polite"></p>
+      </div>
       <div class="mt-14">
         <span class="k staff-section-title">Grants &amp; Workflow:</span>
         <div class="mt-8">${grantsHtml}</div>
@@ -1053,6 +1122,64 @@ async function viewCaregiver(id) {
   }
 }
 
+function eventsCountText(events) {
+  const list = Array.isArray(events) ? events : [];
+  const total = list.length === 1 ? '1 event' : `${list.length} events`;
+  const byState = {};
+  for (const ev of list) {
+    const state = ev.publish_state || 'published';
+    byState[state] = (byState[state] || 0) + 1;
+  }
+  const parts = ['published', 'draft', 'archived'].filter(state => byState[state]).map(state => `${byState[state]} ${state}`);
+  return parts.length ? `(${total}: ${parts.join(', ')})` : `(${total})`;
+}
+
+// Archive / Restore reuse the existing caregiver PATCH with only {status}; no new transition.
+let caregiverStatusPending = false;
+
+function setCaregiverLifecycleMessage(text, isError = false) {
+  const message = document.getElementById('caregiverLifecycleMessage');
+  if (!message) return;
+  message.textContent = text;
+  message.classList?.toggle('is-error', isError);
+}
+
+async function setCaregiverRecordStatus(status, target) {
+  const panel = document.getElementById('caregiverRecordPanel');
+  const caregiverId = panel?.dataset?.caregiverId;
+  if (!caregiverId || caregiverStatusPending || (status !== 'archived' && status !== 'active')) return;
+  const archiving = status === 'archived';
+  const question = archiving
+    ? 'Archive this caregiver? Their record and history are kept, but they will not be able to sign in to the Caregiver Portal. Open follow-ups stay open. You can restore them to active later.'
+    : 'Restore this caregiver to active? They will be able to sign in to the Caregiver Portal again.';
+  if (!window.confirm(question)) return;
+  caregiverStatusPending = true;
+  if (target) target.disabled = true;
+  setCaregiverLifecycleMessage(archiving ? 'Archiving…' : 'Restoring…');
+  try {
+    const res = await fetch(`/api/staff/caregiver/${encodeURIComponent(caregiverId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.error || `the server answered ${res.status}`);
+    caregiverStatusPending = false;
+    await viewCaregiver(caregiverId);
+    if (document.getElementById('caregiverRecordPanel')?.dataset?.caregiverId === caregiverId) {
+      setCaregiverLifecycleMessage(archiving
+        ? 'Archived. This caregiver can no longer sign in to the Caregiver Portal.'
+        : 'Restored to active. This caregiver can sign in to the Caregiver Portal again.');
+    }
+    await searchCaregivers(currentSearchOffset);
+  } catch (e) {
+    if (target) target.disabled = false;
+    setCaregiverLifecycleMessage(`Could not change the status: ${e.message}. Reopen the record to check its current status before trying again.`, true);
+  } finally {
+    caregiverStatusPending = false;
+  }
+}
+
 async function loadEvents() {
   try {
     let res = await fetch('/api/staff/events');
@@ -1066,6 +1193,8 @@ async function loadEvents() {
     if (!data || !data.ok) throw new Error(data?.error || 'Failed to fetch events');
 
     staffEvents = data.events || [];
+    const count = document.getElementById('eventsCount');
+    if (count) count.textContent = eventsCountText(staffEvents);
     const body = document.getElementById('upcomingEventsBody');
     if (!body) return;
     if (staffEvents.length === 0) {
@@ -1086,10 +1215,10 @@ async function loadEvents() {
         actions.push(`<button type="button" class="btn btn-sm btn-plum btn-compact" data-action="publish-event" data-event-id="${escapeHtml(ev.id)}">Publish</button>`);
       }
       if (state === 'published') {
-        actions.push(`<button type="button" class="btn btn-sm btn-outline btn-compact" data-action="unpublish-event" data-event-id="${escapeHtml(ev.id)}">Unpublish</button>`);
+        actions.push(`<button type="button" class="btn btn-sm btn-outline btn-compact" data-action="unpublish-event" data-event-id="${escapeHtml(ev.id)}" aria-describedby="eventLifecycleHelp" title="Hide from the public calendar; you can publish it again">Unpublish</button>`);
       }
       if (state !== 'archived') {
-        actions.push(`<button type="button" class="btn btn-sm btn-outline btn-compact" data-action="archive-event" data-event-id="${escapeHtml(ev.id)}">Archive</button>`);
+        actions.push(`<button type="button" class="btn btn-sm btn-outline btn-compact" data-action="archive-event" data-event-id="${escapeHtml(ev.id)}" aria-describedby="eventLifecycleHelp" title="Retire this event; it cannot be restored or published again">Archive</button>`);
       }
       actions.push(`<button type="button" class="btn btn-sm btn-outline btn-compact" data-action="edit-event" data-event-id="${escapeHtml(ev.id)}">Edit</button>`);
 
@@ -1663,6 +1792,7 @@ async function updateAttendance(id, status, event) {
 }
 
 document.addEventListener('DOMContentLoaded', function () {
+  initStaffPanels();
   initStaffAssistantDisclosure();
   void initWebJobFeature();
   initStaffChatTargets();
@@ -1928,6 +2058,12 @@ document.addEventListener('click', function (e) {
   } else if (action === 'caregiver-edit') {
     e.stopPropagation();
     openCaregiverEditor();
+  } else if (action === 'caregiver-archive') {
+    e.stopPropagation();
+    setCaregiverRecordStatus('archived', target);
+  } else if (action === 'caregiver-restore') {
+    e.stopPropagation();
+    setCaregiverRecordStatus('active', target);
   } else if (action === 'caregiver-back') {
     e.stopPropagation();
     backToStaffDashboard();
@@ -2034,6 +2170,126 @@ document.addEventListener('click', function (e) {
     archiveEvent(id);
   }
 });
+
+// Staff section disclosures: every main panel is a native <details>, so the summary is
+// keyboard operable and collapsing never fetches or changes records. Only open/closed
+// booleans are remembered, under a key for this origin and a hash of the signed-in staff
+// email; nothing is remembered until /api/staff/me names a person. The Legacy Assistant
+// is deliberately not part of this list.
+const STAFF_PANEL_IDS = Object.freeze(['staffHelpPanel', 'needsAttentionPanel', 'eventsPanel', 'grantsPanel', 'wellnessPanel', 'peopleManagementPanel', 'recentChangesPanel', 'siteContentPanel']);
+const STAFF_PANEL_STORAGE_PREFIX = 'staff-console-panels-v1';
+const staffPanelDefaults = {};
+const staffPanelTouched = new Set();
+const staffPanelProgrammatic = new Map();
+let staffPanelStorageKey = null;
+let staffPanelSaved = null;
+let staffPanelKeyEpoch = 0;
+let needsAttentionActionable = null;
+
+function staffPanelStorage() {
+  try { return window.localStorage || null; } catch { return null; }
+}
+
+async function staffPanelKeyFor(me, origin) {
+  const email = String(me?.email || '').trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+$/.test(email) || !origin) return null;
+  const subtle = window.crypto?.subtle;
+  if (!subtle || typeof TextEncoder !== 'function') return null;
+  const digest = await subtle.digest('SHA-256', new TextEncoder().encode(email));
+  const hex = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
+  return `${STAFF_PANEL_STORAGE_PREFIX}:${origin}:${hex.slice(0, 32)}`;
+}
+
+function readStaffPanelChoices(key) {
+  try {
+    const parsed = JSON.parse(staffPanelStorage()?.getItem(key) || '{}');
+    const choices = {};
+    for (const id of STAFF_PANEL_IDS) {
+      if (typeof parsed?.[id] === 'boolean') choices[id] = parsed[id];
+    }
+    return choices;
+  } catch {
+    return {};
+  }
+}
+
+function saveStaffPanelChoice(id, open) {
+  if (!staffPanelStorageKey || !staffPanelSaved) return;
+  staffPanelSaved = { ...staffPanelSaved, [id]: open };
+  try {
+    staffPanelStorage()?.setItem(staffPanelStorageKey, JSON.stringify(staffPanelSaved));
+  } catch {
+    // Storage full, blocked or private: the choice still applies for this page.
+  }
+}
+
+function setStaffPanelOpen(id, open) {
+  const panel = document.getElementById(id);
+  if (!panel || panel.open === open) return;
+  staffPanelProgrammatic.set(id, open);
+  panel.open = open;
+}
+
+// A person's saved choice wins; otherwise Needs attention opens only when something is
+// open, and every other section keeps its markup default.
+function applyStaffPanelDefaults() {
+  for (const id of STAFF_PANEL_IDS) {
+    if (staffPanelTouched.has(id) || !(id in staffPanelDefaults)) continue;
+    if (staffPanelSaved && typeof staffPanelSaved[id] === 'boolean') setStaffPanelOpen(id, staffPanelSaved[id]);
+    else if (id === 'needsAttentionPanel' && needsAttentionActionable !== null) setStaffPanelOpen(id, needsAttentionActionable);
+    else setStaffPanelOpen(id, staffPanelDefaults[id]);
+  }
+}
+
+function onStaffPanelToggle(panel) {
+  const id = panel.id;
+  if (staffPanelProgrammatic.has(id)) {
+    const expected = staffPanelProgrammatic.get(id);
+    staffPanelProgrammatic.delete(id);
+    if (expected === panel.open) return;
+  }
+  staffPanelTouched.add(id);
+  saveStaffPanelChoice(id, panel.open);
+}
+
+function initStaffPanels() {
+  for (const id of STAFF_PANEL_IDS) {
+    const panel = document.getElementById(id);
+    if (!panel) continue;
+    staffPanelDefaults[id] = Boolean(panel.open);
+    panel.addEventListener('toggle', () => onStaffPanelToggle(panel));
+  }
+}
+
+// Only the first successful load decides the Needs attention default; reloads after
+// Mark complete never reopen or close the section.
+function noteNeedsAttentionActionable(actionable) {
+  if (needsAttentionActionable !== null) return;
+  needsAttentionActionable = Boolean(actionable);
+  applyStaffPanelDefaults();
+}
+
+async function rememberStaffPanelsFor(me) {
+  const epoch = ++staffPanelKeyEpoch;
+  let key = null;
+  try {
+    key = await staffPanelKeyFor(me, window.location?.origin);
+  } catch {
+    key = null;
+  }
+  if (epoch !== staffPanelKeyEpoch || key === staffPanelStorageKey) return;
+  if (staffPanelStorageKey) staffPanelTouched.clear();
+  staffPanelStorageKey = key;
+  staffPanelSaved = key ? readStaffPanelChoices(key) : null;
+  if (key) {
+    for (const id of staffPanelTouched) {
+      const panel = document.getElementById(id);
+      if (panel) saveStaffPanelChoice(id, Boolean(panel.open));
+    }
+  }
+  applyStaffPanelDefaults();
+}
+// End staff section disclosures.
 
 // Presentation only: hiding the panel never resets drafts, selection or HOLD.
 function setStaffAssistantExpanded(expanded, moveFocus = true) {
@@ -3153,6 +3409,8 @@ async function loadStaffTeam() {
     const meData = await meRes.json();
     const teamData = await teamRes.json();
     if (!meRes.ok || !meData.ok) throw new Error(meData.error || 'Failed to load your staff record');
+    // Section open/closed choices belong to this signed-in person (see staff section disclosures).
+    if (typeof rememberStaffPanelsFor === 'function') void rememberStaffPanelsFor(meData.me);
     if (!teamRes.ok || !teamData.ok) throw new Error(teamData.error || 'Failed to load staff');
     staffMe = meData.me;
     staffTeam = teamData.team || [];
@@ -3380,6 +3638,8 @@ async function loadWellnessCaregivers() {
     if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to load');
     wellnessCaregivers = data.caregivers || [];
     wellnessListLoading = false;
+    const count = document.getElementById('wellnessCount');
+    if (count) count.textContent = `(${wellnessCaregivers.length} with check-ins)`;
     await filterWellnessCaregivers();
   } catch (e) {
     if (epoch !== wellnessListEpoch) return;
@@ -3389,6 +3649,8 @@ async function loadWellnessCaregivers() {
     select.disabled = true;
     const status = document.getElementById('wellnessPickerStatus');
     if (status) status.textContent = 'Caregiver list unavailable. Use Refresh to check again.';
+    const count = document.getElementById('wellnessCount');
+    if (count) count.textContent = '(could not load)';
     if (chart) chart.innerHTML = `<p class="muted small text-center my-20">Error loading wellness: ${escapeHtml(e.message)}</p>`;
   }
 }

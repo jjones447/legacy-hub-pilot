@@ -6,7 +6,7 @@
 <title>Legacy Hub · Staff console</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=43d628ae2aa3">
+<link rel="stylesheet" href="styles.css?v=3b2620978d8f">
 <link rel="icon" href="favicon.ico" sizes="32x32">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -164,23 +164,25 @@
         </div>
         </details>
 
-        <div class="panel">
-          <h4>📥 Needs attention</h4>
-          <p class="small muted mb-12">Open follow-ups and action items requiring staff review.</p>
+        <details class="panel staff-section" id="needsAttentionPanel" open>
+          <summary><h4 class="staff-section-heading">📥 Needs attention</h4> <span class="staff-section-count small muted" id="needsAttentionCount">(loading…)</span></summary>
+          <p class="small muted mb-12" id="needsAttentionHelp">Open follow-ups and action items requiring staff review. Each row is open and needs follow-up, such as a support request or an event registration to confirm. Choose a row to open the caregiver record. <strong>Mark complete</strong> records that the follow-up is done and removes it from this open list. It does not send an email and does not delete the caregiver or any history.</p>
+          <p class="small staff-section-message" id="needsAttentionMessage" role="status" aria-live="polite"></p>
           <table class="data">
             <thead><tr><th>Caregiver</th><th>Item</th><th>Status</th></tr></thead>
             <tbody id="needsAttentionBody">
               <tr><td colspan="3" class="text-center muted small">Loading follow-ups...</td></tr>
             </tbody>
           </table>
-        </div>
+        </details>
 
-        <div class="panel" id="eventsPanel">
-          <div class="flex-between-center mb-12">
-            <h4 class="m-0">📅 Upcoming events</h4>
+        <details class="panel staff-section" id="eventsPanel" open>
+          <summary><h4 class="staff-section-heading">📅 Upcoming events</h4> <span class="staff-section-count small muted" id="eventsCount">(loading…)</span></summary>
+          <div class="staff-section-tools">
+            <p class="small muted m-0">Schedule, manage, and take attendance for community events and respite sessions.</p>
             <button class="btn btn-sm btn-plum" id="newEventToggleBtn">+ New Event</button>
           </div>
-          <p class="small muted mb-12">Schedule, manage, and take attendance for community events and respite sessions.</p>
+          <p class="small muted mb-12" id="eventLifecycleHelp"><strong>Unpublish</strong> hides a published event from the public calendar and returns it to draft. Its details and registrations are kept, and you can publish it again. <strong>Archive</strong> retires the event for good: its details, registrations and history are kept and it stays off the public calendar, but it cannot be published again and there is no restore. If people are registered, you are asked to confirm first. Neither action emails anyone or deletes anything.</p>
           <div id="newEventContainer" class="d-none mb-16"></div>
           <table class="data">
             <thead><tr><th>Event</th><th>Date</th><th>Status</th><th>Registered</th><th>Actions</th></tr></thead>
@@ -189,7 +191,7 @@
             </tbody>
           </table>
           <div id="editEventContainer" class="d-none mt-16"></div>
-        </div>
+        </details>
 
         <div class="panel d-none-mt-24" id="attendancePanel">
           <h4>👥 Event Attendance</h4>
@@ -197,11 +199,13 @@
           <div id="attendanceContent"></div>
         </div>
 
-        <div class="panel" id="grantsPanel">
-          <div class="staff-panel-header-bar">
-            <h4 class="mb-0">🎁 Wellness Grants</h4>
-            <select id="grantsStatusFilter" class="staff-filter-select-sm">
+        <details class="panel staff-section" id="grantsPanel" open>
+          <summary><h4 class="staff-section-heading">🎁 Wellness Grants</h4> <span class="staff-section-count small muted" id="grantsCount">(loading…)</span></summary>
+          <div class="staff-section-tools">
+            <p class="small muted m-0">Track grant applications from review through award, course completion, and closeout.</p>
+            <select id="grantsStatusFilter" class="staff-filter-select-sm" aria-label="Show grant applications">
               <option value="">All statuses</option>
+              <option value="active">Active (all except closed)</option>
               <option value="submitted">Submitted</option>
               <option value="in_review">In review</option>
               <option value="awarded">Awarded</option>
@@ -210,18 +214,18 @@
               <option value="declined">Declined</option>
             </select>
           </div>
-          <p class="small muted mb-12">Track grant applications from review through award, course completion, and closeout.</p>
+          <p class="small muted mb-12" id="grantActionsHelp">Choose <strong>Open application</strong> to go to the caregiver record. The review, award, decline, course-complete and close steps for each application are there. <strong>Close</strong> is the final closeout after course completion or a decline; it is not an archive or delete. Grant applications cannot be archived or deleted.</p>
           <table class="data">
-            <thead><tr><th>Caregiver</th><th>Requested For</th><th>Status</th><th>Award</th></tr></thead>
+            <thead><tr><th>Caregiver</th><th>Requested For</th><th>Status</th><th>Award</th><th>Actions</th></tr></thead>
             <tbody id="grantsTableBody">
-              <tr><td colspan="4" class="text-center muted small">Loading grants...</td></tr>
+              <tr><td colspan="5" class="text-center muted small">Loading grants...</td></tr>
             </tbody>
           </table>
-        </div>
+        </details>
 
-        <div class="panel" id="wellnessPanel">
-          <div class="flex-between-center mb-12">
-            <h4 class="m-0">Caregiver wellness</h4>
+        <details class="panel staff-section" id="wellnessPanel" open>
+          <summary><h4 class="staff-section-heading">Caregiver wellness</h4> <span class="staff-section-count small muted" id="wellnessCount">(loading…)</span></summary>
+          <div class="staff-section-tools">
             <button class="btn btn-sm btn-outline" id="refreshWellnessBtn">Refresh</button>
           </div>
           <p class="small muted mb-12">Caregivers submit wellness check-ins through their own portal accounts. Only caregivers with recorded check-ins appear in this list; adding a staff account does not add a caregiver here. This chart summarizes those check-ins, not a diagnosis or a measure of improvement. Choose a caregiver to show their chart.</p>
@@ -244,7 +248,7 @@
           <div id="wellnessChart" class="wellness-chart">
             <p class="muted small text-center my-20">No check-ins yet.</p>
           </div>
-        </div>
+        </details>
 
 
 
@@ -292,7 +296,7 @@
 
 <script src="app.js?v=f51fedb26dc4"></script>
 <script src="nav-v2.js"></script>
-<script src="staff.js?v=258e422c053b"></script>
+<script src="staff.js?v=9a7f329cc237"></script>
 </body>
 </html>
 
