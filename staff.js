@@ -246,12 +246,67 @@ async function loadStaffConsole() {
     loadSiteContent(),
     loadRecentChanges(),
     loadStaffTeam(),
-    loadWellnessCaregivers()
+    loadWellnessCaregivers(),
+    loadSubscribers()
   ]);
   if (currentEventId) {
     await loadRegistrations(currentEventId, currentEventTitle);
   }
   updateStatusLine();
+}
+
+// Email list subscribers (schema/0019): read-only list, search and counts.
+// The API never returns unsubscribe tokens; CSV download is a plain link to the staff route.
+let subscribersEpoch = 0;
+
+function formatSubscriberCounts(counts, matching, shown, filtered) {
+  const subscribed = Number(counts?.subscribed || 0);
+  const unsubscribed = Number(counts?.unsubscribed || 0);
+  let text = `${subscribed} subscribed · ${unsubscribed} unsubscribed`;
+  if (filtered) text += ` · ${matching} matching`;
+  if (shown < matching) text += ` (showing the newest ${shown})`;
+  return text;
+}
+
+async function loadSubscribers() {
+  const epoch = ++subscribersEpoch;
+  const body = document.getElementById('subscribersTableBody');
+  const countsLine = document.getElementById('subscribersCounts');
+  const q = String(document.getElementById('subscribersSearchQuery')?.value || '').trim();
+  const status = document.getElementById('subscribersStatusFilter')?.value || '';
+  const params = new URLSearchParams();
+  if (q) params.set('q', q);
+  if (status) params.set('status', status);
+  const query = params.toString();
+  try {
+    const res = await fetch('/api/staff/subscribers' + (query ? `?${query}` : ''));
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to load subscribers');
+    if (epoch !== subscribersEpoch) return;
+    const rows = Array.isArray(data.subscribers) ? data.subscribers : [];
+    if (countsLine) countsLine.textContent = formatSubscriberCounts(data.counts, Number(data.matching || 0), rows.length, !!(q || status));
+    if (!body) return;
+    if (rows.length === 0) {
+      body.innerHTML = `<tr><td colspan="4" class="text-center muted small">${q || status ? 'No subscribers match this search.' : 'No one has joined the email list yet.'}</td></tr>`;
+      return;
+    }
+    body.innerHTML = rows.map(sub => {
+      const badge = sub.status === 'subscribed' ? 'badge-green' : 'badge-outline';
+      const joined = sub.created_at ? escapeHtml(String(sub.created_at).split(' ')[0]) : '';
+      return `
+        <tr>
+          <td data-label="Email">${escapeHtml(sub.email)}</td>
+          <td data-label="First name">${escapeHtml(sub.first_name || '')}</td>
+          <td data-label="Status"><span class="badge ${badge}">${escapeHtml(sub.status)}</span></td>
+          <td data-label="Joined"><span class="small">${joined}</span></td>
+        </tr>
+      `;
+    }).join('');
+  } catch (e) {
+    if (epoch !== subscribersEpoch) return;
+    if (countsLine) countsLine.textContent = 'Subscribers are unavailable right now.';
+    if (body) body.innerHTML = `<tr><td colspan="4" role="alert">Could not load subscribers: ${escapeHtml(e.message)}. Use Search subscribers to try again.</td></tr>`;
+  }
 }
 
 async function loadGrants() {
@@ -1711,6 +1766,15 @@ document.addEventListener('DOMContentLoaded', function () {
       loadWellnessCaregivers();
     });
   }
+  document.getElementById('subscribersSearchBtn')?.addEventListener('click', function () {
+    loadSubscribers();
+  });
+  document.getElementById('subscribersStatusFilter')?.addEventListener('change', function () {
+    loadSubscribers();
+  });
+  document.getElementById('subscribersSearchQuery')?.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') loadSubscribers();
+  });
   const refreshStaffBtn = document.getElementById('refreshStaffTeamBtn');
   if (refreshStaffBtn) {
     refreshStaffBtn.addEventListener('click', function () {
@@ -3034,6 +3098,8 @@ async function submitDirectContent(form) {
 }
 
 let recentChanges = [];
+let releaseActivity = [];
+let releaseActivityAsOf = null;
 
 async function loadRecentChanges() {
   try {
@@ -3042,6 +3108,8 @@ async function loadRecentChanges() {
     if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to load recent changes');
 
     recentChanges = data.changes || data.recent_changes || [];
+    releaseActivity = Array.isArray(data.release_activity) ? data.release_activity : [];
+    releaseActivityAsOf = data.release_activity_as_of || null;
     renderRecentChanges();
   } catch (e) {
     const list = document.getElementById('recentChangesList');
@@ -3053,12 +3121,34 @@ function renderRecentChanges() {
   const container = document.getElementById('recentChangesList');
   if (!container) return;
 
-  if (recentChanges.length === 0) {
-    container.innerHTML = '<p class="muted small text-center my-20">No changes recorded.</p>';
-    return;
+  const notes = typeof releaseActivity === 'undefined' ? [] : releaseActivity;
+  const labels = {
+    legacy_staff: 'Legacy staff request', xcentric_maintenance: 'X-Centric maintenance',
+    not_established: 'Not established', legacy_assistant: 'Legacy assistant', xcentric_team: 'X-Centric team',
+    requested: 'Requested', in_progress: 'In progress', reviewed: 'Reviewed', merged: 'Code complete',
+    not_deployed: 'Not installed', available: 'Ready to review', verified: 'Verified',
+    pending: 'Awaiting approval', approved: 'Approved', not_required: 'Not required',
+    deployed: 'Installed; verification pending', rolled_back: 'Rolled back',
+  };
+  let html = '<h3>Requested changes and releases</h3><p class="small muted">Selected updates reviewed for Legacy staff. Request origin and who carried out the work are recorded separately. Code completion does not mean a change is live.</p>';
+  if (typeof releaseActivityAsOf !== 'undefined' && releaseActivityAsOf) html += `<p class="small muted">Last reviewed update: ${escapeHtml(releaseActivityAsOf)}</p>`;
+  if (!notes.length) html += '<p class="small muted">No reviewed release updates are available.</p>';
+  for (const note of notes) {
+    html += `<div class="recent-change-row"><div class="recent-change-meta"><div class="recent-change-action">${escapeHtml(note.summary)}</div>`;
+    html += `<div class="recent-change-detail">Requested by: ${escapeHtml(note.requested_by)} · Origin: ${escapeHtml(labels[note.request_origin] || 'Not established')} · Carried out by: ${escapeHtml(labels[note.executor] || 'Not established')}</div>`;
+    for (const [key, title] of [['source','Code'],['staging','Staging'],['approval','Approval'],['production','Production']]) {
+      const m = note.milestones?.[key];
+      html += `<div class="small">${title}: ${escapeHtml(labels[m?.state] || 'Not established')}${m?.at ? ` · ${escapeHtml(m.at)}` : ''}</div>`;
+    }
+    // Defense in depth: accept only plain same-site page paths, never arbitrary links.
+    if (typeof note.evidence_path === 'string' && /^\/[a-z0-9][a-z0-9/_-]*$/.test(note.evidence_path)
+        && !note.evidence_path.includes('//') && !/^\/(api|cdn-cgi)(\/|$)/.test(note.evidence_path)) {
+      html += `<a href="${escapeHtml(note.evidence_path)}">Related page</a>`;
+    }
+    html += '</div></div>';
   }
-
-  let html = '';
+  html += '<h3>Staff activity</h3><p class="small muted">Recent supported staff edits and their original audit records. This is not a complete list of every system action.</p>';
+  if (recentChanges.length === 0) html += '<p class="muted small text-center my-20">No changes recorded.</p>';
   for (const c of recentChanges) {
     const isUndone = c.is_undone;
     const canUndo = c.restorable || c.can_undo;

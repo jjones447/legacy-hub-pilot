@@ -6,6 +6,8 @@ import * as eventsDomain from '../../_lib/domain/events.js';
 import { getStaffMember, listStaff, updateStaffMember, createStaffMember } from '../../_lib/staff.js';
 import { staffSeries, caregiversWithCheckins } from '../../_lib/wellness.js';
 import { _resetContentCache } from '../../_content.mjs';
+import { customerActivity } from '../../_lib/customer-activity.mjs';
+import { listSubscribers, subscribedForExport, subscribersCsv } from '../../_lib/newsletter.mjs';
 
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), {
@@ -257,11 +259,16 @@ export async function onRequestGet({ request, env }) {
         };
       });
 
-      return json({
+      const releases = customerActivity();
+      const response = json({
         ok: true,
         changes: enriched,
-        recent_changes: enriched
+        recent_changes: enriched,
+        release_activity: releases.entries,
+        release_activity_as_of: releases.as_of,
       });
+      response.headers.set('Cache-Control', 'no-store');
+      return response;
     }
 
     if (subRoute === 'events') {
@@ -278,6 +285,36 @@ export async function onRequestGet({ request, env }) {
       `).all();
 
       return json({ ok: true, events: results });
+    }
+
+    if (subRoute === 'subscribers' || subRoute === 'subscribers.csv') {
+      // GET /api/staff/subscribers[?q=&status=&limit=] -- email list (schema/0019), read-only.
+      // GET /api/staff/subscribers.csv (or ?format=csv) -- every subscribed address as CSV.
+      // Never returns unsubscribe tokens. Staff-only: /api/staff/ is behind the Access guard.
+      if (pathSegments.length !== 3) return json({ ok: false, error: 'unsupported route' }, 404);
+      if (subRoute === 'subscribers.csv' || url.searchParams.get('format') === 'csv') {
+        const rows = await subscribedForExport(env.LEGACY_DB);
+        await env.LEGACY_DB.prepare(`
+          INSERT INTO audit_log (actor, action, entity, after_json) VALUES (?, 'subscriber.export', 'email_subscriber', ?)
+        `).bind(getActor(request, env), JSON.stringify({ rows: rows.length })).run();
+        const date = new Date().toISOString().slice(0, 10);
+        return new Response('﻿' + subscribersCsv(rows), {
+          status: 200,
+          headers: {
+            'content-type': 'text/csv; charset=utf-8',
+            'content-disposition': `attachment; filename="legacy-email-subscribers-${date}.csv"`,
+            'cache-control': 'no-store',
+          },
+        });
+      }
+      const list = await listSubscribers(env.LEGACY_DB, {
+        q: url.searchParams.get('q') || '',
+        status: url.searchParams.get('status') || '',
+        limit: url.searchParams.get('limit') || 200,
+      });
+      const response = json({ ok: true, ...list });
+      response.headers.set('Cache-Control', 'no-store');
+      return response;
     }
 
     if (subRoute === 'me') {
