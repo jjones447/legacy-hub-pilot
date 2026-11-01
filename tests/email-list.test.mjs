@@ -430,6 +430,21 @@ test('the script enables the sign-up only when it runs, and hides the not-ready 
   assert.match(app, /initUnsubscribePage\(window\.location, window\.history\);\n  initEmailListForm\(\);/, "wired at DOMContentLoaded");
 });
 
+test('outcome copy never claims a subscription the server may have refused (review 5730619796 P2)', () => {
+  for (const [path, unsub] of [['index.html', 'unsubscribe.html'], ['templates/index.html.j2', 'templates/unsubscribe.html.j2']]) {
+    const success = read(path).match(/<form id="emailListForm"[\s\S]*?<div class="success-note" data-intake-success[^>]*>([\s\S]*?)<\/div>/)?.[1];
+    assert.ok(success, `${path}: sign-up success note`);
+    // Valid for a new address, one already on the list, and one that previously unsubscribed.
+    assert.match(success, /^Thank you\. We've received your request to join the Legacy email list\./);
+    assert.doesNotMatch(success, /on the list|(?<!un)subscribed|you're in|welcome to/i);
+    assert.match(success, /previously unsubscribed[\s\S]*<a href="about\.html#contact">contact Legacy<\/a>/);
+    const done = read(unsub).match(/<div class="success-note" data-intake-success[^>]*>([\s\S]*?)<\/div>/)?.[1];
+    assert.ok(done, `${unsub}: unsubscribe outcome`);
+    assert.doesNotMatch(done, /home page|join again|sign up again/i, 'no self-service rejoin is promised');
+    assert.match(done, /<a href="about\.html#contact">contact Legacy<\/a>/);
+  }
+});
+
 test('unsubscribe page has public chrome, noindex, a labelled form and generic outcome copy', () => {
   const html = read('unsubscribe.html');
   assert.ok(html.includes('<a class="skip-link" href="#main">Skip to content</a>'));
