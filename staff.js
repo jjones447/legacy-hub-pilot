@@ -725,18 +725,31 @@ async function resolveFollowup(id, event) {
   }
   setNeedsAttentionMessage('Marking the follow-up complete…');
   let failure = null;
+  let unconfirmed = false;
   try {
     const res = await fetch(`/api/staff/followup/${id}/resolve`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'done' })
     });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || data.ok === false) failure = data.error || `the server answered ${res.status}`;
+    const data = await res.json().catch(() => null);
+    // Only the explicit positive acknowledgment counts as done (#306 review): a 200 with an
+    // unreadable or unexpected body is "unconfirmed", never "completed".
+    if (res.ok && data && data.ok === true) failure = null;
+    else if (res.ok) { unconfirmed = true; failure = 'the server did not confirm it'; }
+    else failure = (data && data.error) || `the server answered ${res.status}`;
   } catch (e) {
+    unconfirmed = true;
     failure = 'the request did not finish';
   }
   followupPending.delete(id);
+  if (unconfirmed) {
+    // Never retry automatically: re-read the queue so the list shows the real state, and
+    // only then allow another attempt from the refreshed row.
+    setNeedsAttentionMessage(`We could not confirm whether this follow-up was marked complete (${failure}). The list has been refreshed; check whether it is still open before trying again.`, true);
+    await loadFollowups();
+    return;
+  }
   if (failure) {
     if (button) {
       button.disabled = false;
@@ -1153,6 +1166,7 @@ async function setCaregiverRecordStatus(status, target) {
     ? 'Archive this caregiver? Their record and history are kept, but they will not be able to sign in to the Caregiver Portal. Open follow-ups stay open. You can restore them to active later.'
     : 'Restore this caregiver to active? They will be able to sign in to the Caregiver Portal again.';
   if (!window.confirm(question)) return;
+  const stillShowing = () => document.getElementById('caregiverRecordPanel')?.dataset?.caregiverId === caregiverId;
   caregiverStatusPending = true;
   if (target) target.disabled = true;
   setCaregiverLifecycleMessage(archiving ? 'Archiving…' : 'Restoring…');
@@ -1163,18 +1177,24 @@ async function setCaregiverRecordStatus(status, target) {
       body: JSON.stringify({ status })
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.ok) throw new Error(data.error || `the server answered ${res.status}`);
+    if (!res.ok || !data || data.ok !== true) throw new Error((data && data.error) || `the server answered ${res.status}`);
     caregiverStatusPending = false;
-    await viewCaregiver(caregiverId);
-    if (document.getElementById('caregiverRecordPanel')?.dataset?.caregiverId === caregiverId) {
-      setCaregiverLifecycleMessage(archiving
-        ? 'Archived. This caregiver can no longer sign in to the Caregiver Portal.'
-        : 'Restored to active. This caregiver can sign in to the Caregiver Portal again.');
+    // Only refresh and report on the record that is still on screen (#306 review): if staff
+    // opened another caregiver meanwhile, never navigate back to this one.
+    if (stillShowing()) {
+      await viewCaregiver(caregiverId);
+      if (stillShowing()) {
+        setCaregiverLifecycleMessage(archiving
+          ? 'Archived. This caregiver can no longer sign in to the Caregiver Portal.'
+          : 'Restored to active. This caregiver can sign in to the Caregiver Portal again.');
+      }
     }
     await searchCaregivers(currentSearchOffset);
   } catch (e) {
-    if (target) target.disabled = false;
-    setCaregiverLifecycleMessage(`Could not change the status: ${e.message}. Reopen the record to check its current status before trying again.`, true);
+    if (stillShowing()) {
+      if (target) target.disabled = false;
+      setCaregiverLifecycleMessage(`Could not change the status: ${e.message}. Reopen the record to check its current status before trying again.`, true);
+    }
   } finally {
     caregiverStatusPending = false;
   }
@@ -2267,6 +2287,15 @@ function noteNeedsAttentionActionable(actionable) {
   if (needsAttentionActionable !== null) return;
   needsAttentionActionable = Boolean(actionable);
   applyStaffPanelDefaults();
+}
+
+// The current person can't be established (#306 review): stop writing anyone's choices.
+// Cancels a pending identity hash; stored choices are kept, never deleted.
+function forgetStaffPanelIdentity() {
+  staffPanelKeyEpoch++;
+  staffPanelStorageKey = null;
+  staffPanelSaved = null;
+  staffPanelTouched.clear();
 }
 
 async function rememberStaffPanelsFor(me) {
@@ -3404,11 +3433,13 @@ let staffTeamError = null;
 
 async function loadStaffTeam() {
   const list = document.getElementById('staffTeamList');
+  let identityKnown = false;
   try {
     const [meRes, teamRes] = await Promise.all([fetch('/api/staff/me'), fetch('/api/staff/team')]);
     const meData = await meRes.json();
     const teamData = await teamRes.json();
     if (!meRes.ok || !meData.ok) throw new Error(meData.error || 'Failed to load your staff record');
+    identityKnown = true;
     // Section open/closed choices belong to this signed-in person (see staff section disclosures).
     if (typeof rememberStaffPanelsFor === 'function') void rememberStaffPanelsFor(meData.me);
     if (!teamRes.ok || !teamData.ok) throw new Error(teamData.error || 'Failed to load staff');
@@ -3419,6 +3450,7 @@ async function loadStaffTeam() {
     return true;
   } catch (e) {
     staffTeamError = e.message;
+    if (!identityKnown && typeof forgetStaffPanelIdentity === 'function') forgetStaffPanelIdentity();
     staffMe = null;
     staffTeam = [];
     if (list) list.innerHTML = `<p class="muted small text-center my-20">Error loading staff: ${escapeHtml(e.message)}</p>`;

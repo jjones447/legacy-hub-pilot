@@ -190,6 +190,48 @@ test('storage failures, missing identity and service actors fall back to default
   assert.equal(noCrypto.storage.writes, 0);
 });
 
+test('a failed identity refresh stops writing the previous person\'s choices and cancels a pending identity (review P2-2)', async () => {
+  const storage = memoryStorage();
+  const page = panelPage({ storage });
+  await page.context.rememberStaffPanelsFor({ email: 'person.a@example.invalid', role: 'staff' });
+  await page.user('eventsPanel');
+  const written = storage.writes;
+  assert.equal(written, 1);
+  const saved = [...storage.map];
+  page.context.forgetStaffPanelIdentity();
+  await page.user('grantsPanel');
+  await page.user('eventsPanel');
+  assert.equal(storage.writes, written, 'unknown identity writes nothing');
+  assert.deepEqual([...storage.map], saved, "the previous person's stored choices are kept, not deleted");
+  // A hash still in flight when identity is lost never installs a key afterwards.
+  const pending = page.context.rememberStaffPanelsFor({ email: 'person.b@example.invalid', role: 'staff' });
+  page.context.forgetStaffPanelIdentity();
+  await pending;
+  await page.user('wellnessPanel');
+  assert.equal(storage.writes, written);
+});
+
+test('loadStaffTeam revokes the preference identity only when /me cannot be established (review P2-2)', async () => {
+  const run = async (meOk, teamOk) => {
+    const forgot = []; const remembered = [];
+    const context = createContext({
+      document: { getElementById: () => ({ innerHTML: '' }) }, escapeHtml,
+      fetch: async (url) => url.endsWith('/me')
+        ? { ok: meOk, json: async () => (meOk ? { ok: true, me: { email: 'person.a@example.invalid', role: 'staff' } } : { ok: false, error: 'unknown' }) }
+        : { ok: teamOk, json: async () => (teamOk ? { ok: true, team: [] } : { ok: false, error: 'team down' }) },
+      rememberStaffPanelsFor: me => { remembered.push(me.email); },
+      forgetStaffPanelIdentity: () => { forgot.push(true); },
+      renderStaffTeam: () => {},
+    });
+    runInContext(slice('let staffMe = null;', 'function renderStaffTeam()'), context);
+    await context.loadStaffTeam();
+    return { forgot: forgot.length, remembered };
+  };
+  assert.deepEqual(await run(false, true), { forgot: 1, remembered: [] });
+  assert.deepEqual(await run(true, false), { forgot: 0, remembered: ['person.a@example.invalid'] });
+  assert.deepEqual(await run(true, true), { forgot: 0, remembered: ['person.a@example.invalid'] });
+});
+
 test('the Legacy Assistant is excluded from section persistence and keeps its own closed-by-default disclosure', () => {
   const page = panelPage();
   const ids = runInContext('STAFF_PANEL_IDS', page.context);
@@ -285,6 +327,26 @@ test('Mark complete failures are visible, re-enable the button and do not reload
   assert.match(offline.nodes.needsAttentionBody.innerHTML, /role="alert">Could not load follow-ups/);
   assert.equal(offline.nodes.needsAttentionCount.textContent, '(could not load)');
   assert.deepEqual(offline.notes, [], 'an unknown queue does not decide the default');
+});
+
+test('Mark complete reports completion only on an explicit {ok:true}; anything else is unconfirmed and re-read (review P2-1)', async () => {
+  for (const reply of [
+    { ok: true, status: 200, json: async () => { throw new SyntaxError('not JSON'); } },
+    { ok: true, status: 200, json: async () => ({}) },
+    { ok: true, status: 200, json: async () => ({ ok: 'yes' }) },
+    { ok: true, status: 200, json: async () => null },
+  ]) {
+    const h = followups({ fetchImpl: async (url) => (url.endsWith('/resolve') ? reply : queueReply(QUEUE)) });
+    const btn = button();
+    await h.context.resolveFollowup(7, { target: btn, stopPropagation() {} });
+    assert.doesNotMatch(h.message.textContent, /Marked complete/);
+    assert.match(h.message.textContent, /could not confirm whether this follow-up was marked complete/);
+    assert.equal(h.message.classes.has('is-error'), true);
+    assert.equal(h.calls.filter(c => c.url.endsWith('/resolve')).length, 1, 'no automatic retry');
+    assert.equal(h.calls.at(-1).url, '/api/staff/queue', 'the queue is re-read before any new attempt');
+    assert.equal(h.nodes.needsAttentionCount.textContent, '(1 open)');
+    assert.match(h.nodes.needsAttentionBody.innerHTML, /data-action="resolve-followup" data-followup-id="7"/);
+  }
 });
 
 test('the follow-up route and its transition are unchanged (done/dismissed only, open-only queue)', () => {
@@ -403,4 +465,26 @@ test('Archive/Restore reuse the existing caregiver PATCH with only status, confi
   assert.equal(failed.message.classes.has('is-error'), true);
   await failed.context.setCaregiverRecordStatus('deleted', restore);
   assert.equal(failed.calls.filter(call => call.options?.method === 'PATCH').length, 1, 'only archived/active are offered');
+});
+
+test('an older Archive/Restore response never pulls staff back from a newer record (review P2-3)', async () => {
+  for (const outcome of ['success', 'failure']) {
+    let finish;
+    const pending = new Promise(resolve => { finish = resolve; });
+    const h = caregiverRecord({ patch: () => pending });
+    await h.context.viewCaregiver('cg_demo');
+    const target = { disabled: false };
+    const run = h.context.setCaregiverRecordStatus('archived', target);
+    const before = h.calls.length;
+    h.nodes.caregiverRecordPanel.dataset.caregiverId = 'cg_second'; // staff opened another record
+    h.message.textContent = 'cg_second view';
+    finish(outcome === 'success'
+      ? { ok: true, json: async () => ({ ok: true }) }
+      : { ok: false, status: 400, json: async () => ({ ok: false, error: 'refused' }) });
+    await run;
+    const views = h.calls.slice(before).filter(c => !c.options?.method && /\/api\/staff\/caregiver\/cg_demo/.test(c.url));
+    assert.deepEqual(views, [], `${outcome}: no navigation back to the older record`);
+    assert.equal(h.nodes.caregiverRecordPanel.dataset.caregiverId, 'cg_second');
+    assert.equal(h.message.textContent, 'cg_second view', `${outcome}: no stale feedback on the newer record`);
+  }
 });
