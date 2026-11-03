@@ -41,7 +41,7 @@
 
 <section id="story">
   <div class="container">
-    <div class="split">
+    <div class="split" id="mission">
       <div>
         <span class="eyebrow" data-cs="about.story.eyebrow">{{ sections["about.story"].eyebrow }}</span>
         <h2 class="mb-14" data-cs="about.story.heading">{{ sections["about.story"].heading }}</h2>
@@ -54,14 +54,6 @@
       <figure class="about-story-photo">
         <img src="media/client-oct16/about-family-img-1846.jpg" alt="A family photo from Legacy's story" width="2058" height="1474" loading="lazy" decoding="async">
       </figure>
-    </div>
-    <div class="about-values-row">
-        <div class="visual" id="mission">
-          <h3 class="fs-18-mb-14" data-cs="about.values.heading">{{ sections["about.values"].heading }}</h3>
-{%- for it in sections["about.values"]["items"] %}
-          <div class="timeline-item"><div class="timeline-dot bg-coral"></div><div><strong>{{ it.title }}</strong><div class="when">{{ it.when }}</div></div></div>
-{%- endfor %}
-        </div>
     </div>
   </div>
 </section>

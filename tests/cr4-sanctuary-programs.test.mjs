@@ -327,7 +327,9 @@ test('O26-02/03/04: Sanctuary, About, and Get Involved place hero text over supp
     const story = aboutHtml.match(/<section id="story">([\s\S]*?)<\/section>/)?.[1];
     assert.ok(story, `${rel}: About story section must exist`);
     assert.match(story, /<figure class="about-story-photo">\s*<img src="media\/client-oct16\/about-family-img-1846\.jpg" alt="[^"]+" width="2058" height="1474"/);
-    assert.match(story, /id="mission"/, 'the values block and its #mission anchor stay in the story section');
+    // Nov 3 request: the "What guides us" values block is removed; #mission still lands on the story.
+    assert.match(story, /<div class="split" id="mission">/, 'the #mission anchor stays on the story');
+    assert.doesNotMatch(aboutHtml, /about-values-row|What guides us<\/h3>|Real rest, not lip service/);
     assert.match(aboutHtml, /<figure class="client-founder-photo">\s*<img src="media\/client-oct16\/founder-img-7045\.jpg"/);
   }
 
