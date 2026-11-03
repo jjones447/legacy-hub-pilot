@@ -95,6 +95,11 @@ secret/database access. Owner-scoped history, exact retries, private-data whitel
 payload rejection and zero additional mail remain covered. Hosted checks and independent review
 must refer to the final combined head; the standalone312 disposition does not qualify installation.
 
+The first integration CI found a Windows merge-checkout CRLF app hash, even though Git stored LF.
+The author normalized the local app to its exact committed LF bytes (no semantic source change)
+and regenerated the 24 HTML cache keys from those bytes. Use the final corrected head and its
+hosted checks, not the initial `01e85cd` cache-key result. No global Git or runtime settings changed.
+
 ## Independent integration / preflight — STOP before effects
 
 1. Review the exact source delta from Staff306 `ca69b6926791cfb52ecb990129c22cee1620c308`.
