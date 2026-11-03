@@ -100,9 +100,13 @@ test('a missing, zero, negative, faster-than-normal or non-numeric rate leaves n
   }
 });
 
-test('Home and Drop-In Respite header videos ask for half speed (requester choice, Nov 3)', () => {
+test('Home, Drop-In Respite and Sanctuary header videos ask for half speed (requester choice, Nov 3)', () => {
   for (const page of ['index', 'drop-in-respite']) {
     const html = readFileSync(new URL(`../templates/${page}.html.j2`, import.meta.url), 'utf8');
     assert.match(html, /<video class="hero-video"[^>]*data-playback-rate="0\.5"/);
   }
+  // sanctuary.html is a hand-maintained shared page, not a template.
+  const sanctuary = readFileSync(new URL('../sanctuary.html', import.meta.url), 'utf8');
+  assert.match(sanctuary, /<video class="hero-media"[^>]*data-motion-autoplay data-playback-rate="0\.5"/);
+  assert.match(sanctuary, /<script src="app\.js\?v=[0-9a-f]+"><\/script>/);
 });
