@@ -619,6 +619,8 @@ function submitPortalLogin(e) {
         statusDiv.textContent = 'Too many requests. Please wait a few minutes and try again.';
       } else if (err.message === 'signin_unavailable') {
         statusDiv.textContent = 'Sign-in is temporarily unavailable. Please contact Legacy or try again later.';
+      } else if (err.message === 'preview_portal_disabled') {
+        statusDiv.textContent = 'Staging caregiver sign-in is disabled. Only the specifically configured QA caregiver can sign in after the release owner enables it.';
       } else {
         statusDiv.textContent = "We couldn't request a sign-in link just now. Please try again later.";
       }

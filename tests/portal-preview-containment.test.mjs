@@ -170,7 +170,7 @@ test('production mailed login and single-use verification remain intact', async 
   await productionCredentials();
 });
 
-test('explicit PORTAL_PREVIEW_MAIL_ENABLED opt-in enables staging caregiver sign-in while preserving ENVIRONMENT=preview, staging DB, and origin guards', async () => {
+test('explicit single-QA opt-in enables staging caregiver sign-in while preserving ENVIRONMENT=preview, staging DB, and origin guards', async () => {
   const rows = [];
   const db = {
     prepare(sql) {
@@ -211,11 +211,15 @@ test('explicit PORTAL_PREVIEW_MAIL_ENABLED opt-in enables staging caregiver sign
   const env = {
     ENVIRONMENT: 'preview',
     PORTAL_PREVIEW_MAIL_ENABLED: '1',
+    PORTAL_PREVIEW_QA_CAREGIVER_ID: 'staging-caregiver',
+    PORTAL_PREVIEW_QA_EMAIL: 'caregiver@staging.invalid',
     LEGACY_DB: db,
     PORTAL_TOKEN_SECRET: SECRET,
     EMAIL_API_KEY: 'synthetic-staging-key',
   };
-  assert.equal(canSendEmail(env), true);
+  assert.equal(canSendEmail(env), false, 'QA opt-in is not general mail permission');
+  assert.equal(canSendEmail(env, { purpose: 'portal-signin', recipient: env.PORTAL_PREVIEW_QA_EMAIL,
+    caregiverId: env.PORTAL_PREVIEW_QA_CAREGIVER_ID }), true);
   assert.equal(canSendEmail({ ...env, ENVIRONMENT: 'development' }), false);
 
   const originalFetch = globalThis.fetch;

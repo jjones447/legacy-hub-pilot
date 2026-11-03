@@ -166,7 +166,7 @@ test('existing portal/fallback opt-in cannot enable confirmation and confirmatio
   const base = { ...f.env, ENVIRONMENT:'preview', CONFIRMATION_PREVIEW_RECIPIENTS:f.body.email };
   for (const flags of [{PORTAL_PREVIEW_MAIL_ENABLED:'1'}, {PREVIEW_MAIL_ENABLED:'1'}]) {
     const env = { ...base, ...flags };
-    assert.equal(canSendEmail(env), true);
+    assert.equal(canSendEmail(env), false, 'broad preview mail flags no longer grant general mail permission');
     assert.equal(confirmationMailAllowed(env, f.body.email), false);
     assert.deepEqual(await sendEmail(env, {to:f.body.email,purpose:'confirmation'}, f.send), {ok:false,status:0});
   }
