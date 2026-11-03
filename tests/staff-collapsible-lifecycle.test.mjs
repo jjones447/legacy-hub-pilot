@@ -56,8 +56,8 @@ test('every main Staff section is a native details/summary with preserved IDs, c
     assert.match(source, new RegExp(`getElementById\\('${id}'\\)`), `${id} keeps its listener`);
   }
   assert.match(details('peopleManagementPanel').body, /data-action="search-caregivers"/);
-  assert.match(details('needsAttentionPanel').summary, /Needs attention/);
-  assert.match(details('eventsPanel').summary, /Upcoming events/);
+  assert.match(details('needsAttentionPanel').summary, /Alerts/);
+  assert.match(details('eventsPanel').summary, /Events/);
   assert.match(details('grantsPanel').summary, /Wellness Grants/);
   assert.match(details('wellnessPanel').summary, /Caregiver wellness/);
   // Attendance is a disclosure too, still hidden until an event is chosen (review item 4).
