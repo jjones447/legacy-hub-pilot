@@ -1414,3 +1414,12 @@ main ul.measure-620 { margin: 16px 0; padding-left: 24px; }
 
 /* Portal: one-time membership hand-off status (pc2-claude-ct-2, Oct 30). Visible when not [hidden]. */
 .portal-handoff-note { margin: 0 0 12px; padding: 10px 12px; border-radius: 6px; background: #f3f4f6; color: #374151; font-size: 14px; }
+
+/* Staff panel disclosures; no layout or business-flow changes outside these sections. */
+.staff-section > summary { cursor: pointer; }
+.staff-section > summary .staff-section-heading { display: inline; margin: 0; }
+.staff-section > summary:focus-visible { outline: 2px solid var(--plum); outline-offset: 2px; border-radius: 4px; }
+.staff-section[open] > summary { margin-bottom: 12px; }
+.staff-section-count { margin-left: 4px; }
+.staff-section-tools { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 12px; margin-bottom: 12px; }
+.staff-section-tools > :last-child { margin-left: auto; }

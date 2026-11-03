@@ -209,3 +209,69 @@ not a new account move, alias recreation, repointing or client-message instructi
 
 Recreate this branch alias in the new account and re-point anything referencing it. The staging
 URL will change with the account; tell Shanelle before it does, not after.
+
+
+## Production-based Staff panel candidate — November 3, 2026
+
+[pc2-codex-42] This bounded presentation change reuses reviewed Staff306/310
+panel markup, preference isolation and names on cloud main `d810ef9c` (tree
+`aaa493af885cf9a45d5b3784c3d42f5d164c93c4`), identical to recorded production
+source `f8d7361e`. The current deployment pin is from the existing November3
+publisher receipt in private Legacy54 comment6606227728; this source work does
+not make a fresh Cloudflare installation or drift claim. The release owner must
+compare the actual current package before an authorized installation.
+
+The existing Staff UI is the designated home. Alerts and Events replace the
+old Needs attention and Upcoming events headings. The four main workflow panels
+and conditional Attendance use native disclosures. Existing People, Change log
+and Site content disclosures remain. The existing controls/IDs and all server
+operations are preserved; no Help panel is added because production has none.
+
+Open/closed booleans alone are stored per origin and hashed verified Staff email.
+The saved personal choice wins, including closed Alerts with open requests. With
+no saved choice, the first successful empty Alerts read closes it; a failed read
+stays visibly unavailable. Failed/unknown identity cancels preference writes and
+pending hashes without deleting another person's saved choices. Attendance opens
+when an event is selected and is not persisted. The Legacy Assistant's independent
+recording, drafts, HOLD and session state are excluded.
+
+Local acceptance uses actual committed HTML in jsdom: clicking the actual summary
+heading triggers its DOM default activation, and a reconstructed page restores
+the same fixture person's choices. Tests cover person/origin separation, controls,
+unknown identities, storage errors and list failures. Cold DOMContentLoaded tests
+do not flush parser toggle events before initialization: preferences are saved
+only after actual summary activation, in a post-dispatch task. Pending intent
+fences automatic defaults; parser/programmatic/canceled toggles are excluded,
+rapid activations retain the final choice and identity revocation cancels pending
+writes. A forced pre-activation microtask checkpoint test covers the event-loop
+schedule that ordinary scripted Element.click() does not model. jsdom is a locked **test-only**
+dependency, installed with lifecycle scripts disabled only in the separately named
+Staff DOM controls workflow. These tests live under tests/dom and are directly
+selected outside the ordinary unit inventory. The main unit job, original no-install
+guard and runtime dispatcher remain unchanged. jsdom is not imported or
+included by the served application. No external page, browser process, layout,
+customer session or login gate is involved. A 390px DOM context is not phone visual
+QA, and `details.open` transitions are not proof of deployed pixel visibility.
+
+Source test command:
+
+```text
+node --test tests/dom/staff-production-panels.test.mjs
+node --test tests/events-d7-s2a.test.mjs tests/staff-assistant-disclosure.test.mjs tests/staff-team.test.mjs tests/test-boundary.test.mjs
+python build.py --verify
+```
+
+Current stage: a focused source candidate and local control tests, with independent
+review/hosted checks/installed acceptance separate. Next increment is the exact
+reviewed package followed by an authorized own-Staff browser check: click Alerts
+and Events, confirm actual rows hide/reappear at desktop/phone widths, reload with
+the same Staff identity and confirm the choice. The prior Work-settings browser
+denial remains NOT RUN; local DOM tests are not a bypass or a substitute for that
+installed evidence. No deployment, merge, provider/mail, customer record, schema,
+portal behavior or production approval follows from this candidate.
+
+For rollback retain the prior package and original staff/session state. This change
+adds no database state. Preference booleans can remain inert when rolling back code;
+never clear unrelated storage, customer records or another person's session.
+Root41 owns release and joined acceptance;42 authors this bounded source slice and
+retains independent reviewer separation from the other author's My Support work.

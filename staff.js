@@ -634,11 +634,15 @@ async function archiveNote(id, target) {
 
 
 async function loadFollowups() {
+  const count = document.getElementById('needsAttentionCount');
   try {
     const res = await fetch('/api/staff/queue');
     const data = await res.json();
     if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to fetch queue');
     
+    const openCount = Array.isArray(data.queue) ? data.queue.length : 0;
+    if (count) count.textContent = openCount ? `(${openCount} open)` : '(nothing open)';
+    noteNeedsAttentionActionable(openCount > 0);
     const body = document.getElementById('needsAttentionBody');
     if (!body) return;
     if (!data.queue || data.queue.length === 0) {
@@ -671,6 +675,9 @@ async function loadFollowups() {
       `;
     }).join('');
   } catch (e) {
+    if (count) count.textContent = '(could not load)';
+    const body = document.getElementById('needsAttentionBody');
+    if (body) body.innerHTML = '<tr><td colspan="3" role="alert">Could not load alerts. Reload the page to try again.</td></tr>';
     console.error(e);
   }
 }
@@ -1053,7 +1060,20 @@ async function viewCaregiver(id) {
   }
 }
 
+function eventsCountText(events) {
+  const list = Array.isArray(events) ? events : [];
+  const total = list.length === 1 ? '1 event' : `${list.length} events`;
+  const byState = {};
+  for (const ev of list) {
+    const state = ev.publish_state || 'published';
+    byState[state] = (byState[state] || 0) + 1;
+  }
+  const parts = ['published', 'draft', 'archived'].filter(state => byState[state]).map(state => `${byState[state]} ${state}`);
+  return parts.length ? `(${total}: ${parts.join(', ')})` : `(${total})`;
+}
+
 async function loadEvents() {
+  const count = document.getElementById('eventsCount');
   try {
     let res = await fetch('/api/staff/events');
     let data;
@@ -1066,6 +1086,7 @@ async function loadEvents() {
     if (!data || !data.ok) throw new Error(data?.error || 'Failed to fetch events');
 
     staffEvents = data.events || [];
+    if (count) count.textContent = eventsCountText(staffEvents);
     const body = document.getElementById('upcomingEventsBody');
     if (!body) return;
     if (staffEvents.length === 0) {
@@ -1108,6 +1129,9 @@ async function loadEvents() {
       `;
     }).join('');
   } catch (e) {
+    if (count) count.textContent = '(could not load)';
+    const body = document.getElementById('upcomingEventsBody');
+    if (body) body.innerHTML = '<tr><td colspan="5" role="alert">Could not load events. Reload the page to try again.</td></tr>';
     console.error(e);
   }
 }
@@ -1594,6 +1618,7 @@ async function loadRegistrations(eventId, eventTitle) {
     if (!panel || !content) return;
     
     panel.style.display = 'block';
+    panel.open = true;
     
     if (data.registrations.length === 0) {
       content.innerHTML = '<p class="small muted text-center">No caregivers registered for this event yet.</p>';
@@ -1663,6 +1688,7 @@ async function updateAttendance(id, status, event) {
 }
 
 document.addEventListener('DOMContentLoaded', function () {
+  initStaffPanels();
   initStaffAssistantDisclosure();
   void initWebJobFeature();
   initStaffChatTargets();
@@ -2034,6 +2060,145 @@ document.addEventListener('click', function (e) {
     archiveEvent(id);
   }
 });
+
+// Staff section disclosures: reused from306/310; native <details> summaries are
+// keyboard operable and collapsing never fetches or changes records. Only open/closed
+// booleans are remembered, under a key for this origin and a hash of the signed-in staff
+// email; nothing is remembered until /api/staff/me names a person. The Legacy Assistant
+// is deliberately not part of this list.
+const STAFF_PANEL_IDS = Object.freeze(['needsAttentionPanel', 'eventsPanel', 'grantsPanel', 'wellnessPanel', 'peopleManagementPanel', 'recentChangesPanel', 'siteContentPanel']);
+const STAFF_PANEL_STORAGE_PREFIX = 'staff-console-panels-v1';
+const staffPanelDefaults = {};
+const staffPanelTouched = new Set();
+const staffPanelActivations = new Map();
+let staffPanelStorageKey = null;
+let staffPanelSaved = null;
+let staffPanelKeyEpoch = 0;
+let needsAttentionActionable = null;
+
+function staffPanelStorage() {
+  try { return window.localStorage || null; } catch { return null; }
+}
+
+async function staffPanelKeyFor(me, origin) {
+  const email = String(me?.email || '').trim().toLowerCase();
+  if (!['staff', 'admin'].includes(me?.role) || !/^[^@\s]+@[^@\s]+$/.test(email) || !origin) return null;
+  const subtle = window.crypto?.subtle;
+  if (!subtle || typeof TextEncoder !== 'function') return null;
+  const digest = await subtle.digest('SHA-256', new TextEncoder().encode(email));
+  const hex = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
+  return `${STAFF_PANEL_STORAGE_PREFIX}:${origin}:${hex.slice(0, 32)}`;
+}
+
+function readStaffPanelChoices(key) {
+  try {
+    const parsed = JSON.parse(staffPanelStorage()?.getItem(key) || '{}');
+    const choices = {};
+    for (const id of STAFF_PANEL_IDS) {
+      if (typeof parsed?.[id] === 'boolean') choices[id] = parsed[id];
+    }
+    return choices;
+  } catch {
+    return {};
+  }
+}
+
+function saveStaffPanelChoice(id, open) {
+  if (!staffPanelStorageKey || !staffPanelSaved) return;
+  staffPanelSaved = { ...staffPanelSaved, [id]: open };
+  try {
+    staffPanelStorage()?.setItem(staffPanelStorageKey, JSON.stringify(staffPanelSaved));
+  } catch {
+    // Storage full, blocked or private: the choice still applies for this page.
+  }
+}
+
+function setStaffPanelOpen(id, open) {
+  const panel = document.getElementById(id);
+  if (!panel || panel.open === open) return;
+  panel.open = open;
+}
+
+// A person's saved choice wins; otherwise Alerts opens only when something is
+// open, and every other section keeps its markup default.
+function applyStaffPanelDefaults() {
+  for (const id of STAFF_PANEL_IDS) {
+    if (staffPanelTouched.has(id) || staffPanelActivations.has(id) || !(id in staffPanelDefaults)) continue;
+    if (staffPanelSaved && typeof staffPanelSaved[id] === 'boolean') setStaffPanelOpen(id, staffPanelSaved[id]);
+    else if (id === 'needsAttentionPanel' && needsAttentionActionable !== null) setStaffPanelOpen(id, needsAttentionActionable);
+    else setStaffPanelOpen(id, staffPanelDefaults[id]);
+  }
+}
+
+function initStaffPanels() {
+  for (const id of STAFF_PANEL_IDS) {
+    const panel = document.getElementById(id);
+    if (!panel) continue;
+    staffPanelDefaults[id] = Boolean(panel.open);
+    const summary = panel.querySelector(':scope > summary');
+    // The browser emits toggle for parsed [open] markup and programmatic changes too.
+    // Persist only an actual summary activation (pointer or native keyboard click).
+    summary?.addEventListener('click', event => {
+      const activation = { event, expectedOpen: !panel.open };
+      const pending = staffPanelActivations.get(id) || new Set();
+      pending.add(activation);
+      staffPanelActivations.set(id, pending);
+      // A microtask checkpoint can precede native activation in user event dispatch.
+      // A task observes final uncanceled activation; pending intent also fences defaults.
+      setTimeout(() => {
+        const current = staffPanelActivations.get(id);
+        if (!current?.delete(activation)) return; // identity was revoked while pending
+        if (!current.size) staffPanelActivations.delete(id);
+        if (!event.defaultPrevented && panel.open === activation.expectedOpen) {
+          staffPanelTouched.add(id);
+          saveStaffPanelChoice(id, Boolean(panel.open));
+        } else if (!current.size) {
+          applyStaffPanelDefaults();
+        }
+      }, 0);
+    });
+  }
+}
+
+// Only the first successful load decides the Alerts default; later list refreshes
+// never reopen or close the section.
+function noteNeedsAttentionActionable(actionable) {
+  if (needsAttentionActionable !== null) return;
+  needsAttentionActionable = Boolean(actionable);
+  applyStaffPanelDefaults();
+}
+
+// The current person can't be established (#306 review): stop writing anyone's choices.
+// Cancels a pending identity hash; stored choices are kept, never deleted.
+function forgetStaffPanelIdentity() {
+  staffPanelKeyEpoch++;
+  staffPanelStorageKey = null;
+  staffPanelSaved = null;
+  staffPanelTouched.clear();
+  staffPanelActivations.clear();
+}
+
+async function rememberStaffPanelsFor(me) {
+  const epoch = ++staffPanelKeyEpoch;
+  let key = null;
+  try {
+    key = await staffPanelKeyFor(me, window.location?.origin);
+  } catch {
+    key = null;
+  }
+  if (epoch !== staffPanelKeyEpoch || key === staffPanelStorageKey) return;
+  if (staffPanelStorageKey) { staffPanelTouched.clear(); staffPanelActivations.clear(); }
+  staffPanelStorageKey = key;
+  staffPanelSaved = key ? readStaffPanelChoices(key) : null;
+  if (key) {
+    for (const id of staffPanelTouched) {
+      const panel = document.getElementById(id);
+      if (panel) saveStaffPanelChoice(id, Boolean(panel.open));
+    }
+  }
+  applyStaffPanelDefaults();
+}
+// End staff section disclosures.
 
 // Presentation only: hiding the panel never resets drafts, selection or HOLD.
 function setStaffAssistantExpanded(expanded, moveFocus = true) {
@@ -3122,11 +3287,15 @@ let staffTeamError = null;
 
 async function loadStaffTeam() {
   const list = document.getElementById('staffTeamList');
+  let identityKnown = false;
   try {
     const [meRes, teamRes] = await Promise.all([fetch('/api/staff/me'), fetch('/api/staff/team')]);
     const meData = await meRes.json();
     const teamData = await teamRes.json();
     if (!meRes.ok || !meData.ok) throw new Error(meData.error || 'Failed to load your staff record');
+    identityKnown = true;
+    // Section open/closed choices belong to this signed-in person (see staff section disclosures).
+    if (typeof rememberStaffPanelsFor === 'function') void rememberStaffPanelsFor(meData.me);
     if (!teamRes.ok || !teamData.ok) throw new Error(teamData.error || 'Failed to load staff');
     staffMe = meData.me;
     staffTeam = teamData.team || [];
@@ -3135,6 +3304,7 @@ async function loadStaffTeam() {
     return true;
   } catch (e) {
     staffTeamError = e.message;
+    if (!identityKnown && typeof forgetStaffPanelIdentity === 'function') forgetStaffPanelIdentity();
     staffMe = null;
     staffTeam = [];
     if (list) list.innerHTML = `<p class="muted small text-center my-20">Error loading staff: ${escapeHtml(e.message)}</p>`;
