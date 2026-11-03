@@ -1085,6 +1085,18 @@ footer a:hover { color: #fff; }
 .grant-actions { margin-top: 6px; }
 .grant-error-banner { display: none; color: #a84a32; background: #f9efdc; margin-top: 6px; padding: 6px; border-radius: 4px; font-size: 12.5px; }
 .staff-section-title { font-weight: 700; color: var(--plum-dark); }
+/* Staff console: collapsible main sections (native details/summary). */
+.staff-section > summary { cursor: pointer; }
+.staff-section > summary .staff-section-heading { display: inline; margin: 0; }
+.staff-section > summary:focus-visible { outline: 2px solid var(--plum); outline-offset: 2px; border-radius: 4px; }
+.staff-section[open] > summary { margin-bottom: 12px; }
+.staff-section-count { margin-left: 4px; }
+.staff-section-tools { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 12px; margin-bottom: 12px; }
+.staff-section-tools > :last-child { margin-left: auto; }
+.staff-section-message:empty { display: none; }
+.staff-section-message.is-error, .caregiver-lifecycle-message.is-error { color: #a84a32; }
+.caregiver-lifecycle { margin-top: 14px; padding: 10px; border: 1px solid #efdfd3; border-radius: 8px; background: #faf6f1; }
+.caregiver-lifecycle-message:empty { display: none; }
 .form-row-compact { display: flex; gap: 8px; margin-bottom: 8px; }
 .form-col-flex { flex: 1; margin-bottom: 0; }
 .form-input-compact { padding: 6px 10px; border-radius: 6px; font-size: 13px; }

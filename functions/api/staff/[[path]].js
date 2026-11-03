@@ -371,14 +371,9 @@ export async function onRequestPost({ request, env }) {
         if (targetStatus === 'dismissed') {
           return json({ ok: false, error: 'managed_support_request_cannot_dismiss' }, 409);
         }
-        const currentState = await getStaffSupportState(env.LEGACY_DB, id);
-        if (!currentState) {
-          return json({ ok: false, error: 'support_request_not_found' }, 404);
-        }
-        const expectedVersion = Number.isInteger(body.expected_version) ? body.expected_version : currentState.version;
         const managed = await handleStaffSupportMutation(env.LEGACY_DB, getActor(request, null), id, {
           status: 'completed',
-          expected_version: expectedVersion,
+          expected_version: body.expected_version,
         });
         if (!managed.ok) {
           return json({ ok: false, error: managed.error }, managed.status);

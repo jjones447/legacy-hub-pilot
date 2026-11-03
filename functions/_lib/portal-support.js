@@ -284,6 +284,10 @@ function deriveEffectiveState(row) {
 
   const submittedAt = row.created_at || row.audit_at || null;
   const lastStatusUpdatedAt = row.latest_staff_at || submittedAt;
+  const latestLifecycleAuditId = latestStaff
+    ? Number(row.latest_staff_audit_id) || null
+    : Number(row.initial_audit_id) || null;
+  const latestStaffBefore = parseAuditJson(row.latest_staff_before_json);
 
   return {
     followup_id: row.id,
@@ -304,6 +308,8 @@ function deriveEffectiveState(row) {
     assigned_to: current.assigned_to || initial.assigned_to || SHANELLE_STAFF_EMAIL,
     assigned_to_name: current.assigned_to_name || initial.assigned_to_name || SHANELLE_DISPLAY_NAME,
     version: Number.isInteger(current.version) ? current.version : 1,
+    latest_lifecycle_audit_id: latestLifecycleAuditId,
+    latest_mutation_id: typeof latestStaffBefore?.mutation_id === 'string' ? latestStaffBefore.mutation_id : null,
     submitted_at: submittedAt,
     last_status_updated_at: lastStatusUpdatedAt,
   };
@@ -577,7 +583,15 @@ export async function getStaffSupportState(db, followupId) {
   const row = await db
     .prepare(
       `SELECT f.id, f.caregiver_id, f.kind, f.detail, f.status AS followup_status, f.source, f.external_ref, f.created_at,
-              a.after_json, a.at AS audit_at,
+              a.id AS initial_audit_id, a.after_json, a.at AS audit_at,
+              (SELECT s.id FROM audit_log s
+               WHERE s.action = 'staff.support_request_updated'
+                 AND s.entity = 'followup' AND s.entity_id = CAST(f.id AS TEXT)
+               ORDER BY s.id DESC LIMIT 1) AS latest_staff_audit_id,
+              (SELECT s.before_json FROM audit_log s
+               WHERE s.action = 'staff.support_request_updated'
+                 AND s.entity = 'followup' AND s.entity_id = CAST(f.id AS TEXT)
+               ORDER BY s.id DESC LIMIT 1) AS latest_staff_before_json,
               (SELECT s.after_json FROM audit_log s
                WHERE s.action = 'staff.support_request_updated'
                  AND s.entity = 'followup' AND s.entity_id = CAST(f.id AS TEXT)
@@ -765,11 +779,20 @@ export async function handleStaffSupportMutation(db, actor, followupId, body) {
   let nextAssigneeEmail = state.assigned_to;
   let nextAssigneeName = state.assigned_to_name;
 
-  if (hasLifecycleChange) {
+  if (body.expected_version !== undefined) {
     if (!Number.isInteger(body.expected_version) || body.expected_version < 1) {
       return { ok: false, status: 400, error: 'expected_version_required' };
     }
     if (body.expected_version !== state.version) {
+      return { ok: false, status: 409, error: 'version_conflict' };
+    }
+  }
+
+  if (hasLifecycleChange) {
+    if (!Number.isInteger(body.expected_version) || body.expected_version < 1) {
+      return { ok: false, status: 400, error: 'expected_version_required' };
+    }
+    if (!Number.isInteger(state.latest_lifecycle_audit_id)) {
       return { ok: false, status: 409, error: 'version_conflict' };
     }
 
@@ -797,27 +820,28 @@ export async function handleStaffSupportMutation(db, actor, followupId, body) {
   }
 
   const statements = [];
+  const mutationId = crypto.randomUUID();
+  const nextFollowupStatus = nextStatus === 'completed' ? 'done' : 'open';
+  const currentFollowupStatus = state.status === 'completed' ? 'done' : 'open';
+  const currentDetail = formatSupportQueueDetail({
+    supportTypeLabel: state.support_type_label,
+    urgencyLabel: state.urgency_label,
+    contactPreferenceLabel: state.contact_preference_label,
+    assignedToName: state.assigned_to_name,
+    statusLabel: state.status_label,
+    detail: state.detail,
+  });
+  const nextDetail = formatSupportQueueDetail({
+    supportTypeLabel: state.support_type_label,
+    urgencyLabel: state.urgency_label,
+    contactPreferenceLabel: state.contact_preference_label,
+    assignedToName: nextAssigneeName,
+    statusLabel: SUPPORT_STATUS_LABELS[nextStatus],
+    detail: state.detail,
+  });
 
   if (hasLifecycleChange) {
     const nextVersion = state.version + 1;
-    const nextFollowupStatus = nextStatus === 'completed' ? 'done' : 'open';
-    const currentFollowupStatus = state.status === 'completed' ? 'done' : 'open';
-    const currentDetail = formatSupportQueueDetail({
-      supportTypeLabel: state.support_type_label,
-      urgencyLabel: state.urgency_label,
-      contactPreferenceLabel: state.contact_preference_label,
-      assignedToName: state.assigned_to_name,
-      statusLabel: state.status_label,
-      detail: state.detail,
-    });
-    const nextDetail = formatSupportQueueDetail({
-      supportTypeLabel: state.support_type_label,
-      urgencyLabel: state.urgency_label,
-      contactPreferenceLabel: state.contact_preference_label,
-      assignedToName: nextAssigneeName,
-      statusLabel: SUPPORT_STATUS_LABELS[nextStatus],
-      detail: state.detail,
-    });
 
     const beforeJson = JSON.stringify({
       schema: SUPPORT_SOURCE,
@@ -827,6 +851,7 @@ export async function handleStaffSupportMutation(db, actor, followupId, body) {
       assigned_to: state.assigned_to,
       assigned_to_name: state.assigned_to_name,
       version: state.version,
+      mutation_id: mutationId,
     });
     const afterJson = JSON.stringify({
       schema: SUPPORT_SOURCE,
@@ -853,16 +878,62 @@ export async function handleStaffSupportMutation(db, actor, followupId, body) {
         .prepare(
           `UPDATE followup
            SET status = ?, detail = ?
-           WHERE id = ? AND source = ? AND status = ? AND detail = ?`
+           WHERE id = ? AND source = ? AND status = ? AND detail = ?
+             AND EXISTS (
+               SELECT 1 FROM staff_member sm
+               WHERE LOWER(TRIM(sm.email)) = ? AND sm.status = 'active'
+             )
+             AND (? = 0 OR EXISTS (
+               SELECT 1 FROM staff_member sa
+               WHERE LOWER(TRIM(sa.email)) = ? AND sa.status = 'active'
+             ))
+             AND COALESCE(
+               (SELECT s.id FROM audit_log s
+                WHERE s.entity = 'followup' AND s.entity_id = CAST(followup.id AS TEXT)
+                  AND s.action IN ('portal.support_requested', 'staff.support_request_updated')
+                ORDER BY s.id DESC LIMIT 1),
+               -1
+             ) = ?
+             AND COALESCE(
+               CAST(
+                 json_extract(
+                   (SELECT s.after_json FROM audit_log s
+                    WHERE s.entity = 'followup' AND s.entity_id = CAST(followup.id AS TEXT)
+                      AND s.action IN ('portal.support_requested', 'staff.support_request_updated')
+                    ORDER BY s.id DESC LIMIT 1),
+                   '$.version'
+                 ) AS INTEGER
+               ),
+               1
+             ) = ?`
         )
-        .bind(nextFollowupStatus, nextDetail, followupId, SUPPORT_SOURCE, currentFollowupStatus, currentDetail),
+        .bind(
+          nextFollowupStatus,
+          nextDetail,
+          followupId,
+          SUPPORT_SOURCE,
+          currentFollowupStatus,
+          currentDetail,
+          staffActor.email,
+          body.assigned_to !== undefined ? 1 : 0,
+          nextAssigneeEmail,
+          state.latest_lifecycle_audit_id,
+          state.version
+        ),
       db
         .prepare(
           `INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
            SELECT ?, 'staff.support_request_updated', 'followup', CAST(f.id AS TEXT), ?, ?
            FROM followup f
            WHERE f.id = ? AND f.source = ? AND f.status = ? AND f.detail = ?
-             AND changes() = 1`
+             AND changes() = 1
+             AND COALESCE(
+               (SELECT s.id FROM audit_log s
+                WHERE s.entity = 'followup' AND s.entity_id = CAST(f.id AS TEXT)
+                  AND s.action IN ('portal.support_requested', 'staff.support_request_updated')
+                ORDER BY s.id DESC LIMIT 1),
+               -1
+             ) = ?`
         )
         .bind(
           staffActor.email,
@@ -871,20 +942,75 @@ export async function handleStaffSupportMutation(db, actor, followupId, body) {
           followupId,
           SUPPORT_SOURCE,
           nextFollowupStatus,
-          nextDetail
+          nextDetail,
+          state.latest_lifecycle_audit_id
         )
     );
   }
 
   if (noteText !== null) {
+    if (hasLifecycleChange) {
+      statements.push(
+        db
+          .prepare(
+            `INSERT INTO note (caregiver_id, author, body, visibility, status)
+             SELECT f.caregiver_id, ?, ?, 'staff', 'active'
+             FROM followup f
+             WHERE f.id = ? AND f.source = ? AND f.status = ? AND f.detail = ?
+               AND changes() = 1
+               AND COALESCE(
+                 json_extract(
+                   (SELECT s.before_json FROM audit_log s
+                    WHERE s.entity = 'followup' AND s.entity_id = CAST(f.id AS TEXT)
+                      AND s.action = 'staff.support_request_updated'
+                    ORDER BY s.id DESC LIMIT 1),
+                   '$.mutation_id'
+                 ),
+                 ''
+               ) = ?`
+          )
+          .bind(
+            staffActor.email,
+            noteText,
+            followupId,
+            SUPPORT_SOURCE,
+            nextFollowupStatus,
+            nextDetail,
+            mutationId
+          )
+      );
+    } else {
+      statements.push(
+        db
+          .prepare(
+            `INSERT INTO note (caregiver_id, author, body, visibility, status)
+             SELECT f.caregiver_id, ?, ?, 'staff', 'active'
+             FROM followup f
+             WHERE f.id = ? AND f.source = ?
+               AND EXISTS (
+                 SELECT 1 FROM staff_member sm
+                 WHERE LOWER(TRIM(sm.email)) = ? AND sm.status = 'active'
+               )
+               AND (? = 0 OR COALESCE(
+                 (SELECT s.id FROM audit_log s
+                  WHERE s.entity = 'followup' AND s.entity_id = CAST(f.id AS TEXT)
+                    AND s.action IN ('portal.support_requested', 'staff.support_request_updated')
+                  ORDER BY s.id DESC LIMIT 1),
+                 -1
+               ) = ?)`
+          )
+          .bind(
+            staffActor.email,
+            noteText,
+            followupId,
+            SUPPORT_SOURCE,
+            staffActor.email,
+            body.expected_version !== undefined ? 1 : 0,
+            state.latest_lifecycle_audit_id ?? -1
+          )
+      );
+    }
     statements.push(
-      db
-        .prepare(
-          `INSERT INTO note (caregiver_id, author, body, visibility, status)
-           SELECT caregiver_id, ?, ?, 'staff', 'active'
-           FROM followup WHERE id = ? AND source = ?`
-        )
-        .bind(staffActor.email, noteText, followupId, SUPPORT_SOURCE),
       db
         .prepare(
           `INSERT INTO audit_log (actor, action, entity, entity_id, after_json)
@@ -902,7 +1028,11 @@ export async function handleStaffSupportMutation(db, actor, followupId, body) {
   }
 
   const updatedState = await getStaffSupportState(db, followupId);
-  if (!updatedState || (hasLifecycleChange && updatedState.version !== state.version + 1)) {
+  if (
+    !updatedState ||
+    (hasLifecycleChange &&
+      (updatedState.version !== state.version + 1 || updatedState.latest_mutation_id !== mutationId))
+  ) {
     return { ok: false, status: 409, error: 'version_conflict' };
   }
 

@@ -2,6 +2,7 @@
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
 import { DatabaseSync } from 'node:sqlite';
 import { onRequestGet, onRequestPost } from '../functions/api/portal/[[path]].js';
 import { onRequestGet as staffGet, onRequestPost as staffPost } from '../functions/api/staff/[[path]].js';
@@ -15,6 +16,7 @@ import {
   SUPPORT_TYPES,
   SUPPORT_URGENCY_OPTIONS,
   computeSupportExternalRef,
+  handleStaffSupportMutation,
 } from '../functions/_lib/portal-support.js';
 import { handleIntake } from '../functions/api/_shared.mjs';
 import { onRequestPost as postIntake } from '../functions/api/intake.js';
@@ -587,4 +589,346 @@ test('lost acknowledgement after committed batch retries same request_id idempot
   const retry = await submit({ body: defaultPayload({ request_id: ID_2 }) });
   assert.equal(retry.status, 201);
   assert.deepEqual(counts(), { tasks: 1, audits: 1, caregivers: 2 });
+});
+
+test('fences canonical request version inside db.batch on concurrent same-state updates and requires expected_version on resolve', async () => {
+  assert.equal((await submit()).status, 201);
+
+  let raced = false;
+  const racingDb = d1({
+    async beforeBatch() {
+      if (raced) return;
+      raced = true;
+      const winner = await handleStaffSupportMutation(d1(), SHANELLE_STAFF_EMAIL, 1, {
+        status: 'received',
+        expected_version: 1,
+      });
+      assert.equal(winner.ok, true);
+      assert.equal(winner.support_request.version, 2);
+    },
+  });
+
+  const stale = await handleStaffSupportMutation(racingDb, SHANELLE_STAFF_EMAIL, 1, {
+    status: 'received',
+    expected_version: 1,
+  });
+  assert.equal(stale.ok, false);
+  assert.equal(stale.status, 409);
+  assert.equal(stale.error, 'version_conflict');
+
+  const audits = raw
+    .prepare("SELECT id, after_json FROM audit_log WHERE action = 'staff.support_request_updated' ORDER BY id")
+    .all();
+  assert.equal(audits.length, 1);
+  assert.equal(JSON.parse(audits[0].after_json).version, 2);
+
+  // Resolve endpoint requires expected_version for managed portal_support_v1 rows
+  const missingVersionRes = await staffPost({
+    request: new Request(`${ORIGIN}/api/staff/followup/1/resolve`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cf-Access-Jwt-Assertion': staffJwt(SHANELLE_STAFF_EMAIL),
+      },
+      body: JSON.stringify({ status: 'done' }),
+    }),
+    env,
+  });
+  assert.equal(missingVersionRes.status, 400);
+  assert.equal((await missingVersionRes.json()).error, 'expected_version_required');
+
+  const staleResolveRes = await staffPost({
+    request: new Request(`${ORIGIN}/api/staff/followup/1/resolve`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cf-Access-Jwt-Assertion': staffJwt(SHANELLE_STAFF_EMAIL),
+      },
+      body: JSON.stringify({ status: 'done', expected_version: 1 }),
+    }),
+    env,
+  });
+  assert.equal(staleResolveRes.status, 409);
+  assert.equal((await staleResolveRes.json()).error, 'version_conflict');
+
+  const validResolveRes = await staffPost({
+    request: new Request(`${ORIGIN}/api/staff/followup/1/resolve`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cf-Access-Jwt-Assertion': staffJwt(SHANELLE_STAFF_EMAIL),
+      },
+      body: JSON.stringify({ status: 'done', expected_version: 2 }),
+    }),
+    env,
+  });
+  assert.equal(validResolveRes.status, 200);
+  const validResolveBody = await validResolveRes.json();
+  assert.equal(validResolveBody.support_request.status, 'completed');
+  assert.equal(validResolveBody.support_request.version, 3);
+});
+
+test('prevents partial note or note-audit writes when concurrent lifecycle compare loses', async () => {
+  assert.equal((await submit()).status, 201);
+
+  let raced = false;
+  const racingDb = d1({
+    async beforeBatch() {
+      if (raced) return;
+      raced = true;
+      const winner = await handleStaffSupportMutation(d1(), SHANELLE_STAFF_EMAIL, 1, {
+        status: 'in_progress',
+        expected_version: 1,
+      });
+      assert.equal(winner.ok, true);
+    },
+  });
+
+  const loser = await handleStaffSupportMutation(racingDb, SHANELLE_STAFF_EMAIL, 1, {
+    status: 'in_progress',
+    expected_version: 1,
+    note: 'should not persist on stale version',
+  });
+  assert.equal(loser.ok, false);
+  assert.equal(loser.status, 409);
+  assert.equal(loser.error, 'version_conflict');
+  assert.equal(raw.prepare('SELECT COUNT(*) AS n FROM note').get().n, 0);
+  assert.equal(
+    raw.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'staff.support_request_note'").get().n,
+    0
+  );
+});
+
+test('app.js preserves unresolved request_id across member edits and cancel/reopen, and reconciles on 409 conflict', async () => {
+  const code = readFileSync(new URL('../app.js', import.meta.url), 'utf8');
+  const start = code.indexOf('/* ---------- Portal: My Support requests');
+  const end = code.indexOf("document.addEventListener('click'", start);
+  const els = {
+    portalSupportForm: { classList: { add() {}, remove() {} }, reset() {} },
+    portalSupportBtn: { classList: { add() {}, remove() {} } },
+    portalSupportMsg: { textContent: '' },
+    portalSupportSubmitBtn: { disabled: false },
+    portalSupportType: { value: 'respite_services' },
+    portalSupportUrgency: { value: 'next_few_days' },
+    portalSupportContactPref: { value: 'phone_call' },
+    portalSupportEmail: { value: 'alpha@example.test' },
+    portalSupportPhone: { value: '(414) 555-0101' },
+    portalSupportDetail: { value: 'Initial note' },
+    portalSupportHistory: { open: false },
+    portalSupportHistoryRows: { textContent: '', appendChild() {} },
+  };
+  let seq = 0;
+  const posted = [];
+  let mode = 'timeout_then_201';
+  const ctx = vm.createContext({
+    console,
+    crypto: { randomUUID: () => `00000000-0000-4000-8000-00000000000${++seq}` },
+    document: {
+      getElementById: (id) => els[id] || null,
+      createElement: () => ({ className: '', textContent: '', appendChild() {} }),
+      createTextNode: () => ({}),
+    },
+    fetch: async (_url, opts = {}) => {
+      if (opts.method === 'POST') {
+        posted.push(JSON.parse(opts.body));
+        if (mode === 'timeout_then_201') {
+          if (posted.length === 1) throw new Error('network timeout after server may have committed');
+          return {
+            ok: true,
+            status: 201,
+            async json() {
+              return { ok: true, request: { support_type_label: 'Respite Services', status_label: 'Received' } };
+            },
+          };
+        }
+        if (mode === 'timeout_then_409') {
+          if (posted.length === 3) throw new Error('network timeout after server committed');
+          return {
+            ok: false,
+            status: 409,
+            async json() {
+              return { ok: false, error: 'request_id_conflict' };
+            },
+          };
+        }
+      }
+      return {
+        ok: true,
+        status: 200,
+        async json() {
+          return {
+            ok: true,
+            requests: [
+              {
+                request_id: posted.at(-1)?.request_id,
+                support_type_label: 'Respite Services',
+                status: 'received',
+                status_label: 'Received',
+              },
+            ],
+          };
+        },
+      };
+    },
+  });
+  vm.runInContext(code.slice(start, end), ctx);
+
+  // 1. Unknown outcome -> edit field -> cancel/reopen -> retry reuses exact same request_id
+  await ctx.submitPortalSupport({ preventDefault() {} });
+  els.portalSupportDetail.value = 'Edited note after unknown save';
+  ctx.closePortalSupportForm();
+  ctx.openPortalSupportForm();
+  await ctx.submitPortalSupport({ preventDefault() {} });
+  assert.equal(posted.length, 2);
+  assert.equal(posted[0].request_id, '00000000-0000-4000-8000-000000000001');
+  assert.equal(posted[1].request_id, '00000000-0000-4000-8000-000000000001');
+
+  // 2. Confirmed save clears pending request so a subsequent new request gets a fresh request_id
+  mode = 'timeout_then_409';
+  els.portalSupportDetail.value = 'Second request initial note';
+  await ctx.submitPortalSupport({ preventDefault() {} });
+  assert.equal(posted[2].request_id, '00000000-0000-4000-8000-000000000002');
+  els.portalSupportDetail.value = 'Second request edited after server already saved';
+  await ctx.submitPortalSupport({ preventDefault() {} });
+  assert.equal(posted[3].request_id, '00000000-0000-4000-8000-000000000002');
+  assert.match(els.portalSupportMsg.textContent, /already saved and is shown in your history below/);
+});
+
+test('staff.js renders usable queue and caregiver-detail support triage controls and posts expected_version to /api/staff/followup/:id/support', async () => {
+  assert.equal((await submit({ body: defaultPayload({ detail: 'Caregiver detail <script>alert(1)</script>' }) })).status, 201);
+
+  const staffCode = readFileSync(new URL('../staff.js', import.meta.url), 'utf8');
+  const slice = (from, to) => {
+    const s = staffCode.indexOf(from);
+    const e = staffCode.indexOf(to, s);
+    assert.ok(s >= 0 && e > s, `slice ${from} .. ${to}`);
+    return staffCode.slice(s, e);
+  };
+
+  const nodes = {
+    needsAttentionCount: { textContent: '' },
+    needsAttentionBody: { innerHTML: '' },
+    needsAttentionMessage: { textContent: '', classList: { toggle() {} } },
+    staffDashboardView: { classList: { add() {}, remove() {} } },
+    caregiverDetailView: { classList: { add() {}, remove() {} } },
+    caregiverBackButton: { focus() {} },
+    caregiverDetailHeading: { focus() {} },
+    caregiverRecordPanel: { innerHTML: '', dataset: {} },
+    caregiverLifecycleMessage: { textContent: '', classList: { toggle() {} } },
+  };
+  const calls = [];
+  const context = vm.createContext({
+    console,
+    URLSearchParams,
+    encodeURIComponent,
+    Number,
+    Boolean,
+    Array,
+    Set,
+    String,
+    Object,
+    JSON,
+    Math,
+    Date,
+    Promise,
+    currentCaregiverId: null,
+    currentGrantId: null,
+    currentSearchOffset: 0,
+    noteNeedsAttentionActionable() {},
+    searchCaregivers: async () => {},
+    loadRecentChanges: async () => {},
+    window: { scrollY: 0, scrollTo() {}, confirm: () => true },
+    document: {
+      activeElement: null,
+      getElementById: (id) => nodes[id] || null,
+    },
+    fetch: async (url, options = {}) => {
+      calls.push({ url, method: options.method || 'GET', body: options.body ? JSON.parse(options.body) : null });
+      const req = new Request(`${ORIGIN}${url}`, {
+        method: options.method || 'GET',
+        headers: {
+          ...(options.headers || {}),
+          'Cf-Access-Jwt-Assertion': staffJwt(SHANELLE_STAFF_EMAIL),
+        },
+        body: options.body,
+      });
+      const res = (options.method || 'GET') === 'POST'
+        ? await staffPost({ request: req, env })
+        : await staffGet({ request: req, env });
+      return {
+        ok: res.ok,
+        status: res.status,
+        json: async () => res.json(),
+      };
+    },
+  });
+
+  vm.runInContext(slice('function escapeHtml(', 'function formatStatusLine('), context);
+  vm.runInContext(slice('// Follow-ups: "Mark complete"', '// A focused caregiver view preserves'), context);
+  vm.runInContext(slice('// A focused caregiver view', 'async function loadEvents('), context);
+
+  // 1. Queue renders support metadata, Shanelle inbox count, Mark in progress, and Mark complete with version
+  await context.loadFollowups();
+  assert.equal(nodes.needsAttentionCount.textContent, '(1 open · 1 in Shanelle support inbox)');
+  assert.match(nodes.needsAttentionBody.innerHTML, /Request ID: <code>00112233-4455-4677-8899-aabbccddeeff<\/code> · v1/);
+  assert.match(nodes.needsAttentionBody.innerHTML, /Assigned: <strong>Shanelle Snowden<\/strong>/);
+  assert.match(nodes.needsAttentionBody.innerHTML, /data-action="support-in-progress" data-followup-id="1" data-support-version="1"/);
+  assert.match(nodes.needsAttentionBody.innerHTML, /data-action="resolve-followup" data-followup-id="1" data-support-version="1"/);
+  assert.doesNotMatch(nodes.needsAttentionBody.innerHTML, /<script>/);
+
+  // 2. Queue "Mark in progress" transitions via /api/staff/followup/1/support with expected_version: 1
+  const inProgressBtn = {
+    disabled: false,
+    setAttribute() {},
+    removeAttribute() {},
+    closest: () => inProgressBtn,
+  };
+  await context.transitionSupportFollowup(1, 1, 'in_progress', {
+    stopPropagation() {},
+    target: inProgressBtn,
+  });
+  const supportPost1 = calls.find((c) => c.method === 'POST' && c.url === '/api/staff/followup/1/support');
+  assert.deepEqual(supportPost1.body, { status: 'in_progress', expected_version: 1 });
+  assert.match(nodes.needsAttentionBody.innerHTML, /v2 · Status: <strong>In Progress<\/strong>/);
+
+  // 3. Caregiver detail view renders My Support Requests triage form, private notes, and reporting history
+  await context.viewCaregiver('cg_synthetic_a');
+  assert.match(nodes.caregiverRecordPanel.innerHTML, /My Support Requests:/);
+  assert.match(nodes.caregiverRecordPanel.innerHTML, /data-action="submit-support-triage" data-followup-id="1" data-expected-version="2"/);
+  assert.doesNotMatch(nodes.caregiverRecordPanel.innerHTML, /<script>/);
+
+  // 4. Submitting the caregiver detail triage form reassigns, adds a request-linked private note, and completes
+  const msgEl = { textContent: '', classList: { add() {}, remove() {} } };
+  const submitBtn = { disabled: false, setAttribute() {}, removeAttribute() {} };
+  const triageForm = {
+    getAttribute(attr) {
+      if (attr === 'data-followup-id') return '1';
+      if (attr === 'data-expected-version') return '2';
+      return null;
+    },
+    querySelector(sel) {
+      if (sel === '[name="expected_version"]') return { value: '2' };
+      if (sel === '[name="status"]') return { value: 'completed' };
+      if (sel === '[name="assigned_to"]') return { value: 'coordinator@legacyhomehealthservices.org' };
+      if (sel === '[name="note"]') return { value: 'Spoke by phone and scheduled respite intake.' };
+      if (sel === '.support-triage-msg') return msgEl;
+      if (sel === 'button[type="submit"]') return submitBtn;
+      return null;
+    },
+  };
+  await context.submitStaffSupportTriage(triageForm);
+  const triagePost = calls.filter((c) => c.method === 'POST' && c.url === '/api/staff/followup/1/support').at(-1);
+  assert.deepEqual(triagePost.body, {
+    expected_version: 2,
+    status: 'completed',
+    assigned_to: 'coordinator@legacyhomehealthservices.org',
+    note: 'Spoke by phone and scheduled respite intake.',
+  });
+  assert.match(nodes.caregiverRecordPanel.innerHTML, /v3/);
+  assert.match(nodes.caregiverRecordPanel.innerHTML, /Spoke by phone and scheduled respite intake\./);
+  assert.match(nodes.caregiverRecordPanel.innerHTML, /staff\.support_request_note/);
+
+  // 5. Submitting a stale version surfaces inline refusal feedback in .support-triage-msg
+  await context.submitStaffSupportTriage(triageForm);
+  assert.match(msgEl.textContent, /Could not save support triage: version_conflict/);
 });

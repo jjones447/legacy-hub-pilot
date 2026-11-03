@@ -1564,6 +1564,30 @@ function renderPortalSupport(data) {
   const requests = Array.isArray(data && data.requests) ? data.requests : [];
   const rowsEl = document.getElementById('portalSupportHistoryRows');
   renderPortalSupportHistory(rowsEl, requests, 'No support requests yet.');
+  if (portalSupportPendingRequest) {
+    const matched = requests.find(function (r) {
+      return r && r.request_id === portalSupportPendingRequest.requestId;
+    });
+    if (matched) {
+      const wasUnresolved = Boolean(portalSupportPendingRequest.unresolved);
+      portalSupportPendingRequest = null;
+      const form = document.getElementById('portalSupportForm');
+      if (form) {
+        form.reset();
+        form.classList.add('d-none');
+      }
+      const openBtn = document.getElementById('portalSupportBtn');
+      if (openBtn) openBtn.classList.remove('d-none');
+      if (wasUnresolved) {
+        const msg = document.getElementById('portalSupportMsg');
+        if (msg) {
+          msg.textContent = 'Confirmed: your support request (' +
+            (matched.support_type_label || 'Support request') + ') was saved (' +
+            (matched.status_label || 'Received') + ').';
+        }
+      }
+    }
+  }
 }
 
 function renderPortalSupportHistory(container, requests, emptyText) {
@@ -1662,11 +1686,14 @@ async function submitPortalSupport(e) {
   }
 
   const signature = JSON.stringify([supportType, urgency, contactPref, contactEmail.toLowerCase(), contactPhone, detail]);
-  if (!portalSupportPendingRequest || portalSupportPendingRequest.signature !== signature) {
+  if (!portalSupportPendingRequest) {
     portalSupportPendingRequest = {
       requestId: newPortalSupportRequestId(),
-      signature: signature
+      signature: signature,
+      unresolved: false
     };
+  } else {
+    portalSupportPendingRequest.signature = signature;
   }
 
   if (submitBtn) submitBtn.disabled = true;
@@ -1688,6 +1715,22 @@ async function submitPortalSupport(e) {
       })
     });
     const data = await res.json().catch(function () { return {}; });
+    if (res.status === 409 && data && data.error === 'request_id_conflict') {
+      portalSupportPendingRequest = null;
+      if (form) {
+        form.reset();
+        form.classList.add('d-none');
+      }
+      const openBtn = document.getElementById('portalSupportBtn');
+      if (openBtn) openBtn.classList.remove('d-none');
+      const historyDetails = document.getElementById('portalSupportHistory');
+      if (historyDetails) historyDetails.open = true;
+      await loadPortalSupport();
+      if (msg) {
+        msg.textContent = 'Your original support request was already saved and is shown in your history below. If you still need additional changes, you can start a new request.';
+      }
+      return;
+    }
     if (!res.ok || !data || !data.ok || !data.request) {
       throw new Error(data && data.error ? data.error : 'unavailable');
     }
@@ -1707,6 +1750,9 @@ async function submitPortalSupport(e) {
     if (historyDetails) historyDetails.open = true;
     await loadPortalSupport();
   } catch (err) {
+    if (portalSupportPendingRequest) {
+      portalSupportPendingRequest.unresolved = true;
+    }
     if (msg) {
       msg.textContent = 'We could not confirm your support request was saved. You can submit again safely without creating a duplicate.';
     }
