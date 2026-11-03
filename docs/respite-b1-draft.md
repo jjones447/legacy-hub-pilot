@@ -99,6 +99,13 @@ Real Cloudflare D1, workerd, hosted browser pixels, deployment, live login/mail,
 profile creation, provider calls and runtime settings are **NOT RUN**. Hosted source CI is reported on the
 exact PR head separately, never substituted for those acceptance gates. Private full logs stay outside source.
 
+Initial PC1 Node 24.15 source qualification: 27 new tests PASS; 165 combined focused tests PASS.
+Full candidate 2,159 PASS / 3 FAIL / 0 SKIP versus the exact frozen #315 baseline 2,132 PASS /
+the same 3 FAIL / 0 SKIP. The three reproduced baseline failures are NUL-bearing text round trips in
+backup restore, caregiver contact and staff note tests; they were not suppressed or changed.
+The added generated page required extending the explicit public-header coverage count from 23 to 24;
+every page still undergoes the same hierarchy/accessibility assertions.
+
 ## Integration custody
 
 Original #315 remains frozen. #319 People Add remains with pc2-codex-42, #320 page integration with
@@ -107,3 +114,17 @@ Shared source intersections are small: Staff Attendance call + script tag, build
 and explicit unit inventory. Do not overwrite their staff forms, generated assets or package lock.
 Reconcile exact selected successors and regenerate assets from committed LF bytes before release review.
 No merge, publisher GO, schema application or live collection follows from this draft PR.
+
+Local-only compatibility witness: merged this B1 candidate with exact #319
+`0e43c4894a71aad134936dd9de780914c0a5f2b9` in a separate C5-owned qualification worktree.
+The only merge conflict was the generated `staff.js` version tag; kept the B1 script reference,
+preserved merged People Add/Attendance source, regenerated assets and committed local-only
+`b9813937cb6119501c0e4bb494fa9cceae5de35a` / tree `2d058143deb3199726bd818b83f8c5c00171f10c`.
+Actual combined B1 + People Add + QA/My Support + dispatch source tests: 89 PASS / 0 FAIL / 0 SKIP;
+template verification clean. This is not a selected or published combined release, independent review,
+or #319 rendered DOM acceptance. No #319 branch, owner worktree or #320 source was amended.
+
+Cloudflare API references retrieved November 3: [D1 batch API](https://developers.cloudflare.com/d1/worker-api/d1-database/),
+[Pages Function context](https://developers.cloudflare.com/pages/functions/api-reference/),
+[Workers practices](https://developers.cloudflare.com/workers/best-practices/workers-best-practices/).
+Latest retrieved Workers types `5.20261103.1` confirm the D1 `batch` and Pages handler shapes.
