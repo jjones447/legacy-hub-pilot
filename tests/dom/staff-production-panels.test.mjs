@@ -199,3 +199,45 @@ test('programmatic and canceled activations do not persist; genuine early summar
     assert.equal(JSON.parse(Object.values(early.storage())[0]).needsAttentionPanel, false);
   } finally { early.close(); }
 });
+
+
+test('a microtask checkpoint before native summary activation cannot drop the final preference', async () => {
+  const p = await page();
+  try {
+    await p.w.loadStaffTeam(); await wait();
+    const panel = p.w.document.getElementById('needsAttentionPanel');
+    const summary = panel.querySelector('summary');
+    let checkpointBeforeActivation = false;
+    // Force the allowed callback-cleanup schedule that Element.click() alone does not model.
+    // If application persistence uses a microtask, it will observe the old open value here.
+    p.w.queueMicrotask = callback => callback();
+    summary.addEventListener('click', () => p.w.queueMicrotask(() => {
+      checkpointBeforeActivation = panel.open === true;
+    }), { once: true });
+    summary.querySelector('h4').click();
+    assert.equal(checkpointBeforeActivation, true);
+    assert.equal(panel.open, false);
+    assert.deepEqual(p.storage(), {}, 'the post-dispatch task has not run yet');
+    await p.w.loadFollowups(); // a completed list may not override pending user intent
+    await wait();
+    assert.equal(panel.open, false);
+    assert.equal(JSON.parse(Object.values(p.storage())[0]).needsAttentionPanel, false);
+  } finally { p.close(); }
+});
+
+test('rapid uncanceled/canceled activations retain the final user state, and revoked pending choices do not cross identities', async () => {
+  const p = await page();
+  try {
+    await p.w.loadStaffTeam(); await wait();
+    const panel = p.w.document.getElementById('eventsPanel'), heading = panel.querySelector('summary h4');
+    heading.click(); heading.click(); heading.click();
+    panel.querySelector('summary').addEventListener('click', event => event.preventDefault(), { once: true });
+    heading.click();
+    assert.equal(panel.open, false);
+    await wait();
+    assert.equal(JSON.parse(Object.values(p.storage())[0]).eventsPanel, false);
+    const before = p.storage();
+    heading.click(); p.w.forgetStaffPanelIdentity();
+    await wait(); assert.deepEqual(p.storage(), before, 'revocation cancels pending persistence');
+  } finally { p.close(); }
+});

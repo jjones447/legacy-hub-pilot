@@ -240,8 +240,11 @@ heading triggers its DOM default activation, and a reconstructed page restores
 the same fixture person's choices. Tests cover person/origin separation, controls,
 unknown identities, storage errors and list failures. Cold DOMContentLoaded tests
 do not flush parser toggle events before initialization: preferences are saved
-only after actual summary activation, preserving early clicks while ignoring
-markup/programmatic toggles. jsdom is a locked **test-only**
+only after actual summary activation, in a post-dispatch task. Pending intent
+fences automatic defaults; parser/programmatic/canceled toggles are excluded,
+rapid activations retain the final choice and identity revocation cancels pending
+writes. A forced pre-activation microtask checkpoint test covers the event-loop
+schedule that ordinary scripted Element.click() does not model. jsdom is a locked **test-only**
 dependency, installed with lifecycle scripts disabled only in the separately named
 Staff DOM controls workflow. These tests live under tests/dom and are directly
 selected outside the ordinary unit inventory. The main unit job, original no-install

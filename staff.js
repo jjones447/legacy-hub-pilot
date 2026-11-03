@@ -2070,6 +2070,7 @@ const STAFF_PANEL_IDS = Object.freeze(['needsAttentionPanel', 'eventsPanel', 'gr
 const STAFF_PANEL_STORAGE_PREFIX = 'staff-console-panels-v1';
 const staffPanelDefaults = {};
 const staffPanelTouched = new Set();
+const staffPanelActivations = new Map();
 let staffPanelStorageKey = null;
 let staffPanelSaved = null;
 let staffPanelKeyEpoch = 0;
@@ -2122,7 +2123,7 @@ function setStaffPanelOpen(id, open) {
 // open, and every other section keeps its markup default.
 function applyStaffPanelDefaults() {
   for (const id of STAFF_PANEL_IDS) {
-    if (staffPanelTouched.has(id) || !(id in staffPanelDefaults)) continue;
+    if (staffPanelTouched.has(id) || staffPanelActivations.has(id) || !(id in staffPanelDefaults)) continue;
     if (staffPanelSaved && typeof staffPanelSaved[id] === 'boolean') setStaffPanelOpen(id, staffPanelSaved[id]);
     else if (id === 'needsAttentionPanel' && needsAttentionActionable !== null) setStaffPanelOpen(id, needsAttentionActionable);
     else setStaffPanelOpen(id, staffPanelDefaults[id]);
@@ -2138,12 +2139,23 @@ function initStaffPanels() {
     // The browser emits toggle for parsed [open] markup and programmatic changes too.
     // Persist only an actual summary activation (pointer or native keyboard click).
     summary?.addEventListener('click', event => {
-      const before = panel.open;
-      queueMicrotask(() => {
-        if (event.defaultPrevented || panel.open === before) return;
-        staffPanelTouched.add(id);
-        saveStaffPanelChoice(id, Boolean(panel.open));
-      });
+      const activation = { event, expectedOpen: !panel.open };
+      const pending = staffPanelActivations.get(id) || new Set();
+      pending.add(activation);
+      staffPanelActivations.set(id, pending);
+      // A microtask checkpoint can precede native activation in user event dispatch.
+      // A task observes final uncanceled activation; pending intent also fences defaults.
+      setTimeout(() => {
+        const current = staffPanelActivations.get(id);
+        if (!current?.delete(activation)) return; // identity was revoked while pending
+        if (!current.size) staffPanelActivations.delete(id);
+        if (!event.defaultPrevented && panel.open === activation.expectedOpen) {
+          staffPanelTouched.add(id);
+          saveStaffPanelChoice(id, Boolean(panel.open));
+        } else if (!current.size) {
+          applyStaffPanelDefaults();
+        }
+      }, 0);
     });
   }
 }
@@ -2163,6 +2175,7 @@ function forgetStaffPanelIdentity() {
   staffPanelStorageKey = null;
   staffPanelSaved = null;
   staffPanelTouched.clear();
+  staffPanelActivations.clear();
 }
 
 async function rememberStaffPanelsFor(me) {
@@ -2174,7 +2187,7 @@ async function rememberStaffPanelsFor(me) {
     key = null;
   }
   if (epoch !== staffPanelKeyEpoch || key === staffPanelStorageKey) return;
-  if (staffPanelStorageKey) staffPanelTouched.clear();
+  if (staffPanelStorageKey) { staffPanelTouched.clear(); staffPanelActivations.clear(); }
   staffPanelStorageKey = key;
   staffPanelSaved = key ? readStaffPanelChoices(key) : null;
   if (key) {
