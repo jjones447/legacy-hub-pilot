@@ -20,7 +20,8 @@ test('no demo actions or sample-caregiver shortcut in the portal', () => {
 test('no invented saved resources and no sales copy on the dashboard', () => {
   assert.doesNotMatch(PORTAL, /saved Jun/);
   assert.doesNotMatch(PORTAL, /Why this matters/);
-  assert.match(PORTAL, /Resource library/);
+  // Renamed to "My Resources" at Legacy's request (Oct 30); still no invented saved list.
+  assert.match(PORTAL, /My Resources/);
   assert.match(PORTAL, /library is public, not a personalized saved list/);
 });
 
