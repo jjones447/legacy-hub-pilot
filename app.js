@@ -1554,9 +1554,15 @@ async function loadPortalSupport() {
         phone: String(data.profile_contact.phone || '')
       };
     }
-    renderPortalSupport(data);
+    const matchedReceipt = renderPortalSupport(data);
+    return {
+      ok: true,
+      requests: Array.isArray(data.requests) ? data.requests : [],
+      matchedReceipt: matchedReceipt
+    };
   } catch (e) {
     renderPortalSupportHistory(rowsEl, [], 'Your support requests are not available right now.');
+    return { ok: false, requests: [], matchedReceipt: null };
   }
 }
 
@@ -1567,9 +1573,10 @@ function renderPortalSupport(data) {
   if (portalSupportPendingRequest) {
     const matched = requests.find(function (r) {
       return r && r.request_id === portalSupportPendingRequest.requestId;
-    });
+    }) || null;
     if (matched) {
       const wasUnresolved = Boolean(portalSupportPendingRequest.unresolved);
+      const wasConflict = Boolean(portalSupportPendingRequest.conflict);
       portalSupportPendingRequest = null;
       const form = document.getElementById('portalSupportForm');
       if (form) {
@@ -1578,16 +1585,24 @@ function renderPortalSupport(data) {
       }
       const openBtn = document.getElementById('portalSupportBtn');
       if (openBtn) openBtn.classList.remove('d-none');
-      if (wasUnresolved) {
+      const historyDetails = document.getElementById('portalSupportHistory');
+      if (historyDetails) historyDetails.open = true;
+      if (wasConflict || wasUnresolved) {
         const msg = document.getElementById('portalSupportMsg');
         if (msg) {
-          msg.textContent = 'Confirmed: your support request (' +
-            (matched.support_type_label || 'Support request') + ') was saved (' +
-            (matched.status_label || 'Received') + ').';
+          if (wasConflict) {
+            msg.textContent = 'Your original support request was already saved and is shown in your history below. If you still need additional changes, you can start a new request.';
+          } else {
+            msg.textContent = 'Confirmed: your support request (' +
+              (matched.support_type_label || 'Support request') + ') was saved (' +
+              (matched.status_label || 'Received') + ').';
+          }
         }
       }
+      return matched;
     }
   }
+  return null;
 }
 
 function renderPortalSupportHistory(container, requests, emptyText) {
@@ -1716,18 +1731,26 @@ async function submitPortalSupport(e) {
     });
     const data = await res.json().catch(function () { return {}; });
     if (res.status === 409 && data && data.error === 'request_id_conflict') {
-      portalSupportPendingRequest = null;
-      if (form) {
-        form.reset();
-        form.classList.add('d-none');
+      if (portalSupportPendingRequest) {
+        portalSupportPendingRequest.unresolved = true;
+        portalSupportPendingRequest.conflict = true;
       }
-      const openBtn = document.getElementById('portalSupportBtn');
-      if (openBtn) openBtn.classList.remove('d-none');
       const historyDetails = document.getElementById('portalSupportHistory');
       if (historyDetails) historyDetails.open = true;
-      await loadPortalSupport();
+      const historyOutcome = await loadPortalSupport();
+      if (historyOutcome && historyOutcome.ok && historyOutcome.matchedReceipt) {
+        return;
+      }
       if (msg) {
-        msg.textContent = 'Your original support request was already saved and is shown in your history below. If you still need additional changes, you can start a new request.';
+        if (!historyOutcome || !historyOutcome.ok) {
+          msg.textContent = 'Your original support request ID (' +
+            (portalSupportPendingRequest ? portalSupportPendingRequest.requestId : '') +
+            ') was already recorded, but your support request history is not available right now to confirm the saved receipt. Your pending reference is preserved until your history loads.';
+        } else {
+          msg.textContent = 'We could not verify a matching receipt for request ID (' +
+            (portalSupportPendingRequest ? portalSupportPendingRequest.requestId : '') +
+            ') in your support history yet. Your pending reference is preserved until the saved receipt appears in your history.';
+        }
       }
       return;
     }

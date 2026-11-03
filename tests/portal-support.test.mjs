@@ -699,7 +699,7 @@ test('prevents partial note or note-audit writes when concurrent lifecycle compa
   );
 });
 
-test('app.js preserves unresolved request_id across member edits and cancel/reopen, and reconciles on 409 conflict', async () => {
+test('app.js preserves unresolved request_id across member edits and cancel/reopen, retains reference on 409 when GET fails or lacks matching receipt, and reconciles later without an extra POST', async () => {
   const code = readFileSync(new URL('../app.js', import.meta.url), 'utf8');
   const start = code.indexOf('/* ---------- Portal: My Support requests');
   const end = code.indexOf("document.addEventListener('click'", start);
@@ -719,7 +719,8 @@ test('app.js preserves unresolved request_id across member edits and cancel/reop
   };
   let seq = 0;
   const posted = [];
-  let mode = 'timeout_then_201';
+  let postMode = 'timeout_then_201';
+  let getMode = 'match_latest';
   const ctx = vm.createContext({
     console,
     crypto: { randomUUID: () => `00000000-0000-4000-8000-00000000000${++seq}` },
@@ -731,7 +732,7 @@ test('app.js preserves unresolved request_id across member edits and cancel/reop
     fetch: async (_url, opts = {}) => {
       if (opts.method === 'POST') {
         posted.push(JSON.parse(opts.body));
-        if (mode === 'timeout_then_201') {
+        if (postMode === 'timeout_then_201') {
           if (posted.length === 1) throw new Error('network timeout after server may have committed');
           return {
             ok: true,
@@ -741,7 +742,7 @@ test('app.js preserves unresolved request_id across member edits and cancel/reop
             },
           };
         }
-        if (mode === 'timeout_then_409') {
+        if (postMode === 'timeout_then_409') {
           if (posted.length === 3) throw new Error('network timeout after server committed');
           return {
             ok: false,
@@ -751,6 +752,28 @@ test('app.js preserves unresolved request_id across member edits and cancel/reop
             },
           };
         }
+      }
+      if (getMode === 'fail') {
+        throw new Error('history temporarily unavailable');
+      }
+      if (getMode === 'missing_receipt') {
+        return {
+          ok: true,
+          status: 200,
+          async json() {
+            return {
+              ok: true,
+              requests: [
+                {
+                  request_id: '00000000-0000-4000-8000-000000000099',
+                  support_type_label: 'Other',
+                  status: 'received',
+                  status_label: 'Received',
+                },
+              ],
+            };
+          },
+        };
       }
       return {
         ok: true,
@@ -771,7 +794,11 @@ test('app.js preserves unresolved request_id across member edits and cancel/reop
       };
     },
   });
-  vm.runInContext(code.slice(start, end), ctx);
+  vm.runInContext(
+    code.slice(start, end) +
+      ';globalThis.getPendingRequest=()=>portalSupportPendingRequest ? { ...portalSupportPendingRequest } : null;',
+    ctx
+  );
 
   // 1. Unknown outcome -> edit field -> cancel/reopen -> retry reuses exact same request_id
   await ctx.submitPortalSupport({ preventDefault() {} });
@@ -782,15 +809,43 @@ test('app.js preserves unresolved request_id across member edits and cancel/reop
   assert.equal(posted.length, 2);
   assert.equal(posted[0].request_id, '00000000-0000-4000-8000-000000000001');
   assert.equal(posted[1].request_id, '00000000-0000-4000-8000-000000000001');
+  assert.equal(ctx.getPendingRequest(), null);
 
-  // 2. Confirmed save clears pending request so a subsequent new request gets a fresh request_id
-  mode = 'timeout_then_409';
+  // 2. Unknown save -> edited retry returns 409 request_id_conflict while owner-scoped GET fails:
+  //    pending request reference is retained and feedback does NOT falsely claim receipt is shown in history.
+  postMode = 'timeout_then_409';
+  getMode = 'fail';
   els.portalSupportDetail.value = 'Second request initial note';
   await ctx.submitPortalSupport({ preventDefault() {} });
+  assert.equal(posted.length, 3);
   assert.equal(posted[2].request_id, '00000000-0000-4000-8000-000000000002');
   els.portalSupportDetail.value = 'Second request edited after server already saved';
   await ctx.submitPortalSupport({ preventDefault() {} });
+  assert.equal(posted.length, 4);
   assert.equal(posted[3].request_id, '00000000-0000-4000-8000-000000000002');
+  assert.equal(ctx.getPendingRequest()?.requestId, '00000000-0000-4000-8000-000000000002');
+  assert.equal(els.portalSupportHistoryRows.textContent, 'Your support requests are not available right now.');
+  assert.match(els.portalSupportMsg.textContent, /not available right now to confirm the saved receipt/);
+  assert.doesNotMatch(els.portalSupportMsg.textContent, /shown in your history below/);
+
+  // 3. Retry when owner-scoped GET succeeds (200) but lacks the matching receipt:
+  //    pending request reference is still retained and feedback states matching receipt is not verified yet.
+  getMode = 'missing_receipt';
+  await ctx.submitPortalSupport({ preventDefault() {} });
+  assert.equal(posted.length, 5);
+  assert.equal(posted[4].request_id, '00000000-0000-4000-8000-000000000002');
+  assert.equal(ctx.getPendingRequest()?.requestId, '00000000-0000-4000-8000-000000000002');
+  assert.match(els.portalSupportMsg.textContent, /could not verify a matching receipt/);
+  assert.doesNotMatch(els.portalSupportMsg.textContent, /shown in your history below/);
+
+  // 4. Later history load (loadPortalSupport) returns the matching owner-scoped receipt WITHOUT an extra POST:
+  //    reconciles and clears the pending reference, and updates feedback to confirm the receipt is shown in history.
+  getMode = 'match_latest';
+  const reconciled = await ctx.loadPortalSupport();
+  assert.equal(posted.length, 5);
+  assert.equal(reconciled.ok, true);
+  assert.equal(reconciled.matchedReceipt?.request_id, '00000000-0000-4000-8000-000000000002');
+  assert.equal(ctx.getPendingRequest(), null);
   assert.match(els.portalSupportMsg.textContent, /already saved and is shown in your history below/);
 });
 
