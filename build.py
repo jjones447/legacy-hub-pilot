@@ -24,6 +24,10 @@ SITE_URL = "https://caregiversanctuary.org"
 DEFAULT_SHARE_IMAGE = f"{SITE_URL}/media/share-default.jpg"
 
 PAGE_METADATA = {
+    "respite-application.html": {
+        "title": "Respite Request Draft — Legacy Home & Respite Care Foundation",
+        "description": "Fictional-data qualification draft. Collection is unavailable unless separately enabled for source testing.",
+    },
     "index.html": {
         "title": "Legacy Home & Respite Care Foundation — Caregiver Wellness & Resource Hub",
         "description": "Supporting dementia caregivers through community, wellness, and respite.",
@@ -110,7 +114,7 @@ PAGE_METADATA = {
     },
     "portal.html": {
         "title": "Caregiver Portal — Legacy Home & Respite Care Foundation",
-        "description": "Your events, your grant and your resources, in one place.",
+        "description": "Your events, your wellness and your resources, in one place.",
     },
     "programs-events.html": {
         "title": "Programs & Events — Legacy Home & Respite Care Foundation",
@@ -123,6 +127,7 @@ PAGE_METADATA = {
 }
 
 PAGES = {
+    "respite-application.html": "respite-application.html.j2",
     "index.html": "index.html.j2",
     "resources.html": "resources.html.j2",
     "events.html": "events.html.j2",
@@ -275,6 +280,7 @@ def asset_versions() -> dict:
         "styles.css": hashlib.sha256((ROOT / "styles.css").read_bytes()).hexdigest()[:12],
         "app.js": hashlib.sha256((ROOT / "app.js").read_bytes()).hexdigest()[:12],
         "staff.js": hashlib.sha256((ROOT / "staff.js").read_bytes()).hexdigest()[:12],
+        "respite-b1.js": hashlib.sha256((ROOT / "respite-b1.js").read_bytes()).hexdigest()[:12],
     }
 
 
@@ -315,6 +321,9 @@ def render_all() -> dict:
     rendered = {}
     for page, tpl in PAGES.items():
         html = env.get_template(tpl).render(**ctx)
+        if page == "respite-application.html":
+            # New page starts whitespace-clean; preserve inherited pages byte-for-byte.
+            html = "\n".join(line.rstrip() for line in html.split("\n"))
         if page == "coming-soon.html":
             html = _splice_head(html, render_coming_soon_head())
         else:
