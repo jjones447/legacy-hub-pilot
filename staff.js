@@ -1166,7 +1166,11 @@ async function setCaregiverRecordStatus(status, target) {
     ? 'Archive this caregiver? Their record and history are kept, but they will not be able to sign in to the Caregiver Portal. Open follow-ups stay open. You can restore them to active later.'
     : 'Restore this caregiver to active? They will be able to sign in to the Caregiver Portal again.';
   if (!window.confirm(question)) return;
-  const stillShowing = () => document.getElementById('caregiverRecordPanel')?.dataset?.caregiverId === caregiverId;
+  // The view generation fences the response too: opening another record (even while it is still
+  // loading and the panel still names this one) or returning to the dashboard bumps the epoch.
+  let viewEpoch = caregiverDetailEpoch;
+  const stillShowing = () => caregiverDetailEpoch === viewEpoch
+    && document.getElementById('caregiverRecordPanel')?.dataset?.caregiverId === caregiverId;
   caregiverStatusPending = true;
   if (target) target.disabled = true;
   setCaregiverLifecycleMessage(archiving ? 'Archiving…' : 'Restoring…');
@@ -1182,7 +1186,9 @@ async function setCaregiverRecordStatus(status, target) {
     // Only refresh and report on the record that is still on screen (#306 review): if staff
     // opened another caregiver meanwhile, never navigate back to this one.
     if (stillShowing()) {
-      await viewCaregiver(caregiverId);
+      const refreshed = viewCaregiver(caregiverId);
+      viewEpoch = caregiverDetailEpoch; // the refresh's own generation, taken synchronously
+      await refreshed;
       if (stillShowing()) {
         setCaregiverLifecycleMessage(archiving
           ? 'Archived. This caregiver can no longer sign in to the Caregiver Portal.'
@@ -1201,6 +1207,7 @@ async function setCaregiverRecordStatus(status, target) {
 }
 
 async function loadEvents() {
+  const count = document.getElementById('eventsCount');
   try {
     let res = await fetch('/api/staff/events');
     let data;
@@ -1213,7 +1220,6 @@ async function loadEvents() {
     if (!data || !data.ok) throw new Error(data?.error || 'Failed to fetch events');
 
     staffEvents = data.events || [];
-    const count = document.getElementById('eventsCount');
     if (count) count.textContent = eventsCountText(staffEvents);
     const body = document.getElementById('upcomingEventsBody');
     if (!body) return;
@@ -1257,6 +1263,9 @@ async function loadEvents() {
       `;
     }).join('');
   } catch (e) {
+    if (count) count.textContent = '(could not load)';
+    const body = document.getElementById('upcomingEventsBody');
+    if (body) body.innerHTML = '<tr><td colspan="5" class="text-center muted small" role="alert">Could not load events. Reload the page to try again.</td></tr>';
     console.error(e);
   }
 }
@@ -1699,6 +1708,7 @@ async function unpublishEvent(eventId) {
 }
 
 async function archiveEvent(eventId, confirmWithRegistrations = false) {
+  if (!confirmWithRegistrations && !confirm('Archive this event for good? Its details, registrations and history are kept and it stays off the public calendar, but it cannot be published again and there is no restore.')) return;
   try {
     const body = confirmWithRegistrations ? { confirm_with_registrations: true } : {};
     const res = await fetch(`/api/staff/event/${encodeURIComponent(eventId)}/archive`, {
@@ -1743,6 +1753,7 @@ async function loadRegistrations(eventId, eventTitle) {
     if (!panel || !content) return;
     
     panel.style.display = 'block';
+    panel.open = true;
     
     if (data.registrations.length === 0) {
       content.innerHTML = '<p class="small muted text-center">No caregivers registered for this event yet.</p>';

@@ -20,6 +20,8 @@ const flush = () => new Promise(resolve => setTimeout(resolve, 0));
 const PANELS = ['staffHelpPanel', 'needsAttentionPanel', 'eventsPanel', 'grantsPanel', 'wellnessPanel', 'peopleManagementPanel', 'recentChangesPanel', 'siteContentPanel'];
 const OPEN_BY_DEFAULT = ['needsAttentionPanel', 'eventsPanel', 'grantsPanel', 'wellnessPanel'];
 
+const STAFF_PANEL_SOURCE_IDS = () => JSON.parse(source.match(/const STAFF_PANEL_IDS = Object\.freeze\((\[[^\]]*\])\)/)[1].replaceAll("'", '"'));
+
 function details(id) {
   const match = html.match(new RegExp(`<details\\b([^>]*\\bid="${id}"[^>]*)>([\\s\\S]*?)</details>`));
   assert.ok(match, `${id} is a native details element`);
@@ -58,8 +60,15 @@ test('every main Staff section is a native details/summary with preserved IDs, c
   assert.match(details('eventsPanel').summary, /Upcoming events/);
   assert.match(details('grantsPanel').summary, /Wellness Grants/);
   assert.match(details('wellnessPanel').summary, /Caregiver wellness/);
-  // The attendance panel remains a conditional reveal and the assistant keeps its own disclosure.
-  assert.match(html, /<div class="panel d-none-mt-24" id="attendancePanel">/);
+  // Attendance is a disclosure too, still hidden until an event is chosen (review item 4).
+  const attendance = details('attendancePanel');
+  assert.match(attendance.attrs, /class="panel staff-section d-none-mt-24"/);
+  assert.equal(attendance.open, true);
+  assert.match(attendance.summary, /<h4 class="staff-section-heading">👥 Event Attendance<\/h4>/);
+  assert.match(attendance.body, /id="attendanceContent"/);
+  assert.match(slice('async function loadRegistrations(', '} catch (e)'), /panel\.style\.display = 'block';\n    panel\.open = true;/);
+  assert.ok(!STAFF_PANEL_SOURCE_IDS().includes('attendancePanel'), 'the conditional panel is not persisted');
+  // The assistant keeps its own disclosure.
   assert.match(html, /<section id="staffAssistantPanel"[^>]* hidden>/);
 });
 
@@ -389,7 +398,7 @@ test('Grants show where actions live, add only a client-side Active view, and ne
   assert.doesNotMatch(source, /\/api\/grants\/\$\{[^}]+\}\/(?:archive|restore|delete|withdraw)/);
 });
 
-function caregiverRecord({ status = 'active', patch = async () => ({ ok: true, json: async () => ({ ok: true }) }), confirmAnswer = true } = {}) {
+function caregiverRecord({ status = 'active', patch = async () => ({ ok: true, json: async () => ({ ok: true }) }), confirmAnswer = true, get = null } = {}) {
   const make = (extra = {}) => ({ classList: { add() {}, remove() {} }, dataset: {}, innerHTML: '', focus() {}, ...extra });
   const message = { textContent: '', classes: new Set(), classList: { toggle(name, on) { on ? message.classes.add(name) : message.classes.delete(name); } } };
   const nodes = { staffDashboardView: make(), caregiverDetailView: make(), caregiverRecordPanel: make(), caregiverDetailHeading: make(), caregiverLifecycleMessage: message };
@@ -407,6 +416,7 @@ function caregiverRecord({ status = 'active', patch = async () => ({ ok: true, j
         if (reply.ok) profileStatus = JSON.parse(options.body).status;
         return reply;
       }
+      if (get) { const held = get(url); if (held) await held; }
       return { ok: true, json: async () => ({ ok: true, profile: { id: 'cg_demo', first_name: 'Fictional', last_name: 'Example', status: profileStatus, sanctuary_member: 0 },
         grants: [], registrations: [], notes: [], contact_history: [], followups: [] }) };
     },
@@ -487,4 +497,123 @@ test('an older Archive/Restore response never pulls staff back from a newer reco
     assert.equal(h.nodes.caregiverRecordPanel.dataset.caregiverId, 'cg_second');
     assert.equal(h.message.textContent, 'cg_second view', `${outcome}: no stale feedback on the newer record`);
   }
+});
+
+test('an Archive/Restore response is fenced by view generation: newer record still loading, leave, re-enter (review item 3)', async () => {
+  const viewsOf = (h, from, id) => h.calls.slice(from).filter(c => !c.options?.method && c.url === `/api/staff/caregiver/${id}`);
+  for (const outcome of ['success', 'failure']) {
+    const reply = outcome === 'success'
+      ? { ok: true, json: async () => ({ ok: true }) }
+      : { ok: false, status: 400, json: async () => ({ ok: false, error: 'refused' }) };
+
+    // A rendered -> A Archive pending -> B GET starts (panel still names A) -> A's PATCH returns.
+    let finish, releaseB;
+    const patchHeld = new Promise(resolve => { finish = resolve; });
+    const bHeld = new Promise(resolve => { releaseB = resolve; });
+    const h = caregiverRecord({ patch: () => patchHeld, get: url => url.endsWith('/cg_second') ? bHeld : null });
+    await h.context.viewCaregiver('cg_demo');
+    const target = { disabled: false };
+    const run = h.context.setCaregiverRecordStatus('archived', target);
+    const before = h.calls.length;
+    const loadingB = h.context.viewCaregiver('cg_second');
+    await flush();
+    assert.equal(h.nodes.caregiverRecordPanel.dataset.caregiverId, 'cg_demo', 'B is still loading');
+    finish(reply);
+    await run;
+    assert.deepEqual(viewsOf(h, before, 'cg_demo'), [], `${outcome}: no refresh of A while B loads`);
+    assert.equal(h.message.textContent, 'Archiving…', `${outcome}: no stale A feedback`);
+    assert.equal(target.disabled, true, `${outcome}: A's old button is not re-enabled into B's view`);
+    releaseB();
+    await loadingB;
+    assert.equal(h.nodes.caregiverRecordPanel.dataset.caregiverId, 'cg_second', `${outcome}: B's pending load still renders`);
+
+    // Leave for the dashboard while the PATCH is pending.
+    let finishLeave;
+    const leaveHeld = new Promise(resolve => { finishLeave = resolve; });
+    const left = caregiverRecord({ patch: () => leaveHeld });
+    await left.context.viewCaregiver('cg_demo');
+    const leaveRun = left.context.setCaregiverRecordStatus('archived', { disabled: false });
+    const leaveBefore = left.calls.length;
+    left.context.backToStaffDashboard();
+    finishLeave(reply);
+    await leaveRun;
+    assert.deepEqual(viewsOf(left, leaveBefore, 'cg_demo'), [], `${outcome}: leaving cancels the refresh`);
+    assert.equal(left.message.textContent, 'Archiving…', `${outcome}: no feedback after leaving`);
+
+    // Leave and re-enter the same record before the PATCH returns: only the re-entry GET runs.
+    let finishAgain;
+    const againHeld = new Promise(resolve => { finishAgain = resolve; });
+    const again = caregiverRecord({ patch: () => againHeld });
+    await again.context.viewCaregiver('cg_demo');
+    const againRun = again.context.setCaregiverRecordStatus('archived', { disabled: false });
+    const againBefore = again.calls.length;
+    again.context.backToStaffDashboard();
+    await again.context.viewCaregiver('cg_demo');
+    finishAgain(reply);
+    await againRun;
+    assert.equal(viewsOf(again, againBefore, 'cg_demo').length, 1, `${outcome}: the re-entered view is not reloaded by the old response`);
+    assert.equal(again.message.textContent, 'Archiving…', `${outcome}: no stale feedback on the re-entered view`);
+  }
+
+  // The refresh after a still-current success reports on its own generation.
+  const current = caregiverRecord();
+  await current.context.viewCaregiver('cg_demo');
+  await current.context.setCaregiverRecordStatus('archived', { disabled: false });
+  assert.match(current.message.textContent, /^Archived\./);
+});
+
+test('an Events load failure is visible in the count and the list (review item 5)', async () => {
+  const nodes = { eventsCount: { textContent: '(3 events: 3 published)' }, upcomingEventsBody: { innerHTML: '<tr><td>stale row</td></tr>' } };
+  const errors = [];
+  for (const fetchImpl of [
+    async () => { throw new Error('offline'); },
+    async () => ({ ok: true, json: async () => ({ ok: false, error: 'nope' }) }),
+  ]) {
+    const context = createContext({ document: { getElementById: id => nodes[id] }, fetch: fetchImpl, console: { error: e => errors.push(e) }, escapeHtml });
+    runInContext(slice('async function loadEvents(', 'function renderNewEventForm('), context);
+    await context.loadEvents();
+    assert.equal(nodes.eventsCount.textContent, '(could not load)');
+    assert.equal(nodes.upcomingEventsBody.innerHTML, '<tr><td colspan="5" class="text-center muted small" role="alert">Could not load events. Reload the page to try again.</td></tr>');
+    nodes.eventsCount.textContent = 'stale';
+  }
+  assert.equal(errors.length, 2);
+});
+
+test('Event Archive confirms before the first POST and keeps the separate registration override (review item 6)', async () => {
+  function archive({ answers, replies }) {
+    const posts = [], confirms = [], alerts = [];
+    let reloads = 0;
+    const context = createContext({
+      confirm: text => { confirms.push(text); return answers.shift(); },
+      alert: text => alerts.push(text),
+      fetch: async (url, options) => { posts.push({ url, body: JSON.parse(options.body), method: options.method }); return replies.shift(); },
+      loadEvents: async () => { reloads++; }, loadRecentChanges: async () => {},
+    });
+    runInContext(slice('async function archiveEvent(', 'async function selectEvent('), context);
+    return { context, posts, confirms, alerts, reloads: () => reloads };
+  }
+  const ok = { ok: true, status: 200, json: async () => ({ ok: true }) };
+  const busy = { ok: false, status: 409, json: async () => ({ ok: false, registration_count: 2 }) };
+
+  const declined = archive({ answers: [false], replies: [] });
+  await declined.context.archiveEvent('ev_1');
+  assert.equal(declined.posts.length, 0, 'declining the first question sends nothing');
+  assert.equal(declined.confirms[0], 'Archive this event for good? Its details, registrations and history are kept and it stays off the public calendar, but it cannot be published again and there is no restore.');
+
+  const plain = archive({ answers: [true], replies: [ok] });
+  await plain.context.archiveEvent('ev_1');
+  assert.deepEqual(plain.posts, [{ url: '/api/staff/event/ev_1/archive', body: {}, method: 'POST' }]);
+  assert.equal(plain.confirms.length, 1);
+  assert.equal(plain.reloads(), 1);
+
+  const override = archive({ answers: [true, true], replies: [busy, ok] });
+  await override.context.archiveEvent('ev_1');
+  assert.deepEqual(override.posts.map(p => p.body), [{}, { confirm_with_registrations: true }]);
+  assert.equal(override.confirms.length, 2, 'the registration question is asked once, separately');
+  assert.match(override.confirms[1], /^This event has 2 active registration\(s\)/);
+
+  const keep = archive({ answers: [true, false], replies: [busy] });
+  await keep.context.archiveEvent('ev_1');
+  assert.equal(keep.posts.length, 1, 'declining the registration override sends nothing more');
+  assert.equal(keep.reloads(), 0);
 });
