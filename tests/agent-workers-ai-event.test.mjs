@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mapRequestToWorkflowChange } from '../functions/api/agent/_mapper.mjs';
 import { validate } from '../functions/_lib/domain/events.js';
-import { postAgentFixture as onRequestPost } from './helpers/confirmed-agent.mjs';
+import {postWithInertProvider as onRequestPost} from './fixtures/inert-agent-provider.mjs';
 
 const event = { id: 'ev_synthetic', title: 'Before', type: 'wellness',
   starts_at: '2026-10-15T18:00:00Z', ends_at: null, location: null,
@@ -217,7 +217,7 @@ test('Event draft only writes durable draft; confirmation applies selected recor
   assert.ok(db.state.audits.some(a => a.values.includes('agent_change.confirm')));
 });
 
-test('native Event object response stores only a version-bound preview, never applies', async () => {
+test('inert native Event object response stores only a version-bound preview, never applies', async () => {
   const db = workflowDb();
   let calls = 0;
   const drafted = await post(db, 'draft', { area: 'event', target_id: event.id, request: 'Update title to After' },
@@ -238,7 +238,7 @@ for (const [name, envelope] of [
   ['provider refusal', { refusal: 'Out of scope' }],
   ['invalid Event field', { change: { operation: 'update', payload: { publish_state: 'published' } } }]
 ]) {
-  test(`native Event ${name} creates no draft or domain/audit write`, async () => {
+  test(`inert native Event ${name} creates no draft or domain/audit write`, async () => {
     const db = workflowDb();
     let calls = 0;
     const result = await post(db, 'draft', { area: 'event', target_id: event.id, request: 'Update title' },

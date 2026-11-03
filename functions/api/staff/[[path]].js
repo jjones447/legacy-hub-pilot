@@ -6,6 +6,8 @@ import * as eventsDomain from '../../_lib/domain/events.js';
 import { getStaffMember, listStaff, updateStaffMember, createStaffMember } from '../../_lib/staff.js';
 import { staffSeries, caregiversWithCheckins } from '../../_lib/wellness.js';
 import { _resetContentCache } from '../../_content.mjs';
+import { customerActivity } from '../../_lib/customer-activity.mjs';
+import { SUPPORT_SOURCE, enrichStaffFollowups, getStaffSupportState, handleStaffSupportMutation } from '../../_lib/portal-support.js';
 
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), {
@@ -36,7 +38,8 @@ export async function onRequestGet({ request, env }) {
         ORDER BY COALESCE(f.due, f.created_at) ASC, f.created_at ASC
       `).all();
 
-      return json({ ok: true, queue: results });
+      const { followups: enrichedQueue, shanelleInboxCount } = await enrichStaffFollowups(env.LEGACY_DB, results || []);
+      return json({ ok: true, queue: enrichedQueue, shanelle_support_inbox_count: shanelleInboxCount });
     }
 
     if (subRoute === 'caregiver') {
@@ -99,12 +102,18 @@ export async function onRequestGet({ request, env }) {
         ORDER BY occurred_at DESC, created_at DESC
       `).bind(caregiverId).all();
 
+      const { followups: enrichedFollowups } = await enrichStaffFollowups(
+        env.LEGACY_DB,
+        followups || [],
+        { includeReporting: true }
+      );
+
       return json({
         ok: true,
         profile,
         registrations,
         grants,
-        followups,
+        followups: enrichedFollowups,
         notes,
         contact_history
       });
@@ -257,11 +266,16 @@ export async function onRequestGet({ request, env }) {
         };
       });
 
-      return json({
+      const releases = customerActivity();
+      const response = json({
         ok: true,
         changes: enriched,
-        recent_changes: enriched
+        recent_changes: enriched,
+        release_activity: releases.entries,
+        release_activity_as_of: releases.as_of,
       });
+      response.headers.set('Cache-Control', 'no-store');
+      return response;
     }
 
     if (subRoute === 'events') {
@@ -336,7 +350,7 @@ export async function onRequestPost({ request, env }) {
 
       // Fetch followup status
       const followup = await env.LEGACY_DB.prepare(`
-        SELECT status, caregiver_id FROM followup WHERE id = ?
+        SELECT status, caregiver_id, source FROM followup WHERE id = ?
       `).bind(id).first();
 
       if (!followup) {
@@ -351,6 +365,20 @@ export async function onRequestPost({ request, env }) {
       const targetStatus = body.status || 'done';
       if (!['done', 'dismissed'].includes(targetStatus)) {
         return json({ ok: false, error: "status must be 'done' or 'dismissed'" }, 400);
+      }
+
+      if (followup.source === SUPPORT_SOURCE) {
+        if (targetStatus === 'dismissed') {
+          return json({ ok: false, error: 'managed_support_request_cannot_dismiss' }, 409);
+        }
+        const managed = await handleStaffSupportMutation(env.LEGACY_DB, getActor(request, null), id, {
+          status: 'completed',
+          expected_version: body.expected_version,
+        });
+        if (!managed.ok) {
+          return json({ ok: false, error: managed.error }, managed.status);
+        }
+        return json({ ok: true, support_request: managed.support_request });
       }
 
       // Status and its original audit must commit together or not at all.
@@ -370,6 +398,25 @@ export async function onRequestPost({ request, env }) {
       ]);
 
       return json({ ok: true });
+    }
+
+    // 1b. POST /api/staff/followup/:id/support — managed My Support lifecycle, assignment & private notes
+    if (pathSegments.length === 5 && pathSegments[2] === 'followup' && pathSegments[4] === 'support') {
+      const id = parseInt(pathSegments[3], 10);
+      if (isNaN(id)) {
+        return json({ ok: false, error: 'invalid followup id' }, 400);
+      }
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return json({ ok: false, error: 'invalid JSON body' }, 400);
+      }
+      const result = await handleStaffSupportMutation(env.LEGACY_DB, getActor(request, null), id, body);
+      if (!result.ok) {
+        return json({ ok: false, error: result.error }, result.status);
+      }
+      return json({ ok: true, support_request: result.support_request }, result.status);
     }
 
     // 2. POST /api/staff/caregiver/:id/contact
