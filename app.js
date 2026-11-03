@@ -466,7 +466,11 @@ function submitRegister(e) {
     relationship: document.getElementById('regRole').value,
   };
 
-  postIntake(form, payload).then(function () {
+  postIntake(form, payload).then(function (result) {
+    const success = form.querySelector('[data-intake-success]');
+    if (success) success.textContent = result.confirmation_email === 'submitted'
+      ? 'Registration saved. Your confirmation email has been submitted. Check your inbox and spam folder.'
+      : 'Registration saved. We could not confirm the email was sent. Please contact Legacy for the details; do not register again.';
     setFormState(form, 'success');
   }).catch(function (err) {
     if (err.message === 'event_full') {
@@ -510,6 +514,7 @@ function checkPortalSession() {
         takePortalHandoff(); // discard: an existing session wins, nothing is sent
         renderPortalData(result.data);
         loadWellness();
+        loadPortalSupport();
         loginView.style.display = 'none';
         dashView.style.display = 'block';
       } else {
@@ -614,6 +619,8 @@ function submitPortalLogin(e) {
         statusDiv.textContent = 'Too many requests. Please wait a few minutes and try again.';
       } else if (err.message === 'signin_unavailable') {
         statusDiv.textContent = 'Sign-in is temporarily unavailable. Please contact Legacy or try again later.';
+      } else if (err.message === 'preview_portal_disabled') {
+        statusDiv.textContent = 'Staging caregiver sign-in is disabled. Only the specifically configured QA caregiver can sign in after the release owner enables it.';
       } else {
         statusDiv.textContent = "We couldn't request a sign-in link just now. Please try again later.";
       }
@@ -667,18 +674,29 @@ function portalLogout() {
 }
 
 function renderPortalData(data) {
+  const profile = data.profile || {};
   const welcome = document.getElementById('portalWelcome');
   if (welcome) {
-    welcome.textContent = 'Welcome back, ' + (data.profile.first_name || 'Member');
+    const first = typeof profile.first_name === 'string' ? profile.first_name.trim() : '';
+    welcome.textContent = first ? 'Welcome to Your Sanctuary, ' + first + '!' : 'Welcome to Your Sanctuary!';
   }
+
+  // My Profile & Intake: read-only account details (updates/intake are not built yet).
+  const setText = function (id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value ? String(value) : '—';
+  };
+  setText('portalProfileName', [profile.first_name, profile.last_name].filter(Boolean).join(' '));
+  setText('portalProfileEmail', profile.email);
+  setText('portalProfilePhone', profile.phone);
 
   // Membership status
   const memberStatus = document.getElementById('portalMembershipStatus');
   if (memberStatus) {
-    if (data.profile.sanctuary_member === 1) {
+    if (profile.sanctuary_member === 1) {
       memberStatus.innerHTML = '<span class="badge badge-green">Sanctuary member</span>';
     } else {
-      memberStatus.innerHTML = '<span class="badge badge-gray">Non-member</span>';
+      memberStatus.innerHTML = '<span class="badge badge-gray">Not yet a member</span>';
     }
   }
 
@@ -708,52 +726,37 @@ function renderPortalData(data) {
     }
   }
 
-  // Events list
+  // My Events: the account's registrations (any published event type, including Memory
+  // Socials and support group sessions), grouped into upcoming and past.
   const eventsList = document.getElementById('portalEventsList');
+  const nowDate = new Date();
+  const timed = (data.events || []).map(function (e) {
+    return { event: e, time: publicEventTime(e.starts_at, nowDate, 'America/Chicago') };
+  });
+  const upcoming = timed.filter(function (x) { return x.time && x.time.future; })
+    .sort(function (a, b) { return a.time.instant - b.time.instant; });
+  const past = timed.filter(function (x) { return !(x.time && x.time.future); })
+    .sort(function (a, b) { return (b.time ? b.time.instant : -Infinity) - (a.time ? a.time.instant : -Infinity); });
   if (eventsList) {
     eventsList.innerHTML = '';
-    if (data.events && data.events.length > 0) {
-      data.events.forEach(function (e) {
-        const item = document.createElement('div');
-        item.className = 'timeline-item';
-        let dotColor = 'var(--ink-soft)';
-        if (e.type === 'support_group') dotColor = 'var(--green)';
-        else if (e.type === 'memory_social') dotColor = 'var(--amber)';
-        else if (e.type === 'wellness') dotColor = 'var(--plum)';
-
-        // Built as DOM nodes, not an HTML string. e.title and e.location are free text
-        // authored in the staff console, and concatenating them into innerHTML made the
-        // caregiver portal a stored-XSS sink. Everywhere else in this file already uses
-        // textContent; these were the outliers.
-        const dot = document.createElement('div');
-        dot.className = 'timeline-dot';
-        dot.style.background = dotColor;
-
-        const title = document.createElement('strong');
-        title.textContent = e.title || 'Event';
-
-        const badge = document.createElement('span');
-        badge.className = 'badge badge-green';
-        badge.textContent = e.registration_status || '';
-
-        const when = document.createElement('div');
-        when.className = 'when';
-        when.textContent = (e.starts_at || '') + ' · ' + (e.location || 'Online');
-
-        const body = document.createElement('div');
-        body.appendChild(title);
-        body.appendChild(document.createTextNode(' '));
-        body.appendChild(badge);
-        body.appendChild(when);
-
-        item.appendChild(dot);
-        item.appendChild(body);
-        eventsList.appendChild(item);
-      });
-    } else {
+    if (timed.length === 0) {
       eventsList.innerHTML = '<p class="small muted m-0">No registered events yet.</p>';
+    } else {
+      [['Upcoming', upcoming], ['Past', past]].forEach(function (group) {
+        if (!group[1].length) return;
+        const section = document.createElement('div');
+        section.className = 'portal-events-group';
+        const heading = document.createElement('h5');
+        heading.textContent = group[0];
+        section.appendChild(heading);
+        group[1].forEach(function (entry) { section.appendChild(portalEventItem(entry.event)); });
+        eventsList.appendChild(section);
+      });
     }
   }
+  const nextRegistered = upcoming.find(function (x) { return x.event.registration_status === 'registered'; });
+  portalHighlightState.nextEvent = nextRegistered ? nextRegistered.event : null;
+  renderPortalHighlights();
 
   // Memory socials count and details
   const socialsCount = document.getElementById('portalSocialsCount');
@@ -780,6 +783,112 @@ function renderPortalData(data) {
   }
 }
 
+
+const PORTAL_EVENT_TYPE_LABELS = { support_group: 'Support Group', memory_social: 'Memory Social', wellness: 'Wellness', caregiver_event: 'Caregiver Event' };
+
+// Built as DOM nodes, not an HTML string: event titles and locations are free text
+// authored in the staff console (stored-XSS hardening).
+function portalEventItem(e) {
+  const item = document.createElement('div');
+  item.className = 'timeline-item';
+  let dotColor = 'var(--ink-soft)';
+  if (e.type === 'support_group') dotColor = 'var(--green)';
+  else if (e.type === 'memory_social') dotColor = 'var(--amber)';
+  else if (e.type === 'wellness') dotColor = 'var(--plum)';
+  const dot = document.createElement('div');
+  dot.className = 'timeline-dot';
+  dot.style.background = dotColor;
+  const title = document.createElement('strong');
+  title.textContent = e.title || 'Event';
+  const badge = document.createElement('span');
+  badge.className = 'badge badge-green';
+  badge.textContent = e.registration_status || '';
+  const when = document.createElement('div');
+  when.className = 'when';
+  const kind = PORTAL_EVENT_TYPE_LABELS[e.type] ? PORTAL_EVENT_TYPE_LABELS[e.type] + ' · ' : '';
+  when.textContent = kind + (e.starts_at || '') + ' · ' + (e.location || 'Online');
+  const body = document.createElement('div');
+  body.appendChild(title);
+  body.appendChild(document.createTextNode(' '));
+  body.appendChild(badge);
+  body.appendChild(when);
+  item.appendChild(dot);
+  item.appendChild(body);
+  return item;
+}
+
+// Dashboard highlights: only information connected to this account (next registered
+// event, a due wellness check-in). Nothing is shown when there is nothing real to show.
+const portalHighlightState = { nextEvent: null, wellnessDue: false };
+
+function renderPortalHighlights() {
+  const box = document.getElementById('portalHighlights');
+  const list = document.getElementById('portalHighlightsList');
+  if (!box || !list) return;
+  list.textContent = '';
+  const add = function (icon, text) {
+    const li = document.createElement('li');
+    const mark = document.createElement('span');
+    mark.setAttribute('aria-hidden', 'true');
+    mark.textContent = icon;
+    const body = document.createElement('span');
+    body.textContent = text;
+    li.appendChild(mark);
+    li.appendChild(body);
+    list.appendChild(li);
+  };
+  const e = portalHighlightState.nextEvent;
+  if (e) add('📅', 'Your next event: ' + (e.title || 'Event') + ' · ' + String(e.starts_at || '').slice(0, 16));
+  if (portalHighlightState.wellnessDue) add('💛', 'It’s time for a quick wellness check-in. See My Wellness below.');
+  box.hidden = list.children.length === 0;
+}
+
+
+// Design preview (client review on the test site, where caregiver sign-in mail is off):
+// /portal?preview=sample shows the real dashboard layout with clearly labeled FICTIONAL
+// information. No session, API request, storage or submit control is used.
+function portalDesignPreviewRequested() {
+  try {
+    return typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('preview') === 'sample';
+  } catch (err) {
+    return false;
+  }
+}
+
+function portalSampleDate(daysFromNow, hhmm) {
+  const d = new Date(Date.now() + daysFromNow * 86400000);
+  return d.toISOString().slice(0, 10) + ' ' + hhmm;
+}
+
+function initPortalDesignPreview() {
+  const loginView = document.getElementById('loginView');
+  const dashView = document.getElementById('dashView');
+  if (!loginView || !dashView) return false;
+  loginView.style.display = 'none';
+  dashView.style.display = 'block';
+  const banner = document.getElementById('portalDesignPreview');
+  if (banner) banner.hidden = false;
+  ['portalLogoutBtn', 'portalWellnessSample'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el) el.hidden = true;
+  });
+  renderPortalData({
+    profile: { first_name: 'Jordan', last_name: 'Example', email: 'jordan@example.invalid', phone: '(000) 000-0000', sanctuary_member: 1 },
+    grants: [],
+    events: [
+      { title: 'Example Memory Social', type: 'memory_social', starts_at: portalSampleDate(3, '14:00'), location: 'Sample community room', registration_status: 'registered' },
+      { title: 'Example Virtual Caregiver Support Group', type: 'support_group', starts_at: portalSampleDate(6, '17:00'), location: 'Online', registration_status: 'registered' },
+      { title: 'Example Family Education Workshop', type: 'caregiver_event', starts_at: portalSampleDate(-9, '18:00'), location: 'Sample community center', registration_status: 'attended' },
+    ],
+  });
+  // No fictional wellness scores; only the due prompt, and no check-in can be submitted.
+  renderWellness({ history: [], due: true });
+  const btn = document.getElementById('portalWellnessBtn');
+  if (btn) btn.classList.add('d-none');
+  const supportBtn = document.getElementById('portalSupportBtn');
+  if (supportBtn) supportBtn.classList.add('d-none');
+  return true;
+}
 
 /* ---------- Staff console: governed agent chat mock ---------- */
 function agentConfirm(btn) {
@@ -1015,7 +1124,7 @@ function loadLiveEvents() {
 document.addEventListener('DOMContentLoaded', function() {
   initPortalSummaryPreview();
   loadLiveEvents();
-  checkPortalSession();
+  if (!(portalDesignPreviewRequested() && initPortalDesignPreview())) checkPortalSession();
 });
 
 
@@ -1222,6 +1331,9 @@ document.addEventListener('submit', function (e) {
   } else if (action === 'submit-register') {
     e.preventDefault();
     submitRegister(e);
+  } else if (action === 'submit-portal-support') {
+    e.preventDefault();
+    submitPortalSupport(e);
   }
 });
 
@@ -1260,6 +1372,10 @@ function renderWellness(data) {
     }
   }
   if (btn) btn.classList.toggle('d-none', !data.due);
+  if (typeof portalHighlightState === 'object' && typeof renderPortalHighlights === 'function') {
+    portalHighlightState.wellnessDue = !!data.due;
+    renderPortalHighlights();
+  }
   const trendHint = document.getElementById('portalWellnessTrendHint');
   if (trendHint) trendHint.textContent = history.length < 2
     ? 'A trend appears after two check-ins.' : 'Scores shown oldest to newest.';
@@ -1284,8 +1400,13 @@ function initPortalSummaryPreview() {
   const preview = document.getElementById('portalWellnessSample');
   const actual = document.getElementById('portalAccountSummary');
   if (!preview || !actual) return;
-  // Display-only examples: no session, storage, API data or check-in changes.
-  const sync = function () { actual.hidden = preview.open; };
+  // Display-only examples: no session, storage, API data or check-in changes. The sample
+  // cards stand in for the other summary cards; the real wellness card stays visible.
+  const sync = function () {
+    Array.prototype.forEach.call(actual.children, function (card) {
+      if (card.id !== 'portalWellnessTile') card.hidden = preview.open;
+    });
+  };
   preview.open = false;
   sync();
   preview.addEventListener('toggle', sync);
@@ -1406,6 +1527,265 @@ async function submitWellness(button) {
   }
 }
 
+/* ---------- Portal: My Support requests & history (LP-02 staged increment) ---------- */
+let portalSupportPendingRequest = null;
+let portalSupportProfileContact = { email: '', phone: '' };
+
+function newPortalSupportRequestId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, function (b) { return b.toString(16).padStart(2, '0'); }).join('');
+  return hex.slice(0, 8) + '-' + hex.slice(8, 12) + '-' + hex.slice(12, 16) + '-' + hex.slice(16, 20) + '-' + hex.slice(20);
+}
+
+async function loadPortalSupport() {
+  const rowsEl = document.getElementById('portalSupportHistoryRows');
+  if (rowsEl) rowsEl.textContent = 'Loading your support requests…';
+  try {
+    const res = await fetch('/api/portal/support', { credentials: 'same-origin' });
+    const data = await res.json();
+    if (!res.ok || !data || !data.ok) throw new Error('unavailable');
+    if (data.profile_contact && typeof data.profile_contact === 'object') {
+      portalSupportProfileContact = {
+        email: String(data.profile_contact.email || ''),
+        phone: String(data.profile_contact.phone || '')
+      };
+    }
+    const matchedReceipt = renderPortalSupport(data);
+    return {
+      ok: true,
+      requests: Array.isArray(data.requests) ? data.requests : [],
+      matchedReceipt: matchedReceipt
+    };
+  } catch (e) {
+    renderPortalSupportHistory(rowsEl, [], 'Your support requests are not available right now.');
+    return { ok: false, requests: [], matchedReceipt: null };
+  }
+}
+
+function renderPortalSupport(data) {
+  const requests = Array.isArray(data && data.requests) ? data.requests : [];
+  const rowsEl = document.getElementById('portalSupportHistoryRows');
+  renderPortalSupportHistory(rowsEl, requests, 'No support requests yet.');
+  if (portalSupportPendingRequest) {
+    const matched = requests.find(function (r) {
+      return r && r.request_id === portalSupportPendingRequest.requestId;
+    }) || null;
+    if (matched) {
+      const wasUnresolved = Boolean(portalSupportPendingRequest.unresolved);
+      const wasConflict = Boolean(portalSupportPendingRequest.conflict);
+      portalSupportPendingRequest = null;
+      const form = document.getElementById('portalSupportForm');
+      if (form) {
+        form.reset();
+        form.classList.add('d-none');
+      }
+      const openBtn = document.getElementById('portalSupportBtn');
+      if (openBtn) openBtn.classList.remove('d-none');
+      const historyDetails = document.getElementById('portalSupportHistory');
+      if (historyDetails) historyDetails.open = true;
+      if (wasConflict || wasUnresolved) {
+        const msg = document.getElementById('portalSupportMsg');
+        if (msg) {
+          if (wasConflict) {
+            msg.textContent = 'Your original support request was already saved and is shown in your history below. If you still need additional changes, you can start a new request.';
+          } else {
+            msg.textContent = 'Confirmed: your support request (' +
+              (matched.support_type_label || 'Support request') + ') was saved (' +
+              (matched.status_label || 'Received') + ').';
+          }
+        }
+      }
+      return matched;
+    }
+  }
+  return null;
+}
+
+function renderPortalSupportHistory(container, requests, emptyText) {
+  if (!container) return;
+  container.textContent = '';
+  if (!Array.isArray(requests) || requests.length === 0) {
+    container.textContent = emptyText;
+    return;
+  }
+  const list = document.createElement('ol');
+  requests.forEach(function (req) {
+    const li = document.createElement('li');
+    const title = document.createElement('strong');
+    title.textContent = String(req.support_type_label || req.support_type || 'Support request');
+    const badge = document.createElement('span');
+    let badgeClass = 'badge-amber';
+    if (req.status === 'completed') badgeClass = 'badge-green';
+    else if (req.status === 'in_progress') badgeClass = 'badge-plum';
+    badge.className = 'badge ' + badgeClass;
+    badge.textContent = String(req.status_label || req.status || 'Received');
+    const submitted = String(req.submitted_at || '').slice(0, 10) || '—';
+    const updated = String(req.last_status_updated_at || req.submitted_at || '').slice(0, 10) || submitted;
+    const meta = document.createElement('span');
+    meta.className = 'small muted d-block';
+    meta.textContent = 'Submitted ' + submitted + ' · Last status update ' + updated +
+      (req.urgency_label ? ' · ' + String(req.urgency_label) : '') +
+      (req.contact_preference_label ? ' · Prefer ' + String(req.contact_preference_label) : '');
+    li.appendChild(title);
+    li.appendChild(document.createTextNode(' '));
+    li.appendChild(badge);
+    li.appendChild(meta);
+    list.appendChild(li);
+  });
+  container.appendChild(list);
+}
+
+function openPortalSupportForm() {
+  const form = document.getElementById('portalSupportForm');
+  const btn = document.getElementById('portalSupportBtn');
+  const emailInput = document.getElementById('portalSupportEmail');
+  const phoneInput = document.getElementById('portalSupportPhone');
+  const profileEmailEl = document.getElementById('portalProfileEmail');
+  const profilePhoneEl = document.getElementById('portalProfilePhone');
+  if (!form) return;
+  if (emailInput && !emailInput.value) {
+    const fallbackEmail = portalSupportProfileContact.email ||
+      (profileEmailEl && profileEmailEl.textContent !== '—' ? profileEmailEl.textContent : '');
+    emailInput.value = fallbackEmail || '';
+  }
+  if (phoneInput && !phoneInput.value) {
+    const fallbackPhone = portalSupportProfileContact.phone ||
+      (profilePhoneEl && profilePhoneEl.textContent !== '—' ? profilePhoneEl.textContent : '');
+    phoneInput.value = fallbackPhone || '';
+  }
+  form.classList.remove('d-none');
+  if (btn) btn.classList.add('d-none');
+}
+
+function closePortalSupportForm() {
+  const form = document.getElementById('portalSupportForm');
+  const btn = document.getElementById('portalSupportBtn');
+  if (form) form.classList.add('d-none');
+  if (btn) btn.classList.remove('d-none');
+}
+
+async function submitPortalSupport(e) {
+  if (e) e.preventDefault();
+  const form = document.getElementById('portalSupportForm');
+  const msg = document.getElementById('portalSupportMsg');
+  const submitBtn = document.getElementById('portalSupportSubmitBtn');
+  const typeEl = document.getElementById('portalSupportType');
+  const urgencyEl = document.getElementById('portalSupportUrgency');
+  const prefEl = document.getElementById('portalSupportContactPref');
+  const emailEl = document.getElementById('portalSupportEmail');
+  const phoneEl = document.getElementById('portalSupportPhone');
+  const detailEl = document.getElementById('portalSupportDetail');
+
+  const supportType = typeEl ? typeEl.value.trim() : '';
+  const urgency = urgencyEl ? urgencyEl.value.trim() : '';
+  const contactPref = prefEl ? prefEl.value.trim() : '';
+  const contactEmail = emailEl ? emailEl.value.trim() : '';
+  const contactPhone = phoneEl ? phoneEl.value.trim() : '';
+  const detail = detailEl ? detailEl.value.trim() : '';
+
+  if (!supportType || !urgency || !contactPref) {
+    if (msg) msg.textContent = 'Please select a support type, urgency, and preferred contact method.';
+    return;
+  }
+  if (contactPref === 'email' && (!contactEmail || !contactEmail.includes('@'))) {
+    if (msg) msg.textContent = 'Please provide an email address for Email follow-up.';
+    return;
+  }
+  if ((contactPref === 'phone_call' || contactPref === 'text_message') && !contactPhone) {
+    if (msg) msg.textContent = 'Please provide a phone number for Phone or Text follow-up.';
+    return;
+  }
+
+  const signature = JSON.stringify([supportType, urgency, contactPref, contactEmail.toLowerCase(), contactPhone, detail]);
+  if (!portalSupportPendingRequest) {
+    portalSupportPendingRequest = {
+      requestId: newPortalSupportRequestId(),
+      signature: signature,
+      unresolved: false
+    };
+  } else {
+    portalSupportPendingRequest.signature = signature;
+  }
+
+  if (submitBtn) submitBtn.disabled = true;
+  if (msg) msg.textContent = 'Saving your support request…';
+
+  try {
+    const res = await fetch('/api/portal/support', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        request_id: portalSupportPendingRequest.requestId,
+        support_type: supportType,
+        urgency: urgency,
+        contact_preference: contactPref,
+        contact_email: contactEmail || undefined,
+        contact_phone: contactPhone || undefined,
+        detail: detail || undefined
+      })
+    });
+    const data = await res.json().catch(function () { return {}; });
+    if (res.status === 409 && data && data.error === 'request_id_conflict') {
+      if (portalSupportPendingRequest) {
+        portalSupportPendingRequest.unresolved = true;
+        portalSupportPendingRequest.conflict = true;
+      }
+      const historyDetails = document.getElementById('portalSupportHistory');
+      if (historyDetails) historyDetails.open = true;
+      const historyOutcome = await loadPortalSupport();
+      if (historyOutcome && historyOutcome.ok && historyOutcome.matchedReceipt) {
+        return;
+      }
+      if (msg) {
+        if (!historyOutcome || !historyOutcome.ok) {
+          msg.textContent = 'Your original support request ID (' +
+            (portalSupportPendingRequest ? portalSupportPendingRequest.requestId : '') +
+            ') was already recorded, but your support request history is not available right now to confirm the saved receipt. Your pending reference is preserved until your history loads.';
+        } else {
+          msg.textContent = 'We could not verify a matching receipt for request ID (' +
+            (portalSupportPendingRequest ? portalSupportPendingRequest.requestId : '') +
+            ') in your support history yet. Your pending reference is preserved until the saved receipt appears in your history.';
+        }
+      }
+      return;
+    }
+    if (!res.ok || !data || !data.ok || !data.request) {
+      throw new Error(data && data.error ? data.error : 'unavailable');
+    }
+    portalSupportPendingRequest = null;
+    if (form) {
+      form.reset();
+      form.classList.add('d-none');
+    }
+    const openBtn = document.getElementById('portalSupportBtn');
+    if (openBtn) openBtn.classList.remove('d-none');
+    if (msg) {
+      msg.textContent = 'Request received: ' + (data.request.support_type_label || 'Support request') +
+        ' (' + (data.request.status_label || 'Received') + '). Our team will follow up via ' +
+        (data.request.contact_preference_label || 'your preferred contact method') + '.';
+    }
+    const historyDetails = document.getElementById('portalSupportHistory');
+    if (historyDetails) historyDetails.open = true;
+    await loadPortalSupport();
+  } catch (err) {
+    if (portalSupportPendingRequest) {
+      portalSupportPendingRequest.unresolved = true;
+    }
+    if (msg) {
+      msg.textContent = 'We could not confirm your support request was saved. You can submit again safely without creating a duplicate.';
+    }
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
+  }
+}
+
 document.addEventListener('click', function (e) {
   const target = e.target.closest('[data-action]');
   if (!target || target.tagName === 'FORM') return;
@@ -1464,6 +1844,12 @@ document.addEventListener('click', function (e) {
   } else if (action === 'wellness-submit') {
     e.preventDefault();
     submitWellness(target);
+  } else if (action === 'portal-support-open') {
+    e.preventDefault();
+    openPortalSupportForm();
+  } else if (action === 'portal-support-cancel') {
+    e.preventDefault();
+    closePortalSupportForm();
   } else if (action === 'portal-logout') {
     e.preventDefault();
     portalLogout();

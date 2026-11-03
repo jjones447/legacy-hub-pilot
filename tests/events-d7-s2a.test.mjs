@@ -838,7 +838,7 @@ test('UI wiring: staff console has event chat area option and new event form', (
 });
 
 test('UI styling: new event elements have ZERO inline styles or inline handlers', () => {
-  const newEventSectionMatch = STAFF_HTML.match(/<div class="panel" id="eventsPanel">([\s\S]*?)<\/table>/);
+  const newEventSectionMatch = STAFF_HTML.match(/<details class="panel staff-section" id="eventsPanel"[^>]*>([\s\S]*?)<\/table>/);
   assert.ok(newEventSectionMatch, 'eventsPanel found in staff.html');
   const sectionContent = newEventSectionMatch[1];
 
