@@ -327,6 +327,36 @@ export async function onRequestPost({ request, env }) {
     const url = new URL(request.url);
     const pathSegments = url.pathname.split('/').filter(Boolean);
 
+    if (pathSegments.length === 3 && pathSegments[2] === 'caregivers') {
+      // Browser-only record creation; separate from enrollment/intake and staff access.
+      if (request.headers.get('Origin') !== url.origin ||
+          ![null, 'same-origin'].includes(request.headers.get('Sec-Fetch-Site'))) {
+        return json({ ok: false, error: 'Refresh the staff page before adding a person.' }, 403);
+      }
+      if ((request.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase() !== 'application/json') {
+        return json({ ok: false, error: 'Use a JSON record.' }, 415);
+      }
+      const reader = request.body?.getReader();
+      if (!reader) return json({ ok: false, error: 'Enter a caregiver record.' }, 400);
+      let body;
+      try {
+        const chunks = []; let size = 0;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          size += value.byteLength;
+          if (size > 4096) { await reader.cancel(); return json({ ok: false, error: 'The record is too large.' }, 413); }
+          chunks.push(value);
+        }
+        const bytes = new Uint8Array(size); let offset = 0;
+        for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+        body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+      } catch { return json({ ok: false, error: 'Enter a valid caregiver record.' }, 400); }
+      finally { reader.releaseLock(); }
+      const result = await caregiversDomain.create(env.LEGACY_DB, body, getActor(request, env));
+      return json(result, result.status);
+    }
+
     if (pathSegments.length === 3 && pathSegments[2] === 'team') {
       let body;
       try {
