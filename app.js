@@ -1013,6 +1013,7 @@ function renderPublicEvents(events, grid, now) {
   const badgeText = grid.dataset.eventBadge || '';
   const keepWhenEmpty = grid.dataset.keepWhenEmpty !== undefined;
   const cards = [];
+  const cardDates = [];
   let unknown = false;
   const labels = { support_group: 'Support Group', memory_social: 'Memory Social', wellness: 'Wellness', caregiver_event: 'Caregiver Event' };
   events.forEach(function (event) {
@@ -1083,7 +1084,9 @@ function renderPublicEvents(events, grid, now) {
     body.appendChild(row);
     card.appendChild(body);
     cards.push(card);
+    cardDates.push(start.display.slice(0, 10));
   });
+  if (keepWhenEmpty) return mergePlannedEvents(grid, cards, cardDates, now, timeZone);
   if (!cards.length) {
     if (unknown || keepWhenEmpty) return false;
     const empty = document.createElement('p');
@@ -1093,6 +1096,32 @@ function renderPublicEvents(events, grid, now) {
   }
   grid.replaceChildren.apply(grid, cards);
   return true;
+}
+
+// A planned-date card (data-planned-date="YYYY-MM-DD") stays until a published session on
+// that date takes its place; other published sessions join in date order, and planned dates
+// that have already passed drop out.
+function mergePlannedEvents(grid, cards, cardDates, now, timeZone) {
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+  const used = [];
+  const merged = [];
+  Array.prototype.slice.call(grid.children).forEach(function (el) {
+    const date = el.dataset && el.dataset.plannedDate;
+    if (!date || date < today) return;
+    const index = cardDates.indexOf(date);
+    if (index >= 0 && used.indexOf(index) < 0) {
+      used.push(index);
+      merged.push({ date: date, el: cards[index] });
+    } else {
+      merged.push({ date: date, el: el });
+    }
+  });
+  cards.forEach(function (card, index) {
+    if (used.indexOf(index) < 0) merged.push({ date: cardDates[index], el: card });
+  });
+  merged.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+  grid.replaceChildren.apply(grid, merged.map(function (item) { return item.el; }));
+  return cards.length > 0;
 }
 
 function loadLiveEvents() {

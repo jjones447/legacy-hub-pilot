@@ -102,15 +102,15 @@
     <p class="muted measure-640">Every third Thursday, 10 AM &ndash; 2 PM, at Ebenezer Ministry &amp; Family Worship Center.</p>
     <p class="respite-note"><em>Advance registration is requested. Participation is based on individual support needs and available capacity.</em></p>
     {#
-      Live sessions: published Staff-console events whose title starts with "Drop-In Respite"
-      replace these cards, each with its own Register button. Until then the planned dates stay,
-      with a contact route instead of a Register button that could not save anything.
+      Live sessions: a published Staff-console event whose title starts with "Drop-In Respite"
+      replaces the planned card for its own date, with its own Register button. Other planned
+      dates stay, with a contact route instead of a Register button that could not save anything.
     #}
     <div class="card-grid grid-autofit-240 mt-24" id="liveEventsGrid" data-event-time-zone="America/Chicago"
          data-event-title-prefix="Drop-In Respite" data-event-badge="Drop-In Respite"
          data-keep-when-empty aria-live="polite">
-{%- for d in ["Thursday, November 19, 2026", "Thursday, December 17, 2026", "Thursday, January 21, 2027", "Thursday, February 18, 2027"] %}
-      <div class="card event-card">
+{%- for iso, d in [("2026-11-19", "Thursday, November 19, 2026"), ("2026-12-17", "Thursday, December 17, 2026"), ("2027-01-21", "Thursday, January 21, 2027"), ("2027-02-18", "Thursday, February 18, 2027")] %}
+      <div class="card event-card" data-planned-date="{{ iso }}">
         <div class="flex-1">
           <span class="badge badge-plum">Drop-In Respite</span>
           <h3 class="fs-19-m-8-0-4">{{ d }}</h3>
@@ -127,7 +127,7 @@
 <section class="section-sand" id="how-it-works">
   <div class="container">
     <div class="section-head"><h2>How It Works</h2></div>
-    <ol class="card-grid respite-steps">
+    <ol class="card-grid grid-autofit-240 respite-steps">
       <li class="card">
         <div class="icon" aria-hidden="true">1</div>
         <h3>Register</h3>

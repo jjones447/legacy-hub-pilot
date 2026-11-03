@@ -17,15 +17,18 @@ class Element {
 }
 const now = new Date('2026-11-04T15:00:00Z');
 const event = (overrides = {}) => ({ id: 'ev_synthetic', title: 'Drop-In Respite — November 19', type: 'other', starts_at: '2026-11-19 10:00', ends_at: '2026-11-19 14:00', location: 'Synthetic hall', capacity: 10, registered_count: 2, ...overrides });
-function setup(data) {
+const PLANNED = ['2026-11-19', '2026-12-17', '2027-01-21', '2027-02-18'];
+function setup() {
   const grid = new Element('div');
   Object.assign(grid.dataset, { eventTimeZone: 'America/Chicago', eventTitlePrefix: 'Drop-In Respite', eventBadge: 'Drop-In Respite', keepWhenEmpty: '' });
-  const planned = Object.assign(new Element('div'), { textContent: 'planned date' });
-  grid.appendChild(planned);
+  for (const date of PLANNED) grid.appendChild(Object.assign(new Element('div'), { textContent: `planned ${date}`, dataset: { plannedDate: date } }));
   const context = vm.createContext({ document: { createElement: tag => new Element(tag), getElementById: () => grid, querySelectorAll: () => [] }, Date, Intl, URL, console: { error() {} } });
   vm.runInContext(renderSource, context);
-  return { grid, planned, context };
+  return { grid, context };
 }
+const session = (date, overrides = {}) => event({ id: `ev_respite_${date}`, title: `Drop-In Respite — ${date}`, starts_at: `${date} 10:00`, ends_at: `${date} 14:00`, ...overrides });
+// What each slot of the grid now shows: "planned <date>" or the live event id behind its Register button.
+const slots = grid => grid.children.map(el => el.dataset.plannedDate ? `planned ${el.dataset.plannedDate}` : descendants(el).find(item => item.tagName === 'button')?.dataset.eventId);
 const descendants = el => [el, ...el.children.flatMap(descendants)];
 const text = el => descendants(el).map(item => item.textContent).join(' ');
 
@@ -55,6 +58,7 @@ test('the requested sections are present in order, and Memory Social and grant r
 test('the four planned dates show with a contact route, never a Register button that cannot save', () => {
   const grid = page.slice(page.indexOf('id="liveEventsGrid"'), page.indexOf('id="how-it-works"'));
   for (const d of ['November 19, 2026', 'December 17, 2026', 'January 21, 2027', 'February 18, 2027']) assert.match(grid, new RegExp(`<h3 class="fs-19-m-8-0-4">Thursday, ${d}</h3>`));
+  for (const iso of PLANNED) assert.match(grid, new RegExp(`<div class="card event-card" data-planned-date="${iso}">`));
   assert.equal((grid.match(/href="about\.html#contact">Contact us to register<\/a>/g) || []).length, 4);
   assert.doesNotMatch(grid, /data-action="open-register"/);
   assert.match(page, /data-event-title-prefix="Drop-In Respite" data-event-badge="Drop-In Respite"\s+data-keep-when-empty/);
@@ -66,21 +70,48 @@ test('the shared registration modal is identical on Events and Drop-In Respite',
   assert.equal(modal(page), modal(events));
 });
 
-test('live sessions: only Drop-In Respite events replace the planned dates, under the program badge', () => {
+test('each published session replaces only its own planned date: none, one, some, all (review 5757140409)', () => {
+  const cases = [
+    [[], ['planned 2026-11-19', 'planned 2026-12-17', 'planned 2027-01-21', 'planned 2027-02-18']],
+    [['2026-11-19'], ['ev_respite_2026-11-19', 'planned 2026-12-17', 'planned 2027-01-21', 'planned 2027-02-18']],
+    [['2026-12-17', '2027-02-18'], ['planned 2026-11-19', 'ev_respite_2026-12-17', 'planned 2027-01-21', 'ev_respite_2027-02-18']],
+    [PLANNED, PLANNED.map(date => `ev_respite_${date}`)],
+  ];
+  for (const [published, expected] of cases) {
+    const { grid, context } = setup();
+    context.renderPublicEvents(published.map(date => session(date)), grid, now);
+    assert.deepEqual(slots(grid), expected, `published: ${published.join(', ') || 'none'}`);
+  }
+  // A live card keeps the real event identity and the program badge.
   const { grid, context } = setup();
-  context.renderPublicEvents([event({ id: 'ev_respite_nov' }), event({ id: 'ev_other', title: 'Virtual Support Group', type: 'support_group' })], grid, now);
-  const buttons = descendants(grid).filter(item => item.tagName === 'button');
-  assert.deepEqual(buttons.map(b => b.dataset.eventId), ['ev_respite_nov']);
-  assert.equal(buttons[0].dataset.action, 'open-register');
-  assert.match(text(grid), /Drop-In Respite .*Drop-In Respite — November 19/s);
-  assert.doesNotMatch(text(grid), /Virtual Support Group|planned date/);
+  context.renderPublicEvents([session('2026-11-19')], grid, now);
+  const live = grid.children[0];
+  const register = descendants(live).find(item => item.tagName === 'button');
+  assert.equal(register.dataset.action, 'open-register');
+  assert.equal(register.dataset.eventId, 'ev_respite_2026-11-19');
+  assert.match(text(live), /Drop-In Respite .*Drop-In Respite — 2026-11-19/s);
 });
 
-test('with no matching published session the planned dates stay; the Events page still empties', () => {
-  for (const data of [[], [event({ title: 'Wellness Grant Info Session', type: 'wellness' })], [event({ starts_at: '2026-10-15 10:00', ends_at: '2026-10-15 14:00' })]]) {
-    const { grid, planned, context } = setup();
+test('other programs are ignored; an unplanned respite date joins in order; passed planned dates drop out', () => {
+  const { grid, context } = setup();
+  context.renderPublicEvents([
+    event({ id: 'ev_other', title: 'Virtual Support Group', type: 'support_group', starts_at: '2026-12-02 17:00', ends_at: '2026-12-02 18:00' }),
+    session('2027-03-18'),
+    session('2027-01-21'),
+  ], grid, now);
+  assert.deepEqual(slots(grid), ['planned 2026-11-19', 'planned 2026-12-17', 'ev_respite_2027-01-21', 'planned 2027-02-18', 'ev_respite_2027-03-18']);
+  assert.doesNotMatch(text(grid), /Virtual Support Group/);
+
+  const later = setup();
+  later.context.renderPublicEvents([session('2027-01-21')], later.grid, new Date('2026-12-20T15:00:00Z'));
+  assert.deepEqual(slots(later.grid), ['ev_respite_2027-01-21', 'planned 2027-02-18']);
+});
+
+test('malformed or past data never removes a future planned date; the Events page still empties', () => {
+  for (const data of [[event({ title: 'Wellness Grant Info Session', type: 'wellness' })], [session('2026-10-15')], [session('2026-11-19', { starts_at: 'not a date' })]]) {
+    const { grid, context } = setup();
     context.renderPublicEvents(data, grid, now);
-    assert.deepEqual(grid.children, [planned]);
+    assert.deepEqual(slots(grid), PLANNED.map(date => `planned ${date}`));
   }
   const { grid, context } = setup();
   delete grid.dataset.keepWhenEmpty; delete grid.dataset.eventTitlePrefix;
