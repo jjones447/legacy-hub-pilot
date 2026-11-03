@@ -209,3 +209,105 @@ not a new account move, alias recreation, repointing or client-message instructi
 
 Recreate this branch alias in the new account and re-point anything referencing it. The staging
 URL will change with the account; tell Shanelle before it does, not after.
+
+
+## People & access Add action — November 3, 2026
+
+Owner/author: pc2-codex-42; independent review and release acceptance: pc2-codex-41.
+Canonical acceptance: [Legacy54 request6610139845](https://github.com/jjones447/legacy-caregiver-hub/issues/54#issuecomment-6610139845).
+Stage: built source candidate with deterministic fixture evidence; not installed/live/client accepted.
+
+Discovery/reuse: People search and the focused caregiver view already live in staff.html/staff.js.
+The existing admin-only `createStaffMember` in functions/_lib/staff.js remains the staff writer.
+The caregiver domain module supported updates but no record-only create. Public intake is unsuitable
+because it enrolls or creates follow-up work. The new `create` operation therefore belongs in the
+existing functions/_lib/domain/caregivers.js, reached only through POST /api/staff/caregivers.
+This extends the proven UI/domain/runbook foundation; it adds no service or orchestration layer.
+
+Add person sits beside Search people. Staff can choose Add caregiver record; active admins also
+get a shortcut that opens the existing Add staff member form. The server retains its admin guard.
+Caregiver fields are first/last name and email/phone only, requiring first name and one contact.
+The server checks normalized email or common phone formatting against ALL record statuses before
+creation and again inside the atomic insert. A match returns existing records for review, never
+merging, updating or restoring their history. Shared family contacts can therefore need staff review;
+this increment deliberately offers no duplicate override or automatic merge.
+
+Creation writes one caregiver with default nonmember state and one original audit atomically.
+It does not capture consent, enroll, grant staff access, send invitations or create follow-up work.
+Current active staff authorization gates the insert, both duplicate reads and saved-profile read.
+The browser-only endpoint requires exact origin, bounds JSON at4096 bytes and rejects extra fields.
+Confirmed saves show the normal person view/list; refusals and unknown results preserve entries.
+An unknown saved response can be recovered by contact search or duplicate readback without a second
+record. Existing staff creation/role rules remain separate from caregiver identity.
+
+Verification commands:
+
+```text
+npm run test:unit
+npm ci --ignore-scripts --no-audit --no-fund
+node --test tests/dom/staff-people-add.test.mjs
+python build.py --verify
+```
+
+Normal unit inventory explicitly includes people-add.test.mjs. The original main unit workflow,
+no-install guard and runtime dispatcher remain unchanged. DOM checks reuse exactly the pinned
+jsdom30.1.3 dependency/lock foundation independently reviewed in PR311/db1b3d5; the new People Add
+DOM workflow installs locked test dependencies with lifecycle scripts disabled. Nothing is imported
+by the served application. Fictional records use in-memory SQLite and actual delegated click/submit
+controls connected to the actual API handlers. No external fetch, mailbox, real browser, workerd,
+customer session or deployment is exercised; DOM success is not pixel/layout or live acceptance.
+
+Local source result:2014 unitPASS/0FAIL/0SKIP and5 DOMPASS/0FAIL/0SKIP, template verifyclean/diffcheck.
+Prepublication review caught and fixed unauthorized duplicate projection after access revocation;
+a focused test covers initial match, post-refused-insert match and saved-profile read. Initial full
+unit run also exposed action-map registration and incomplete DOM stubs; new actions are registered
+without weakening existing wiring assertions. Actual final-head hosted results are separate.
+
+Production base is cloud-main d810ef9 (tree identical to recorded production f8d7361e); this is a
+small standalone Add increment, not a staging-union promotion and not an amendment to311/312/313.
+The release owner must freshly reconcile the actual production package and selected311 panel delta,
+and regenerate staff cache hashes after integrating both. For staging313/QA-login successors, retain
+My Support and all auth/env/current-row fences; reconcile shared staff source and regenerate hashes,
+then run normal checks and the real-control fixture on the exact combined candidate. No stale-base
+file overwrite or inference that this source candidate includes those other increments.
+
+Recovery: preserve the prior package and normal rollback custody. No schema migration/configuration
+is added. Rolling back UI/API does not remove legitimately created people or original audits; use
+normal review/archive workflows rather than deleting history. Installation and own-user acceptance
+remain with the existing publisher/root41, and customer data changes are outside this source task.
+
+
+### Staging integration of People Add over approved313
+
+Separate source candidate authored by42 for41 independent delta review; original314 stays frozen.
+Inputs: approved31397f0779 (Staff306, Alerts/Events310, MySupport309a722) plus accepted314fb419b4.
+This is source assembly, not a claim of current installation. No installed313 successor was present
+in the inspected cloud receipts; publisher must requalify actual installed baseline before selecting it.
+
+Keep both customer-activity and People Add entries in the explicit unit inventory; regenerate the
+Staff script hash. The merged submit dispatcher uses `action`, including the My Support triage arm;
+leaving its older `formAction` reference would break that real form. The helper-driven preference
+identity regression retains its isolated function fixture via the optional leaf UI hook. No MySupport
+core, portal/shared app, auth or mail/config/schema logic is changed by this integration.
+
+The inert test adapter now supplies SELECT results within db.batch, matching the existing MySupport
+canonical readback contract. An additional actual-HTML delegated control test creates a fictional
+support request through the existing core, clicks Mark in progress, submits the existing triage form,
+and verifies completed state, private note and original audits alongside Add and both labels. Its
+fictional JWT is a handler-only fixture, not evidence of verified Cloudflare Access or a live session.
+No provider or network is used.
+
+Release handoff: review this delta/normal checks, then original publisher/root41 select tester route
+and installed package. The separate QA-only login source/integration/walkthrough must proceed without
+waiting for this candidate, and is not merged or activated here. If the installed successor already
+includes QA auth, carry forward its exact env/current-row guards and selected source rather than
+replacing it with this older source base. Stop on drift and return the combined source for review.
+
+Integrated local result:2106unitPASS/0FAIL/0SKIP plus6DOMPASS/0FAIL/0SKIP, verifyclean/diffcheck.
+Tester handoff after review and separately selected installation: at the exact Staff staging URL,
+use the authorized Staff identity and fictional records to check Add beside Search, caregiver save
+and normal record, contact duplicate Open/history, retained entries on refusal, admin staff shortcut
+and nonadmin denial. Recheck the existing synthetic support queue/triage/history and both labels.
+Do not request a real sign-in link or use a customer identity from this Add-source task; QA-only
+login walkthrough stays with its current owner and exact package. Return installed ID/asset hashes,
+actual result and precise limitations separately from these source/fixture passes.

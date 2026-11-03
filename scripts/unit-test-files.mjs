@@ -3,6 +3,7 @@
 // absence of runtime effects. The separately gated workerd harness is excluded.
 export const UNIT_TEST_FILES = Object.freeze([
   'customer-activity.test.mjs',
+  'people-add.test.mjs',
   'membership-continuation.test.mjs',
   'portal-dashboard-redesign.test.mjs',
   'agent-conversation.test.mjs',
