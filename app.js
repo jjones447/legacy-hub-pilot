@@ -43,6 +43,19 @@ function initializeMotionVideo() {
 }
 initializeMotionVideo();
 
+/* Header videos play at the rate the page sets in data-playback-rate (0 < rate <= 1).
+   Loading media resets playbackRate to defaultPlaybackRate, so both are set. */
+function initializeHeroVideoRate() {
+  if (typeof document === 'undefined') return;
+  for (const video of document.querySelectorAll('video[data-playback-rate]')) {
+    const rate = Number(video.dataset && video.dataset.playbackRate);
+    if (!(rate > 0 && rate <= 1)) continue;
+    video.defaultPlaybackRate = rate;
+    video.playbackRate = rate;
+  }
+}
+initializeHeroVideoRate();
+
 /* ---------- Live intake forms ---------- */
 const INTAKE_ENDPOINT = '/api/intake';
 

@@ -76,3 +76,33 @@ test('without native controls, a click or Enter/Space toggles playback', () => {
   handlers.keydown({ key: 'a', preventDefault() { throw new Error('unexpected'); } });
   assert.equal(video.plays, 2);
 });
+
+function mountRate(dataset) {
+  const video = { dataset, playbackRate: 1, defaultPlaybackRate: 1 };
+  runInNewContext(source, {
+    document: { querySelectorAll: (sel) => sel === 'video[data-playback-rate]' ? [video] : [] },
+    window: { matchMedia: () => ({ matches: false, addEventListener() {} }) },
+  });
+  return video;
+}
+
+test('a header video with data-playback-rate plays at that slower rate, including after reload', () => {
+  const video = mountRate({ playbackRate: '0.75' });
+  assert.equal(video.playbackRate, 0.75);
+  assert.equal(video.defaultPlaybackRate, 0.75);
+});
+
+test('a missing, zero, negative, faster-than-normal or non-numeric rate leaves normal speed', () => {
+  for (const value of [undefined, '0', '-1', '1.5', 'slow']) {
+    const video = mountRate(value === undefined ? {} : { playbackRate: value });
+    assert.equal(video.playbackRate, 1);
+    assert.equal(video.defaultPlaybackRate, 1);
+  }
+});
+
+test('Home and Drop-In Respite header videos ask for the slower rate', () => {
+  for (const page of ['index', 'drop-in-respite']) {
+    const html = readFileSync(new URL(`../templates/${page}.html.j2`, import.meta.url), 'utf8');
+    assert.match(html, /<video class="hero-video"[^>]*data-playback-rate="0\.75"/);
+  }
+});
