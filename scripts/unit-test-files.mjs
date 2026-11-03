@@ -47,6 +47,7 @@ export const UNIT_TEST_FILES = Object.freeze([
   'events-d7-s2a.test.mjs',
   'forms-by-chat-d7-s2b.test.mjs',
   'forms-live.test.mjs',
+  'free-only-ai.test.mjs',
   'generic-internal-errors.test.mjs',
   'givebutter-event-kind.test.mjs',
   'givebutter-webhook.test.mjs',

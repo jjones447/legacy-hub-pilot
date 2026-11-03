@@ -1,3 +1,4 @@
+import {postWithInertProvider as postAgent} from './fixtures/inert-agent-provider.mjs';
 // Tests for LEGACY-D7-GOVERNED-DATA-CHANGES-S1 (Issue #103)
 // Governed assistant drafts, previews, and confirms workflow data changes (grants and caregivers).
 
@@ -6,7 +7,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { onRequestGet as getAgent } from '../functions/api/agent/[[path]].js';
-import { postAgentFixture as postAgent, captureSeededPreview } from './helpers/confirmed-agent.mjs';
+import { captureSeededPreview } from './helpers/confirmed-agent.mjs';
 import * as caregiversDomain from '../functions/_lib/domain/caregivers.js';
 import * as grantsDomain from '../functions/_lib/domain/grants.js';
 import * as eventsDomain from '../functions/_lib/domain/events.js';
@@ -199,7 +200,7 @@ for (const [name, envelope, accepted] of [
   ['refusal', { refusal: 'Out of scope' }, false],
   ['invalid transition', { change: { operation: 'close', payload: { outcome: 'Premature close' } } }, false]
 ]) {
-  test(`native grant object ${name} retains domain validation and preview-only writes`, async () => {
+  test(`inert native grant object ${name} retains domain validation and preview-only writes`, async () => {
     const beforeGrant = raw.prepare('SELECT * FROM grant_application WHERE id = 1').get();
     const beforeCaregiver = raw.prepare('SELECT * FROM caregiver WHERE id = ?').get('cg_test_1');
     let calls = 0;

@@ -1,5 +1,12 @@
 # Staff chat source correction
 
+## Free-only inference boundary
+
+The November 3 [free-only AI boundary](free-only-ai.md) supersedes provider-backed
+HTTP admission described below. No current receipt or environment flag admits
+paid-capable inference. Manual Staff and already-produced proposal workflows
+remain available. Historical provider protocol tests are source evidence only.
+
 ## Selected customer change activity — source increment, October 30
 
 [pc2-codex-42] The existing Staff **Change log** now has two sections: selected
