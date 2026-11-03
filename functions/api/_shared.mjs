@@ -14,7 +14,7 @@ export function validateIntake(body) {
   if (!body.external_ref || typeof body.external_ref !== 'string') return 'external_ref is required';
   // This keyspace belongs only to the signed-session portal support producer.
   // Reject before duplicate lookup, caregiver upsert, or any workflow mutation.
-  if (body.source === SUPPORT_SOURCE) return 'source is reserved';
+  if (body.source === SUPPORT_SOURCE || (typeof body.source === 'string' && body.source.startsWith('respite_b1'))) return 'source is reserved';
   if (body.kind === 'event_registration' && !body.event_id) return 'event_id is required for event_registration';
   return validateSupportGroupSession(body);
 }
