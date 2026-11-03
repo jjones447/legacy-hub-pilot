@@ -75,6 +75,7 @@ export const UNIT_TEST_FILES = Object.freeze([
   'public-events-render.test.mjs',
   'resource-closeout.test.mjs',
   'resource-links.test.mjs',
+  'sanctuary-our-approach.test.mjs',
   'restore-audit-integrity.test.mjs',
   'restore-count-report.test.mjs',
   'restore-identity-guard.test.mjs',
