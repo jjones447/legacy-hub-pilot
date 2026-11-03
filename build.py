@@ -321,6 +321,9 @@ def render_all() -> dict:
     rendered = {}
     for page, tpl in PAGES.items():
         html = env.get_template(tpl).render(**ctx)
+        if page == "respite-application.html":
+            # New page starts whitespace-clean; preserve inherited pages byte-for-byte.
+            html = "\n".join(line.rstrip() for line in html.split("\n"))
         if page == "coming-soon.html":
             html = _splice_head(html, render_coming_soon_head())
         else:
