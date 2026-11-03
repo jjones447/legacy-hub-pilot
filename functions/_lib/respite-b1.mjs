@@ -148,20 +148,33 @@ const summaryColumns = 'id,event_id,status,revision,first_time,followup_at,careg
 export async function staffGet(context) {
   try {
     if (!await ready(context.env)) return fail(404, 'unavailable');
-    if (!await reviewer(context)) return fail(403, 'forbidden');
+    const actor = await reviewer(context);
+    if (!actor) return fail(403, 'forbidden');
     const url = new URL(context.request.url), db = context.env.LEGACY_DB;
     const id = url.searchParams.get('id'), event = url.searchParams.get('event_id');
     if (id && ID.test(id)) {
       const row = await db.prepare(`SELECT ${summaryColumns},privacy_version,nonmedical_version,acknowledged_at
         FROM respite_application WHERE id=?`).bind(id).first();
       if (!row) return fail(404, 'not_found');
-      const privateRow = await db.prepare('SELECT snapshot_json FROM respite_application_private WHERE application_id=?').bind(id).first();
+      // The earlier reviewer() read is an early refusal, not cached authority.
+      // Authorize in the SAME SQL statement that projects the private snapshot.
+      const privateRow = await db.prepare(`SELECT snapshot_json FROM respite_application_private
+        WHERE application_id=? AND EXISTS(SELECT 1 FROM staff_member WHERE email=? AND status='active')`)
+        .bind(id, actor).first();
+      if (!privateRow) return fail(403, 'forbidden');
       return reply({ ok: true, application: row, details: JSON.parse(privateRow.snapshot_json), acknowledgments: ACK_COPY });
     }
     if (!ID.test(event || '')) return fail(400, 'event_required');
-    const { results } = await db.prepare(`SELECT ${summaryColumns} FROM respite_application WHERE event_id=?
-      ORDER BY created_at,id LIMIT 100`).bind(event).all();
-    return reply({ ok: true, applications: results });
+    // LEFT JOIN keeps a server-only authorization witness even for an empty list.
+    // No staff row means refusal, not a successful empty/stale protected response.
+    const projection = summaryColumns.split(',').map(column => 'a.' + column).join(',');
+    const { results } = await db.prepare(`SELECT s.email AS authorized_reviewer,${projection}
+      FROM staff_member s LEFT JOIN respite_application a ON a.event_id=?
+      WHERE s.email=? AND s.status='active' ORDER BY a.created_at,a.id LIMIT 100`).bind(event, actor).all();
+    if (!results?.length) return fail(403, 'forbidden');
+    const applications = results.filter(row => row.id !== null)
+      .map(({ authorized_reviewer, ...application }) => application);
+    return reply({ ok: true, applications });
   } catch { return fail(503, 'unavailable'); }
 }
 export async function staffPost(context) {

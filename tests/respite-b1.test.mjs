@@ -12,7 +12,7 @@ import { handleIntake } from '../functions/api/_shared.mjs';
 import { onRequest as middleware } from '../functions/_middleware.js';
 import { onRequestPost as attendance } from '../functions/api/registrations.js';
 const origin = 'https://fixture.example.invalid', actor = 'reviewer@example.invalid';
-let raw, db, env, beforeBatch, afterCommit;
+let raw, db, env, beforeBatch, afterCommit, afterFirstRead;
 beforeEach(() => {
   raw = new DatabaseSync(':memory:'); raw.exec('PRAGMA foreign_keys=ON');
   for (const file of ['0001_init.sql','0011_staff_member.sql','candidates/0019_respite_pending_review.sql']) {
@@ -21,10 +21,14 @@ beforeEach(() => {
   raw.exec("INSERT INTO caregiver(id,first_name,email) VALUES('cg_fixture','Fictional','same@example.invalid')");
   raw.exec("INSERT INTO event(id,title,type,starts_at,publish_state,capacity,respite_review_required) VALUES('ev_fixture','Fictional respite','other','2099-11-19 10:00','published',1,1),('ev_ordinary','Ordinary','other','2099-11-19 10:00','published',10,0)");
   raw.prepare('INSERT INTO staff_member(email) VALUES(?)').run(actor);
-  beforeBatch = null; afterCommit = null;
+  beforeBatch = null; afterCommit = null; afterFirstRead = null;
   db = { prepare(sql) {
     const bound = params => ({ sql, params,
-      async first() { return raw.prepare(sql).get(...params) ?? null; },
+      async first() {
+        const result = raw.prepare(sql).get(...params) ?? null;
+        if (afterFirstRead) afterFirstRead(sql);
+        return result;
+      },
       async all() { return { success: true, results: raw.prepare(sql).all(...params) }; },
       async run() { const result = raw.prepare(sql).run(...params); return { success: true, meta: { changes: result.changes } }; },
     });
@@ -141,9 +145,55 @@ test('Access middleware guards staff route, dev bypass cannot mint reviewer capa
 test('staff summaries omit private answers; private detail is separate, no-store and explicitly gated', async () => {
   await submit(payload({safety:'Fictional private safety detail'}));
   const summary = await staffGet(staffContext(undefined,'?event_id=ev_fixture'));
-  assert.equal(summary.status,200); assert.doesNotMatch(JSON.stringify(await summary.json()),/Fictional|same@example|safety/);
+  assert.equal(summary.status,200);
+  const summaryBody=await summary.json();
+  assert.doesNotMatch(JSON.stringify(summaryBody),/Fictional|same@example|safety|authorized_reviewer/);
+  assert.equal(JSON.stringify(summaryBody).includes(actor),false,'internal authorization witness is never part of a response');
   const detail=await staffGet(staffContext(undefined,'?id='+row().id));
   assert.equal(detail.headers.get('Cache-Control'),'no-store'); assert.equal((await detail.json()).details.safety,'Fictional private safety detail');
+});
+for (const point of ['after-reviewer-read','after-application-read']) {
+  test('private detail revocation '+point+' returns no protected fields', async () => {
+    await submit(payload({safety:'FICTIONAL_PRIVATE_REVOCATION_SENTINEL'}));
+    const id = row().id;
+    let drifted = false;
+    afterFirstRead = sql => {
+      const match = point === 'after-reviewer-read' ? sql.includes('SELECT email FROM staff_member')
+        : sql.includes('privacy_version,nonmedical_version,acknowledged_at');
+      if (match && !drifted) {
+        raw.prepare("UPDATE staff_member SET status='deactivated' WHERE email=?").run(actor);
+        drifted = true;
+      }
+    };
+    const response = await staffGet(staffContext(undefined,'?id='+id));
+    assert.ok(drifted,'must exercise the actual reported await boundary');
+    assert.equal(raw.prepare('SELECT status FROM staff_member WHERE email=?').get(actor).status,'deactivated');
+    assert.equal(response.status,403);
+    assert.equal(response.headers.get('Cache-Control'),'no-store');
+    const body = await response.json();
+    assert.deepEqual(body,{ok:false,error:'forbidden'});
+    assert.doesNotMatch(JSON.stringify(body),/FICTIONAL_PRIVATE_REVOCATION_SENTINEL|same@example|snapshot_json|caregiver_id|application|details/);
+  });
+}
+test('protected summary revocation after reviewer read returns no application metadata', async () => {
+  await submit(payload());
+  const id = row().id;
+  let drifted = false;
+  afterFirstRead = sql => {
+    if (sql.includes('SELECT email FROM staff_member') && !drifted) {
+      raw.prepare("UPDATE staff_member SET status='deactivated' WHERE email=?").run(actor);
+      drifted = true;
+    }
+  };
+  const response = await staffGet(staffContext(undefined,'?event_id=ev_fixture'));
+  assert.ok(drifted); assert.equal(response.status,403);
+  const body=await response.json(); assert.deepEqual(body,{ok:false,error:'forbidden'});
+  assert.equal(JSON.stringify(body).includes(id),false);
+  assert.equal(body.applications,undefined);
+});
+test('authorized empty summary is distinct from revoked access and excludes the internal authorization witness', async () => {
+  const response=await staffGet(staffContext(undefined,'?event_id=ev_fixture'));
+  assert.equal(response.status,200); assert.deepEqual(await response.json(),{ok:true,applications:[]});
 });
 test('first-time requires explicit identity verification and completed followup before staffed confirmation', async () => {
   await submit(payload()); assert.equal((await action('confirm')).status,409);

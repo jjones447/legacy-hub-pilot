@@ -30,6 +30,12 @@ This is a draft, not an installed system, approved privacy policy, clinical asse
 - Reviewer access requires the existing middleware's Symbol-backed verified active human Access actor,
   an explicit reviewer list, and a fresh active staff row. Dev bypass, service credentials, body/header
   claims, all-staff membership, missing schema or malformed settings do not grant it.
+  Private snapshots also require that **same actor be active in the actual private projection SQL**;
+  the earlier eligibility check is not cached authority. Protected summaries use one current-active-staff
+  `LEFT JOIN` projection, retaining a server-only authorization witness even when no applications exist.
+  Revoked/missing authorization returns403 with no application/details fields, not a successful empty
+  or stale protected response; the witness itself is never returned. This authorizes at the data-read
+  statement snapshot, not by a post-response check or a claim of perpetual authorization afterward.
 - Staff independently verifies/selects an existing caregiver ID, recording actor/time without updating
   a real profile. Unknown/ambiguous identity stays pending; there is no automatic search/merge/restore.
   Any genuine new caregiver creation uses the separately reviewed #319 explicit record-only workflow.
@@ -105,6 +111,23 @@ the same 3 FAIL / 0 SKIP. The three reproduced baseline failures are NUL-bearing
 backup restore, caregiver contact and staff note tests; they were not suppressed or changed.
 The added generated page required extending the explicit public-header coverage count from 23 to 24;
 every page still undergoes the same hierarchy/accessibility assertions.
+
+### Independent-review correction: current authorization at projection
+
+Review42 `5758143486` / Legacy54 `6613215004` found two private-read revocation interleavings in
+initial `b40616e`: staff deactivation after the initial reviewer read or after application metadata read
+still returned200/private fields. Lead41 assigned the same-PR source correction in `6613230050`.
+The original verdict is **SOURCE NEEDS CHANGES via COMMENT**, not formal GitHub REQUEST_CHANGES;
+source acceptance remains for the independent reviewer, not this author.
+
+Regression-first reproduction:31 tests,28PASS/3FAIL; both reported detail races and a protected-summary
+analogue incorrectly returned200 versus expected403. The confined SQL correction above yields31PASS/
+0FAIL/0SKIP, preserving all original27 cases plus an authorized-empty-summary control. It adds no role,
+storage, schema, configuration, policy, runtime or provider changes. Both drift cases explicitly prove
+the same current actor was deactivated before sensitive projection and that response contains zero
+private/application fields. Same consent, producer/CAS/atomic-audit, OFF and pre-live holds remain.
+Correction qualification also passes169 combined focused tests. Full PC1 Node24.15 run:2163PASS /
+the same3 baseline NUL-handling failures /0SKIP (2166 total), with no suppression or test-boundary changes.
 
 ## Integration custody
 
