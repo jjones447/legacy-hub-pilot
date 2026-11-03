@@ -67,6 +67,7 @@ export const UNIT_TEST_FILES = Object.freeze([
   'portal-no-store.test.mjs',
   'portal-origin-guard.test.mjs',
   'portal-preview-containment.test.mjs',
+  'portal-preview-qa-only.test.mjs',
   'portal-signin-email.test.mjs',
   'public-events-render.test.mjs',
   'resource-closeout.test.mjs',

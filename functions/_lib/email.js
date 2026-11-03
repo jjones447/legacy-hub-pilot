@@ -1,6 +1,7 @@
 // Transactional email through Resend (https://resend.com/docs/api-reference/emails/send-email).
 // Preview confirmation and portal mail have independent opt-ins. Confirmation
 // purpose is selected only by the server caller, never from an intake payload.
+import { previewQACaregiver, matchesPreviewQACaregiver } from './portal-preview.mjs';
 
 export const EMAIL_FROM = 'Caregiver Sanctuary <no-reply@caregiversanctuary.org>';
 export const EMAIL_REPLY_TO = 'info@legacyhomehealthservices.org';
@@ -8,13 +9,16 @@ const RESEND_URL = 'https://api.resend.com/emails';
 const EMAIL = /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/;
 
 export function isPreviewMailOptIn(env) {
-  if (!env || env.ENVIRONMENT !== 'preview') return false;
-  const flag = String(env.PORTAL_PREVIEW_MAIL_ENABLED ?? env.PREVIEW_MAIL_ENABLED ?? '').trim().toLowerCase();
-  return flag === '1' || flag === 'true';
+  return previewQACaregiver(env) !== null;
 }
 
-export function canSendEmail(env, { purpose, recipient } = {}) {
+export function canSendEmail(env, { purpose, recipient, caregiverId } = {}) {
   if (!env || !String(env.EMAIL_API_KEY || '').trim()) return false;
+  if (purpose === 'portal-signin') {
+    if (typeof recipient !== 'string' || !EMAIL.test(recipient.trim())) return false;
+    if (env.ENVIRONMENT === 'preview') return matchesPreviewQACaregiver(env, caregiverId, recipient);
+    return !env.ENVIRONMENT || env.ENVIRONMENT === 'production';
+  }
   if (purpose !== undefined) {
     if (purpose !== 'confirmation' || typeof recipient !== 'string' || !EMAIL.test(recipient.trim())) return false;
     if (!env.ENVIRONMENT || env.ENVIRONMENT === 'production') return true;
@@ -23,9 +27,9 @@ export function canSendEmail(env, { purpose, recipient } = {}) {
     const approved = String(env.CONFIRMATION_PREVIEW_RECIPIENTS || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
     return (flag === '1' || flag === 'true') && approved.includes(recipient.trim().toLowerCase());
   }
-  // Existing callers (including portal sign-in) retain their original policy.
+  // A preview portal opt-in is not a general-purpose mail permission.
   if (env.ENVIRONMENT === 'development') return false;
-  if (env.ENVIRONMENT === 'preview') return isPreviewMailOptIn(env);
+  if (env.ENVIRONMENT === 'preview') return false;
   return true;
 }
 
@@ -56,8 +60,8 @@ export function signInEmail(link) {
 }
 
 /** Send one email. Returns { ok, status } and never throws; callers log failures without details. */
-export async function sendEmail(env, { to, subject, text, html, idempotencyKey, timeoutMs, purpose }, fetchImpl = fetch) {
-  if (!canSendEmail(env, { purpose, recipient: to })) return { ok: false, status: 0 };
+export async function sendEmail(env, { to, subject, text, html, idempotencyKey, timeoutMs, purpose, caregiverId }, fetchImpl = fetch) {
+  if (!canSendEmail(env, { purpose, recipient: to, caregiverId })) return { ok: false, status: 0 };
   try {
     const res = await fetchImpl(RESEND_URL, {
       method: 'POST',
