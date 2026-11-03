@@ -1007,12 +1007,18 @@ function safeEventRegistrationUrl(value) {
 function renderPublicEvents(events, grid, now) {
   if (!Array.isArray(events)) return false;
   const timeZone = grid.dataset.eventTimeZone || 'America/Chicago';
+  // A page can show only its own program's events (Drop-In Respite) under its own badge, and
+  // keep its planned dates when nothing matching is published yet.
+  const titlePrefix = grid.dataset.eventTitlePrefix || '';
+  const badgeText = grid.dataset.eventBadge || '';
+  const keepWhenEmpty = grid.dataset.keepWhenEmpty !== undefined;
   const cards = [];
   let unknown = false;
   const labels = { support_group: 'Support Group', memory_social: 'Memory Social', wellness: 'Wellness', caregiver_event: 'Caregiver Event' };
   events.forEach(function (event) {
     if (!event || typeof event.id !== 'string' || !event.id || typeof event.title !== 'string' || !event.title.trim()) { unknown = true; return; }
     if (event.publish_state && event.publish_state !== 'published') return;
+    if (titlePrefix && event.title.trim().indexOf(titlePrefix) !== 0) return;
     const start = publicEventTime(event.starts_at, now, timeZone);
     const end = event.ends_at ? publicEventTime(event.ends_at, now, timeZone) : null;
     if (!start || (event.ends_at && !end) || (end && end.instant < start.instant)) { unknown = true; return; }
@@ -1035,7 +1041,7 @@ function renderPublicEvents(events, grid, now) {
     }
     const badge = document.createElement('span');
     badge.className = 'badge badge-plum';
-    badge.textContent = labels[event.type] || 'Event';
+    badge.textContent = badgeText || labels[event.type] || 'Event';
     const title = document.createElement('h3');
     title.className = 'fs-19-m-8-0-4';
     title.textContent = event.title;
@@ -1079,7 +1085,7 @@ function renderPublicEvents(events, grid, now) {
     cards.push(card);
   });
   if (!cards.length) {
-    if (unknown) return false;
+    if (unknown || keepWhenEmpty) return false;
     const empty = document.createElement('p');
     empty.className = 'small muted';
     empty.textContent = 'No upcoming published events. Please check back for confirmed dates and registration.';

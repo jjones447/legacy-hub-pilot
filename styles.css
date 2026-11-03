@@ -1436,3 +1436,13 @@ main ul.measure-620 { margin: 16px 0; padding-left: 24px; }
 .about-story-photo { margin: 0; }
 .about-story-photo img { display: block; width: 100%; height: auto; border-radius: 16px; }
 .about-values-row { margin-top: 40px; }
+
+/* Drop-In Respite (Nov 3 rebuild): key facts in the hero, program details, numbered steps. */
+.respite-facts { list-style: none; display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 22px; padding: 0; }
+.respite-facts li { background: rgba(255, 255, 255, 0.16); border: 1px solid rgba(255, 255, 255, 0.45); color: #fff; border-radius: 999px; padding: 6px 16px; font-size: 17px; }
+.respite-details-list { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; margin: 0 0 20px; }
+.respite-details-list dt { font-weight: 700; color: var(--plum-dark); }
+.respite-details-list dd { margin: 0; color: var(--ink); }
+.respite-details-list address { font-style: normal; font-weight: 600; }
+.respite-note { color: var(--ink-soft); margin-top: 8px; }
+.respite-steps { list-style: none; padding: 0; margin: 24px 0 0; }
