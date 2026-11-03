@@ -330,6 +330,11 @@ test('O26-02/03/04: Sanctuary, About, and Get Involved place hero text over supp
     // Nov 3 request: the "What guides us" values block, its Mission & Vision card and the
     // Mission & Vision menu/footer links are removed.
     assert.doesNotMatch(aboutHtml, /about-values-row|What guides us|Real rest, not lip service|id="mission"|Mission &amp; Vision/);
+    // Nov 3 request: About's Supporters section shows the same supporters as the home page.
+    const logos = html => html.match(/<ul class="client-partner-logos" aria-label="[^"]+">([\s\S]*?)<\/ul>/)?.[1];
+    const home = loadFile(rel.replace('about', 'index'));
+    assert.ok(logos(aboutHtml) && logos(aboutHtml) === logos(home), `${rel}: About supporters match the home page`);
+    assert.doesNotMatch(aboutHtml.slice(aboutHtml.indexOf('id="supporters"'), aboutHtml.indexOf('id="contact"')), /Content coming|will be recognized here/);
     assert.match(aboutHtml, /<figure class="client-founder-photo">\s*<img src="media\/client-oct16\/founder-img-7045\.jpg"/);
   }
 
