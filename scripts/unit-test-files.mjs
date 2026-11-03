@@ -87,6 +87,7 @@ export const UNIT_TEST_FILES = Object.freeze([
   'staff-console-clarity.test.mjs',
   'staff-notes-d2.test.mjs',
   'staff-team.test.mjs',
+  'staff-production-panels.test.mjs',
   'staging-db-config.test.mjs',
   'tap-targets-375px.test.mjs',
   'test-boundary.test.mjs',
