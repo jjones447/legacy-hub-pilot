@@ -46,8 +46,11 @@ initializeMotionVideo();
 /* Header videos play at the rate the page sets in data-playback-rate (0 < rate <= 1).
    Loading media resets playbackRate to defaultPlaybackRate, so both are set. */
 function initializeHeroVideoRate() {
-  if (typeof document === 'undefined') return;
-  for (const video of document.querySelectorAll('video[data-playback-rate]')) {
+  if (typeof document === 'undefined' || typeof document.querySelectorAll !== 'function') return;
+  const videos = document.querySelectorAll('video[data-playback-rate]');
+  if (!videos || !videos.length) return;
+  for (let i = 0; i < videos.length; i++) {
+    const video = videos[i];
     const rate = Number(video.dataset && video.dataset.playbackRate);
     if (!(rate > 0 && rate <= 1)) continue;
     video.defaultPlaybackRate = rate;
