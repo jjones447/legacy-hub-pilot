@@ -176,7 +176,7 @@ test('card copy distinguishes account registrations, the public calendar/library
   assert.match(html, /Browse all events/);
   assert.match(html, /Guides, tools and trusted local help for caregivers in the shared Resource Hub\. This library is public, not a personalized saved list\./);
   assert.match(html, /Coming soon<\/span> Saving your favorite resources here/);
-  assert.match(html, /Coming soon<\/span> Your past requests and their status will appear here/);
+  assert.match(html, /View my support requests/);
   assert.match(html, /Coming soon<\/span> Announcements, upcoming opportunities and member benefits/);
 });
 

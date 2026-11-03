@@ -208,9 +208,51 @@
 
       <div class="panel m-0 portal-card" id="portalSupportCard">
         <h4><span class="portal-card-icon" aria-hidden="true">🤝</span> My Support</h4>
-        <p class="small muted m-0">Need help with caregiving, respite or resources? Send a request and the Legacy team will follow up with you.</p>
-        <a href="request-support.html" class="btn btn-plum btn-sm mt-16 d-inline-block">Request support</a>
-        <p class="small muted mt-16 m-0"><span class="badge badge-gray">Coming soon</span> Your past requests and their status will appear here.</p>
+        <p class="small muted m-0" id="portalSupportSummary">Need help with caregiving, respite or resources? Send a request and the Legacy team will follow up with you.</p>
+        <button type="button" class="btn btn-plum btn-sm mt-16" data-action="portal-support-open" id="portalSupportBtn">Request support</button>
+        <form id="portalSupportForm" class="d-none mt-16" data-action="submit-portal-support" novalidate>
+          <p class="small muted m-0"><strong>Not monitored for emergencies.</strong> If someone is in immediate danger, call 911 or visit <a href="crisis-help.html">Crisis &amp; Emergency Help</a>. Only you and authorized Legacy staff can view your support requests.</p>
+          <label class="small mt-8 d-block" for="portalSupportType"><strong>Support type</strong> (required)</label>
+          <select id="portalSupportType" name="support_type" class="input mt-4" required>
+            <option value="">Select a support type…</option>
+            <option value="respite_services">Respite Services</option>
+            <option value="caregiver_support_guidance">Caregiver Support &amp; Guidance</option>
+            <option value="dementia_education_information">Dementia Education &amp; Information</option>
+            <option value="community_resources_referrals">Community Resources &amp; Referrals</option>
+            <option value="caregiver_wellness_support">Caregiver Wellness Support</option>
+            <option value="programs_events">Programs &amp; Events</option>
+            <option value="speak_with_team_member">Speak With a Legacy Team Member</option>
+            <option value="other">Other</option>
+          </select>
+          <label class="small mt-8 d-block" for="portalSupportUrgency"><strong>Urgency</strong> (required)</label>
+          <select id="portalSupportUrgency" name="urgency" class="input mt-4" required>
+            <option value="">Select urgency…</option>
+            <option value="as_soon_as_possible">As soon as possible</option>
+            <option value="next_few_days">Next few days</option>
+            <option value="general_inquiry">General inquiry</option>
+          </select>
+          <label class="small mt-8 d-block" for="portalSupportContactPref"><strong>Preferred contact method</strong> (required)</label>
+          <select id="portalSupportContactPref" name="contact_preference" class="input mt-4" required>
+            <option value="">Select contact preference…</option>
+            <option value="phone_call">Phone Call</option>
+            <option value="email">Email</option>
+            <option value="text_message">Text Message</option>
+          </select>
+          <label class="small mt-8 d-block" for="portalSupportEmail"><strong>Email for this request</strong> (prefilled from your profile; does not change your sign-in email)</label>
+          <input type="email" id="portalSupportEmail" name="contact_email" class="input mt-4" maxlength="254" placeholder="you@example.org">
+          <label class="small mt-8 d-block" for="portalSupportPhone"><strong>Phone for this request</strong></label>
+          <input type="tel" id="portalSupportPhone" name="contact_phone" class="input mt-4" maxlength="40" placeholder="(414) 555-0100">
+          <label class="small mt-8 d-block" for="portalSupportDetail"><strong>Additional details</strong> (optional)</label>
+          <textarea id="portalSupportDetail" name="detail" class="input mt-4" rows="3" maxlength="1000" placeholder="How can our team best support you?"></textarea>
+          <button type="submit" class="btn btn-plum btn-sm mt-8" id="portalSupportSubmitBtn">Send support request</button>
+          <button type="button" class="btn btn-outline btn-sm mt-8" data-action="portal-support-cancel" id="portalSupportCancelBtn">Cancel</button>
+        </form>
+        <p class="small mt-8 m-0" id="portalSupportMsg" role="status"></p>
+        <details class="mt-16" id="portalSupportHistory">
+          <summary>View my support requests</summary>
+          <p class="small muted">Your past requests, current status (Received, In Progress, Completed), and last status update.</p>
+          <div id="portalSupportHistoryRows">Your saved support requests will appear here.</div>
+        </details>
       </div>
 
       <div class="panel m-0 portal-card portal-events-panel" id="portalEventsCard">
@@ -281,7 +323,7 @@
 </footer>
 <!-- SHARED:footer:end -->
 
-<script src="app.js?v=f51fedb26dc4"></script>
+<script src="app.js?v=bd4d2318980c"></script>
 <script src="nav-v2.js"></script>
 </body>
 </html>
