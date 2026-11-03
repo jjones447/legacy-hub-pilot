@@ -32,13 +32,15 @@ const slots = grid => grid.children.map(el => el.dataset.plannedDate ? `planned 
 const descendants = el => [el, ...el.children.flatMap(descendants)];
 const text = el => descendants(el).map(item => item.textContent).join(' ');
 
-test('the page leads with FREE, every third Thursday, 10 AM–2 PM and the full Ebenezer address', () => {
+test('the header has the heading, lede and only How it works; details carry the time and full address', () => {
   assert.match(page, /<h1>FREE Drop-In Respite<\/h1>/);
-  assert.match(page, /<p class="lede">A Break for You\. Meaningful Moments for Your Loved One\.<\/p>/);
-  assert.match(page, /<ul class="respite-facts"[^>]*>\s*<li><strong>FREE<\/strong><\/li>\s*<li><strong>Every Third Thursday<\/strong><\/li>\s*<li><strong>10 AM&ndash;2 PM<\/strong><\/li>/);
+  assert.match(page, /<p class="lede">A Break for You\. Meaningful Moments for Your Loved One\.<\/p>\s*<div class="btn-row">\s*<a href="#how-it-works" class="btn btn-outline-light">How it works<\/a>\s*<\/div>/);
+  // Requester, Nov 3 19:54Z: no FREE / Every Third Thursday / 10–2 bubbles in the header.
+  assert.doesNotMatch(page, /respite-facts/);
+  assert.match(page, /<dt>When<\/dt><dd>Every Third Thursday of the Month<\/dd>\s*<dt>Time<\/dt><dd>10:00 AM &ndash; 2:00 PM<\/dd>/);
   assert.match(page, /<address>3132 N\. Dr\. Martin Luther King Jr\. Drive<br>Milwaukee, WI 53212<\/address>/);
   assert.match(page, /Ebenezer Ministry &amp; Family Worship Center/);
-  assert.equal((page.match(/>Register for Free Respite</g) || []).length, 2);
+  assert.equal((page.match(/>Register for Free Respite</g) || []).length, 1, 'the Program Details button remains');
   assert.match(page, /data-playback-rate="0\.4"/, 'keeps the slower header video');
 });
 
