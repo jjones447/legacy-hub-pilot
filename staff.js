@@ -1734,29 +1734,32 @@ document.addEventListener('DOMContentLoaded', function () {
 document.addEventListener('submit', function (e) {
   const form = e.target;
   if (!form) return;
-  const formAction = form.getAttribute('data-action');
-  if (formAction === 'submit-edit-caregiver') {
+  const action = form.getAttribute('data-action');
+  if (action === 'submit-edit-caregiver') {
     e.preventDefault();
     submitEditCaregiver(form);
-  } else if (formAction === 'submit-add-contact') {
+  } else if (action === 'submit-add-contact') {
     e.preventDefault();
     submitAddContact(form);
-  } else if (formAction === 'submit-add-note') {
+  } else if (action === 'submit-add-note') {
     e.preventDefault();
     submitAddNote(form);
-  } else if (formAction === 'submit-direct-content') {
+  } else if (action === 'submit-direct-content') {
     e.preventDefault();
     submitDirectContent(form);
-  } else if (formAction === 'submit-create-event') {
+  } else if (action === 'submit-create-event') {
     e.preventDefault();
     submitCreateEvent(form);
-  } else if (formAction === 'submit-edit-event') {
+  } else if (action === 'submit-edit-event') {
     e.preventDefault();
     submitEditEvent(form);
-  } else if (formAction === 'submit-event-photo') {
+  } else if (action === 'submit-event-photo') {
     e.preventDefault();
     submitEventPhoto(form, e.submitter?.value === 'remove');
-  } else if (formAction === 'submit-add-staff') {
+  } else if (action === 'submit-add-caregiver') {
+    e.preventDefault();
+    void submitAddCaregiver(form);
+  } else if (action === 'submit-add-staff') {
     e.preventDefault();
     submitAddStaff(form);
   }
@@ -1938,6 +1941,14 @@ document.addEventListener('click', function (e) {
     const id = target.getAttribute('data-event-id');
     const title = target.getAttribute('data-event-title');
     selectEvent(id, title);
+  } else if (action === 'open-people-add') {
+    void openPeopleAdd();
+  } else if (action === 'close-people-add') {
+    closePeopleAdd();
+  } else if (action === 'open-caregiver-create') {
+    openCaregiverCreate();
+  } else if (action === 'open-staff-create') {
+    void openStaffCreate();
   } else if (action === 'search-caregivers') {
     searchCaregivers(0);
   } else if (action === 'search-prev') {
@@ -3129,6 +3140,7 @@ async function loadStaffTeam() {
     if (!meRes.ok || !meData.ok) throw new Error(meData.error || 'Failed to load your staff record');
     if (!teamRes.ok || !teamData.ok) throw new Error(teamData.error || 'Failed to load staff');
     staffMe = meData.me;
+    updatePeopleAddActions();
     staffTeam = teamData.team || [];
     staffTeamError = null;
     renderStaffTeam();
@@ -3136,6 +3148,7 @@ async function loadStaffTeam() {
   } catch (e) {
     staffTeamError = e.message;
     staffMe = null;
+    updatePeopleAddActions();
     staffTeam = [];
     if (list) list.innerHTML = `<p class="muted small text-center my-20">Error loading staff: ${escapeHtml(e.message)}</p>`;
     return false;
@@ -3207,6 +3220,84 @@ function renderStaffTeam() {
     </table></div>`;
 }
 
+// People creation reuses the existing staff writer; caregiver creation is record-only.
+function closePeopleAdd() {
+  document.getElementById('peopleAddPanel')?.classList.add('d-none');
+  document.querySelector('[data-action="open-people-add"]')?.setAttribute('aria-expanded', 'false');
+}
+
+function openCaregiverCreate() {
+  document.getElementById('addCaregiverForm')?.classList.remove('d-none');
+  document.querySelector('#addCaregiverForm [name="first_name"]')?.focus();
+}
+
+function updatePeopleAddActions() {
+  const admin = staffMe?.role === 'admin' && staffMe?.status === 'active';
+  document.getElementById('addStaffFromPeopleBtn')?.classList?.toggle('d-none', !admin);
+}
+
+async function openPeopleAdd() {
+  const panel = document.getElementById('peopleAddPanel');
+  panel?.classList.remove('d-none');
+  document.querySelector('[data-action="open-people-add"]')?.setAttribute('aria-expanded', 'true');
+  await loadStaffTeam();
+  updatePeopleAddActions();
+}
+
+async function openStaffCreate() {
+  if (staffMe?.role !== 'admin' || staffMe?.status !== 'active') {
+    const message = document.getElementById('peopleAddMessage');
+    if (message) message.textContent = 'Only an active admin can add staff. Caregiver records do not grant staff access.';
+    return;
+  }
+  document.getElementById('peopleRoleFilter').value = 'team';
+  document.getElementById('caregiverSearchQuery').value = '';
+  document.getElementById('addCaregiverForm')?.classList.add('d-none');
+  filterPeopleByRole();
+  const form = document.querySelector('form[data-action="submit-add-staff"]');
+  if (form) {
+    form.closest('details').open = true;
+    form.querySelector('[name="display_name"]').focus();
+  }
+}
+
+async function submitAddCaregiver(form) {
+  const button = form.querySelector('button[type="submit"]');
+  const message = form.querySelector('[data-add-caregiver-message]');
+  if (button.disabled) return;
+  const fields = new FormData(form);
+  const payload = Object.fromEntries(['first_name', 'last_name', 'email', 'phone'].map(key => [key, String(fields.get(key) || '').trim()]));
+  if (!payload.email && !payload.phone) { message.textContent = 'Enter at least one email address or phone number.'; return; }
+  button.disabled = true;
+  message.textContent = 'Checking for an existing caregiver and saving…';
+  try {
+    const res = await fetch('/api/staff/caregivers', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload)
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 409 && Array.isArray(data.matches) && data.matches.length) {
+      message.innerHTML = `<p>${escapeHtml(data.error || 'Open an existing caregiver record.')}</p>` + data.matches.map(person =>
+        `<button type="button" class="btn btn-sm btn-outline" data-action="view-caregiver" data-caregiver-id="${escapeHtml(person.id)}">Open ${escapeHtml([person.first_name, person.last_name].filter(Boolean).join(' '))} (${escapeHtml(person.status)})</button>`).join(' ');
+      return;
+    }
+    if (!res.ok || data.ok !== true || !data.profile?.id) throw new Error(data.error || 'The save could not be confirmed. Search for this contact before trying again.');
+    // Explicit acknowledgement only: keep entered values on any refusal or uncertain result.
+    document.getElementById('peopleRoleFilter').value = 'caregiver';
+    document.getElementById('caregiverSearchQuery').value = data.profile.email || data.profile.phone || '';
+    for (const id of ['caregiverSearchSegment', 'caregiverSearchStatus']) document.getElementById(id).value = '';
+    document.getElementById('staffTeamPanel')?.classList.add('d-none');
+    document.getElementById('caregiverSearchPanel')?.classList.remove('d-none');
+    await searchCaregivers(0);
+    await viewCaregiver(data.profile.id);
+    form.reset(); form.classList.add('d-none'); message.textContent = '';
+    const saved = document.getElementById('peopleAddMessage');
+    if (saved) saved.textContent = 'Caregiver record saved. No enrollment, invitation or follow-up was created.';
+    void loadRecentChanges();
+  } catch (e) {
+    message.textContent = `Could not add caregiver: ${e.message}`;
+  } finally { button.disabled = false; }
+}
+
 async function submitAddStaff(form) {
   const button = form.querySelector('button[type="submit"]');
   const message = form.querySelector('[data-add-staff-message]');
@@ -3222,6 +3313,10 @@ async function submitAddStaff(form) {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.ok) throw new Error(data.error || 'Could not add staff. Try again.');
+    const filter = document.getElementById('peopleRoleFilter');
+    if (filter) filter.value = 'team';
+    const query = document.getElementById('caregiverSearchQuery');
+    if (query) query.value = String(data.member?.email || fields.get('email') || '');
     await loadStaffTeam();
     const after = document.getElementById('staffTeamMessage');
     if (after) after.textContent = 'Staff member added. They can sign in with their approved email address. No invitation was sent.';
