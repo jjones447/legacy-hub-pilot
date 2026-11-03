@@ -238,8 +238,14 @@ recording, drafts, HOLD and session state are excluded.
 Local acceptance uses actual committed HTML in jsdom: clicking the actual summary
 heading triggers its DOM default activation, and a reconstructed page restores
 the same fixture person's choices. Tests cover person/origin separation, controls,
-unknown identities, storage errors and list failures. jsdom is a locked **test-only**
-dependency, installed in CI with lifecycle scripts disabled; it is not imported or
+unknown identities, storage errors and list failures. Cold DOMContentLoaded tests
+do not flush parser toggle events before initialization: preferences are saved
+only after actual summary activation, preserving early clicks while ignoring
+markup/programmatic toggles. jsdom is a locked **test-only**
+dependency, installed with lifecycle scripts disabled only in the separately named
+Staff DOM controls workflow. These tests live under tests/dom and are directly
+selected outside the ordinary unit inventory. The main unit job, original no-install
+guard and runtime dispatcher remain unchanged. jsdom is not imported or
 included by the served application. No external page, browser process, layout,
 customer session or login gate is involved. A 390px DOM context is not phone visual
 QA, and `details.open` transitions are not proof of deployed pixel visibility.
@@ -247,7 +253,8 @@ QA, and `details.open` transitions are not proof of deployed pixel visibility.
 Source test command:
 
 ```text
-node --test tests/staff-production-panels.test.mjs tests/events-d7-s2a.test.mjs tests/staff-assistant-disclosure.test.mjs tests/staff-team.test.mjs
+node --test tests/dom/staff-production-panels.test.mjs
+node --test tests/events-d7-s2a.test.mjs tests/staff-assistant-disclosure.test.mjs tests/staff-team.test.mjs tests/test-boundary.test.mjs
 python build.py --verify
 ```
 

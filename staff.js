@@ -2070,7 +2070,6 @@ const STAFF_PANEL_IDS = Object.freeze(['needsAttentionPanel', 'eventsPanel', 'gr
 const STAFF_PANEL_STORAGE_PREFIX = 'staff-console-panels-v1';
 const staffPanelDefaults = {};
 const staffPanelTouched = new Set();
-const staffPanelProgrammatic = new Map();
 let staffPanelStorageKey = null;
 let staffPanelSaved = null;
 let staffPanelKeyEpoch = 0;
@@ -2116,7 +2115,6 @@ function saveStaffPanelChoice(id, open) {
 function setStaffPanelOpen(id, open) {
   const panel = document.getElementById(id);
   if (!panel || panel.open === open) return;
-  staffPanelProgrammatic.set(id, open);
   panel.open = open;
 }
 
@@ -2131,23 +2129,22 @@ function applyStaffPanelDefaults() {
   }
 }
 
-function onStaffPanelToggle(panel) {
-  const id = panel.id;
-  if (staffPanelProgrammatic.has(id)) {
-    const expected = staffPanelProgrammatic.get(id);
-    staffPanelProgrammatic.delete(id);
-    if (expected === panel.open) return;
-  }
-  staffPanelTouched.add(id);
-  saveStaffPanelChoice(id, panel.open);
-}
-
 function initStaffPanels() {
   for (const id of STAFF_PANEL_IDS) {
     const panel = document.getElementById(id);
     if (!panel) continue;
     staffPanelDefaults[id] = Boolean(panel.open);
-    panel.addEventListener('toggle', () => onStaffPanelToggle(panel));
+    const summary = panel.querySelector(':scope > summary');
+    // The browser emits toggle for parsed [open] markup and programmatic changes too.
+    // Persist only an actual summary activation (pointer or native keyboard click).
+    summary?.addEventListener('click', event => {
+      const before = panel.open;
+      queueMicrotask(() => {
+        if (event.defaultPrevented || panel.open === before) return;
+        staffPanelTouched.add(id);
+        saveStaffPanelChoice(id, Boolean(panel.open));
+      });
+    });
   }
 }
 

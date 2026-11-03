@@ -26,8 +26,6 @@ jobs:
           # node:sqlite (the D1 fake in tests/) is experimental and flag-gated on 22.x;
           # it is stable and unflagged from 24, which is what the suite is run against locally.
           node-version: "24"
-      - name: Install locked test dependencies
-        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Run unit tests
         run: npm run test:unit
       - name: Runtime evidence boundary

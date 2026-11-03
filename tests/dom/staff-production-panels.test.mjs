@@ -5,8 +5,8 @@ import { readFileSync } from 'node:fs';
 import { webcrypto } from 'node:crypto';
 import { JSDOM } from 'jsdom';
 
-const html = readFileSync(new URL('../staff.html', import.meta.url), 'utf8');
-const source = readFileSync(new URL('../staff.js', import.meta.url), 'utf8');
+const html = readFileSync(new URL('../../staff.html', import.meta.url), 'utf8');
+const source = readFileSync(new URL('../../staff.js', import.meta.url), 'utf8');
 const block = (start, end) => source.slice(source.indexOf(start), source.indexOf(end, source.indexOf(start)));
 const panels = block('// Staff section disclosures:', '// End staff section disclosures.');
 const team = block('let staffMe = null;', 'function renderStaffTeam()');
@@ -19,8 +19,6 @@ const ids = ['needsAttentionPanel', 'eventsPanel', 'grantsPanel', 'wellnessPanel
 async function page({ origin = 'https://fixture.example.invalid', saved = {}, width = 1280, queue = [{ id: 1, caregiver_id: 'cg_fixture', caregiver_first_name: 'Fictional', caregiver_last_name: 'Example', kind: 'support_request', detail: 'Synthetic request', status: 'open' }] } = {}) {
   const dom = new JSDOM(html, { url: origin + '/staff', runScripts: 'outside-only' });
   const w = dom.window;
-  // Flush parser-generated toggle events before application listeners, as with a loaded document.
-  await wait();
   Object.defineProperty(w, 'innerWidth', { value: width, configurable: true });
   Object.defineProperty(w.crypto, 'subtle', { value: webcrypto.subtle, configurable: true });
   w.TextEncoder = TextEncoder;
@@ -42,7 +40,11 @@ async function page({ origin = 'https://fixture.example.invalid', saved = {}, wi
   w.renderStaffTeam = () => {};
   w.currentEventId = null;
   w.eval(panels + '\n' + team + '\n' + followups + '\n' + events);
-  w.initStaffPanels();
+  // Match real page startup: register before DOMContentLoaded; do not flush parser toggles.
+  await new Promise(resolve => w.document.addEventListener('DOMContentLoaded', () => {
+    w.initStaffPanels();
+    resolve();
+  }, { once: true }));
   const storage = () => Object.fromEntries(Object.keys(w.localStorage).map(key => [key, w.localStorage.getItem(key)]));
   return { w, dom, calls, storage, setIdentity: value => { currentMe = value; }, failIdentity: () => { identityFails = true; }, failLists: () => { listFails = true; }, close: () => w.close() };
 }
@@ -147,4 +149,53 @@ test('empty Alerts default closes once without persistence; list failures show u
     assert.equal(p.w.document.getElementById('needsAttentionCount').textContent, '(could not load)'); assert.ok(p.w.document.querySelector('#needsAttentionBody [role=alert]'));
     assert.equal(p.w.document.getElementById('eventsCount').textContent, '(could not load)'); assert.ok(p.w.document.querySelector('#upcomingEventsBody [role=alert]'));
   } finally { p.close(); }
+});
+
+
+test('cold DOMContentLoaded: parser toggles do not override first empty Alerts or saved closed choices', async () => {
+  const empty = await page({ queue: [] });
+  try {
+    await empty.w.loadStaffTeam();
+    await empty.w.loadFollowups();
+    await wait(); await wait();
+    assert.equal(empty.w.document.getElementById('needsAttentionPanel').open, false);
+    assert.deepEqual(empty.storage(), {}, 'markup and empty defaults never become user preferences');
+  } finally { empty.close(); }
+
+  const first = await page(); let saved;
+  try {
+    await first.w.loadStaffTeam();
+    first.w.document.querySelector('#needsAttentionPanel summary h4').click();
+    await wait(); saved = first.storage();
+    assert.equal(JSON.parse(Object.values(saved)[0]).needsAttentionPanel, false);
+  } finally { first.close(); }
+  const returning = await page({ saved });
+  try {
+    // Keep the actual parse/init schedule. Identity and queue completion can race.
+    await Promise.all([returning.w.loadFollowups(), returning.w.loadStaffTeam()]);
+    await wait(); await wait();
+    assert.equal(returning.w.document.getElementById('needsAttentionPanel').open, false);
+    assert.deepEqual(returning.storage(), saved, 'startup never overwrites the returning choice');
+  } finally { returning.close(); }
+});
+
+test('programmatic and canceled activations do not persist; genuine early summary activation still does', async () => {
+  const p = await page();
+  try {
+    await p.w.loadStaffTeam(); await wait();
+    const panel = p.w.document.getElementById('eventsPanel');
+    panel.open = false; await wait(); assert.deepEqual(p.storage(), {});
+    panel.open = true; await wait();
+    panel.querySelector('summary').addEventListener('click', event => event.preventDefault(), { once: true });
+    panel.querySelector('summary h4').click(); await wait();
+    assert.equal(panel.open, true); assert.deepEqual(p.storage(), {});
+  } finally { p.close(); }
+  const early = await page();
+  try {
+    early.w.document.querySelector('#needsAttentionPanel summary h4').click();
+    await early.w.loadFollowups();
+    await early.w.loadStaffTeam(); await wait();
+    assert.equal(early.w.document.getElementById('needsAttentionPanel').open, false);
+    assert.equal(JSON.parse(Object.values(early.storage())[0]).needsAttentionPanel, false);
+  } finally { early.close(); }
 });
