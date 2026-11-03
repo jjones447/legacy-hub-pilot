@@ -73,6 +73,7 @@ export const UNIT_TEST_FILES = Object.freeze([
   'portal-support.test.mjs',
   'portal-support-qa-integration.test.mjs',
   'public-events-render.test.mjs',
+  'drop-in-respite-page.test.mjs',
   'resource-closeout.test.mjs',
   'resource-links.test.mjs',
   'restore-audit-integrity.test.mjs',

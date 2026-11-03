@@ -43,6 +43,22 @@ function initializeMotionVideo() {
 }
 initializeMotionVideo();
 
+/* Header videos play at the rate the page sets in data-playback-rate (0 < rate <= 1).
+   Loading media resets playbackRate to defaultPlaybackRate, so both are set. */
+function initializeHeroVideoRate() {
+  if (typeof document === 'undefined' || typeof document.querySelectorAll !== 'function') return;
+  const videos = document.querySelectorAll('video[data-playback-rate]');
+  if (!videos || !videos.length) return;
+  for (let i = 0; i < videos.length; i++) {
+    const video = videos[i];
+    const rate = Number(video.dataset && video.dataset.playbackRate);
+    if (!(rate > 0 && rate <= 1)) continue;
+    video.defaultPlaybackRate = rate;
+    video.playbackRate = rate;
+  }
+}
+initializeHeroVideoRate();
+
 /* ---------- Live intake forms ---------- */
 const INTAKE_ENDPOINT = '/api/intake';
 
@@ -996,12 +1012,19 @@ function safeEventRegistrationUrl(value) {
 function renderPublicEvents(events, grid, now) {
   if (!Array.isArray(events)) return false;
   const timeZone = grid.dataset.eventTimeZone || 'America/Chicago';
+  // A page can show only its own program's events (Drop-In Respite) under its own badge, and
+  // keep its planned dates when nothing matching is published yet.
+  const titlePrefix = grid.dataset.eventTitlePrefix || '';
+  const badgeText = grid.dataset.eventBadge || '';
+  const keepWhenEmpty = grid.dataset.keepWhenEmpty !== undefined;
   const cards = [];
+  const cardDates = [];
   let unknown = false;
   const labels = { support_group: 'Support Group', memory_social: 'Memory Social', wellness: 'Wellness', caregiver_event: 'Caregiver Event' };
   events.forEach(function (event) {
     if (!event || typeof event.id !== 'string' || !event.id || typeof event.title !== 'string' || !event.title.trim()) { unknown = true; return; }
     if (event.publish_state && event.publish_state !== 'published') return;
+    if (titlePrefix && event.title.trim().indexOf(titlePrefix) !== 0) return;
     const start = publicEventTime(event.starts_at, now, timeZone);
     const end = event.ends_at ? publicEventTime(event.ends_at, now, timeZone) : null;
     if (!start || (event.ends_at && !end) || (end && end.instant < start.instant)) { unknown = true; return; }
@@ -1024,7 +1047,7 @@ function renderPublicEvents(events, grid, now) {
     }
     const badge = document.createElement('span');
     badge.className = 'badge badge-plum';
-    badge.textContent = labels[event.type] || 'Event';
+    badge.textContent = badgeText || labels[event.type] || 'Event';
     const title = document.createElement('h3');
     title.className = 'fs-19-m-8-0-4';
     title.textContent = event.title;
@@ -1066,9 +1089,11 @@ function renderPublicEvents(events, grid, now) {
     body.appendChild(row);
     card.appendChild(body);
     cards.push(card);
+    cardDates.push(start.display.slice(0, 10));
   });
+  if (keepWhenEmpty) return mergePlannedEvents(grid, cards, cardDates, now, timeZone);
   if (!cards.length) {
-    if (unknown) return false;
+    if (unknown || keepWhenEmpty) return false;
     const empty = document.createElement('p');
     empty.className = 'small muted';
     empty.textContent = 'No upcoming published events. Please check back for confirmed dates and registration.';
@@ -1076,6 +1101,32 @@ function renderPublicEvents(events, grid, now) {
   }
   grid.replaceChildren.apply(grid, cards);
   return true;
+}
+
+// A planned-date card (data-planned-date="YYYY-MM-DD") stays until a published session on
+// that date takes its place; other published sessions join in date order, and planned dates
+// that have already passed drop out.
+function mergePlannedEvents(grid, cards, cardDates, now, timeZone) {
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+  const used = [];
+  const merged = [];
+  Array.prototype.slice.call(grid.children).forEach(function (el) {
+    const date = el.dataset && el.dataset.plannedDate;
+    if (!date || date < today) return;
+    const index = cardDates.indexOf(date);
+    if (index >= 0 && used.indexOf(index) < 0) {
+      used.push(index);
+      merged.push({ date: date, el: cards[index] });
+    } else {
+      merged.push({ date: date, el: el });
+    }
+  });
+  cards.forEach(function (card, index) {
+    if (used.indexOf(index) < 0) merged.push({ date: cardDates[index], el: card });
+  });
+  merged.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+  grid.replaceChildren.apply(grid, merged.map(function (item) { return item.el; }));
+  return cards.length > 0;
 }
 
 function loadLiveEvents() {
