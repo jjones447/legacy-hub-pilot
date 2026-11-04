@@ -155,6 +155,7 @@ test('tile copy distinguishes account registrations, public calendar/library and
   assert.match(html, /Attended \(all time\)/);
   assert.doesNotMatch(html, /Attended \(2026\)/);
   assert.match(html, /library is public, not a personalized saved list/);
+  assert.match(html, /View my support requests/);
 });
 
 

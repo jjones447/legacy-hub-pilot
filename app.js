@@ -510,6 +510,7 @@ function checkPortalSession() {
         takePortalHandoff(); // discard: an existing session wins, nothing is sent
         renderPortalData(result.data);
         loadWellness();
+        loadPortalSupport();
         loginView.style.display = 'none';
         dashView.style.display = 'block';
       } else {
@@ -1222,6 +1223,9 @@ document.addEventListener('submit', function (e) {
   } else if (action === 'submit-register') {
     e.preventDefault();
     submitRegister(e);
+  } else if (action === 'submit-portal-support') {
+    e.preventDefault();
+    submitPortalSupport(e);
   }
 });
 
@@ -1406,6 +1410,265 @@ async function submitWellness(button) {
   }
 }
 
+/* ---------- Portal: My Support requests & history (LP-02 staged increment) ---------- */
+let portalSupportPendingRequest = null;
+let portalSupportProfileContact = { email: '', phone: '' };
+
+function newPortalSupportRequestId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, function (b) { return b.toString(16).padStart(2, '0'); }).join('');
+  return hex.slice(0, 8) + '-' + hex.slice(8, 12) + '-' + hex.slice(12, 16) + '-' + hex.slice(16, 20) + '-' + hex.slice(20);
+}
+
+async function loadPortalSupport() {
+  const rowsEl = document.getElementById('portalSupportHistoryRows');
+  if (rowsEl) rowsEl.textContent = 'Loading your support requests…';
+  try {
+    const res = await fetch('/api/portal/support', { credentials: 'same-origin' });
+    const data = await res.json();
+    if (!res.ok || !data || !data.ok) throw new Error('unavailable');
+    if (data.profile_contact && typeof data.profile_contact === 'object') {
+      portalSupportProfileContact = {
+        email: String(data.profile_contact.email || ''),
+        phone: String(data.profile_contact.phone || '')
+      };
+    }
+    const matchedReceipt = renderPortalSupport(data);
+    return {
+      ok: true,
+      requests: Array.isArray(data.requests) ? data.requests : [],
+      matchedReceipt: matchedReceipt
+    };
+  } catch (e) {
+    renderPortalSupportHistory(rowsEl, [], 'Your support requests are not available right now.');
+    return { ok: false, requests: [], matchedReceipt: null };
+  }
+}
+
+function renderPortalSupport(data) {
+  const requests = Array.isArray(data && data.requests) ? data.requests : [];
+  const rowsEl = document.getElementById('portalSupportHistoryRows');
+  renderPortalSupportHistory(rowsEl, requests, 'No support requests yet.');
+  if (portalSupportPendingRequest) {
+    const matched = requests.find(function (r) {
+      return r && r.request_id === portalSupportPendingRequest.requestId;
+    }) || null;
+    if (matched) {
+      const wasUnresolved = Boolean(portalSupportPendingRequest.unresolved);
+      const wasConflict = Boolean(portalSupportPendingRequest.conflict);
+      portalSupportPendingRequest = null;
+      const form = document.getElementById('portalSupportForm');
+      if (form) {
+        form.reset();
+        form.classList.add('d-none');
+      }
+      const openBtn = document.getElementById('portalSupportBtn');
+      if (openBtn) openBtn.classList.remove('d-none');
+      const historyDetails = document.getElementById('portalSupportHistory');
+      if (historyDetails) historyDetails.open = true;
+      if (wasConflict || wasUnresolved) {
+        const msg = document.getElementById('portalSupportMsg');
+        if (msg) {
+          if (wasConflict) {
+            msg.textContent = 'Your original support request was already saved and is shown in your history below. If you still need additional changes, you can start a new request.';
+          } else {
+            msg.textContent = 'Confirmed: your support request (' +
+              (matched.support_type_label || 'Support request') + ') was saved (' +
+              (matched.status_label || 'Received') + ').';
+          }
+        }
+      }
+      return matched;
+    }
+  }
+  return null;
+}
+
+function renderPortalSupportHistory(container, requests, emptyText) {
+  if (!container) return;
+  container.textContent = '';
+  if (!Array.isArray(requests) || requests.length === 0) {
+    container.textContent = emptyText;
+    return;
+  }
+  const list = document.createElement('ol');
+  requests.forEach(function (req) {
+    const li = document.createElement('li');
+    const title = document.createElement('strong');
+    title.textContent = String(req.support_type_label || req.support_type || 'Support request');
+    const badge = document.createElement('span');
+    let badgeClass = 'badge-amber';
+    if (req.status === 'completed') badgeClass = 'badge-green';
+    else if (req.status === 'in_progress') badgeClass = 'badge-plum';
+    badge.className = 'badge ' + badgeClass;
+    badge.textContent = String(req.status_label || req.status || 'Received');
+    const submitted = String(req.submitted_at || '').slice(0, 10) || '—';
+    const updated = String(req.last_status_updated_at || req.submitted_at || '').slice(0, 10) || submitted;
+    const meta = document.createElement('span');
+    meta.className = 'small muted d-block';
+    meta.textContent = 'Submitted ' + submitted + ' · Last status update ' + updated +
+      (req.urgency_label ? ' · ' + String(req.urgency_label) : '') +
+      (req.contact_preference_label ? ' · Prefer ' + String(req.contact_preference_label) : '');
+    li.appendChild(title);
+    li.appendChild(document.createTextNode(' '));
+    li.appendChild(badge);
+    li.appendChild(meta);
+    list.appendChild(li);
+  });
+  container.appendChild(list);
+}
+
+function openPortalSupportForm() {
+  const form = document.getElementById('portalSupportForm');
+  const btn = document.getElementById('portalSupportBtn');
+  const emailInput = document.getElementById('portalSupportEmail');
+  const phoneInput = document.getElementById('portalSupportPhone');
+  const profileEmailEl = document.getElementById('portalProfileEmail');
+  const profilePhoneEl = document.getElementById('portalProfilePhone');
+  if (!form) return;
+  if (emailInput && !emailInput.value) {
+    const fallbackEmail = portalSupportProfileContact.email ||
+      (profileEmailEl && profileEmailEl.textContent !== '—' ? profileEmailEl.textContent : '');
+    emailInput.value = fallbackEmail || '';
+  }
+  if (phoneInput && !phoneInput.value) {
+    const fallbackPhone = portalSupportProfileContact.phone ||
+      (profilePhoneEl && profilePhoneEl.textContent !== '—' ? profilePhoneEl.textContent : '');
+    phoneInput.value = fallbackPhone || '';
+  }
+  form.classList.remove('d-none');
+  if (btn) btn.classList.add('d-none');
+}
+
+function closePortalSupportForm() {
+  const form = document.getElementById('portalSupportForm');
+  const btn = document.getElementById('portalSupportBtn');
+  if (form) form.classList.add('d-none');
+  if (btn) btn.classList.remove('d-none');
+}
+
+async function submitPortalSupport(e) {
+  if (e) e.preventDefault();
+  const form = document.getElementById('portalSupportForm');
+  const msg = document.getElementById('portalSupportMsg');
+  const submitBtn = document.getElementById('portalSupportSubmitBtn');
+  const typeEl = document.getElementById('portalSupportType');
+  const urgencyEl = document.getElementById('portalSupportUrgency');
+  const prefEl = document.getElementById('portalSupportContactPref');
+  const emailEl = document.getElementById('portalSupportEmail');
+  const phoneEl = document.getElementById('portalSupportPhone');
+  const detailEl = document.getElementById('portalSupportDetail');
+
+  const supportType = typeEl ? typeEl.value.trim() : '';
+  const urgency = urgencyEl ? urgencyEl.value.trim() : '';
+  const contactPref = prefEl ? prefEl.value.trim() : '';
+  const contactEmail = emailEl ? emailEl.value.trim() : '';
+  const contactPhone = phoneEl ? phoneEl.value.trim() : '';
+  const detail = detailEl ? detailEl.value.trim() : '';
+
+  if (!supportType || !urgency || !contactPref) {
+    if (msg) msg.textContent = 'Please select a support type, urgency, and preferred contact method.';
+    return;
+  }
+  if (contactPref === 'email' && (!contactEmail || !contactEmail.includes('@'))) {
+    if (msg) msg.textContent = 'Please provide an email address for Email follow-up.';
+    return;
+  }
+  if ((contactPref === 'phone_call' || contactPref === 'text_message') && !contactPhone) {
+    if (msg) msg.textContent = 'Please provide a phone number for Phone or Text follow-up.';
+    return;
+  }
+
+  const signature = JSON.stringify([supportType, urgency, contactPref, contactEmail.toLowerCase(), contactPhone, detail]);
+  if (!portalSupportPendingRequest) {
+    portalSupportPendingRequest = {
+      requestId: newPortalSupportRequestId(),
+      signature: signature,
+      unresolved: false
+    };
+  } else {
+    portalSupportPendingRequest.signature = signature;
+  }
+
+  if (submitBtn) submitBtn.disabled = true;
+  if (msg) msg.textContent = 'Saving your support request…';
+
+  try {
+    const res = await fetch('/api/portal/support', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        request_id: portalSupportPendingRequest.requestId,
+        support_type: supportType,
+        urgency: urgency,
+        contact_preference: contactPref,
+        contact_email: contactEmail || undefined,
+        contact_phone: contactPhone || undefined,
+        detail: detail || undefined
+      })
+    });
+    const data = await res.json().catch(function () { return {}; });
+    if (res.status === 409 && data && data.error === 'request_id_conflict') {
+      if (portalSupportPendingRequest) {
+        portalSupportPendingRequest.unresolved = true;
+        portalSupportPendingRequest.conflict = true;
+      }
+      const historyDetails = document.getElementById('portalSupportHistory');
+      if (historyDetails) historyDetails.open = true;
+      const historyOutcome = await loadPortalSupport();
+      if (historyOutcome && historyOutcome.ok && historyOutcome.matchedReceipt) {
+        return;
+      }
+      if (msg) {
+        if (!historyOutcome || !historyOutcome.ok) {
+          msg.textContent = 'Your original support request ID (' +
+            (portalSupportPendingRequest ? portalSupportPendingRequest.requestId : '') +
+            ') was already recorded, but your support request history is not available right now to confirm the saved receipt. Your pending reference is preserved until your history loads.';
+        } else {
+          msg.textContent = 'We could not verify a matching receipt for request ID (' +
+            (portalSupportPendingRequest ? portalSupportPendingRequest.requestId : '') +
+            ') in your support history yet. Your pending reference is preserved until the saved receipt appears in your history.';
+        }
+      }
+      return;
+    }
+    if (!res.ok || !data || !data.ok || !data.request) {
+      throw new Error(data && data.error ? data.error : 'unavailable');
+    }
+    portalSupportPendingRequest = null;
+    if (form) {
+      form.reset();
+      form.classList.add('d-none');
+    }
+    const openBtn = document.getElementById('portalSupportBtn');
+    if (openBtn) openBtn.classList.remove('d-none');
+    if (msg) {
+      msg.textContent = 'Request received: ' + (data.request.support_type_label || 'Support request') +
+        ' (' + (data.request.status_label || 'Received') + '). Our team will follow up via ' +
+        (data.request.contact_preference_label || 'your preferred contact method') + '.';
+    }
+    const historyDetails = document.getElementById('portalSupportHistory');
+    if (historyDetails) historyDetails.open = true;
+    await loadPortalSupport();
+  } catch (err) {
+    if (portalSupportPendingRequest) {
+      portalSupportPendingRequest.unresolved = true;
+    }
+    if (msg) {
+      msg.textContent = 'We could not confirm your support request was saved. You can submit again safely without creating a duplicate.';
+    }
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
+  }
+}
+
 document.addEventListener('click', function (e) {
   const target = e.target.closest('[data-action]');
   if (!target || target.tagName === 'FORM') return;
@@ -1464,6 +1727,12 @@ document.addEventListener('click', function (e) {
   } else if (action === 'wellness-submit') {
     e.preventDefault();
     submitWellness(target);
+  } else if (action === 'portal-support-open') {
+    e.preventDefault();
+    openPortalSupportForm();
+  } else if (action === 'portal-support-cancel') {
+    e.preventDefault();
+    closePortalSupportForm();
   } else if (action === 'portal-logout') {
     e.preventDefault();
     portalLogout();

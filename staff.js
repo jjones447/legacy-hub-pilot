@@ -633,6 +633,21 @@ async function archiveNote(id, target) {
 }
 
 
+// Follow-ups: "Mark complete" posts the existing {status:'done'} transition once per item.
+// It sends no email and deletes nothing; failures are shown in the panel, not only the console.
+const followupPending = new Set();
+
+function staffFollowupSupportUrl(followupId) {
+  return `/api/staff/${'followup'}/${encodeURIComponent(followupId)}/support`;
+}
+
+function setNeedsAttentionMessage(text, isError = false) {
+  const message = document.getElementById('needsAttentionMessage');
+  if (!message) return;
+  message.textContent = text;
+  message.classList?.toggle('is-error', isError);
+}
+
 async function loadFollowups() {
   const count = document.getElementById('needsAttentionCount');
   try {
@@ -640,33 +655,49 @@ async function loadFollowups() {
     const data = await res.json();
     if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to fetch queue');
     
-    const openCount = Array.isArray(data.queue) ? data.queue.length : 0;
-    if (count) count.textContent = openCount ? `(${openCount} open)` : '(nothing open)';
-    noteNeedsAttentionActionable(openCount > 0);
     const body = document.getElementById('needsAttentionBody');
     if (!body) return;
-    if (!data.queue || data.queue.length === 0) {
+    const queue = Array.isArray(data.queue) ? data.queue : [];
+    const openCount = queue.filter(fu => fu.status === 'open').length;
+    const shanelleInbox = Number.isInteger(data.shanelle_support_inbox_count) && data.shanelle_support_inbox_count > 0
+      ? ` · ${data.shanelle_support_inbox_count} in Shanelle support inbox`
+      : '';
+    if (count) count.textContent = openCount === 0 ? '(nothing open)' : `(${openCount} open${shanelleInbox})`;
+    noteNeedsAttentionActionable(openCount > 0);
+    if (queue.length === 0) {
       body.innerHTML = '<tr><td colspan="3" class="text-center muted small">No follow-ups in queue.</td></tr>';
       return;
     }
     
-    body.innerHTML = data.queue.map(fu => {
+    body.innerHTML = queue.map(fu => {
       const first = (fu.caregiver_first_name || '').trim();
       const last = (fu.caregiver_last_name || '').trim();
       const rawName = `${first} ${last}`.trim() || 'Anonymous';
       const caregiverName = escapeHtml(rawName);
       const badgeClass = fu.status === 'open' ? 'badge-plum' : 'badge-green';
-      const statusText = fu.status === 'open' ? 'Queued' : 'Resolved';
+      const statusText = fu.status === 'open' ? 'Open' : 'Completed';
+      const sr = fu.support_request && typeof fu.support_request === 'object' ? fu.support_request : null;
+      const supportMetaHtml = sr
+        ? `<div class="small muted mt-4">Request ID: <code>${escapeHtml(sr.request_id)}</code> · v${escapeHtml(sr.version)} · Status: <strong>${escapeHtml(sr.status_label || sr.status)}</strong> · Assigned: <strong>${escapeHtml(sr.assigned_to_name || sr.assigned_to)}</strong></div>`
+        : '';
       
       let actionHtml = '';
       if (fu.status === 'open') {
-        actionHtml = `<button class="btn btn-sm btn-coral btn-compact-ml" data-action="resolve-followup" data-followup-id="${escapeHtml(fu.id)}">Resolve</button>`;
+        const pending = typeof followupPending !== 'undefined' && followupPending.has(Number(fu.id));
+        if (sr) {
+          const inProgressBtn = sr.status === 'received'
+            ? `<button type="button" class="btn btn-sm btn-outline btn-compact-ml" data-action="support-in-progress" data-followup-id="${escapeHtml(fu.id)}" data-support-version="${escapeHtml(sr.version)}"${pending ? ' disabled aria-busy="true"' : ''}>Mark in progress</button>`
+            : '';
+          actionHtml = `${inProgressBtn}<button type="button" class="btn btn-sm btn-coral btn-compact-ml" data-action="resolve-followup" data-followup-id="${escapeHtml(fu.id)}" data-support-version="${escapeHtml(sr.version)}" aria-describedby="needsAttentionHelp"${pending ? ' disabled aria-busy="true"' : ''}>${pending ? 'Marking complete…' : 'Mark complete'}</button>`;
+        } else {
+          actionHtml = `<button type="button" class="btn btn-sm btn-coral btn-compact-ml" data-action="resolve-followup" data-followup-id="${escapeHtml(fu.id)}" aria-describedby="needsAttentionHelp"${pending ? ' disabled aria-busy="true"' : ''}>${pending ? 'Marking complete…' : 'Mark complete'}</button>`;
+        }
       }
       
       return `
         <tr class="cursor-pointer" data-action="view-caregiver" data-caregiver-id="${escapeHtml(fu.caregiver_id)}">
           <td><strong>${caregiverName}</strong></td>
-          <td>${escapeHtml(fu.kind)}: ${escapeHtml(fu.detail || '')}</td>
+          <td>${escapeHtml(fu.kind)}: ${escapeHtml(fu.detail || '')}${supportMetaHtml}</td>
           <td>
             <span class="badge ${badgeClass}">${statusText}</span>
             ${actionHtml}
@@ -684,21 +715,103 @@ async function loadFollowups() {
 
 async function resolveFollowup(id, event) {
   if (event) event.stopPropagation();
+  if (!Number.isInteger(id) || id <= 0 || followupPending.has(id)) return;
+  followupPending.add(id);
+  const button = event?.target?.closest?.('[data-action="resolve-followup"]') || null;
+  const supportVersionAttr = button?.getAttribute?.('data-support-version');
+  const payload = supportVersionAttr !== null && supportVersionAttr !== undefined && supportVersionAttr !== ''
+    ? { status: 'done', expected_version: Number(supportVersionAttr) }
+    : { status: 'done' };
+  if (button) {
+    button.disabled = true;
+    button.setAttribute('aria-busy', 'true');
+    button.textContent = 'Marking complete…';
+  }
+  setNeedsAttentionMessage('Marking the follow-up complete…');
+  let failure = null;
+  let unconfirmed = false;
   try {
     const res = await fetch(`/api/staff/followup/${id}/resolve`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'done' })
+      body: JSON.stringify(payload)
     });
-    if (res.ok) {
-      await loadFollowups();
-      const panel = document.getElementById('caregiverRecordPanel');
-      if (panel && panel.dataset.caregiverId) {
-        await viewCaregiver(panel.dataset.caregiverId);
-      }
-    }
+    const data = await res.json().catch(() => null);
+    if (res.ok && data && data.ok === true) failure = null;
+    else if (res.ok) { unconfirmed = true; failure = 'the server did not confirm it'; }
+    else failure = (data && data.error) || `the server answered ${res.status}`;
   } catch (e) {
-    console.error(e);
+    unconfirmed = true;
+    failure = 'the request did not finish';
+  }
+  followupPending.delete(id);
+  if (unconfirmed) {
+    setNeedsAttentionMessage(`We could not confirm whether the follow-up was marked complete (${failure}). The list has been refreshed; check whether it is still open before trying again.`, true);
+    await loadFollowups();
+    return;
+  }
+  if (failure) {
+    if (button) {
+      button.disabled = false;
+      button.removeAttribute('aria-busy');
+      button.textContent = 'Mark complete';
+    }
+    setNeedsAttentionMessage(`Could not mark the follow-up complete: ${failure}. It is still open; no email was sent.`, true);
+    return;
+  }
+  setNeedsAttentionMessage('Follow-up marked complete. It has been removed from this open list; no email was sent.');
+  await loadFollowups();
+  const panel = document.getElementById('caregiverRecordPanel');
+  if (panel && panel.dataset.caregiverId) {
+    await viewCaregiver(panel.dataset.caregiverId);
+  }
+}
+
+async function transitionSupportFollowup(id, expectedVersion, status, event) {
+  if (event) event.stopPropagation();
+  if (!Number.isInteger(id) || id <= 0 || followupPending.has(id)) return;
+  followupPending.add(id);
+  const button = event?.target?.closest?.('[data-action="support-in-progress"]') || null;
+  if (button) {
+    button.disabled = true;
+    button.setAttribute('aria-busy', 'true');
+  }
+  setNeedsAttentionMessage('Updating support request status…');
+  let failure = null;
+  let unconfirmed = false;
+  try {
+    const res = await fetch(staffFollowupSupportUrl(id), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status, expected_version: expectedVersion })
+    });
+    const data = await res.json().catch(() => null);
+    if (res.ok && data && data.ok === true) failure = null;
+    else if (res.ok) { unconfirmed = true; failure = 'the server did not confirm it'; }
+    else failure = (data && data.error) || `the server answered ${res.status}`;
+  } catch (e) {
+    unconfirmed = true;
+    failure = 'the request did not finish';
+  }
+  followupPending.delete(id);
+  if (unconfirmed) {
+    setNeedsAttentionMessage(`We could not confirm whether the support request was updated (${failure}). The list has been refreshed; check its status before trying again.`, true);
+    await loadFollowups();
+    return;
+  }
+  if (failure) {
+    if (button) {
+      button.disabled = false;
+      button.removeAttribute('aria-busy');
+    }
+    setNeedsAttentionMessage(`Could not update support request: ${failure}. Reload the queue to check the latest version before trying again.`, true);
+    return;
+  }
+  setNeedsAttentionMessage('Support request marked In Progress. No email was sent.');
+  await loadFollowups();
+  const panel = document.getElementById('caregiverRecordPanel');
+  if (panel && panel.dataset.caregiverId) {
+    await viewCaregiver(panel.dataset.caregiverId);
   }
 }
 
@@ -904,6 +1017,7 @@ async function viewCaregiver(id) {
     }
 
     const nowLocal = localDateTimeValue(new Date());
+    const supportRequestsHtml = renderCaregiverSupportRequestsHtml(data.followups);
 
     panel.innerHTML = `
       <h2 id="caregiverDetailHeading" tabindex="-1">Caregiver record — ${name} ${memberBadge} ${statusBadge}</h2>
@@ -921,6 +1035,10 @@ async function viewCaregiver(id) {
       <div class="mt-14">
         <span class="k staff-section-title">Grants &amp; Workflow:</span>
         <div class="mt-8">${grantsHtml}</div>
+      </div>
+      <div class="mt-14" id="caregiverSupportRequestsSection">
+        <span class="k staff-section-title">My Support Requests:</span>
+        <div class="mt-8">${supportRequestsHtml}</div>
       </div>
 
       <details class="mt-16" open>
@@ -1057,6 +1175,168 @@ async function viewCaregiver(id) {
     if (epoch !== caregiverDetailEpoch) return;
     if (recordPanel) recordPanel.innerHTML = '<p role="alert">Could not load this caregiver. Return to the dashboard and try opening the record again.</p>';
     console.error(e);
+  }
+}
+
+const supportTriagePending = new Set();
+
+function renderCaregiverSupportRequestsHtml(followups) {
+  const items = (Array.isArray(followups) ? followups : []).filter(
+    fu => fu && fu.support_request && typeof fu.support_request === 'object'
+  );
+  if (items.length === 0) {
+    return '<div class="small muted">None</div>';
+  }
+  return items.map(fu => {
+    const sr = fu.support_request;
+    let sBadge = 'badge-plum';
+    if (sr.status === 'in_progress') sBadge = 'badge-amber';
+    if (sr.status === 'completed') sBadge = 'badge-green';
+
+    let statusOptionsHtml = '';
+    if (sr.status === 'received') {
+      statusOptionsHtml = `
+        <option value="received" selected>Received</option>
+        <option value="in_progress">In Progress</option>
+        <option value="completed">Completed</option>
+      `;
+    } else if (sr.status === 'in_progress') {
+      statusOptionsHtml = `
+        <option value="in_progress" selected>In Progress</option>
+        <option value="completed">Completed</option>
+      `;
+    } else {
+      statusOptionsHtml = `<option value="completed" selected>Completed</option>`;
+    }
+
+    const privateNotes = Array.isArray(sr.private_notes) ? sr.private_notes : [];
+    const privateNotesHtml = privateNotes.length === 0
+      ? '<div class="small muted">No request-linked private notes yet.</div>'
+      : `<ul class="small mt-4">${privateNotes.map(n => `<li><strong>${escapeHtml(n.author)}:</strong> ${escapeHtml(n.body)} <span class="muted">(${escapeHtml(n.created_at || '')})</span></li>`).join('')}</ul>`;
+
+    const history = Array.isArray(sr.reporting_history) ? sr.reporting_history : [];
+    const reportingHistoryHtml = history.length === 0
+      ? '<div class="small muted">No audit transitions recorded.</div>'
+      : `<ul class="small mt-4">${history.map(h => `<li><code>${escapeHtml(h.action)}</code> by <strong>${escapeHtml(h.actor)}</strong> <span class="muted">(${escapeHtml(h.at || '')})</span></li>`).join('')}</ul>`;
+
+    return `
+      <div class="support-request-card record-form-panel mb-12" data-followup-id="${escapeHtml(fu.id)}" data-request-id="${escapeHtml(sr.request_id)}" data-support-version="${escapeHtml(sr.version)}">
+        <div>
+          <strong>${escapeHtml(sr.support_type_label || sr.support_type)}</strong>
+          <span class="badge ${sBadge}">${escapeHtml(sr.status_label || sr.status)}</span>
+          <span class="small muted">Request ID: <code>${escapeHtml(sr.request_id)}</code> · v${escapeHtml(sr.version)}</span>
+        </div>
+        <div class="small mt-4">
+          Urgency: <strong>${escapeHtml(sr.urgency_label || sr.urgency)}</strong> ·
+          Preferred contact: <strong>${escapeHtml(sr.contact_preference_label || sr.contact_preference)}</strong> ·
+          Assigned to: <strong>${escapeHtml(sr.assigned_to_name || sr.assigned_to)}</strong> (${escapeHtml(sr.assigned_to || '')})
+        </div>
+        <div class="small muted mt-4">
+          Snapshot contact — Email: ${escapeHtml(sr.contact_email || 'N/A')} · Phone: ${escapeHtml(sr.contact_phone || 'N/A')} ·
+          Submitted: ${escapeHtml(sr.submitted_at || 'N/A')} · Last status update: ${escapeHtml(sr.last_status_updated_at || sr.submitted_at || 'N/A')}
+        </div>
+        ${sr.detail ? `<div class="small mt-4">Member detail: ${escapeHtml(sr.detail)}</div>` : ''}
+        <div class="mt-8">
+          <strong class="small">Request-linked private notes (staff only):</strong>
+          ${privateNotesHtml}
+        </div>
+        <details class="mt-8">
+          <summary class="small cursor-pointer">Reporting &amp; audit history (${history.length})</summary>
+          ${reportingHistoryHtml}
+        </details>
+        <form data-action="submit-support-triage" data-followup-id="${escapeHtml(fu.id)}" data-expected-version="${escapeHtml(sr.version)}" class="mt-8">
+          <input type="hidden" name="expected_version" value="${escapeHtml(sr.version)}">
+          <div class="form-row-compact">
+            <div class="field form-col-flex">
+              <label class="form-label-small">Status:</label>
+              <select name="status" class="form-input-compact">
+                ${statusOptionsHtml}
+              </select>
+            </div>
+            <div class="field form-col-flex">
+              <label class="form-label-small">Assigned staff email:</label>
+              <input type="email" name="assigned_to" value="${escapeHtml(sr.assigned_to || '')}" class="form-input-compact" required>
+            </div>
+          </div>
+          <div class="field mb-8">
+            <label class="form-label-small">Add request-linked private note (optional):</label>
+            <textarea name="note" rows="2" class="form-textarea-compact" maxlength="2000" placeholder="Private triage note for staff (never shown to caregiver)..."></textarea>
+          </div>
+          <div class="support-triage-msg form-error-msg alert-inline-banner form-error-banner d-none" role="status" aria-live="polite"></div>
+          <button type="submit" class="btn btn-sm btn-plum">Save Support Triage</button>
+        </form>
+      </div>
+    `;
+  }).join('');
+}
+
+async function submitStaffSupportTriage(form) {
+  if (!form) return;
+  const panel = document.getElementById('caregiverRecordPanel');
+  const caregiverId = panel?.dataset?.caregiverId;
+  const followupId = Number(form.getAttribute('data-followup-id'));
+  if (!Number.isInteger(followupId) || followupId <= 0 || supportTriagePending.has(followupId)) return;
+
+  const expectedVersionRaw = form.getAttribute('data-expected-version') || form.querySelector('[name="expected_version"]')?.value;
+  const expectedVersion = Number(expectedVersionRaw);
+  const statusVal = form.querySelector('[name="status"]')?.value?.trim() || '';
+  const assignedToVal = form.querySelector('[name="assigned_to"]')?.value?.trim() || '';
+  const noteVal = form.querySelector('[name="note"]')?.value?.trim() || '';
+  const msgBox = form.querySelector('.support-triage-msg');
+  const submitBtn = form.querySelector('button[type="submit"]');
+
+  if (msgBox) {
+    msgBox.textContent = '';
+    msgBox.classList?.add('d-none');
+  }
+
+  const payload = { expected_version: expectedVersion };
+  if (statusVal) payload.status = statusVal;
+  if (assignedToVal) payload.assigned_to = assignedToVal;
+  if (noteVal) payload.note = noteVal;
+
+  supportTriagePending.add(followupId);
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.setAttribute('aria-busy', 'true');
+  }
+
+  let viewEpoch = caregiverDetailEpoch;
+  const stillShowing = () => caregiverDetailEpoch === viewEpoch
+    && (!caregiverId || document.getElementById('caregiverRecordPanel')?.dataset?.caregiverId === caregiverId);
+
+  try {
+    const res = await fetch(`/api/staff/${'followup'}/${encodeURIComponent(followupId)}/support`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data || data.ok !== true) {
+      const errText = (data && data.error) || `the server answered ${res.status}`;
+      throw new Error(errText);
+    }
+    supportTriagePending.delete(followupId);
+    if (caregiverId && stillShowing()) {
+      await viewCaregiver(caregiverId);
+    }
+    if (typeof loadFollowups === 'function') {
+      await loadFollowups();
+    }
+    if (typeof loadRecentChanges === 'function') {
+      await loadRecentChanges();
+    }
+  } catch (e) {
+    if (stillShowing() && msgBox) {
+      msgBox.textContent = `Could not save support triage: ${e.message}. Reopen the record to check the latest version before trying again.`;
+      msgBox.classList?.remove('d-none');
+    }
+  } finally {
+    supportTriagePending.delete(followupId);
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.removeAttribute('aria-busy');
+    }
   }
 }
 
@@ -1788,6 +2068,9 @@ document.addEventListener('submit', function (e) {
   } else if (action === 'submit-add-staff') {
     e.preventDefault();
     submitAddStaff(form);
+  } else if (action === 'submit-support-triage') {
+    e.preventDefault();
+    submitStaffSupportTriage(form);
   }
 });
 
@@ -1949,6 +2232,11 @@ document.addEventListener('click', function (e) {
     e.stopPropagation();
     const id = Number(target.getAttribute('data-followup-id'));
     resolveFollowup(id, e);
+  } else if (action === 'support-in-progress') {
+    e.stopPropagation();
+    const id = Number(target.getAttribute('data-followup-id'));
+    const expectedVersion = Number(target.getAttribute('data-support-version'));
+    transitionSupportFollowup(id, expectedVersion, 'in_progress', e);
   } else if (action === 'update-attendance') {
     e.stopPropagation();
     const id = Number(target.getAttribute('data-registration-id'));
