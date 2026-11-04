@@ -10,6 +10,7 @@ const source = readFileSync(new URL('../../staff.js', import.meta.url), 'utf8');
 const block = (start, end) => source.slice(source.indexOf(start), source.indexOf(end, source.indexOf(start)));
 const panels = block('// Staff section disclosures:', '// End staff section disclosures.');
 const team = block('let staffMe = null;', 'function renderStaffTeam()');
+const peopleRoleUi = block('function updatePeopleAddActions()', 'async function openPeopleAdd()');
 const followups = block('async function loadFollowups()', 'async function resolveFollowup(');
 const events = block('function eventsCountText(', 'function renderNewEventForm()');
 const wait = () => new Promise(resolve => setTimeout(resolve, 0));
@@ -39,7 +40,7 @@ async function page({ origin = 'https://fixture.example.invalid', saved = {}, wi
   w.escapeHtml = value => String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
   w.renderStaffTeam = () => {};
   w.currentEventId = null;
-  w.eval(panels + '\n' + team + '\n' + followups + '\n' + events);
+  w.eval(panels + '\n' + team + '\n' + peopleRoleUi + '\n' + followups + '\n' + events);
   // Match real page startup: register before DOMContentLoaded; do not flush parser toggles.
   await new Promise(resolve => w.document.addEventListener('DOMContentLoaded', () => {
     w.initStaffPanels();

@@ -88,6 +88,30 @@
               <option value="admin">Admins</option>
             </select>
             <button type="button" class="btn btn-sm btn-plum" data-action="search-caregivers">Search people</button>
+            <button type="button" class="btn btn-sm btn-outline" data-action="open-people-add" aria-controls="peopleAddPanel" aria-expanded="false">Add person</button>
+          </div>
+          <div id="peopleAddPanel" class="d-none mt-16" role="region" aria-label="Add a person">
+            <p class="small muted">Search first to avoid creating another record for the same person. Caregiver records and staff access remain separate.</p>
+            <div class="staff-btn-group">
+              <button type="button" class="btn btn-sm btn-plum" data-action="open-caregiver-create">Add caregiver record</button>
+              <button type="button" id="addStaffFromPeopleBtn" class="btn btn-sm btn-outline d-none" data-action="open-staff-create">Add staff member (admin)</button>
+              <button type="button" class="btn btn-sm btn-outline" data-action="close-people-add">Close</button>
+            </div>
+            <p id="peopleAddMessage" class="small muted" role="status" aria-live="polite"></p>
+            <form id="addCaregiverForm" data-action="submit-add-caregiver" class="d-none mt-16">
+              <p class="small muted">This saves a caregiver record only. It does not enroll them in the Sanctuary, record consent, grant staff access, send an invitation or create follow-up work.</p>
+              <div class="form-row-compact">
+                <label>First name <input name="first_name" maxlength="120" class="form-input-compact" required></label>
+                <label>Last name <input name="last_name" maxlength="120" class="form-input-compact"></label>
+              </div>
+              <div class="form-row-compact">
+                <label>Email <input name="email" type="email" maxlength="254" class="form-input-compact"></label>
+                <label>Phone <input name="phone" type="tel" maxlength="40" class="form-input-compact"></label>
+              </div>
+              <p class="small muted">At least one email address or phone number is required. Matching contacts, including archived records, are shown for review instead of being overwritten.</p>
+              <button type="submit" class="btn btn-sm btn-plum">Check and add caregiver</button>
+              <div data-add-caregiver-message role="status" aria-live="polite" class="small mt-8"></div>
+            </form>
           </div>
         <div role="region" id="staffTeamPanel" class="d-none" aria-labelledby="staffListHeading">
           <div class="flex-between-center mb-12">
@@ -269,7 +293,7 @@
 
 <script src="app.js?v=b6d1a39f0a32"></script>
 <script src="nav-v2.js"></script>
-<script src="staff.js?v=a6f4874165b7"></script>
+<script src="staff.js?v=55739713a924"></script>
 </body>
 </html>
 

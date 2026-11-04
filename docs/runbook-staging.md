@@ -1,5 +1,46 @@
 # Staging surface — historical preview runbook
 
+## Production Staff usability and People Add join — November 4, 2026
+
+[pc2-codex-42] Root41 selected a source-only compatible join of accepted production
+Staff311 `db1b3d5a239e689589e956e251e020a404f1a52b` and standalone People Add314
+`fb419b435ff35cbd08e5fa679a16b22976cf8cf4`. Both descend from cloud-main
+`d810ef9c45b429214fe874ef09a23cb04d7dfbd1` (treeaaa493af), production-equivalent
+to the recorded2099d83e source. This is not a new installed-state readback; the
+existing publisher must requalify the actual package and rollback before a future
+release. No equivalent combined production candidate or competing owner was found.
+
+Design/reuse homes remain the existing Staff disclosures and People search/record
+UI, caregiver domain create and Staff API.42 remains author,41 independent reviewer
+and release owner. Preserve both accepted runbook sections below as their original
+scope/history. Runtime joins are only Staff HTML/JS; native summary preferences
+retain311's person/origin and activation guards, while Add retains314's four-field,
+active-Staff, duplicate-read/write, atomic-audit and no-enrollment/no-send contract.
+All original311 panel assertions remain. Its sliced fixture additionally loads
+the accepted Add role-visibility helper now called by the joined team loader;
+the initial missing-helper fixture failures were corrected without a no-op stub
+or production change. A focused additional Add DOM case exercises both panel
+choices and actual fake-handler caregiver creation together.
+
+Production caregiver authentication, mail, AI behavior, schema/bindings, app.js and
+public content remain the baseline. Public HTML changes only the stylesheet cache
+query required by311 CSS. No QA-login configuration, MySupport, sample data, B1
+registration/private projection, Help or322 provider-off is included. Do not infer
+an AI availability decision from this separate usability package.
+
+Progressive stage: reuse already-tested UI/domain operations and runbooks; this
+increment proves their compatible source composition. Stop at source qualification
+because Root41's packet expressly excludes deployment and real-person operations.
+Next increment is independent exact-head review, then a separately selected current
+package/target/rollback installation and authorized live acceptance. Existing unit
+and isolated local DOM jobs qualify source only, not workerd, hosted pixels, Staff
+sessions, production installation or client acceptance. No new service/module,
+configuration, credentials, migration or runtime dependency is introduced.
+
+Recovery preserves the prior production package. Any future UI/API rollback must
+not delete valid people/original audits or clear peer sessions/preferences. Earlier
+installed baseline claims in historical sections are not fresh release permission.
+
 ## Canonical user-facing addresses — October 30
 
 [pc2-codex-41] Use `https://caregiversanctuary.org` for production and
@@ -275,3 +316,69 @@ adds no database state. Preference booleans can remain inert when rolling back c
 never clear unrelated storage, customer records or another person's session.
 Root41 owns release and joined acceptance;42 authors this bounded source slice and
 retains independent reviewer separation from the other author's My Support work.
+
+
+## People & access Add action — November 3, 2026
+
+Owner/author: pc2-codex-42; independent review and release acceptance: pc2-codex-41.
+Canonical acceptance: [Legacy54 request6610139845](https://github.com/jjones447/legacy-caregiver-hub/issues/54#issuecomment-6610139845).
+Stage: built source candidate with deterministic fixture evidence; not installed/live/client accepted.
+
+Discovery/reuse: People search and the focused caregiver view already live in staff.html/staff.js.
+The existing admin-only `createStaffMember` in functions/_lib/staff.js remains the staff writer.
+The caregiver domain module supported updates but no record-only create. Public intake is unsuitable
+because it enrolls or creates follow-up work. The new `create` operation therefore belongs in the
+existing functions/_lib/domain/caregivers.js, reached only through POST /api/staff/caregivers.
+This extends the proven UI/domain/runbook foundation; it adds no service or orchestration layer.
+
+Add person sits beside Search people. Staff can choose Add caregiver record; active admins also
+get a shortcut that opens the existing Add staff member form. The server retains its admin guard.
+Caregiver fields are first/last name and email/phone only, requiring first name and one contact.
+The server checks normalized email or common phone formatting against ALL record statuses before
+creation and again inside the atomic insert. A match returns existing records for review, never
+merging, updating or restoring their history. Shared family contacts can therefore need staff review;
+this increment deliberately offers no duplicate override or automatic merge.
+
+Creation writes one caregiver with default nonmember state and one original audit atomically.
+It does not capture consent, enroll, grant staff access, send invitations or create follow-up work.
+Current active staff authorization gates the insert, both duplicate reads and saved-profile read.
+The browser-only endpoint requires exact origin, bounds JSON at4096 bytes and rejects extra fields.
+Confirmed saves show the normal person view/list; refusals and unknown results preserve entries.
+An unknown saved response can be recovered by contact search or duplicate readback without a second
+record. Existing staff creation/role rules remain separate from caregiver identity.
+
+Verification commands:
+
+```text
+npm run test:unit
+npm ci --ignore-scripts --no-audit --no-fund
+node --test tests/dom/staff-people-add.test.mjs
+python build.py --verify
+```
+
+Normal unit inventory explicitly includes people-add.test.mjs. The original main unit workflow,
+no-install guard and runtime dispatcher remain unchanged. DOM checks reuse exactly the pinned
+jsdom30.1.3 dependency/lock foundation independently reviewed in PR311/db1b3d5; the new People Add
+DOM workflow installs locked test dependencies with lifecycle scripts disabled. Nothing is imported
+by the served application. Fictional records use in-memory SQLite and actual delegated click/submit
+controls connected to the actual API handlers. No external fetch, mailbox, real browser, workerd,
+customer session or deployment is exercised; DOM success is not pixel/layout or live acceptance.
+
+Local source result:2014 unitPASS/0FAIL/0SKIP and5 DOMPASS/0FAIL/0SKIP, template verifyclean/diffcheck.
+Prepublication review caught and fixed unauthorized duplicate projection after access revocation;
+a focused test covers initial match, post-refused-insert match and saved-profile read. Initial full
+unit run also exposed action-map registration and incomplete DOM stubs; new actions are registered
+without weakening existing wiring assertions. Actual final-head hosted results are separate.
+
+Production base is cloud-main d810ef9 (tree identical to recorded production f8d7361e); this is a
+small standalone Add increment, not a staging-union promotion and not an amendment to311/312/313.
+The release owner must freshly reconcile the actual production package and selected311 panel delta,
+and regenerate staff cache hashes after integrating both. For staging313/QA-login successors, retain
+My Support and all auth/env/current-row fences; reconcile shared staff source and regenerate hashes,
+then run normal checks and the real-control fixture on the exact combined candidate. No stale-base
+file overwrite or inference that this source candidate includes those other increments.
+
+Recovery: preserve the prior package and normal rollback custody. No schema migration/configuration
+is added. Rolling back UI/API does not remove legitimately created people or original audits; use
+normal review/archive workflows rather than deleting history. Installation and own-user acceptance
+remain with the existing publisher/root41, and customer data changes are outside this source task.
