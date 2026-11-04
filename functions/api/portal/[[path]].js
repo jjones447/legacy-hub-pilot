@@ -324,11 +324,14 @@ export async function onRequestGet({ request, env }) {
         .bind(caregiverId)
         .all();
 
+      const qaSamples = matchesPreviewQACaregiver(env, profile.id, profile.email);
+
       return json({
         ok: true,
         profile,
         grants,
-        events
+        events,
+        ...(qaSamples ? { qa_samples: true } : {})
       });
     }
 

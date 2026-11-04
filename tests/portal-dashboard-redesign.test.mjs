@@ -24,9 +24,9 @@ function ui({ search = '' } = {}) {
   const ids = ['portalWelcome', 'portalProfileName', 'portalProfileEmail', 'portalProfilePhone', 'portalMembershipStatus',
     'portalEventsList', 'portalHighlights', 'portalHighlightsList', 'portalWellnessSummary', 'portalWellnessBtn',
     'portalWellnessTrendHint', 'portalWellnessTrend', 'portalWellnessHistoryRows', 'loginView', 'dashView',
-    'portalDesignPreview', 'portalLogoutBtn', 'portalWellnessSample'];
+    'portalDesignPreview', 'portalLogoutBtn', 'portalQaSampleBanner'];
   const el = Object.fromEntries(ids.map(id => [id, new Element()]));
-  el.portalDesignPreview.hidden = true; el.portalHighlights.hidden = true;
+  el.portalDesignPreview.hidden = true; el.portalHighlights.hidden = true; el.portalQaSampleBanner.hidden = true;
   const calls = [];
   const context = vm.createContext({
     Date: class extends Date { constructor(...a) { super(...(a.length ? a : [now])); } static now() { return now; } },
@@ -122,7 +122,7 @@ test('design preview (?preview=sample) shows the layout with labeled fictional d
   assert.equal(h.el.loginView.style.display, 'none');
   assert.equal(h.el.portalDesignPreview.hidden, false);
   assert.equal(h.el.portalLogoutBtn.hidden, true);
-  assert.equal(h.el.portalWellnessSample.hidden, true);
+  assert.equal(h.el.portalQaSampleBanner.hidden, true);
   assert.ok(h.el.portalWellnessBtn.classes.has('d-none'), 'no check-in can be submitted');
   assert.equal(h.el.portalWelcome.textContent, 'Welcome to Your Sanctuary, Jordan!');
   assert.equal(h.el.portalWellnessTrend.children.length, 0, 'no fictional wellness scores');

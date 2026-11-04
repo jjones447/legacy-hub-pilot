@@ -674,7 +674,10 @@ function portalLogout() {
 }
 
 function renderPortalData(data) {
-  const profile = data.profile || {};
+  const safeData = data || {};
+  portalQaSamplesActive = Boolean(safeData.qa_samples === true);
+  portalRealEvents = Array.isArray(safeData.events) ? safeData.events.slice() : [];
+  const profile = safeData.profile || {};
   const welcome = document.getElementById('portalWelcome');
   if (welcome) {
     const first = typeof profile.first_name === 'string' ? profile.first_name.trim() : '';
@@ -705,8 +708,8 @@ function renderPortalData(data) {
   const grantRequestedFor = document.getElementById('portalGrantRequestedFor');
   const grantAward = document.getElementById('portalGrantAward');
   if (grantStatus && grantRequestedFor && grantAward) {
-    if (data.grants && data.grants.length > 0) {
-      const ga = data.grants[0];
+    if (safeData.grants && safeData.grants.length > 0) {
+      const ga = safeData.grants[0];
       let badgeClass = 'badge-gray';
       if (ga.status === 'submitted' || ga.status === 'in_review') badgeClass = 'badge-amber';
       else if (ga.status === 'awarded' || ga.status === 'course_complete') badgeClass = 'badge-green';
@@ -726,44 +729,19 @@ function renderPortalData(data) {
     }
   }
 
-  // My Events: the account's registrations (any published event type, including Memory
-  // Socials and support group sessions), grouped into upcoming and past.
-  const eventsList = document.getElementById('portalEventsList');
-  const nowDate = new Date();
-  const timed = (data.events || []).map(function (e) {
-    return { event: e, time: publicEventTime(e.starts_at, nowDate, 'America/Chicago') };
-  });
-  const upcoming = timed.filter(function (x) { return x.time && x.time.future; })
-    .sort(function (a, b) { return a.time.instant - b.time.instant; });
-  const past = timed.filter(function (x) { return !(x.time && x.time.future); })
-    .sort(function (a, b) { return (b.time ? b.time.instant : -Infinity) - (a.time ? a.time.instant : -Infinity); });
-  if (eventsList) {
-    eventsList.innerHTML = '';
-    if (timed.length === 0) {
-      eventsList.innerHTML = '<p class="small muted m-0">No registered events yet.</p>';
-    } else {
-      [['Upcoming', upcoming], ['Past', past]].forEach(function (group) {
-        if (!group[1].length) return;
-        const section = document.createElement('div');
-        section.className = 'portal-events-group';
-        const heading = document.createElement('h5');
-        heading.textContent = group[0];
-        section.appendChild(heading);
-        group[1].forEach(function (entry) { section.appendChild(portalEventItem(entry.event)); });
-        eventsList.appendChild(section);
-      });
-    }
-  }
-  const nextRegistered = upcoming.find(function (x) { return x.event.registration_status === 'registered'; });
-  portalHighlightState.nextEvent = nextRegistered ? nextRegistered.event : null;
-  renderPortalHighlights();
+  syncPortalQaSampleChrome();
+  filterPortalEvents();
 
-  // Memory socials count and details
+  if (typeof filterPortalSupport === 'function') {
+    filterPortalSupport();
+  }
+
+  // Memory socials count and details (uses real account events only)
   const socialsCount = document.getElementById('portalSocialsCount');
   const socialsLast = document.getElementById('portalSocialsLastVisit');
   const socialsNext = document.getElementById('portalSocialsNext');
   if (socialsCount && socialsLast && socialsNext) {
-    const socials = (data.events || []).filter(function (e) { return e.type === 'memory_social'; });
+    const socials = (safeData.events || []).filter(function (e) { return e.type === 'memory_social'; });
     const attended = socials.filter(function (e) { return e.registration_status === 'attended'; });
     const now = new Date();
     const dated = socials.map(function (event) {
@@ -783,6 +761,330 @@ function renderPortalData(data) {
   }
 }
 
+var portalQaSamplesActive = false;
+var portalRealEvents = [];
+var portalEventsFilterState = 'all';
+var portalSupportRealRequests = [];
+var portalSupportFilterState = 'all';
+
+function portalTextNode(text) {
+  return typeof document !== 'undefined' && typeof document.createTextNode === 'function'
+    ? document.createTextNode(text)
+    : { textContent: String(text) };
+}
+
+function portalQaSampleEvents() {
+  if (!portalQaSamplesActive) return [];
+  return [
+    {
+      id: 'qa-sample-event-social-upcoming',
+      title: '[SAMPLE] Thursday Afternoon Memory Social',
+      type: 'memory_social',
+      starts_at: portalSampleDate(3, '14:00'),
+      location: 'Sample Community Room (QA Illustration)',
+      registration_status: 'registered',
+      is_sample: true,
+      sample_badge: 'SAMPLE / TEST',
+      sample_note: 'Fictional sample registration — read-only; does not reserve a seat, send notifications or create a payment.'
+    },
+    {
+      id: 'qa-sample-event-group-upcoming',
+      title: '[SAMPLE] Virtual Caregiver Support Group',
+      type: 'support_group',
+      starts_at: portalSampleDate(6, '17:00'),
+      location: 'Online (QA Illustration)',
+      registration_status: 'registered',
+      is_sample: true,
+      sample_badge: 'SAMPLE / TEST',
+      sample_note: 'Fictional sample registration — read-only; does not reserve a seat, send notifications or create a payment.'
+    },
+    {
+      id: 'qa-sample-event-wellness-upcoming',
+      title: '[SAMPLE] Restorative Breath & Caregiver Renewal',
+      type: 'wellness',
+      starts_at: portalSampleDate(10, '10:00'),
+      location: 'Sanctuary Studio (QA Illustration)',
+      registration_status: 'registered',
+      is_sample: true,
+      sample_badge: 'SAMPLE / TEST',
+      sample_note: 'Fictional sample registration — read-only; does not reserve a seat, send notifications or create a payment.'
+    },
+    {
+      id: 'qa-sample-event-workshop-past',
+      title: '[SAMPLE] Family Dementia Education Workshop',
+      type: 'caregiver_event',
+      starts_at: portalSampleDate(-9, '18:00'),
+      location: 'Milwaukee Community Center (QA Illustration)',
+      registration_status: 'attended',
+      is_sample: true,
+      sample_badge: 'SAMPLE / TEST',
+      sample_note: 'Fictional past attendance entry — read-only; not part of your actual attendance history.'
+    },
+    {
+      id: 'qa-sample-event-social-past',
+      title: '[SAMPLE] Autumn Gathering Memory Social',
+      type: 'memory_social',
+      starts_at: portalSampleDate(-21, '14:00'),
+      location: 'Sample Community Room (QA Illustration)',
+      registration_status: 'attended',
+      is_sample: true,
+      sample_badge: 'SAMPLE / TEST',
+      sample_note: 'Fictional past attendance entry — read-only; not part of your actual attendance history.'
+    }
+  ];
+}
+
+function portalQaSampleSupportRequests() {
+  if (!portalQaSamplesActive) return [];
+  return [
+    {
+      request_id: 'qa-sample-support-in-progress',
+      support_type: 'respite_services',
+      support_type_label: '[SAMPLE] Respite Services',
+      status: 'in_progress',
+      status_label: 'In Progress',
+      urgency: 'next_few_days',
+      urgency_label: 'Next few days',
+      contact_preference: 'phone_call',
+      contact_preference_label: 'Phone Call',
+      submitted_at: portalSampleDate(-2, '10:15'),
+      last_status_updated_at: portalSampleDate(-1, '14:30'),
+      is_sample: true,
+      sample_badge: 'SAMPLE / TEST',
+      sample_note: 'Fictional sample support request — read-only; creates no Staff queue task, clinical history, notification or payment.'
+    },
+    {
+      request_id: 'qa-sample-support-received',
+      support_type: 'caregiver_support_guidance',
+      support_type_label: '[SAMPLE] Caregiver Support & Guidance',
+      status: 'received',
+      status_label: 'Received',
+      urgency: 'general_inquiry',
+      urgency_label: 'General inquiry',
+      contact_preference: 'email',
+      contact_preference_label: 'Email',
+      submitted_at: portalSampleDate(0, '09:00'),
+      last_status_updated_at: portalSampleDate(0, '09:00'),
+      is_sample: true,
+      sample_badge: 'SAMPLE / TEST',
+      sample_note: 'Fictional sample support request — read-only; creates no Staff queue task, clinical history, notification or payment.'
+    },
+    {
+      request_id: 'qa-sample-support-completed',
+      support_type: 'community_resources_referrals',
+      support_type_label: '[SAMPLE] Community Resources & Referrals',
+      status: 'completed',
+      status_label: 'Completed',
+      urgency: 'general_inquiry',
+      urgency_label: 'General inquiry',
+      contact_preference: 'email',
+      contact_preference_label: 'Email',
+      submitted_at: portalSampleDate(-14, '11:20'),
+      last_status_updated_at: portalSampleDate(-10, '16:05'),
+      is_sample: true,
+      sample_badge: 'SAMPLE / TEST',
+      sample_note: 'Fictional sample support request — read-only; creates no Staff queue task, clinical history, notification or payment.'
+    }
+  ];
+}
+
+function syncPortalQaSampleChrome() {
+  ['portalQaSampleBanner', 'portalProfileSampleNote', 'portalResourcesSampleNote', 'portalUpdatesSampleNote'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el) el.hidden = !portalQaSamplesActive;
+  });
+  if (portalQaSamplesActive) {
+    const supportHistory = document.getElementById('portalSupportHistory');
+    if (supportHistory) supportHistory.open = true;
+    const wellnessHistory = document.getElementById('portalWellnessHistory');
+    if (wellnessHistory) wellnessHistory.open = true;
+  }
+}
+
+function filterPortalEvents(filterValue) {
+  const filterSelect = document.getElementById('portalEventsFilter');
+  const activeFilter = typeof filterValue === 'string' && filterValue
+    ? filterValue
+    : (filterSelect && typeof filterSelect.value === 'string' && filterSelect.value ? filterSelect.value : (portalEventsFilterState || 'all'));
+  portalEventsFilterState = activeFilter;
+  if (filterSelect && filterSelect.value !== activeFilter) {
+    filterSelect.value = activeFilter;
+  }
+
+  const eventsList = document.getElementById('portalEventsList');
+  const nowDate = new Date();
+  const realTimed = (portalRealEvents || []).map(function (e) {
+    return { event: e, time: publicEventTime(e.starts_at, nowDate, 'America/Chicago') };
+  });
+  const sampleTimed = portalQaSampleEvents().map(function (e) {
+    return { event: e, time: publicEventTime(e.starts_at, nowDate, 'America/Chicago') };
+  });
+  const combined = realTimed.concat(sampleTimed);
+
+  const filtered = combined.filter(function (entry) {
+    const ev = entry.event;
+    const isFuture = Boolean(entry.time && entry.time.future);
+    if (activeFilter === 'upcoming') return isFuture;
+    if (activeFilter === 'past') return !isFuture;
+    if (activeFilter === 'real') return !ev.is_sample;
+    if (activeFilter === 'sample') return Boolean(ev.is_sample);
+    if (activeFilter === 'memory_social' || activeFilter === 'support_group' || activeFilter === 'caregiver_event' || activeFilter === 'wellness') {
+      return ev.type === activeFilter;
+    }
+    return true;
+  });
+
+  const upcoming = filtered.filter(function (x) { return x.time && x.time.future; })
+    .sort(function (a, b) { return a.time.instant - b.time.instant; });
+  const past = filtered.filter(function (x) { return !(x.time && x.time.future); })
+    .sort(function (a, b) { return (b.time ? b.time.instant : -Infinity) - (a.time ? a.time.instant : -Infinity); });
+
+  if (eventsList) {
+    eventsList.innerHTML = '';
+    if (filtered.length === 0) {
+      eventsList.innerHTML = (activeFilter === 'all' || (activeFilter === 'real' && realTimed.length === 0))
+        ? '<p class="small muted m-0">No registered events yet.</p>'
+        : '<p class="small muted m-0">No events match this filter.</p>';
+    } else {
+      [['Upcoming', upcoming], ['Past', past]].forEach(function (group) {
+        if (!group[1].length) return;
+        const section = document.createElement('div');
+        section.className = 'portal-events-group';
+        const heading = document.createElement('h5');
+        heading.textContent = group[0];
+        section.appendChild(heading);
+        group[1].forEach(function (entry) { section.appendChild(portalEventItem(entry.event)); });
+        eventsList.appendChild(section);
+      });
+    }
+  }
+
+  const realUpcoming = realTimed.filter(function (x) { return x.time && x.time.future; })
+    .sort(function (a, b) { return a.time.instant - b.time.instant; });
+  const nextRegistered = realUpcoming.find(function (x) { return x.event.registration_status === 'registered'; });
+  portalHighlightState.nextEvent = nextRegistered ? nextRegistered.event : null;
+
+  const sampleUpcoming = sampleTimed.filter(function (x) { return x.time && x.time.future; })
+    .sort(function (a, b) { return a.time.instant - b.time.instant; });
+  const nextSampleRegistered = (portalQaSamplesActive && activeFilter !== 'real')
+    ? sampleUpcoming.find(function (x) { return x.event.registration_status === 'registered'; })
+    : null;
+  portalHighlightState.nextSampleEvent = nextSampleRegistered ? nextSampleRegistered.event : null;
+  portalHighlightState.sampleSupportSummary = (portalQaSamplesActive && activeFilter !== 'real' && portalSupportFilterState !== 'real')
+    ? '[SAMPLE / TEST] Sample support follow-up (In Progress): [SAMPLE] Respite Services'
+    : null;
+  renderPortalHighlights();
+
+  return { upcoming: upcoming.map(function (x) { return x.event; }), past: past.map(function (x) { return x.event; }) };
+}
+
+function filterPortalSupport(filterValue) {
+  const filterSelect = document.getElementById('portalSupportFilter');
+  const activeFilter = typeof filterValue === 'string' && filterValue
+    ? filterValue
+    : (filterSelect && typeof filterSelect.value === 'string' && filterSelect.value ? filterSelect.value : (portalSupportFilterState || 'all'));
+  portalSupportFilterState = activeFilter;
+  if (filterSelect && filterSelect.value !== activeFilter) {
+    filterSelect.value = activeFilter;
+  }
+
+  const rowsEl = document.getElementById('portalSupportHistoryRows');
+  const realList = Array.isArray(portalSupportRealRequests) ? portalSupportRealRequests : [];
+  const sampleList = portalQaSampleSupportRequests();
+  const combined = realList.concat(sampleList);
+
+  const filtered = combined.filter(function (req) {
+    if (!req) return false;
+    if (activeFilter === 'real') return !req.is_sample;
+    if (activeFilter === 'sample') return Boolean(req.is_sample);
+    if (activeFilter === 'received' || activeFilter === 'in_progress' || activeFilter === 'completed') {
+      return req.status === activeFilter;
+    }
+    return true;
+  });
+
+  if (rowsEl && (portalQaSamplesActive || realList.length > 0 || activeFilter !== 'all')) {
+    const emptyText = (activeFilter === 'all' || (activeFilter === 'real' && realList.length === 0))
+      ? 'No support requests yet.'
+      : 'No support requests match this filter.';
+    renderPortalSupportEntryList(rowsEl, filtered, emptyText);
+  }
+
+  portalHighlightState.sampleSupportSummary = (portalQaSamplesActive && portalEventsFilterState !== 'real' && activeFilter !== 'real')
+    ? '[SAMPLE / TEST] Sample support follow-up (In Progress): [SAMPLE] Respite Services'
+    : null;
+  renderPortalHighlights();
+
+  return filtered;
+}
+
+function renderPortalSupportEntryList(container, requests, emptyText) {
+  if (!container) return;
+  container.textContent = '';
+  if (!Array.isArray(requests) || requests.length === 0) {
+    container.textContent = emptyText;
+    return;
+  }
+  const list = document.createElement('ol');
+  requests.forEach(function (req) {
+    const li = document.createElement('li');
+    if (req && req.is_sample) {
+      li.className = 'portal-sample-item';
+      li.setAttribute('data-portal-sample-item', 'support');
+      li.setAttribute('data-sample-status', String(req.status || ''));
+    }
+    const title = document.createElement('strong');
+    title.textContent = String(req.support_type_label || req.support_type || 'Support request');
+    const badge = document.createElement('span');
+    let badgeClass = 'badge-amber';
+    if (req.status === 'completed') badgeClass = 'badge-green';
+    else if (req.status === 'in_progress') badgeClass = 'badge-plum';
+    badge.className = 'badge ' + badgeClass;
+    badge.textContent = String(req.status_label || req.status || 'Received');
+    const submitted = String(req.submitted_at || '').slice(0, 10) || '—';
+    const updated = String(req.last_status_updated_at || req.submitted_at || '').slice(0, 10) || submitted;
+    const meta = document.createElement('span');
+    meta.className = 'small muted d-block';
+    meta.textContent = 'Submitted ' + submitted + ' · Last status update ' + updated +
+      (req.urgency_label ? ' · ' + String(req.urgency_label) : '') +
+      (req.contact_preference_label ? ' · Prefer ' + String(req.contact_preference_label) : '');
+    li.appendChild(title);
+    li.appendChild(portalTextNode(' '));
+    li.appendChild(badge);
+    if (req && req.is_sample) {
+      li.appendChild(portalTextNode(' '));
+      const sampleBadge = document.createElement('span');
+      sampleBadge.className = 'badge badge-amber portal-sample-badge';
+      sampleBadge.textContent = String(req.sample_badge || 'SAMPLE / TEST');
+      li.appendChild(sampleBadge);
+    }
+    li.appendChild(meta);
+    if (req && req.is_sample && req.sample_note) {
+      const note = document.createElement('span');
+      note.className = 'small muted d-block portal-sample-note';
+      note.textContent = String(req.sample_note);
+      li.appendChild(note);
+    }
+    list.appendChild(li);
+  });
+  container.appendChild(list);
+}
+
+function initPortalSectionFilters() {
+  const eventsFilter = document.getElementById('portalEventsFilter');
+  if (eventsFilter && typeof eventsFilter.addEventListener === 'function') {
+    eventsFilter.addEventListener('change', function () {
+      filterPortalEvents(eventsFilter.value);
+    });
+  }
+  const supportFilter = document.getElementById('portalSupportFilter');
+  if (supportFilter && typeof supportFilter.addEventListener === 'function') {
+    supportFilter.addEventListener('change', function () {
+      filterPortalSupport(supportFilter.value);
+    });
+  }
+}
+
 
 const PORTAL_EVENT_TYPE_LABELS = { support_group: 'Support Group', memory_social: 'Memory Social', wellness: 'Wellness', caregiver_event: 'Caregiver Event' };
 
@@ -790,7 +1092,12 @@ const PORTAL_EVENT_TYPE_LABELS = { support_group: 'Support Group', memory_social
 // authored in the staff console (stored-XSS hardening).
 function portalEventItem(e) {
   const item = document.createElement('div');
-  item.className = 'timeline-item';
+  item.className = e && e.is_sample ? 'timeline-item portal-sample-item' : 'timeline-item';
+  if (e && e.is_sample) {
+    item.setAttribute('data-portal-sample-item', 'event');
+    item.setAttribute('data-sample-type', String(e.type || ''));
+    item.setAttribute('data-sample-status', String(e.registration_status || ''));
+  }
   let dotColor = 'var(--ink-soft)';
   if (e.type === 'support_group') dotColor = 'var(--green)';
   else if (e.type === 'memory_social') dotColor = 'var(--amber)';
@@ -809,17 +1116,31 @@ function portalEventItem(e) {
   when.textContent = kind + (e.starts_at || '') + ' · ' + (e.location || 'Online');
   const body = document.createElement('div');
   body.appendChild(title);
-  body.appendChild(document.createTextNode(' '));
+  body.appendChild(portalTextNode(' '));
   body.appendChild(badge);
+  if (e && e.is_sample) {
+    body.appendChild(portalTextNode(' '));
+    const sampleBadge = document.createElement('span');
+    sampleBadge.className = 'badge badge-amber portal-sample-badge';
+    sampleBadge.textContent = e.sample_badge || 'SAMPLE / TEST';
+    body.appendChild(sampleBadge);
+  }
   body.appendChild(when);
+  if (e && e.is_sample && e.sample_note) {
+    const note = document.createElement('div');
+    note.className = 'small muted portal-sample-note';
+    note.textContent = String(e.sample_note);
+    body.appendChild(note);
+  }
   item.appendChild(dot);
   item.appendChild(body);
   return item;
 }
 
 // Dashboard highlights: only information connected to this account (next registered
-// event, a due wellness check-in). Nothing is shown when there is nothing real to show.
-const portalHighlightState = { nextEvent: null, wellnessDue: false };
+// event, a due wellness check-in), plus labeled QA sample highlights when the
+// verified QA caregiver session is active. Nothing is shown when there is nothing to show.
+const portalHighlightState = { nextEvent: null, nextSampleEvent: null, sampleSupportSummary: null, wellnessDue: false };
 
 function renderPortalHighlights() {
   const box = document.getElementById('portalHighlights');
@@ -839,6 +1160,9 @@ function renderPortalHighlights() {
   };
   const e = portalHighlightState.nextEvent;
   if (e) add('📅', 'Your next event: ' + (e.title || 'Event') + ' · ' + String(e.starts_at || '').slice(0, 16));
+  const se = portalHighlightState.nextSampleEvent;
+  if (se) add('📅', '[SAMPLE / TEST] Sample upcoming event: ' + (se.title || 'Event') + ' · ' + String(se.starts_at || '').slice(0, 16));
+  if (portalHighlightState.sampleSupportSummary) add('🤝', portalHighlightState.sampleSupportSummary);
   if (portalHighlightState.wellnessDue) add('💛', 'It’s time for a quick wellness check-in. See My Wellness below.');
   box.hidden = list.children.length === 0;
 }
@@ -868,7 +1192,7 @@ function initPortalDesignPreview() {
   dashView.style.display = 'block';
   const banner = document.getElementById('portalDesignPreview');
   if (banner) banner.hidden = false;
-  ['portalLogoutBtn', 'portalWellnessSample'].forEach(function (id) {
+  ['portalLogoutBtn', 'portalQaSampleBanner'].forEach(function (id) {
     const el = document.getElementById(id);
     if (el) el.hidden = true;
   });
@@ -1122,7 +1446,7 @@ function loadLiveEvents() {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-  initPortalSummaryPreview();
+  initPortalSectionFilters();
   loadLiveEvents();
   if (!(portalDesignPreviewRequested() && initPortalDesignPreview())) checkPortalSession();
 });
@@ -1396,27 +1720,6 @@ function renderWellnessHistory(container, history, emptyText) {
   container.appendChild(list);
 }
 
-function initPortalSummaryPreview() {
-  const preview = document.getElementById('portalWellnessSample');
-  const actual = document.getElementById('portalAccountSummary');
-  if (!preview || !actual) return;
-  // Display-only examples: no session, storage, API data or check-in changes. The sample
-  // cards stand in for the other summary cards; the real wellness card stays visible.
-  const sync = function () {
-    Array.prototype.forEach.call(actual.children, function (card) {
-      if (card.id !== 'portalWellnessTile') card.hidden = preview.open;
-    });
-  };
-  preview.open = false;
-  sync();
-  preview.addEventListener('toggle', sync);
-  document.getElementById('portalPreviewReturn')?.addEventListener('click', function () {
-    preview.open = false;
-    sync();
-    document.getElementById('portalPreviewToggle')?.focus();
-  });
-}
-
 function drawWellnessTrend(container, scores, accessibleLabel) {
   if (!container) return;
   container.textContent = '';
@@ -1570,11 +1873,29 @@ async function loadPortalSupport() {
 
 function renderPortalSupport(data) {
   const requests = Array.isArray(data && data.requests) ? data.requests : [];
+  if (typeof portalSupportRealRequests !== 'undefined') {
+    portalSupportRealRequests = requests.slice();
+  }
+  if (data && typeof data.qa_samples === 'boolean' && typeof portalQaSamplesActive !== 'undefined') {
+    portalQaSamplesActive = data.qa_samples;
+  }
   const rowsEl = document.getElementById('portalSupportHistoryRows');
-  renderPortalSupportHistory(rowsEl, requests, 'No support requests yet.');
+  const useDashboardFilter = typeof filterPortalSupport === 'function' && (
+    (typeof portalQaSamplesActive !== 'undefined' && portalQaSamplesActive) ||
+    (typeof portalSupportFilterState === 'string' && portalSupportFilterState !== 'all')
+  );
+  if (useDashboardFilter) {
+    filterPortalSupport();
+  } else {
+    renderPortalSupportHistory(rowsEl, requests, 'No support requests yet.');
+    if (typeof portalHighlightState === 'object' && typeof renderPortalHighlights === 'function') {
+      portalHighlightState.supportCount = requests.length;
+      renderPortalHighlights();
+    }
+  }
   if (portalSupportPendingRequest) {
     const matched = requests.find(function (r) {
-      return r && r.request_id === portalSupportPendingRequest.requestId;
+      return r && !r.is_sample && r.request_id === portalSupportPendingRequest.requestId;
     }) || null;
     if (matched) {
       const wasUnresolved = Boolean(portalSupportPendingRequest.unresolved);
@@ -1608,6 +1929,10 @@ function renderPortalSupport(data) {
 }
 
 function renderPortalSupportHistory(container, requests, emptyText) {
+  if (typeof renderPortalSupportEntryList === 'function') {
+    renderPortalSupportEntryList(container, requests, emptyText);
+    return;
+  }
   if (!container) return;
   container.textContent = '';
   if (!Array.isArray(requests) || requests.length === 0) {
@@ -1617,6 +1942,11 @@ function renderPortalSupportHistory(container, requests, emptyText) {
   const list = document.createElement('ol');
   requests.forEach(function (req) {
     const li = document.createElement('li');
+    const isSample = Boolean(req && req.is_sample);
+    if (isSample) {
+      li.className = 'portal-sample-item';
+      li.setAttribute('data-sample-item', 'true');
+    }
     const title = document.createElement('strong');
     title.textContent = String(req.support_type_label || req.support_type || 'Support request');
     const badge = document.createElement('span');
@@ -1632,8 +1962,15 @@ function renderPortalSupportHistory(container, requests, emptyText) {
     meta.textContent = 'Submitted ' + submitted + ' · Last status update ' + updated +
       (req.urgency_label ? ' · ' + String(req.urgency_label) : '') +
       (req.contact_preference_label ? ' · Prefer ' + String(req.contact_preference_label) : '');
+    if (isSample) {
+      const sampleBadge = document.createElement('span');
+      sampleBadge.className = 'portal-sample-badge';
+      sampleBadge.textContent = 'QA SAMPLE';
+      li.appendChild(sampleBadge);
+      li.appendChild(typeof document.createTextNode === 'function' ? document.createTextNode(' ') : { textContent: ' ' });
+    }
     li.appendChild(title);
-    li.appendChild(document.createTextNode(' '));
+    li.appendChild(typeof document.createTextNode === 'function' ? document.createTextNode(' ') : { textContent: ' ' });
     li.appendChild(badge);
     li.appendChild(meta);
     list.appendChild(li);

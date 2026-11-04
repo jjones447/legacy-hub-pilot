@@ -1,5 +1,39 @@
 # Caregiver Portal — what "done" means
 
+## Staging QA caregiver in-section sample preview — November 4, 2026
+
+[pc2-gemini-ct-5] Source replaces the collapsed `Preview a filled-out portal (sample data)`
+disclosure on `portal.html` with immediate, clearly labeled `[QA SAMPLE]` / `SAMPLE / TEST`
+items inside the normal signed-in caregiver dashboard sections and section filters
+for the verified preview QA caregiver identity only (`matchesPreviewQACaregiver` in
+`GET /api/portal/me` returns `qa_samples: true`). Ordinary caregivers and production
+sessions do not receive `qa_samples` and keep all sample banners, notes and entries
+hidden (`hidden`).
+
+When `qa_samples: true` is present on `/api/portal/me`:
+
+- `#portalQaSampleBanner` appears immediately above the summary grid without opening
+  a collapsed `<details>` toggle.
+- **My Events** (`#portalEventsList`) renders the caregiver's real event registrations
+  alongside four read-only `[QA SAMPLE]` entries across `memory_social`, `support_group`,
+  `wellness` and `caregiver_event` types and `registered` / `attended` statuses, with
+  `#portalEventsFilter` filtering across `all`, `upcoming`, `past`, event types, `real`
+  and `sample`.
+- **My Support** (`#portalSupportHistoryRows`) renders the caregiver's real support
+  requests alongside three read-only `[QA SAMPLE]` entries across `in_progress`,
+  `received` and `completed` statuses, with `#portalSupportFilter` filtering across
+  `all`, status values, `real` and `sample`.
+- **My Profile & Intake**, **My Resources**, and **Sanctuary Updates & Perks** display
+  labeled read-only placement previews (`#portalProfileSampleNote`,
+  `#portalResourcesSampleNote`, `#portalUpdatesSampleNote`) while preserving real
+  profile fields and resource links.
+- **My Wellness** (`#portalWellnessTile`) remains strictly real check-ins only, with
+  zero fictional wellness scores or chart points.
+- Sample items carry `data-sample-item="true"`, contain no forms, inputs, buttons or
+  `data-action` attributes, and never create registrations, support requests, wellness
+  history, notifications or payments. No database seeding, schema migration, mail or
+  production profile selection is introduced in this staging source increment.
+
 ## Populated summary preview — October 30, 2026
 
 [pc2-codex-42] Jacob requested a populated layout example without adding wellness
