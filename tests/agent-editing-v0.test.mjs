@@ -1,11 +1,11 @@
-// Slice 07 tests — Site-builder agent editing loop v0.
+import {postWithInertProvider as postAgent} from './fixtures/inert-agent-provider.mjs';
+// Slice 07 tests â€” Site-builder agent editing loop v0.
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import vm from 'node:vm';
 import { onRequestGet as getAgent } from '../functions/api/agent/[[path]].js';
-import { postAgentFixture as postAgent } from './helpers/confirmed-agent.mjs';
 import { getPublishedSections, _resetContentCache } from '../functions/_content.mjs';
 
 const SCHEMA_1 = readFileSync(new URL('../schema/0001_init.sql', import.meta.url), 'utf8');
@@ -265,7 +265,7 @@ for (const [name, envelope, accepted] of [
   ['refusal', { refusal: 'Out of scope' }, false],
   ['schema-invalid change', { change: { title: 123 } }, false]
 ]) {
-  test(`native content object ${name} retains schema validation and preview-only writes`, async () => {
+  test(`inert native content object ${name} retains schema validation and preview-only writes`, async () => {
     let calls = 0;
     const nativeEnv = { ...env, AGENT_MAPPER_BACKEND: undefined,
       AI: { run: async () => { calls++; return { response: envelope }; } } };
@@ -298,7 +298,7 @@ test('POST /api/agent/confirm requires staff identity and publishes + audits', a
     VALUES ('ci_test_draft', 'resource', '{"title":"Helpline","description":"988","category":"crisis"}', 'draft', 'access_staff:staff@example.org')
   `).run();
 
-  // Missing draft_id -> 400 (staff_id is no longer required — actor comes from identity)
+  // Missing draft_id -> 400 (staff_id is no longer required â€” actor comes from identity)
   const reqFail = new Request('http://localhost/api/agent/confirm', {
     method: 'POST',
     body: JSON.stringify({})
@@ -381,7 +381,7 @@ test('GET /api/agent/drafts returns list of pending drafts only', async () => {
   assert.equal(data.drafts[0].id, 'ci_draft_1');
 });
 
-test('gateway client returns graceful refusal when EMP_LLM_GATEWAY_URL is unset', async () => {
+test('inert gateway protocol returns graceful refusal when EMP_LLM_GATEWAY_URL is unset', async () => {
   const req = new Request('http://localhost/api/agent/draft', {
     method: 'POST',
     body: JSON.stringify({
@@ -395,13 +395,13 @@ test('gateway client returns graceful refusal when EMP_LLM_GATEWAY_URL is unset'
   };
 
   const res = await postAgent({ request: req, env: noGatewayEnv });
-  assert.equal(res.status, 200);
+  assert.equal(res.status, 503);
   const data = await res.json();
   assert.equal(data.ok, false);
-  assert.equal(data.refusal, 'inference unavailable — gateway not configured');
+  assert.equal(data.code, 'free_ai_unavailable');
 });
 
-test('gateway client POSTs OpenAI-shaped request to EMP_LLM_GATEWAY_URL and parses tool_calls', async () => {
+test('inert gateway protocol POSTs OpenAI-shaped request to EMP_LLM_GATEWAY_URL and parses tool_calls', async () => {
   const originalFetch = globalThis.fetch;
 
   let fetchCalled = false;
@@ -479,7 +479,7 @@ test('gateway client POSTs OpenAI-shaped request to EMP_LLM_GATEWAY_URL and pars
   }
 });
 
-test('gateway client handles refuse_request tool call from gateway', async () => {
+test('inert gateway protocol handles refuse_request tool call from gateway', async () => {
   const originalFetch = globalThis.fetch;
 
   globalThis.fetch = async (url, options) => {
