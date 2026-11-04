@@ -1444,6 +1444,14 @@ main ul.measure-620 { margin: 16px 0; padding-left: 24px; }
 #dashView .portal-card-grid > .portal-wellness-section { grid-column: 1 / -1; margin: 0; }
 #dashView .portal-events-group + .portal-events-group { margin-top: 18px; }
 #dashView .portal-events-group h5 { margin: 0 0 8px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-soft); }
+#dashView .portal-qa-sample-banner { margin: 0 0 24px; padding: 14px 18px; border-radius: 12px; background: #fff7e6; border: 1.5px solid #e7c67d; color: #5c4313; font-size: 14.5px; line-height: 1.5; }
+#dashView .portal-qa-sample-banner[hidden], #dashView .portal-qa-sample-note[hidden] { display: none; }
+#dashView .portal-qa-sample-note { padding: 10px 12px; border-radius: 10px; background: #fffaf0; border: 1px dashed #e2c483; color: var(--ink); line-height: 1.45; }
+#dashView .portal-section-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; }
+#dashView .portal-sample-item { padding: 8px 10px; border-radius: 8px; background: #fffaf2; border-left: 3px solid var(--amber); margin-bottom: 8px; }
+#dashView .portal-sample-badge { font-weight: 700; letter-spacing: 0.03em; }
+#dashView .portal-sample-note { font-style: italic; margin-top: 2px; }
+#dashView .portal-sample-list { padding-left: 18px; }
 /* About: the family photo sits beside "From One Family's Journey…" uncropped (requested Nov 1), not in the hero. */
 .about-story-photo { margin: 0; }
 .about-story-photo img { display: block; width: 100%; height: auto; border-radius: 16px; }

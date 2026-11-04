@@ -24,8 +24,15 @@ function ui(reply = { ok: true, history: [], questions: [], due: false }) {
   const ids = ['portalWellnessSummary', 'portalWellnessBtn', 'portalWellnessTrendHint', 'portalWellnessTrend',
     'portalWellnessHistoryRows', 'portalWellnessSampleTrend', 'portalWellnessSampleRows',
     'portalSocialsCount', 'portalSocialsLastVisit', 'portalSocialsNext',
-    'portalGrantStatus', 'portalGrantRequestedFor', 'portalGrantAward'];
+    'portalGrantStatus', 'portalGrantRequestedFor', 'portalGrantAward',
+    'portalQaSampleBanner', 'portalProfileSampleNote', 'portalResourcesSampleNote', 'portalUpdatesSampleNote',
+    'portalEventsList', 'portalEventsFilter', 'portalSupportFilter', 'portalSupportHistoryRows',
+    'portalHighlights', 'portalHighlightsList'];
   const elements = Object.fromEntries(ids.map(id => [id, new Element()]));
+  elements.portalQaSampleBanner.hidden = true;
+  elements.portalProfileSampleNote.hidden = true;
+  elements.portalResourcesSampleNote.hidden = true;
+  elements.portalUpdatesSampleNote.hidden = true;
   const calls = [];
   const context = vm.createContext({ Date: class extends Date { constructor(...args) { super(...(args.length ? args : [now])); } static now() { return now; } },
     document: { getElementById: id => elements[id], createElement: tag => new Element(tag),
@@ -51,35 +58,24 @@ function summaryGridChildren() {
   return ids;
 }
 
-test('summary preview is opt-in, resets on reload and keeps the real wellness card visible', () => {
+test('summary grid keeps all six cards visible and replaces the collapsed sample disclosure with in-section QA samples', () => {
   const h = ui();
-  const listeners = {};
-  let focused = 0;
   const cardIds = summaryGridChildren();
   assert.ok(cardIds.includes('portalWellnessTile'), 'wellness card sits directly in the summary grid');
   assert.ok(cardIds.length >= 6 && cardIds.every(Boolean));
-  const sampleEnd = html.indexOf('</details>', html.indexOf('id="portalWellnessSample"'));
-  assert.ok(sampleEnd < html.indexOf('id="portalAccountSummary"'), 'real cards are outside the sample disclosure');
-  const cards = cardIds.map(id => ({ id, hidden: id !== 'portalWellnessTile' }));
-  h.elements.portalWellnessSample = { open: true, addEventListener(type, callback) { listeners[type] = callback; } };
-  h.elements.portalAccountSummary = { hidden: false, children: cards };
-  h.elements.portalPreviewReturn = { addEventListener(type, callback) { listeners.return = callback; } };
-  h.elements.portalPreviewToggle = { focus() { focused++; } };
-  const visible = () => cards.filter(card => !card.hidden).map(card => card.id);
+  assert.doesNotMatch(html, /portalWellnessSample|Preview a filled-out portal \(sample data\)/);
+  const bannerIdx = html.indexOf('id="portalQaSampleBanner"');
+  assert.ok(bannerIdx > 0 && bannerIdx < html.indexOf('id="portalAccountSummary"'), 'QA sample banner sits above the summary grid');
+  let eventsFilterListener = null;
+  let supportFilterListener = null;
+  h.elements.portalEventsFilter = { value: 'all', addEventListener(type, cb) { if (type === 'change') eventsFilterListener = cb; } };
+  h.elements.portalSupportFilter = { value: 'all', addEventListener(type, cb) { if (type === 'change') supportFilterListener = cb; } };
   const history = Object.freeze([Object.freeze({ created_at: '2026-10-01', score: 20 }), Object.freeze({ created_at: '2026-10-12', score: 30 })]);
   h.context.renderWellness({ history, due: false });
   const before = JSON.stringify(rows(h.elements.portalWellnessHistoryRows));
-  h.context.initPortalSummaryPreview();
-  assert.equal(h.elements.portalWellnessSample.open, false);
-  assert.deepEqual(visible(), cardIds);
-  h.elements.portalWellnessSample.open = true;
-  listeners.toggle();
-  assert.deepEqual(visible(), ['portalWellnessTile'], 'samples replace the other cards; real check-ins stay');
-  assert.equal(h.elements.portalAccountSummary.hidden, false, 'the grid that holds the real wellness card is never hidden');
-  listeners.return();
-  assert.equal(h.elements.portalWellnessSample.open, false);
-  assert.deepEqual(visible(), cardIds);
-  assert.equal(focused, 1);
+  h.context.initPortalSectionFilters();
+  assert.equal(typeof eventsFilterListener, 'function');
+  assert.equal(typeof supportFilterListener, 'function');
   assert.equal(JSON.stringify(rows(h.elements.portalWellnessHistoryRows)), before);
   assert.match(h.elements.portalWellnessTrend.children[0].attributes['aria-label'], /20, 30$/);
   assert.equal(h.calls.length, 0);
@@ -119,15 +115,14 @@ test('history dates/scores are text nodes rather than a health-data HTML injecti
   assert.equal(row.html, undefined);
 });
 
-test('sample disclosure is caregiver-visible, separate from the real check-in form, and has no submit control', () => {
+test('QA sample banner and in-section sample blocks are separate from the real check-in form and have no submit control', () => {
   assert.match(html, /View my saved check-in history/);
   assert.match(html, /latest 24 saved check-ins, oldest to newest/);
-  const sample = html.match(/<details[^>]+id="portalWellnessSample">([\s\S]*?)<\/details>/)?.[1];
-  assert.ok(sample);
-  assert.match(sample, /SAMPLE DATA/);
-  assert.match(sample, /preview adds no check-ins or scores/);
-  assert.doesNotMatch(sample, /<form|<input|data-action=/);
-  assert.match(sample, /id="portalPreviewReturn">Return to my records/);
+  const banner = html.match(/<p[^>]+id="portalQaSampleBanner"[^>]*>([\s\S]*?)<\/p>/)?.[1];
+  assert.ok(banner);
+  assert.match(banner, /SAMPLE DATA — QA \/ TEST PREVIEW INCLUDED/);
+  assert.match(banner, /never create registrations, support requests, wellness history, notifications or payments/);
+  assert.doesNotMatch(banner, /<form|<input|data-action=/);
 });
 
 test('next social ignores past, invalid and nonregistered entries; real account data stays unchanged', () => {
@@ -182,7 +177,7 @@ test('card copy distinguishes account registrations, the public calendar/library
 
 test('dashboard cards follow the requested order; wellness is a full-width card; grant and socials cards are gone', () => {
   const gridStart = html.indexOf('id="portalAccountSummary"');
-  const sample = html.indexOf('id="portalWellnessSample"');
+  const sample = html.indexOf('id="portalQaSampleBanner"');
   assert.ok(gridStart > 0 && sample < gridStart);
   const grid = html.slice(gridStart, html.indexOf('</section>', gridStart));
   const order = ['My Profile &amp; Intake', 'My Support', 'My Events', 'My Wellness', 'My Resources', 'Sanctuary Updates &amp; Perks'];
@@ -198,16 +193,29 @@ test('dashboard cards follow the requested order; wellness is a full-width card;
   assert.match(styles, /@media \(max-width: 700px\)[\s\S]*#dashView \.portal-summary-grid[^}]*grid-template-columns: minmax\(0, 1fr\)/);
 });
 
-test('whole-portal examples remain opt-in, fictional, outside actual records and have no write controls', () => {
-  const match = html.match(/<details([^>]+)id="portalWellnessSample">([\s\S]*?)<\/details>/);
-  assert.ok(match); assert.doesNotMatch(match[1], /\bopen(?:\s|=|$)/);
-  assert.match(match[2], /Preview a filled-out portal \(sample data\)/);
-  for (const area of ['profile', 'support', 'events', 'resources']) assert.match(match[2], new RegExp(`data-portal-sample="${area}"`));
-  assert.doesNotMatch(match[2], /data-portal-sample="(?:grant|socials)"/);
-  assert.match(match[2], /fictional illustrations, not your records/);
-  assert.match(match[2], /Nothing here registers you or sends a request/);
-  assert.doesNotMatch(match[2], /<form\b|<input\b|data-action=|href="(?:\/api|https?:)/);
-  assert.doesNotMatch(match[2], /data-portal-sample="wellness"|portalWellnessSampleTrend|out of 100/);
-  assert.equal((match[2].match(/Sample registration/g) || []).length, 3);
-  for (const id of ['portalEventsList', 'portalProfileName', 'portalWellnessHistoryRows', 'portalWellnessForm']) assert.equal(match[2].includes(`id="${id}"`), false, id);
+test('in-section QA sample previews are hidden by default for ordinary caregivers, fictional, and have no write controls', () => {
+  for (const id of ['portalQaSampleBanner', 'portalProfileSampleNote', 'portalResourcesSampleNote', 'portalUpdatesSampleNote']) {
+    const tag = html.match(new RegExp(`<(?:p|div)[^>]+id="${id}"[^>]*>`));
+    assert.ok(tag, id);
+    assert.match(tag[0], /\bhidden(?:\s|>|$)/, `${id} hidden by default`);
+  }
+  for (const area of ['profile', 'resources', 'updates']) {
+    const block = html.match(new RegExp(`<(p|div)[^>]+data-portal-sample="${area}"[^>]*>([\\s\\S]*?)<\\/\\1>`));
+    assert.ok(block, area);
+    assert.match(block[2], /SAMPLE \/ TEST/);
+    assert.doesNotMatch(block[2], /<form\b|<input\b|<button\b|data-action=|href="(?:\/api|https?:)/);
+  }
+  assert.doesNotMatch(html, /data-portal-sample="(?:grant|socials|wellness)"|portalWellnessSampleTrend/);
+  const h = ui();
+  h.context.renderPortalData({ profile: {}, events: [], grants: [] });
+  assert.equal(h.elements.portalQaSampleBanner.hidden, true);
+  assert.equal(h.elements.portalProfileSampleNote.hidden, true);
+  assert.equal(h.elements.portalResourcesSampleNote.hidden, true);
+  assert.equal(h.elements.portalUpdatesSampleNote.hidden, true);
+  h.context.renderPortalData({ profile: {}, events: [], grants: [], qa_samples: true });
+  assert.equal(h.elements.portalQaSampleBanner.hidden, false);
+  assert.equal(h.elements.portalProfileSampleNote.hidden, false);
+  assert.equal(h.elements.portalResourcesSampleNote.hidden, false);
+  assert.equal(h.elements.portalUpdatesSampleNote.hidden, false);
+  assert.equal(h.elements.portalWellnessTrend.children.length, 0, 'no fictional wellness scores');
 });

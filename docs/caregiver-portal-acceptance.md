@@ -1,5 +1,55 @@
 # Caregiver Portal — what "done" means
 
+## Staging QA caregiver in-section sample preview — November 4, 2026
+
+[pc2-gemini-ct-5] Source replaces the collapsed `Preview a filled-out portal (sample data)`
+disclosure on `portal.html` with immediate, clearly labeled `[SAMPLE]` / `SAMPLE / TEST`
+items inside the normal signed-in caregiver dashboard sections and section filters
+for the verified preview QA caregiver identity only (`matchesPreviewQACaregiver` in
+`GET /api/portal/me` returns `qa_samples: true`). Ordinary caregivers and production
+sessions do not receive `qa_samples` and keep all sample banners, notes and entries
+hidden (`hidden`).
+
+When `qa_samples: true` is present on `/api/portal/me`:
+
+- `#portalQaSampleBanner` appears immediately above the summary grid without opening
+  a collapsed `<details>` toggle.
+- **My Events** (`#portalEventsList`) renders the caregiver's real event registrations
+  alongside five read-only `[SAMPLE]` entries (three upcoming across `memory_social`,
+  `support_group` and `wellness` with status `registered`, and two past across
+  `caregiver_event` and `memory_social` with status `attended`), with
+  `#portalEventsFilter` filtering across `all`, `upcoming`, `past`, event types, `real`
+  and `sample`.
+- **My Support** (`#portalSupportHistoryRows`) renders the caregiver's real support
+  requests alongside three read-only `[SAMPLE]` entries across `in_progress`,
+  `received` and `completed` statuses, with `#portalSupportFilter` filtering across
+  `all`, status values, `real` and `sample`.
+- **For you right now** (`#portalHighlightsList`) renders account-level summary
+  highlights (the caregiver's next registered real event and wellness due notice,
+  plus the labeled `[SAMPLE / TEST]` upcoming event and in-progress support follow-up
+  summary when `qa_samples: true`) independent of list category/status filters
+  (`upcoming`, `past`, event type or support status): setting `#portalEventsFilter`
+  to `real` excludes both sample highlights, while setting `#portalSupportFilter` to
+  `real` excludes the sample support follow-up summary and leaves the sample
+  upcoming-event highlight governed by `#portalEventsFilter`.
+- **My Profile & Intake**, **My Resources**, and **Sanctuary Updates & Perks** display
+  labeled read-only placement previews (`#portalProfileSampleNote`,
+  `#portalResourcesSampleNote`, `#portalUpdatesSampleNote`) while preserving real
+  profile fields and resource links.
+- **My Wellness** (`#portalWellnessTile`) remains strictly real check-ins only, with
+  zero fictional wellness scores or chart points.
+- Sample event and support rows carry `data-portal-sample-item="event"` and
+  `data-portal-sample-item="support"`, contain no forms, inputs, buttons or
+  `data-action` attributes, and never create registrations, support requests, wellness
+  history, notifications or payments.
+- Confirmed sign-out (`portalLogout`), non-`signed_in` session checks
+  (`checkPortalSession`), and changed or absent `/api/portal/me` profile identities
+  clear and scope cached real support rows, sample state, filter selections and
+  highlights, and fence delayed async support/wellness completions by session
+  generation and caregiver identity key while preserving same-identity unresolved
+  support request reconciliation. No database seeding, schema migration, mail or
+  production profile selection is introduced in this staging source increment.
+
 ## Populated summary preview — October 30, 2026
 
 [pc2-codex-42] Jacob requested a populated layout example without adding wellness
