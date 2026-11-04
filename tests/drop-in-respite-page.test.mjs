@@ -33,7 +33,7 @@ const descendants = el => [el, ...el.children.flatMap(descendants)];
 const text = el => descendants(el).map(item => item.textContent).join(' ');
 
 test('the header has the heading, lede and only How it works; details carry the time and full address', () => {
-  assert.match(page, /<h1>FREE Drop-In Respite<\/h1>/);
+  assert.match(page, /<h1>Drop-In Respite Program<\/h1>/, 'requester, Nov 4: no FREE in the header');
   assert.match(page, /<p class="lede">A Break for You\. Meaningful Moments for Your Loved One\.<\/p>\s*<div class="btn-row">\s*<a href="#how-it-works" class="btn btn-outline-light">How it works<\/a>\s*<\/div>/);
   // Requester, Nov 3 19:54Z: no FREE / Every Third Thursday / 10–2 bubbles in the header.
   assert.doesNotMatch(page, /respite-facts/);
@@ -45,7 +45,7 @@ test('the header has the heading, lede and only How it works; details carry the 
 });
 
 test('the requested sections are present in order, and Memory Social and grant references are gone', () => {
-  const order = ['FREE Drop-In Respite', 'Program Details', 'What Makes Our Respite Different?', 'Upcoming Respite Sessions', 'How It Works', 'Bring Respite to Your Faith Community'];
+  const order = ['Drop-In Respite Program', 'Program Details', 'What Makes Our Respite Different?', 'Upcoming Respite Sessions', 'How It Works', 'Bring Respite to Your Faith Community'];
   const positions = order.map(heading => page.indexOf(heading));
   assert.ok(positions.every(p => p > 0), 'every section exists');
   assert.deepEqual([...positions].sort((a, b) => a - b), positions, 'sections follow the requested order');
