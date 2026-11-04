@@ -1,5 +1,53 @@
 # Caregiver Portal — what "done" means
 
+## Staging QA caregiver in-section sample preview — November 4, 2026
+
+[pc2-gemini-ct-5] Source replaces the collapsed `Preview a filled-out portal (sample data)`
+disclosure on `portal.html` with immediate, clearly labeled `[SAMPLE]` / `SAMPLE / TEST`
+items inside the normal signed-in caregiver dashboard sections and section filters
+for the verified preview QA caregiver identity only (`matchesPreviewQACaregiver` in
+`GET /api/portal/me` returns `qa_samples: true`). Ordinary caregivers and production
+sessions do not receive `qa_samples` and keep all sample banners, notes and entries
+hidden (`hidden`).
+
+When `qa_samples: true` is present on `/api/portal/me`:
+
+- `#portalQaSampleBanner` appears immediately above the summary grid without opening
+  a collapsed `<details>` toggle.
+- **My Events** (`#portalEventsList`) renders the caregiver's real event registrations
+  alongside five read-only `[SAMPLE]` entries (three upcoming across `memory_social`,
+  `support_group` and `wellness` with status `registered`, and two past across
+  `caregiver_event` and `memory_social` with status `attended`), with
+  `#portalEventsFilter` filtering across `all`, `upcoming`, `past`, event types, `real`
+  and `sample`.
+- **My Support** (`#portalSupportHistoryRows`) renders the caregiver's real support
+  requests alongside three read-only `[SAMPLE]` entries across `in_progress`,
+  `received` and `completed` statuses, with `#portalSupportFilter` filtering across
+  `all`, status values, `real` and `sample`.
+- **For you right now** (`#portalHighlightsList`) renders account-level summary
+  highlights (the caregiver's next registered real event and wellness due notice,
+  plus the labeled `[SAMPLE / TEST]` upcoming event and in-progress support follow-up
+  summary when `qa_samples: true`) independent of list category/status filters
+  (`upcoming`, `past`, event type or support status), while excluding sample
+  highlights whenever `#portalEventsFilter` or `#portalSupportFilter` is set to `real`.
+- **My Profile & Intake**, **My Resources**, and **Sanctuary Updates & Perks** display
+  labeled read-only placement previews (`#portalProfileSampleNote`,
+  `#portalResourcesSampleNote`, `#portalUpdatesSampleNote`) while preserving real
+  profile fields and resource links.
+- **My Wellness** (`#portalWellnessTile`) remains strictly real check-ins only, with
+  zero fictional wellness scores or chart points.
+- Sample event and support rows carry `data-portal-sample-item="event"` and
+  `data-portal-sample-item="support"`, contain no forms, inputs, buttons or
+  `data-action` attributes, and never create registrations, support requests, wellness
+  history, notifications or payments.
+- Confirmed sign-out (`portalLogout`), non-`signed_in` session checks
+  (`checkPortalSession`), and changed or absent `/api/portal/me` profile identities
+  clear and scope cached real support rows, sample state, filter selections and
+  highlights, and fence delayed async support/wellness completions by session
+  generation and caregiver identity key while preserving same-identity unresolved
+  support request reconciliation. No database seeding, schema migration, mail or
+  production profile selection is introduced in this staging source increment.
+
 ## Populated summary preview — October 30, 2026
 
 [pc2-codex-42] Jacob requested a populated layout example without adding wellness
@@ -396,3 +444,33 @@ results, each needing its own evidence:
 
 Source/unit checks do not prove deployment, rendering, a live request, email delivery
 or portal entry. [pc2-claude-ct-2]
+
+## Dashboard redesign: capability map (October 30)
+
+Requested by Legacy (Shanelle, Slack 2026-10-30 20:55Z). The dashboard is reorganized
+into a warm welcome (“Welcome to Your Sanctuary, [First Name]!” plus subtitle), a
+highlights strip and six rounded cards, using only existing account data:
+
+| Card / item | Source today | Status |
+|---|---|---|
+| Welcome name | `/api/portal/me` `profile.first_name` | works |
+| My Profile & Intake | `profile` name, email, phone, membership (read-only) | works read-only; **profile updates and intake forms are not built** (no portal update/intake endpoint) |
+| My Support | link to the existing Request Support form | **request history/status not built** (no portal read of follow-ups; see unmerged #162) |
+| My Events | `/me` `events`: non-cancelled registrations for published events of any type, split upcoming/past (America/Chicago) | works for **event registrations** (Events page), including Memory Social and support-group *events*. Programs-page support-group sign-ups are follow-ups, not registrations, and do **not** appear |
+| My Wellness | `/api/portal/wellness` history, due flag and questions | works (renamed from “My Wellness (check-ins)”) |
+| My Resources | link to the public Resource Hub | works as a link; **saved resources and a Bookmark button are not built** (needs a per-member table, endpoints and UI) |
+| Sanctuary Updates & Perks | none | **not built** (no announcement or benefit source) |
+| Highlight: next registered event | earliest future `registered` registration | works |
+| Highlight: wellness check-in | wellness `due` | works |
+| Highlight: intake reminder, latest announcement | none | **not shown** (no real data; nothing invented) |
+
+Removed from the dashboard: the Wellness Grant card (program restructuring, Phase 2;
+the API still returns grants and staff tools are unchanged) and the separate Memory
+Socials card (Memory Socials now appear inside My Events). The in-dashboard sample
+toggle now mirrors the new cards without grant/socials examples.
+
+**Design review without sign-in:** `/portal?preview=sample` renders the real layout
+with clearly labeled fictional data (banner, no session, no API request, no submit
+control, no fictional wellness scores). This exists because caregiver sign-in mail is
+off on staging. It is not account data and proves only layout, not authenticated use.
+[pc2-claude-ct-2]

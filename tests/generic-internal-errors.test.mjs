@@ -147,7 +147,8 @@ test('functions/api/agent/[[path]].js handles unexpected database error with gen
     target_id: 1,
     request: 'Update review notes'
   });
-  const resPost = await postAgent({ request: reqPost, env: { LEGACY_DB: throwingDb } });
+  // Use a server-only inert proposal mapper; provider-backed draft entry is now503.
+  const resPost = await postAgent({ request: reqPost, env: { LEGACY_DB: throwingDb, AGENT_MAPPER_BACKEND: () => ({ok:true}) } });
   await assertGenericInternalError(resPost);
 });
 
