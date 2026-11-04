@@ -309,7 +309,7 @@ test('O26-02/03/04: Sanctuary, About, and Get Involved place hero text over supp
   const sanctuaryHero = sanctuaryHtml.match(/<section class="hero has-media client-video-hero[^"]*">([\s\S]*?)<\/section>/)?.[1];
   assert.ok(sanctuaryHero, 'Sanctuary hero section must exist');
   assert.doesNotMatch(sanctuaryHero, /caregiver-sanctuary-logo\.png|client-sanctuary-wordmark|client-video-layout|client-video-panel/);
-  assert.match(sanctuaryHero, /<video class="hero-media" muted loop playsinline data-motion-autoplay preload="metadata" width="720" height="1280" tabindex="0" aria-label="Caregiver Sanctuary community video \(select to pause or play\)">/);
+  assert.match(sanctuaryHero, /<video class="hero-media" muted loop playsinline data-motion-autoplay data-playback-rate="0\.4" preload="metadata" width="720" height="1280" tabindex="0" aria-label="Caregiver Sanctuary community video \(select to pause or play\)">/);
   assert.doesNotMatch(sanctuaryHero, /\sautoplay(?:\s|>)/, 'motion preference is checked before playback');
   assert.match(sanctuaryHero, /<source src="media\/client-oct16\/sanctuary-video-1-trimmed\.mp4\?v=[0-9a-f]{12}#t=0\.1" type="video\/mp4">/);
   assert.match(sanctuaryHero, /<div class="hero-scrim" aria-hidden="true"><\/div>\s*<div class="container hero-content">/);
@@ -327,7 +327,14 @@ test('O26-02/03/04: Sanctuary, About, and Get Involved place hero text over supp
     const story = aboutHtml.match(/<section id="story">([\s\S]*?)<\/section>/)?.[1];
     assert.ok(story, `${rel}: About story section must exist`);
     assert.match(story, /<figure class="about-story-photo">\s*<img src="media\/client-oct16\/about-family-img-1846\.jpg" alt="[^"]+" width="2058" height="1474"/);
-    assert.match(story, /id="mission"/, 'the values block and its #mission anchor stay in the story section');
+    // Nov 3 request: the "What guides us" values block, its Mission & Vision card and the
+    // Mission & Vision menu/footer links are removed.
+    assert.doesNotMatch(aboutHtml, /about-values-row|What guides us|Real rest, not lip service|id="mission"|Mission &amp; Vision/);
+    // Nov 3 request: About's Supporters section shows the same supporters as the home page.
+    const logos = html => html.match(/<ul class="client-partner-logos" aria-label="[^"]+">([\s\S]*?)<\/ul>/)?.[1];
+    const home = loadFile(rel.replace('about', 'index'));
+    assert.ok(logos(aboutHtml) && logos(aboutHtml) === logos(home), `${rel}: About supporters match the home page`);
+    assert.doesNotMatch(aboutHtml.slice(aboutHtml.indexOf('id="supporters"'), aboutHtml.indexOf('id="contact"')), /Content coming|will be recognized here/);
     assert.match(aboutHtml, /<figure class="client-founder-photo">\s*<img src="media\/client-oct16\/founder-img-7045\.jpg"/);
   }
 

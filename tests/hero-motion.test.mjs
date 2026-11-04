@@ -76,3 +76,37 @@ test('without native controls, a click or Enter/Space toggles playback', () => {
   handlers.keydown({ key: 'a', preventDefault() { throw new Error('unexpected'); } });
   assert.equal(video.plays, 2);
 });
+
+function mountRate(dataset) {
+  const video = { dataset, playbackRate: 1, defaultPlaybackRate: 1 };
+  runInNewContext(source, {
+    document: { querySelectorAll: (sel) => sel === 'video[data-playback-rate]' ? [video] : [] },
+    window: { matchMedia: () => ({ matches: false, addEventListener() {} }) },
+  });
+  return video;
+}
+
+test('a header video with data-playback-rate plays at that slower rate, including after reload', () => {
+  const video = mountRate({ playbackRate: '0.75' });
+  assert.equal(video.playbackRate, 0.75);
+  assert.equal(video.defaultPlaybackRate, 0.75);
+});
+
+test('a missing, zero, negative, faster-than-normal or non-numeric rate leaves normal speed', () => {
+  for (const value of [undefined, '0', '-1', '1.5', 'slow']) {
+    const video = mountRate(value === undefined ? {} : { playbackRate: value });
+    assert.equal(video.playbackRate, 1);
+    assert.equal(video.defaultPlaybackRate, 1);
+  }
+});
+
+test('Home, Drop-In Respite and Sanctuary header videos ask for 0.4x speed (requester: half, then a little slower, Nov 3)', () => {
+  for (const page of ['index', 'drop-in-respite']) {
+    const html = readFileSync(new URL(`../templates/${page}.html.j2`, import.meta.url), 'utf8');
+    assert.match(html, /<video class="hero-video"[^>]*data-playback-rate="0\.4"/);
+  }
+  // sanctuary.html is a hand-maintained shared page, not a template.
+  const sanctuary = readFileSync(new URL('../sanctuary.html', import.meta.url), 'utf8');
+  assert.match(sanctuary, /<video class="hero-media"[^>]*data-motion-autoplay data-playback-rate="0\.4"/);
+  assert.match(sanctuary, /<script src="app\.js\?v=[0-9a-f]+"><\/script>/);
+});
