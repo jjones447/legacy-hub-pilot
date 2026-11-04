@@ -158,3 +158,77 @@ export async function apply(db, { id, operation, payload = {} }, actor, addition
     profile: updatedProfile
   };
 }
+
+// Record-only staff creation: intake is intentionally not reused because it enrolls or
+// creates follow-up work. Keep all rows, including archived matches, for staff review.
+const CREATE_FIELDS = ['first_name', 'last_name', 'email', 'phone'];
+const PHONE_DIGITS_SQL = "replace(replace(replace(replace(replace(replace(TRIM(COALESCE(phone, '')), ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), '.', '')";
+const CONTACT_MATCH_SQL = `((? != '' AND LOWER(TRIM(COALESCE(email, ''))) = ?) OR (? != '' AND ${PHONE_DIGITS_SQL} = ?))`;
+
+async function matchingCaregivers(db, email, phoneDigits, actorKey) {
+  const { results } = await db.prepare(`SELECT id, first_name, last_name, email, phone, status FROM caregiver
+    WHERE ${CONTACT_MATCH_SQL} AND EXISTS (SELECT 1 FROM staff_member WHERE email = ?
+      AND status = 'active' AND role IN ('staff', 'admin')) ORDER BY created_at, id LIMIT 10`)
+    .bind(email, email, phoneDigits, phoneDigits, actorKey).all();
+  return results || [];
+}
+
+export async function create(db, payload, actor) {
+  const actorKey = String(actor || '').trim().toLowerCase();
+  const member = await db.prepare('SELECT role, status FROM staff_member WHERE email = ?')
+    .bind(actorKey).first();
+  if (!member || member.status !== 'active' || !['staff', 'admin'].includes(member.role)) {
+    return { ok: false, status: 403, error: 'An active staff account is required to add a caregiver.' };
+  }
+  if (!payload || Array.isArray(payload) || typeof payload !== 'object' ||
+      Object.keys(payload).some(key => !CREATE_FIELDS.includes(key))) {
+    return { ok: false, status: 400, error: 'Use only name, email and phone for a new caregiver record.' };
+  }
+  const input = {};
+  for (const key of CREATE_FIELDS) {
+    if (payload[key] !== undefined && typeof payload[key] !== 'string') {
+      return { ok: false, status: 400, error: 'Name and contact fields must be text.' };
+    }
+    input[key] = (payload[key] || '').trim();
+    if (/[\u0000-\u001f\u007f]/.test(input[key]) || input[key].length > ({ email: 254, phone: 40 }[key] || 120)) {
+      return { ok: false, status: 400, error: 'Use a shorter name or contact without control characters.' };
+    }
+  }
+  input.email = input.email.toLowerCase();
+  if (!input.first_name || (!input.email && !input.phone)) {
+    return { ok: false, status: 400, error: 'Enter a first name and at least one email address or phone number.' };
+  }
+  const phoneDigits = input.phone.replace(/\D/g, '');
+  if ((input.email && !/^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(input.email)) ||
+      (input.phone && (/[^0-9+(). -]/.test(input.phone) || phoneDigits.length < 7 || phoneDigits.length > 20))) {
+    return { ok: false, status: 400, error: 'Enter a valid email address or phone number.' };
+  }
+  const matches = await matchingCaregivers(db, input.email, phoneDigits, actorKey);
+  if (matches.length) return { ok: false, status: 409, error: 'Matching caregiver records already exist. Open the existing person; their history is preserved.', matches };
+  const id = 'cg_' + crypto.randomUUID();
+  const results = await db.batch([
+    db.prepare(`INSERT INTO caregiver (id, first_name, last_name, email, phone, source)
+      SELECT ?, ?, ?, ?, ?, 'staff' WHERE EXISTS (
+        SELECT 1 FROM staff_member WHERE email = ? AND status = 'active' AND role IN ('admin', 'staff')
+      ) AND NOT EXISTS (SELECT 1 FROM caregiver WHERE ${CONTACT_MATCH_SQL})`)
+      .bind(id, input.first_name, input.last_name || null, input.email || null, input.phone || null,
+        actorKey, input.email, input.email, phoneDigits, phoneDigits),
+    db.prepare(`INSERT INTO audit_log (actor, action, entity, entity_id, after_json)
+      SELECT ?, 'caregiver.created', 'caregiver', ?, ? WHERE changes() = 1`)
+      .bind(actorKey, id, JSON.stringify({ source: 'staff', sanctuary_member: 0 })),
+  ]);
+  if (results?.[0]?.meta?.changes === 0) {
+    const currentMatches = await matchingCaregivers(db, input.email, phoneDigits, actorKey);
+    return currentMatches.length
+      ? { ok: false, status: 409, error: 'Matching caregiver records already exist. Open the existing person; their history is preserved.', matches: currentMatches }
+      : { ok: false, status: 403, error: 'Your staff access changed. Refresh your account before adding a caregiver.' };
+  }
+  if (!Array.isArray(results) || results.some(r => r.success !== true || r.meta?.changes !== 1)) {
+    return { ok: false, status: 503, error: 'The save could not be confirmed. Search for this contact before trying again.' };
+  }
+  const profile = await db.prepare(`SELECT * FROM caregiver WHERE id = ? AND EXISTS (
+    SELECT 1 FROM staff_member WHERE email = ? AND status = 'active' AND role IN ('staff', 'admin')
+  )`).bind(id, actorKey).first();
+  if (!profile) return { ok: false, status: 503, error: 'The saved record could not be loaded. Search for this contact before trying again.' };
+  return { ok: true, status: 201, profile };
+}
