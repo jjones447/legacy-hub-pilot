@@ -6,7 +6,7 @@
 <title>Legacy Hub · Staff console</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=5a365152da35">
+<link rel="stylesheet" href="styles.css?v=2b6f2324db1e">
 <link rel="icon" href="favicon.ico" sizes="32x32">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -39,6 +39,29 @@
       <p id="staffStatusLine" class="staff-status-line">Loading status…</p>
       <button type="button" class="btn btn-sm btn-outline staff-assistant-toggle" id="staffAssistantToggle" aria-expanded="false" aria-controls="staffAssistantPanel">Open Legacy Assistant</button>
     </div>
+
+    <details class="panel" id="staffHelpPanel">
+      <summary><strong>Help &amp; quick review</strong></summary>
+      <p class="small mt-16">Start with the task you need. Use your own approved staff account; caregiver sign-in is separate.</p>
+      <h3 class="mt-16">Everyday tasks</h3>
+      <ul class="small">
+        <li><strong>Find a person:</strong> Open <strong>People &amp; access</strong>, choose Caregivers or Staff &amp; admins, then search. Check the name and contact details before editing. Only admins manage staff access; adding staff does not send an invitation.</li>
+        <li><strong>Review a request:</strong> Open an item in <strong>Alerts</strong> and check its linked caregiver. Viewing a request does not complete it. A contact entry records an interaction; it does not send a message.</li>
+        <li><strong>Manage an event:</strong> In <strong>Events</strong>, create a draft or edit an existing event. Check its date, time and registration destination. Publish only when approved, then check the <a href="events.html">public Events page</a>.</li>
+        <li><strong>Change website wording:</strong> Open <strong>Legacy Assistant</strong>, turn on <strong>Guided modification</strong> and describe the page and wording. Read the complete preview before confirming once. <strong>Site content</strong> offers direct wording edits; its save changes published content immediately.</li>
+        <li><strong>Check a result:</strong> Reopen the intended record or page and check <strong>Change log</strong>. If a save or confirmation is unclear, stop and ask the administrator to check it before retrying or using Undo.</li>
+      </ul>
+      <h3 class="mt-16">Explain the caregiver view</h3>
+      <p class="small">The <a href="portal.html">Caregiver Portal</a> shows the signed-in person's profile, registered events and wellness information, with a link to the <a href="resources.html">Resource Hub</a>. Profile editing, intake forms, support history, saved resources and perks are marked Coming soon. Programs-page support-group sign-ups do not appear in My Events. Coaching interest does not book a session.</p>
+      <p class="small">Request a sign-in link once and follow the new email yourself if it arrives. A request confirmation does not prove delivery.</p>
+      <h3 class="mt-16">Quick review checklist</h3>
+      <ol class="small">
+        <li>Confirm which site you are reviewing and the intended task. Check the page on a phone and a wider screen.</li>
+        <li>Check wording, dates, links and empty states. Use the designated test account and approved fictional information for practice; do not use a real caregiver record.</li>
+        <li>For a planned save, use only the administrator's approved fictional example. Save once, reopen it and verify the result. Stop if the outcome is unclear.</li>
+        <li>Report what worked, what failed and the message shown to Legacy or Jacob at X-Centric support. Share no sign-in links, codes or private caregiver details. Approve the specific preview before requesting its release.</li>
+      </ol>
+    </details>
 
     <div id="assistantHandoffRegion"></div>
     <section id="staffAssistantPanel" class="staff-assistant-panel" aria-labelledby="staffAssistantHeading" hidden>
@@ -88,6 +111,30 @@
               <option value="admin">Admins</option>
             </select>
             <button type="button" class="btn btn-sm btn-plum" data-action="search-caregivers">Search people</button>
+            <button type="button" class="btn btn-sm btn-outline" data-action="open-people-add" aria-controls="peopleAddPanel" aria-expanded="false">Add person</button>
+          </div>
+          <div id="peopleAddPanel" class="d-none mt-16" role="region" aria-label="Add a person">
+            <p class="small muted">Search first to avoid creating another record for the same person. Caregiver records and staff access remain separate.</p>
+            <div class="staff-btn-group">
+              <button type="button" class="btn btn-sm btn-plum" data-action="open-caregiver-create">Add caregiver record</button>
+              <button type="button" id="addStaffFromPeopleBtn" class="btn btn-sm btn-outline d-none" data-action="open-staff-create">Add staff member (admin)</button>
+              <button type="button" class="btn btn-sm btn-outline" data-action="close-people-add">Close</button>
+            </div>
+            <p id="peopleAddMessage" class="small muted" role="status" aria-live="polite"></p>
+            <form id="addCaregiverForm" data-action="submit-add-caregiver" class="d-none mt-16">
+              <p class="small muted">This saves a caregiver record only. It does not enroll them in the Sanctuary, record consent, grant staff access, send an invitation or create follow-up work.</p>
+              <div class="form-row-compact">
+                <label>First name <input name="first_name" maxlength="120" class="form-input-compact" required></label>
+                <label>Last name <input name="last_name" maxlength="120" class="form-input-compact"></label>
+              </div>
+              <div class="form-row-compact">
+                <label>Email <input name="email" type="email" maxlength="254" class="form-input-compact"></label>
+                <label>Phone <input name="phone" type="tel" maxlength="40" class="form-input-compact"></label>
+              </div>
+              <p class="small muted">At least one email address or phone number is required. Matching contacts, including archived records, are shown for review instead of being overwritten.</p>
+              <button type="submit" class="btn btn-sm btn-plum">Check and add caregiver</button>
+              <div data-add-caregiver-message role="status" aria-live="polite" class="small mt-8"></div>
+            </form>
           </div>
         <div role="region" id="staffTeamPanel" class="d-none" aria-labelledby="staffListHeading">
           <div class="flex-between-center mb-12">
@@ -141,23 +188,25 @@
         </div>
         </details>
 
-        <div class="panel">
-          <h4>📥 Needs attention</h4>
-          <p class="small muted mb-12">Open follow-ups and action items requiring staff review.</p>
+        <details class="panel staff-section" id="needsAttentionPanel" open>
+          <summary><h4 class="staff-section-heading">📥 Alerts</h4> <span class="staff-section-count small muted" id="needsAttentionCount">(loading…)</span></summary>
+          <p class="small muted mb-12" id="needsAttentionHelp">Open follow-ups and action items requiring staff review. Each row is open and needs follow-up, such as a support request or an event registration to confirm. Choose a row to open the caregiver record. <strong>Mark complete</strong> records that the follow-up is done and removes it from this open list. It does not send an email and does not delete the caregiver or any history.</p>
+          <p class="small staff-section-message" id="needsAttentionMessage" role="status" aria-live="polite"></p>
           <table class="data">
             <thead><tr><th>Caregiver</th><th>Item</th><th>Status</th></tr></thead>
             <tbody id="needsAttentionBody">
               <tr><td colspan="3" class="text-center muted small">Loading follow-ups...</td></tr>
             </tbody>
           </table>
-        </div>
+        </details>
 
-        <div class="panel" id="eventsPanel">
-          <div class="flex-between-center mb-12">
-            <h4 class="m-0">📅 Upcoming events</h4>
+        <details class="panel staff-section" id="eventsPanel" open>
+          <summary><h4 class="staff-section-heading">📅 Events</h4> <span class="staff-section-count small muted" id="eventsCount">(loading…)</span></summary>
+          <div class="staff-section-tools">
+            <p class="small muted m-0">Schedule, manage, and take attendance for community events and respite sessions.</p>
             <button class="btn btn-sm btn-plum" id="newEventToggleBtn">+ New Event</button>
           </div>
-          <p class="small muted mb-12">Schedule, manage, and take attendance for community events and respite sessions.</p>
+          <p class="small muted mb-12" id="eventLifecycleHelp"><strong>Unpublish</strong> hides a published event from the public calendar and returns it to draft. Its details and registrations are kept, and you can publish it again. <strong>Archive</strong> retires the event for good: its details, registrations and history are kept and it stays off the public calendar, but it cannot be published again and there is no restore. If people are registered, you are asked to confirm first. Neither action emails anyone or deletes anything.</p>
           <div id="newEventContainer" class="d-none mb-16"></div>
           <table class="data">
             <thead><tr><th>Event</th><th>Date</th><th>Status</th><th>Registered</th><th>Actions</th></tr></thead>
@@ -166,19 +215,21 @@
             </tbody>
           </table>
           <div id="editEventContainer" class="d-none mt-16"></div>
-        </div>
+        </details>
 
-        <div class="panel d-none-mt-24" id="attendancePanel">
-          <h4>👥 Event Attendance</h4>
+        <details class="panel staff-section d-none-mt-24" id="attendancePanel" open>
+          <summary><h4 class="staff-section-heading">👥 Event Attendance</h4></summary>
           <p class="small muted mb-12">Capture attendance for registered caregivers.</p>
           <div id="attendanceContent"></div>
-        </div>
+        </details>
 
-        <div class="panel" id="grantsPanel">
-          <div class="staff-panel-header-bar">
-            <h4 class="mb-0">🎁 Wellness Grants</h4>
-            <select id="grantsStatusFilter" class="staff-filter-select-sm">
+        <details class="panel staff-section" id="grantsPanel" open>
+          <summary><h4 class="staff-section-heading">🎁 Wellness Grants</h4> <span class="staff-section-count small muted" id="grantsCount">(loading…)</span></summary>
+          <div class="staff-section-tools">
+            <p class="small muted m-0">Track grant applications from review through award, course completion, and closeout.</p>
+            <select id="grantsStatusFilter" class="staff-filter-select-sm" aria-label="Show grant applications">
               <option value="">All statuses</option>
+              <option value="active">Active (all except closed)</option>
               <option value="submitted">Submitted</option>
               <option value="in_review">In review</option>
               <option value="awarded">Awarded</option>
@@ -187,18 +238,18 @@
               <option value="declined">Declined</option>
             </select>
           </div>
-          <p class="small muted mb-12">Track grant applications from review through award, course completion, and closeout.</p>
+          <p class="small muted mb-12" id="grantActionsHelp">Choose <strong>Open application</strong> to go to the caregiver record. The review, award, decline, course-complete and close steps for each application are there. <strong>Close</strong> is the final closeout after course completion or a decline; it is not an archive or delete. Grant applications cannot be archived or deleted.</p>
           <table class="data">
-            <thead><tr><th>Caregiver</th><th>Requested For</th><th>Status</th><th>Award</th></tr></thead>
+            <thead><tr><th>Caregiver</th><th>Requested For</th><th>Status</th><th>Award</th><th>Actions</th></tr></thead>
             <tbody id="grantsTableBody">
-              <tr><td colspan="4" class="text-center muted small">Loading grants...</td></tr>
+              <tr><td colspan="5" class="text-center muted small">Loading grants...</td></tr>
             </tbody>
           </table>
-        </div>
+        </details>
 
-        <div class="panel" id="wellnessPanel">
-          <div class="flex-between-center mb-12">
-            <h4 class="m-0">Caregiver wellness</h4>
+        <details class="panel staff-section" id="wellnessPanel" open>
+          <summary><h4 class="staff-section-heading">Caregiver wellness</h4> <span class="staff-section-count small muted" id="wellnessCount">(loading…)</span></summary>
+          <div class="staff-section-tools">
             <button class="btn btn-sm btn-outline" id="refreshWellnessBtn">Refresh</button>
           </div>
           <p class="small muted mb-12">Caregivers submit wellness check-ins through their own portal accounts. Only caregivers with recorded check-ins appear in this list; adding a staff account does not add a caregiver here. This chart summarizes those check-ins, not a diagnosis or a measure of improvement. Choose a caregiver to show their chart.</p>
@@ -220,6 +271,32 @@
           </div>
           <div id="wellnessChart" class="wellness-chart">
             <p class="muted small text-center my-20">No check-ins yet.</p>
+          </div>
+        </details>
+
+        <div class="panel" id="subscribersPanel" role="region" aria-labelledby="subscribersHeading">
+          <div class="flex-between-center mb-12">
+            <h4 class="m-0" id="subscribersHeading">Subscribers</h4>
+            <a class="btn btn-sm btn-outline" id="subscribersCsvLink" href="/api/staff/subscribers.csv" download>Download CSV</a>
+          </div>
+          <p class="small muted mb-12">People who joined the email list from the home page. This list is read-only: joining does not create a caregiver record, and nothing here sends email. Download CSV exports every currently subscribed address; each download is recorded in the audit log.</p>
+          <p class="small" id="subscribersCounts" role="status" aria-live="polite">Loading subscribers…</p>
+          <div class="staff-search-controls">
+            <input type="search" id="subscribersSearchQuery" class="staff-search-input" placeholder="Search email or first name" aria-label="Search subscribers">
+            <select id="subscribersStatusFilter" class="staff-search-select" aria-label="Filter subscribers by status">
+              <option value="">All statuses</option>
+              <option value="subscribed">Subscribed</option>
+              <option value="unsubscribed">Unsubscribed</option>
+            </select>
+            <button type="button" class="btn btn-sm btn-plum" id="subscribersSearchBtn">Search subscribers</button>
+          </div>
+          <div class="people-results-scroll" tabindex="0" role="region" aria-label="Subscriber list">
+            <table class="data">
+              <thead><tr><th>Email</th><th>First name</th><th>Status</th><th>Joined</th></tr></thead>
+              <tbody id="subscribersTableBody">
+                <tr><td colspan="4" class="text-center muted small">Loading subscribers...</td></tr>
+              </tbody>
+            </table>
           </div>
         </div>
 
@@ -267,9 +344,9 @@
   </div>
 </footer>
 
-<script src="app.js?v=b6d1a39f0a32"></script>
+<script src="app.js?v=062b2842fd65"></script>
 <script src="nav-v2.js"></script>
-<script src="staff.js?v=1d47fe2bec6c"></script>
+<script src="staff.js?v=1b66154ad8a5"></script>
 </body>
 </html>
 

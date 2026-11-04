@@ -6,6 +6,9 @@ import * as eventsDomain from '../../_lib/domain/events.js';
 import { getStaffMember, listStaff, updateStaffMember, createStaffMember } from '../../_lib/staff.js';
 import { staffSeries, caregiversWithCheckins } from '../../_lib/wellness.js';
 import { _resetContentCache } from '../../_content.mjs';
+import { customerActivity } from '../../_lib/customer-activity.mjs';
+import { SUPPORT_SOURCE, enrichStaffFollowups, getStaffSupportState, handleStaffSupportMutation } from '../../_lib/portal-support.js';
+import { listSubscribers, subscribedForExport, subscribersCsv } from '../../_lib/newsletter.mjs';
 
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), {
@@ -36,7 +39,8 @@ export async function onRequestGet({ request, env }) {
         ORDER BY COALESCE(f.due, f.created_at) ASC, f.created_at ASC
       `).all();
 
-      return json({ ok: true, queue: results });
+      const { followups: enrichedQueue, shanelleInboxCount } = await enrichStaffFollowups(env.LEGACY_DB, results || []);
+      return json({ ok: true, queue: enrichedQueue, shanelle_support_inbox_count: shanelleInboxCount });
     }
 
     if (subRoute === 'caregiver') {
@@ -99,12 +103,18 @@ export async function onRequestGet({ request, env }) {
         ORDER BY occurred_at DESC, created_at DESC
       `).bind(caregiverId).all();
 
+      const { followups: enrichedFollowups } = await enrichStaffFollowups(
+        env.LEGACY_DB,
+        followups || [],
+        { includeReporting: true }
+      );
+
       return json({
         ok: true,
         profile,
         registrations,
         grants,
-        followups,
+        followups: enrichedFollowups,
         notes,
         contact_history
       });
@@ -257,11 +267,16 @@ export async function onRequestGet({ request, env }) {
         };
       });
 
-      return json({
+      const releases = customerActivity();
+      const response = json({
         ok: true,
         changes: enriched,
-        recent_changes: enriched
+        recent_changes: enriched,
+        release_activity: releases.entries,
+        release_activity_as_of: releases.as_of,
       });
+      response.headers.set('Cache-Control', 'no-store');
+      return response;
     }
 
     if (subRoute === 'events') {
@@ -278,6 +293,36 @@ export async function onRequestGet({ request, env }) {
       `).all();
 
       return json({ ok: true, events: results });
+    }
+
+    if (subRoute === 'subscribers' || subRoute === 'subscribers.csv') {
+      // GET /api/staff/subscribers[?q=&status=&limit=] -- email list (schema/0020), read-only.
+      // GET /api/staff/subscribers.csv (or ?format=csv) -- every subscribed address as CSV.
+      // Never returns unsubscribe tokens. Staff-only: /api/staff/ is behind the Access guard.
+      if (pathSegments.length !== 3) return json({ ok: false, error: 'unsupported route' }, 404);
+      if (subRoute === 'subscribers.csv' || url.searchParams.get('format') === 'csv') {
+        const rows = await subscribedForExport(env.LEGACY_DB);
+        await env.LEGACY_DB.prepare(`
+          INSERT INTO audit_log (actor, action, entity, after_json) VALUES (?, 'subscriber.export', 'email_subscriber', ?)
+        `).bind(getActor(request, env), JSON.stringify({ rows: rows.length })).run();
+        const date = new Date().toISOString().slice(0, 10);
+        return new Response('﻿' + subscribersCsv(rows), {
+          status: 200,
+          headers: {
+            'content-type': 'text/csv; charset=utf-8',
+            'content-disposition': `attachment; filename="legacy-email-subscribers-${date}.csv"`,
+            'cache-control': 'no-store',
+          },
+        });
+      }
+      const list = await listSubscribers(env.LEGACY_DB, {
+        q: url.searchParams.get('q') || '',
+        status: url.searchParams.get('status') || '',
+        limit: url.searchParams.get('limit') || 200,
+      });
+      const response = json({ ok: true, ...list });
+      response.headers.set('Cache-Control', 'no-store');
+      return response;
     }
 
     if (subRoute === 'me') {
@@ -313,6 +358,36 @@ export async function onRequestPost({ request, env }) {
     const url = new URL(request.url);
     const pathSegments = url.pathname.split('/').filter(Boolean);
 
+    if (pathSegments.length === 3 && pathSegments[2] === 'caregivers') {
+      // Browser-only record creation; separate from enrollment/intake and staff access.
+      if (request.headers.get('Origin') !== url.origin ||
+          ![null, 'same-origin'].includes(request.headers.get('Sec-Fetch-Site'))) {
+        return json({ ok: false, error: 'Refresh the staff page before adding a person.' }, 403);
+      }
+      if ((request.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase() !== 'application/json') {
+        return json({ ok: false, error: 'Use a JSON record.' }, 415);
+      }
+      const reader = request.body?.getReader();
+      if (!reader) return json({ ok: false, error: 'Enter a caregiver record.' }, 400);
+      let body;
+      try {
+        const chunks = []; let size = 0;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          size += value.byteLength;
+          if (size > 4096) { await reader.cancel(); return json({ ok: false, error: 'The record is too large.' }, 413); }
+          chunks.push(value);
+        }
+        const bytes = new Uint8Array(size); let offset = 0;
+        for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+        body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+      } catch { return json({ ok: false, error: 'Enter a valid caregiver record.' }, 400); }
+      finally { reader.releaseLock(); }
+      const result = await caregiversDomain.create(env.LEGACY_DB, body, getActor(request, env));
+      return json(result, result.status);
+    }
+
     if (pathSegments.length === 3 && pathSegments[2] === 'team') {
       let body;
       try {
@@ -336,7 +411,7 @@ export async function onRequestPost({ request, env }) {
 
       // Fetch followup status
       const followup = await env.LEGACY_DB.prepare(`
-        SELECT status, caregiver_id FROM followup WHERE id = ?
+        SELECT status, caregiver_id, source FROM followup WHERE id = ?
       `).bind(id).first();
 
       if (!followup) {
@@ -351,6 +426,20 @@ export async function onRequestPost({ request, env }) {
       const targetStatus = body.status || 'done';
       if (!['done', 'dismissed'].includes(targetStatus)) {
         return json({ ok: false, error: "status must be 'done' or 'dismissed'" }, 400);
+      }
+
+      if (followup.source === SUPPORT_SOURCE) {
+        if (targetStatus === 'dismissed') {
+          return json({ ok: false, error: 'managed_support_request_cannot_dismiss' }, 409);
+        }
+        const managed = await handleStaffSupportMutation(env.LEGACY_DB, getActor(request, null), id, {
+          status: 'completed',
+          expected_version: body.expected_version,
+        });
+        if (!managed.ok) {
+          return json({ ok: false, error: managed.error }, managed.status);
+        }
+        return json({ ok: true, support_request: managed.support_request });
       }
 
       // Status and its original audit must commit together or not at all.
@@ -370,6 +459,25 @@ export async function onRequestPost({ request, env }) {
       ]);
 
       return json({ ok: true });
+    }
+
+    // 1b. POST /api/staff/followup/:id/support — managed My Support lifecycle, assignment & private notes
+    if (pathSegments.length === 5 && pathSegments[2] === 'followup' && pathSegments[4] === 'support') {
+      const id = parseInt(pathSegments[3], 10);
+      if (isNaN(id)) {
+        return json({ ok: false, error: 'invalid followup id' }, 400);
+      }
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return json({ ok: false, error: 'invalid JSON body' }, 400);
+      }
+      const result = await handleStaffSupportMutation(env.LEGACY_DB, getActor(request, null), id, body);
+      if (!result.ok) {
+        return json({ ok: false, error: result.error }, result.status);
+      }
+      return json({ ok: true, support_request: result.support_request }, result.status);
     }
 
     // 2. POST /api/staff/caregiver/:id/contact
