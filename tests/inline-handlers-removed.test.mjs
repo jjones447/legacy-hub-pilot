@@ -172,6 +172,11 @@ test('exact call wiring: every action branch calls its expected function and exc
     'caregiver-edit': 'openCaregiverEditor()',
     'select-event': 'selectEvent(id, title)',
     'search-caregivers': 'searchCaregivers(0)',
+    'open-people-add': 'openPeopleAdd()',
+    'close-people-add': 'closePeopleAdd()',
+    'open-caregiver-create': 'openCaregiverCreate()',
+    'open-staff-create': 'openStaffCreate()',
+    'submit-add-caregiver': 'submitAddCaregiver(form)',
     'search-prev': 'searchPrev()',
     'search-next': 'searchNext()',
   };

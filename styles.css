@@ -1414,3 +1414,26 @@ main ul.measure-620 { margin: 16px 0; padding-left: 24px; }
 
 /* Portal: one-time membership hand-off status (pc2-claude-ct-2, Oct 30). Visible when not [hidden]. */
 .portal-handoff-note { margin: 0 0 12px; padding: 10px 12px; border-radius: 6px; background: #f3f4f6; color: #374151; font-size: 14px; }
+
+/* Staff panel disclosures; no layout or business-flow changes outside these sections. */
+.staff-section > summary { cursor: pointer; }
+.staff-section > summary .staff-section-heading { display: inline; margin: 0; }
+.staff-section > summary:focus-visible { outline: 2px solid var(--plum); outline-offset: 2px; border-radius: 4px; }
+.staff-section[open] > summary { margin-bottom: 12px; }
+.staff-section-count { margin-left: 4px; }
+.staff-section-tools { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 12px; margin-bottom: 12px; }
+.staff-section-tools > :last-child { margin-left: auto; }
+
+/* About: the family photo sits beside "From One Family's Journey…" uncropped (requested Nov 1), not in the hero. */
+.about-story-photo { margin: 0; }
+.about-story-photo img { display: block; width: 100%; height: auto; border-radius: 16px; }
+
+/* Drop-In Respite (Nov 3 rebuild): program details, numbered steps. */
+.respite-intro { display: grid; grid-template-columns: 1.2fr 1fr; gap: 48px; align-items: start; }
+@media (max-width: 900px) { .respite-intro { grid-template-columns: 1fr; gap: 28px; } }
+.respite-details-list { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; margin: 0 0 20px; }
+.respite-details-list dt { font-weight: 700; color: var(--plum-dark); }
+.respite-details-list dd { margin: 0; color: var(--ink); }
+.respite-details-list address { font-style: normal; font-weight: 600; }
+.respite-note { color: var(--ink-soft); margin-top: 8px; }
+.respite-steps { list-style: none; padding: 0; margin: 24px 0 0; }
