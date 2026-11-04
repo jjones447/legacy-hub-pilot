@@ -6,7 +6,7 @@
 <title>Legacy Hub · Staff console</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=c7d36481a9f5">
+<link rel="stylesheet" href="styles.css?v=2b6f2324db1e">
 <link rel="icon" href="favicon.ico" sizes="32x32">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -274,6 +274,32 @@
           </div>
         </details>
 
+        <div class="panel" id="subscribersPanel" role="region" aria-labelledby="subscribersHeading">
+          <div class="flex-between-center mb-12">
+            <h4 class="m-0" id="subscribersHeading">Subscribers</h4>
+            <a class="btn btn-sm btn-outline" id="subscribersCsvLink" href="/api/staff/subscribers.csv" download>Download CSV</a>
+          </div>
+          <p class="small muted mb-12">People who joined the email list from the home page. This list is read-only: joining does not create a caregiver record, and nothing here sends email. Download CSV exports every currently subscribed address; each download is recorded in the audit log.</p>
+          <p class="small" id="subscribersCounts" role="status" aria-live="polite">Loading subscribers…</p>
+          <div class="staff-search-controls">
+            <input type="search" id="subscribersSearchQuery" class="staff-search-input" placeholder="Search email or first name" aria-label="Search subscribers">
+            <select id="subscribersStatusFilter" class="staff-search-select" aria-label="Filter subscribers by status">
+              <option value="">All statuses</option>
+              <option value="subscribed">Subscribed</option>
+              <option value="unsubscribed">Unsubscribed</option>
+            </select>
+            <button type="button" class="btn btn-sm btn-plum" id="subscribersSearchBtn">Search subscribers</button>
+          </div>
+          <div class="people-results-scroll" tabindex="0" role="region" aria-label="Subscriber list">
+            <table class="data">
+              <thead><tr><th>Email</th><th>First name</th><th>Status</th><th>Joined</th></tr></thead>
+              <tbody id="subscribersTableBody">
+                <tr><td colspan="4" class="text-center muted small">Loading subscribers...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
 
 
         <details class="panel" id="recentChangesPanel">
@@ -318,9 +344,9 @@
   </div>
 </footer>
 
-<script src="app.js?v=198847b808e9"></script>
+<script src="app.js?v=2a2834b36e59"></script>
 <script src="nav-v2.js"></script>
-<script src="staff.js?v=0c5ecb48d0e8"></script>
+<script src="staff.js?v=de648f2f048a"></script>
 </body>
 </html>
 

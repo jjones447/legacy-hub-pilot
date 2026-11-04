@@ -143,6 +143,8 @@ test('exact call wiring: every action branch calls its expected function and exc
     'submit-coaching-interest': 'submitCoachingInterest(e)',
     'submit-support-group-interest': 'submitSupportGroupInterest(e)',
     'submit-register': 'submitRegister(e)',
+    'submit-email-list': 'submitEmailList(e)',
+    'submit-unsubscribe': 'submitUnsubscribe(e)',
     'open-membership': 'openMembership()',
     'close-membership': 'closeMembership()',
     'open-grant-apply': 'openGrantApply()',

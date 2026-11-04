@@ -3,12 +3,15 @@
 // in tests/intake.test.mjs against the real schema via node:sqlite.
 import { isSupportGroup, validateSupportGroupSession } from '../_lib/support-group-session.mjs';
 import { SUPPORT_SOURCE } from '../_lib/portal-support.js';
+import { handleNewsletter, validateNewsletter } from '../_lib/newsletter.mjs';
 
-export const INTAKE_KINDS = ['support_request', 'membership', 'event_registration', 'grant_application'];
+// 'newsletter' (email list, schema/0019) writes only email_subscriber: no caregiver record.
+export const INTAKE_KINDS = ['support_request', 'membership', 'event_registration', 'grant_application', 'newsletter'];
 
 export function validateIntake(body) {
   if (!body || typeof body !== 'object') return 'body must be a JSON object';
   if (!INTAKE_KINDS.includes(body.kind)) return `kind must be one of ${INTAKE_KINDS.join(', ')}`;
+  if (body.kind === 'newsletter') return validateNewsletter(body);
   if (!body.first_name || typeof body.first_name !== 'string') return 'first_name is required';
   if (!body.email && !body.phone) return 'email or phone is required';
   if (!body.external_ref || typeof body.external_ref !== 'string') return 'external_ref is required';
@@ -32,6 +35,9 @@ const KIND_TABLE = {
 };
 
 export async function handleIntake(db, body) {
+  // Email-list sign-ups keep the intake conventions (validation, IP limit, idempotency on
+  // (source, external_ref)) but never touch caregiver, followup or any email sender.
+  if (body && typeof body === 'object' && body.kind === 'newsletter') return handleNewsletter(db, body);
   const err = validateIntake(body);
   if (err) return { status: 400, body: { ok: false, error: err } };
 
@@ -165,6 +171,7 @@ export async function handleIntake(db, body) {
 export const IP_LIMITS = {
   portalLogin: { action: 'portal.login_ip', limit: 20, windowMinutes: 15 },
   intake: { action: 'intake.submit_ip', limit: 10, windowMinutes: 60 },
+  unsubscribe: { action: 'unsubscribe.submit_ip', limit: 20, windowMinutes: 60 },
 };
 
 async function sha256Hex(text) {

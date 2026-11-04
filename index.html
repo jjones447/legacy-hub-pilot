@@ -7,7 +7,7 @@
 <meta name="description" content="Supporting dementia caregivers through community, wellness, and respite.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=c7d36481a9f5">
+<link rel="stylesheet" href="styles.css?v=2b6f2324db1e">
 <link rel="icon" href="favicon.ico" sizes="32x32">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -387,6 +387,35 @@
   </div>
 </div>
 
+<section class="home-email-list" id="email-list" aria-labelledby="emailListHeading">
+  <div class="container">
+    <div class="email-list-card">
+      <span class="eyebrow">Email list</span>
+      <h2 id="emailListHeading" class="mb-12">Join our email list</h2>
+      <p class="muted">Occasional news about Legacy events, caregiver resources and community updates.</p>
+      <form id="emailListForm" data-action="submit-email-list" method="post" action="#email-list">
+        <div class="field">
+          <label for="emailListFirstName">First name <span class="muted small">(optional)</span></label>
+          <input id="emailListFirstName" type="text" autocomplete="given-name" maxlength="100">
+        </div>
+        <div class="field">
+          <label for="emailListEmail">Email address</label>
+          <input id="emailListEmail" type="email" autocomplete="email" maxlength="254" required aria-required="true">
+        </div>
+        <p class="privacy-line" id="emailListConsent">By joining, you agree to receive occasional emails from Legacy. You can unsubscribe anytime.</p>
+        <!-- Fail closed without the script (#302 review P3): the inputs have no name, so a native
+             submission carries no personal data; the form uses POST, never a URL query; and the
+             button stays disabled until app.js has wired the JSON sign-up. -->
+        <button type="submit" class="btn btn-coral w-100" aria-describedby="emailListConsent" disabled>Join the email list</button>
+        <p class="small muted" data-email-list-not-ready>The sign-up needs JavaScript to be turned on. You can also ask Legacy to add you through the <a href="about.html#contact">contact information</a>.</p>
+        <p data-email-list-pending role="status" aria-live="polite" hidden>Adding you to the email list. Please wait; don't submit it again.</p>
+        <div class="success-note" data-intake-success role="status" aria-live="polite" tabindex="-1">Thank you. We've received your request to join the Legacy email list. If you previously unsubscribed and want to rejoin, please <a href="about.html#contact">contact Legacy</a>.</div>
+        <div class="error-note" data-intake-error role="alert" aria-live="assertive" tabindex="-1"></div>
+      </form>
+    </div>
+  </div>
+</section>
+
 <section class="section-sand" id="donate">
   <div class="container text-center">
     <span class="eyebrow">Donate</span>
@@ -420,7 +449,7 @@
 </footer>
 
 
-<script src="app.js?v=198847b808e9"></script>
+<script src="app.js?v=2a2834b36e59"></script>
 <script src="nav-v2.js"></script>
 </body>
 </html>
