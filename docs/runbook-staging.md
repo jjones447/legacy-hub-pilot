@@ -1,5 +1,32 @@
 # Staging surface — historical preview runbook
 
+## Shared323 People Add source successor — November 3, 2026
+
+[pc2-codex-42] Source-only packaging adds the already-reviewed319 People Add delta
+(`0e43c4894a71aad134936dd9de780914c0a5f2b9`) to installed shared323
+(`e12b29983824371d935e5c76ca830c6e37c3a90c`). Existing design/home is the Staff
+People search area, `functions/_lib/domain/caregivers.js` create contract and the
+existing Staff caregivers POST route, as documented in the People Add sections
+below. The existing author42 packages this increment; Root41 independently reviews
+and selects any release. No replacement component or new operator is introduced.
+
+People Add code, locked DOM tests and dependency files are reused from319. The
+provider-off implementation/tests remain323; QA login, My Support and the portal
+remain323. The unit inventory is323 plus the existing People Add test. The package
+excludes isolated Respite/public-page325/326 changes and unaccepted327 dashboard
+samples. Compare this successor against323 rather than treating the public-main
+PR diff as its release scope.
+
+Retained controls: active Staff authorization at insertion/readback, strict
+first/last/email/phone input allowlist, atomic original audit, contact-duplicate
+refusal including archived matches, no overwrite/enrollment/invitation/email or
+consent side effects, and truthful idempotent retry after an uncertain response.
+Validation is Node unit/in-memory SQLite plus local JSDOM only; no real workerd,
+installed/browser/client acceptance, database migration, email or deployment is
+claimed. The next increment is independent exact-head review, followed by Root41's
+existing release selection and applicable installed acceptance. Do not deploy or
+merge this package to production from this source receipt.
+
 ## Canonical user-facing addresses — October 30
 
 [pc2-codex-41] Use `https://caregiversanctuary.org` for production and
@@ -209,3 +236,133 @@ not a new account move, alias recreation, repointing or client-message instructi
 
 Recreate this branch alias in the new account and re-point anything referencing it. The staging
 URL will change with the account; tell Shanelle before it does, not after.
+
+
+## People & access Add action — November 3, 2026
+
+Owner/author: pc2-codex-42; independent review and release acceptance: pc2-codex-41.
+Canonical acceptance: [Legacy54 request6610139845](https://github.com/jjones447/legacy-caregiver-hub/issues/54#issuecomment-6610139845).
+Stage: built source candidate with deterministic fixture evidence; not installed/live/client accepted.
+
+Discovery/reuse: People search and the focused caregiver view already live in staff.html/staff.js.
+The existing admin-only `createStaffMember` in functions/_lib/staff.js remains the staff writer.
+The caregiver domain module supported updates but no record-only create. Public intake is unsuitable
+because it enrolls or creates follow-up work. The new `create` operation therefore belongs in the
+existing functions/_lib/domain/caregivers.js, reached only through POST /api/staff/caregivers.
+This extends the proven UI/domain/runbook foundation; it adds no service or orchestration layer.
+
+Add person sits beside Search people. Staff can choose Add caregiver record; active admins also
+get a shortcut that opens the existing Add staff member form. The server retains its admin guard.
+Caregiver fields are first/last name and email/phone only, requiring first name and one contact.
+The server checks normalized email or common phone formatting against ALL record statuses before
+creation and again inside the atomic insert. A match returns existing records for review, never
+merging, updating or restoring their history. Shared family contacts can therefore need staff review;
+this increment deliberately offers no duplicate override or automatic merge.
+
+Creation writes one caregiver with default nonmember state and one original audit atomically.
+It does not capture consent, enroll, grant staff access, send invitations or create follow-up work.
+Current active staff authorization gates the insert, both duplicate reads and saved-profile read.
+The browser-only endpoint requires exact origin, bounds JSON at4096 bytes and rejects extra fields.
+Confirmed saves show the normal person view/list; refusals and unknown results preserve entries.
+An unknown saved response can be recovered by contact search or duplicate readback without a second
+record. Existing staff creation/role rules remain separate from caregiver identity.
+
+Verification commands:
+
+```text
+npm run test:unit
+npm ci --ignore-scripts --no-audit --no-fund
+node --test tests/dom/staff-people-add.test.mjs
+python build.py --verify
+```
+
+Normal unit inventory explicitly includes people-add.test.mjs. The original main unit workflow,
+no-install guard and runtime dispatcher remain unchanged. DOM checks reuse exactly the pinned
+jsdom30.1.3 dependency/lock foundation independently reviewed in PR311/db1b3d5; the new People Add
+DOM workflow installs locked test dependencies with lifecycle scripts disabled. Nothing is imported
+by the served application. Fictional records use in-memory SQLite and actual delegated click/submit
+controls connected to the actual API handlers. No external fetch, mailbox, real browser, workerd,
+customer session or deployment is exercised; DOM success is not pixel/layout or live acceptance.
+
+Local source result:2014 unitPASS/0FAIL/0SKIP and5 DOMPASS/0FAIL/0SKIP, template verifyclean/diffcheck.
+Prepublication review caught and fixed unauthorized duplicate projection after access revocation;
+a focused test covers initial match, post-refused-insert match and saved-profile read. Initial full
+unit run also exposed action-map registration and incomplete DOM stubs; new actions are registered
+without weakening existing wiring assertions. Actual final-head hosted results are separate.
+
+Production base is cloud-main d810ef9 (tree identical to recorded production f8d7361e); this is a
+small standalone Add increment, not a staging-union promotion and not an amendment to311/312/313.
+The release owner must freshly reconcile the actual production package and selected311 panel delta,
+and regenerate staff cache hashes after integrating both. For staging313/QA-login successors, retain
+My Support and all auth/env/current-row fences; reconcile shared staff source and regenerate hashes,
+then run normal checks and the real-control fixture on the exact combined candidate. No stale-base
+file overwrite or inference that this source candidate includes those other increments.
+
+Recovery: preserve the prior package and normal rollback custody. No schema migration/configuration
+is added. Rolling back UI/API does not remove legitimately created people or original audits; use
+normal review/archive workflows rather than deleting history. Installation and own-user acceptance
+remain with the existing publisher/root41, and customer data changes are outside this source task.
+
+
+### Staging integration of People Add over approved313
+
+Separate source candidate authored by42 for41 independent delta review; original314 stays frozen.
+Inputs: approved31397f0779 (Staff306, Alerts/Events310, MySupport309a722) plus accepted314fb419b4.
+This is source assembly, not a claim of current installation. No installed313 successor was present
+in the inspected cloud receipts; publisher must requalify actual installed baseline before selecting it.
+
+Keep both customer-activity and People Add entries in the explicit unit inventory; regenerate the
+Staff script hash. The merged submit dispatcher uses `action`, including the My Support triage arm;
+leaving its older `formAction` reference would break that real form. The helper-driven preference
+identity regression retains its isolated function fixture via the optional leaf UI hook. No MySupport
+core, portal/shared app, auth or mail/config/schema logic is changed by this integration.
+
+The inert test adapter now supplies SELECT results within db.batch, matching the existing MySupport
+canonical readback contract. An additional actual-HTML delegated control test creates a fictional
+support request through the existing core, clicks Mark in progress, submits the existing triage form,
+and verifies completed state, private note and original audits alongside Add and both labels. Its
+fictional JWT is a handler-only fixture, not evidence of verified Cloudflare Access or a live session.
+No provider or network is used.
+
+Release handoff: review this delta/normal checks, then original publisher/root41 select tester route
+and installed package. The separate QA-only login source/integration/walkthrough must proceed without
+waiting for this candidate, and is not merged or activated here. If the installed successor already
+includes QA auth, carry forward its exact env/current-row guards and selected source rather than
+replacing it with this older source base. Stop on drift and return the combined source for review.
+
+Integrated local result:2106unitPASS/0FAIL/0SKIP plus6DOMPASS/0FAIL/0SKIP, verifyclean/diffcheck.
+Tester handoff after review and separately selected installation: at the exact Staff staging URL,
+use the authorized Staff identity and fictional records to check Add beside Search, caregiver save
+and normal record, contact duplicate Open/history, retained entries on refusal, admin staff shortcut
+and nonadmin denial. Recheck the existing synthetic support queue/triage/history and both labels.
+Do not request a real sign-in link or use a customer identity from this Add-source task; QA-only
+login walkthrough stays with its current owner and exact package. Return installed ID/asset hashes,
+actual result and precise limitations separately from these source/fixture passes.
+
+
+### QA-enabled People Add successor on315
+
+Current source assembly starts exact reviewed3155d70122f1f518805adb73c2279398b667a0d5dac
+and layers reviewed3179b0e75ac27465ef1680b7f4b7fb13e3c4a9da4e5. This supersedes only the
+older313-based Add integration as the candidate to consider after the QA login release; originals
+remain frozen. Discovery found no existing successor branch/PR before this bounded authoring pass.
+Git merged these exact parents without a content conflict. No manual auth or MySupport source
+resolution was needed, and no selected source is silently replaced by its older parent.
+
+Exact315 parity: shared app/QA portal handler/policy reader/sender/support core/QA source guide/
+wrangler config. Exact317 parity: Staff JS/caregiver domain and Staff API route/Add unit and actual
+DOM tests/inert adapter/test dependency foundation. Shared Staff HTML preserves315 app hash and317
+Staff hash; explicit unit inventory keeps both QA suites and People Add. Generated build must verify.
+
+Qualification combines actual QA+production support allowed/denied handler tests with Add controls
+and existing Staff triage in the same source package. Source pass does not activate QA, send a link,
+create live records or qualify installed Access. The independent315 staging release and walkthrough
+continues without waiting for this successor. Review/checks first, then existing publisher/root41
+revalidate the actual installed315-or-successor target, bindings, in-flight publication and rollback;
+return a fresh combined source if drift exists. No deployment/settings/mail/customer action by42.
+
+Current QA-enabled successor local verification:2142 unitPASS/0FAIL/0SKIP and6actualDOMcontrols
+PASS/0FAIL/0SKIP; templateverifyclean/diffcheck. Both18-case QA suites and14-case originalSupport
+suite remain in the explicit unit run, alongside7record-only Add cases. The6DOMcases retain the
+real Staff queue/triage flow and caregiver/admin Add controls. Normal hosted checks and independent
+review on this exact new candidate remain separate; no source/CI result means installed acceptance.
