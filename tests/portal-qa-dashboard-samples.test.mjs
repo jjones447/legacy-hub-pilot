@@ -66,7 +66,7 @@ function makePortalDb() {
   };
 }
 
-function createPortalDashboardUi() {
+function createPortalDashboardUi({ fetchHandler = null } = {}) {
   class Element {
     constructor(tag = 'div') {
       this.tag = tag;
@@ -119,11 +119,12 @@ function createPortalDashboardUi() {
     addEventListener(type, fn) {
       this.listeners[type] = fn;
     }
+    focus() {}
     reset() {}
   }
 
   const ids = [
-    'loginView', 'dashView', 'portalDesignPreview', 'portalLogoutBtn',
+    'loginView', 'dashView', 'portalDesignPreview', 'portalLogoutBtn', 'portalLogoutStatus', 'loginStatus', 'loginEmail',
     'portalWelcome', 'portalProfileName', 'portalProfileEmail', 'portalProfilePhone', 'portalMembershipStatus',
     'portalQaSampleBanner', 'portalProfileSampleNote', 'portalResourcesSampleNote', 'portalUpdatesSampleNote',
     'portalHighlights', 'portalHighlightsList',
@@ -148,6 +149,7 @@ function createPortalDashboardUi() {
   el.portalWellnessHistory.open = true;
 
   const eventTimeSlice = APP_JS.slice(APP_JS.indexOf('function publicEventTime('), APP_JS.indexOf('function renderPublicEvents('));
+  const portalLoginLogoutSlice = APP_JS.slice(APP_JS.indexOf('function checkPortalSession('), APP_JS.indexOf('function renderPortalData('));
   const dashboardSlice = APP_JS.slice(APP_JS.indexOf('function renderPortalData('), APP_JS.indexOf('/* ---------- Staff console:'));
   const wellnessSlice = APP_JS.slice(APP_JS.indexOf('let wellnessQuestions ='), APP_JS.indexOf('function openWellnessForm('));
   const supportSlice = APP_JS.slice(
@@ -164,7 +166,8 @@ function createPortalDashboardUi() {
     Intl,
     URLSearchParams,
     crypto: globalThis.crypto,
-    window: { location: { search: '' } },
+    takePortalHandoff: () => null,
+    window: { location: { search: '' }, scrollTo() {} },
     document: {
       getElementById: id => el[id] || null,
       createElement: tag => new Element(tag),
@@ -173,6 +176,9 @@ function createPortalDashboardUi() {
     },
     fetch: async (...args) => {
       networkCalls.push(args);
+      if (typeof fetchHandler === 'function') {
+        return fetchHandler(...args);
+      }
       throw new Error('unexpected network call in synthetic UI render');
     },
     localStorage: {
@@ -181,7 +187,7 @@ function createPortalDashboardUi() {
   });
 
   vm.runInContext(
-    eventTimeSlice + '\n' + wellnessSlice + '\n' + dashboardSlice + '\n' + supportSlice,
+    eventTimeSlice + '\n' + wellnessSlice + '\n' + portalLoginLogoutSlice + '\n' + dashboardSlice + '\n' + supportSlice,
     context
   );
   context.initPortalSectionFilters();
@@ -596,4 +602,274 @@ test('reload stability, read-only sample safety, and second-caregiver isolation'
   assert.doesNotMatch(ui.el.portalEventsList.textContent, /SAMPLE \/ TEST/);
   assert.doesNotMatch(ui.el.portalSupportHistoryRows.textContent, /SAMPLE \/ TEST/);
   assert.equal(ui.el.portalHighlights.hidden, true);
+});
+
+test('session lifecycle: confirmed logout, changed/absent identity, failed/delayed history, and same-identity pending reconciliation', async () => {
+  let mePayload = {
+    ok: true,
+    qa_samples: true,
+    profile: { id: 'fictional-a', first_name: 'A', email: 'a@example.test' },
+    grants: [],
+    events: []
+  };
+  let supportResponse = {
+    ok: true,
+    requests: [{
+      request_id: 'req-a-1',
+      support_type: 'speak_with_team_member',
+      support_type_label: 'A PRIVATE FICTIONAL SUPPORT HISTORY',
+      status: 'received',
+      status_label: 'Received',
+      urgency_label: 'This week',
+      contact_preference_label: 'Email',
+      submitted_at: '2026-11-01T12:00:00Z',
+      last_status_updated_at: '2026-11-01T12:00:00Z'
+    }]
+  };
+  let supportShouldFail = false;
+  let delayedSupportResolve = null;
+  let delayedWellnessResolve = null;
+
+  const ui = createPortalDashboardUi({
+    fetchHandler: async (url) => {
+      if (url === '/api/portal/me') {
+        return {
+          status: 200,
+          ok: true,
+          redirected: false,
+          headers: { get: () => 'application/json' },
+          json: async () => mePayload
+        };
+      }
+      if (url === '/api/portal/logout') {
+        return {
+          status: 200,
+          ok: true,
+          redirected: false,
+          headers: { get: () => 'application/json' },
+          json: async () => ({ ok: true })
+        };
+      }
+      if (url === '/api/portal/support') {
+        if (delayedSupportResolve) {
+          return new Promise(resolve => {
+            delayedSupportResolve = resolve;
+          });
+        }
+        if (supportShouldFail) {
+          return {
+            status: 500,
+            ok: false,
+            headers: { get: () => 'application/json' },
+            json: async () => ({ ok: false })
+          };
+        }
+        return {
+          status: 200,
+          ok: true,
+          headers: { get: () => 'application/json' },
+          json: async () => supportResponse
+        };
+      }
+      if (url === '/api/portal/wellness') {
+        if (delayedWellnessResolve) {
+          return new Promise(resolve => {
+            delayedWellnessResolve = resolve;
+          });
+        }
+        return {
+          status: 200,
+          ok: true,
+          headers: { get: () => 'application/json' },
+          json: async () => ({ questions: [], history: [{ created_at: '2026-11-01T12:00:00Z', score: 85 }], due: false })
+        };
+      }
+      throw new Error(`unexpected fetch url: ${url}`);
+    }
+  });
+
+  const flushMicrotasks = async (rounds = 2) => {
+    for (let i = 0; i < rounds; i++) {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+  };
+
+  // 1. Session A (QA sample caregiver with 1 real support request)
+  ui.context.checkPortalSession();
+  await flushMicrotasks();
+
+  const totalSampleDomNodes = () =>
+    collectSampleNodes(ui.el.portalEventsList).length + collectSampleNodes(ui.el.portalSupportHistoryRows).length;
+
+  assert.equal(ui.el.dashView.style.display, 'block');
+  assert.equal(ui.el.portalProfileEmail.textContent, 'a@example.test');
+  assert.equal(vm.runInContext('portalQaSamplesActive', ui.context), true);
+  assert.equal(totalSampleDomNodes(), 8);
+  assert.equal(ui.el.portalQaSampleBanner.hidden, false);
+  assert.equal(vm.runInContext('portalSupportRealRequests.length', ui.context), 1);
+  assert.match(ui.el.portalSupportHistoryRows.textContent, /A PRIVATE FICTIONAL SUPPORT HISTORY/);
+
+  // Non-default filters before logout
+  ui.el.portalEventsFilter.value = 'upcoming';
+  ui.el.portalEventsFilter.listeners.change();
+  ui.el.portalSupportFilter.value = 'received';
+  ui.el.portalSupportFilter.listeners.change();
+
+  // 2. Confirmed logout clears sample state, sample DOM nodes, cached real requests, filter selections, and highlights
+  await ui.context.portalLogout();
+  assert.equal(ui.el.dashView.style.display, 'none');
+  assert.equal(vm.runInContext('portalQaSamplesActive', ui.context), false);
+  assert.equal(totalSampleDomNodes(), 0);
+  assert.equal(ui.el.portalQaSampleBanner.hidden, true);
+  assert.equal(ui.el.portalProfileSampleNote.hidden, true);
+  assert.equal(ui.el.portalResourcesSampleNote.hidden, true);
+  assert.equal(ui.el.portalUpdatesSampleNote.hidden, true);
+  assert.equal(ui.el.portalHighlights.hidden, true);
+  assert.equal(ui.el.portalHighlightsList.children.length, 0);
+  assert.equal(vm.runInContext('portalSupportRealRequests.length', ui.context), 0);
+  assert.equal(ui.el.portalEventsFilter.value, 'all');
+  assert.equal(ui.el.portalSupportFilter.value, 'all');
+
+  // 3. Second identity in same document with failed /api/portal/support GET must never resurrect caregiver A's history on filter change
+  mePayload = {
+    ok: true,
+    profile: { id: 'fictional-b', first_name: 'B', email: 'b@example.test' },
+    grants: [],
+    events: []
+  };
+  supportShouldFail = true;
+  ui.context.checkPortalSession();
+  await flushMicrotasks();
+
+  assert.equal(ui.el.portalProfileEmail.textContent, 'b@example.test');
+  assert.equal(vm.runInContext('portalQaSamplesActive', ui.context), false);
+  assert.equal(totalSampleDomNodes(), 0);
+  assert.equal(ui.el.portalSupportHistoryRows.textContent, 'Your support requests are not available right now.');
+
+  for (const nextFilter of ['received', 'in_progress', 'completed', 'real', 'all']) {
+    ui.el.portalSupportFilter.value = nextFilter;
+    ui.el.portalSupportFilter.listeners.change();
+    assert.equal(ui.el.portalSupportHistoryRows.textContent, 'Your support requests are not available right now.');
+    assert.equal(ui.el.portalSupportHistoryRows.textContent.includes('A PRIVATE FICTIONAL'), false);
+  }
+
+  // 4. Absent identity clears cached support rows, sample state, filter selections, and highlights
+  supportShouldFail = false;
+  mePayload = {
+    ok: true,
+    qa_samples: true,
+    profile: { id: 'fictional-a', first_name: 'A', email: 'a@example.test' },
+    grants: [],
+    events: []
+  };
+  ui.context.checkPortalSession();
+  await flushMicrotasks();
+  assert.equal(vm.runInContext('portalSupportRealRequests.length', ui.context), 1);
+
+  ui.context.renderPortalData({
+    ok: true,
+    profile: {},
+    grants: [],
+    events: []
+  });
+  assert.equal(vm.runInContext('portalQaSamplesActive', ui.context), false);
+  assert.equal(vm.runInContext('portalSupportRealRequests.length', ui.context), 0);
+  assert.equal(totalSampleDomNodes(), 0);
+  assert.equal(ui.el.portalHighlights.hidden, true);
+  assert.equal(ui.el.portalEventsFilter.value, 'all');
+  assert.equal(ui.el.portalSupportFilter.value, 'all');
+
+  // 5. Delayed async completions from a prior session are fenced and cannot repopulate current state
+  ui.context.renderPortalData({
+    ok: true,
+    qa_samples: true,
+    profile: { id: 'fictional-a', first_name: 'A', email: 'a@example.test' },
+    grants: [],
+    events: []
+  });
+  delayedSupportResolve = true;
+  delayedWellnessResolve = true;
+  const staleSupportPromise = ui.context.loadPortalSupport();
+  const staleWellnessPromise = ui.context.loadWellness();
+  await flushMicrotasks(2);
+  const resolveStaleSupport = delayedSupportResolve;
+  const resolveStaleWellness = delayedWellnessResolve;
+  delayedSupportResolve = null;
+  delayedWellnessResolve = null;
+
+  // Switch to caregiver B before Session A's support/wellness requests finish
+  ui.context.renderPortalData({
+    ok: true,
+    profile: { id: 'fictional-b', first_name: 'B', email: 'b@example.test' },
+    grants: [],
+    events: []
+  });
+  ui.context.renderPortalSupport({ ok: true, requests: [] });
+  ui.context.renderWellness({ history: [], due: true });
+
+  resolveStaleSupport({
+    status: 200,
+    ok: true,
+    headers: { get: () => 'application/json' },
+    json: async () => supportResponse
+  });
+  resolveStaleWellness({
+    status: 200,
+    ok: true,
+    headers: { get: () => 'application/json' },
+    json: async () => ({ questions: [], history: [{ created_at: '2026-11-01T12:00:00Z', score: 99 }], due: false })
+  });
+  const staleSupportResult = await staleSupportPromise;
+  await staleWellnessPromise;
+
+  assert.equal(staleSupportResult.stale, true);
+  assert.equal(vm.runInContext('portalSupportRealRequests.length', ui.context), 0);
+  assert.equal(ui.el.portalSupportHistoryRows.textContent.includes('A PRIVATE FICTIONAL'), false);
+  assert.equal(ui.el.portalWellnessHistoryRows.textContent.includes('99 out of 100'), false);
+
+  // 6. Same-identity unresolved request reconciliation is preserved across same-identity re-render
+  ui.context.renderPortalData({
+    ok: true,
+    qa_samples: true,
+    profile: { id: 'fictional-a', first_name: 'A', email: 'a@example.test' },
+    grants: [],
+    events: []
+  });
+  vm.runInContext(
+    `portalSupportPendingRequest = {
+      requestId: 'req-a-pending',
+      signature: 'respite_services|this_week|email||need help',
+      submittedAfterMs: 0,
+      unresolved: true
+    };`,
+    ui.context
+  );
+  // Re-rendering same caregiver A preserves portalSupportPendingRequest
+  ui.context.renderPortalData({
+    ok: true,
+    qa_samples: true,
+    profile: { id: 'fictional-a', first_name: 'A', email: 'a@example.test' },
+    grants: [],
+    events: []
+  });
+  assert.equal(vm.runInContext('Boolean(portalSupportPendingRequest && portalSupportPendingRequest.unresolved)', ui.context), true);
+
+  supportResponse = {
+    ok: true,
+    requests: [{
+      request_id: 'req-a-pending',
+      support_type: 'respite_services',
+      support_type_label: 'Respite Services',
+      status: 'received',
+      status_label: 'Received',
+      urgency_label: 'This week',
+      contact_preference_label: 'Email',
+      submitted_at: '2026-11-04T15:00:00Z',
+      last_status_updated_at: '2026-11-04T15:00:00Z'
+    }]
+  };
+  const reconciled = await ui.context.loadPortalSupport();
+  assert.equal(reconciled.ok, true);
+  assert.equal(vm.runInContext('portalSupportPendingRequest', ui.context), null);
+  assert.match(ui.el.portalSupportMsg.textContent, /Confirmed: your support request \(Respite Services\) was saved \(Received\)\./);
 });

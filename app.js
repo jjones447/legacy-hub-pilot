@@ -499,6 +499,8 @@ function checkPortalSession() {
   const dashView = document.getElementById('dashView');
   if (!loginView || !dashView) return; // not on portal page
 
+  const checkGen = typeof bumpPortalSessionGeneration === 'function' ? bumpPortalSessionGeneration() : 0;
+
   // Only a confirmed signed-out answer (HTTP 401) may start the one automatic sign-in
   // link request from a membership hand-off. A signed-in session discards the hand-off;
   // an unavailable or unreadable session check only prefills the email (manual send).
@@ -510,6 +512,7 @@ function checkPortalSession() {
       return { outcome: res.status === 401 ? 'signed_out' : 'unavailable' };
     })
     .then(function (result) {
+      if (typeof portalSessionGeneration === 'number' && checkGen && checkGen !== portalSessionGeneration) return;
       if (result.outcome === 'signed_in') {
         takePortalHandoff(); // discard: an existing session wins, nothing is sent
         renderPortalData(result.data);
@@ -518,12 +521,15 @@ function checkPortalSession() {
         loginView.style.display = 'none';
         dashView.style.display = 'block';
       } else {
+        if (typeof resetPortalSessionState === 'function') resetPortalSessionState();
         dashView.style.display = 'none';
         loginView.style.display = 'block';
         continueMembershipHandoff(result.outcome === 'signed_out' ? 'auto' : 'manual');
       }
     })
     .catch(function () {
+      if (typeof portalSessionGeneration === 'number' && checkGen && checkGen !== portalSessionGeneration) return;
+      if (typeof resetPortalSessionState === 'function') resetPortalSessionState();
       dashView.style.display = 'none';
       loginView.style.display = 'block';
       continueMembershipHandoff('manual');
@@ -647,6 +653,7 @@ function portalLogout() {
     })
     .then(function (data) {
       if (!data || data.ok !== true) throw new Error('logout_unconfirmed');
+      if (typeof resetPortalSessionState === 'function') resetPortalSessionState();
       const loginView = document.getElementById('loginView');
       const dashView = document.getElementById('dashView');
       const statusDiv = document.getElementById('loginStatus');
@@ -675,9 +682,39 @@ function portalLogout() {
 
 function renderPortalData(data) {
   const safeData = data || {};
-  portalQaSamplesActive = Boolean(safeData.qa_samples === true);
-  portalRealEvents = Array.isArray(safeData.events) ? safeData.events.slice() : [];
   const profile = safeData.profile || {};
+  const nextCaregiverKey = portalProfileIdentityKey(profile);
+  const nextQaSamples = Boolean(safeData.qa_samples === true);
+  const identityChanged = !nextCaregiverKey ||
+    nextCaregiverKey !== portalActiveCaregiverKey ||
+    nextQaSamples !== portalQaSamplesActive ||
+    (portalSupportCacheCaregiverKey && portalSupportCacheCaregiverKey !== nextCaregiverKey);
+  if (identityChanged) {
+    portalSessionGeneration += 1;
+    portalEventsFilterState = 'all';
+    portalSupportRealRequests = [];
+    portalSupportCacheCaregiverKey = nextCaregiverKey;
+    portalSupportHistoryUnavailable = false;
+    portalSupportFilterState = 'all';
+    if (typeof portalSupportPendingRequest !== 'undefined') {
+      portalSupportPendingRequest = null;
+    }
+    if (typeof portalSupportProfileContact !== 'undefined') {
+      portalSupportProfileContact = { email: '', phone: '' };
+    }
+    const eventsFilter = document.getElementById('portalEventsFilter');
+    if (eventsFilter) eventsFilter.value = 'all';
+    const supportFilter = document.getElementById('portalSupportFilter');
+    if (supportFilter) supportFilter.value = 'all';
+    const rowsEl = document.getElementById('portalSupportHistoryRows');
+    if (rowsEl && !nextQaSamples) {
+      rowsEl.textContent = 'Your saved support requests will appear here.';
+    }
+    portalHighlightState.wellnessDue = false;
+  }
+  portalActiveCaregiverKey = nextCaregiverKey;
+  portalQaSamplesActive = nextQaSamples;
+  portalRealEvents = Array.isArray(safeData.events) ? safeData.events.slice() : [];
   const welcome = document.getElementById('portalWelcome');
   if (welcome) {
     const first = typeof profile.first_name === 'string' ? profile.first_name.trim() : '';
@@ -761,11 +798,67 @@ function renderPortalData(data) {
   }
 }
 
+var portalSessionGeneration = 0;
+var portalActiveCaregiverKey = '';
 var portalQaSamplesActive = false;
 var portalRealEvents = [];
 var portalEventsFilterState = 'all';
 var portalSupportRealRequests = [];
+var portalSupportCacheCaregiverKey = '';
+var portalSupportHistoryUnavailable = false;
 var portalSupportFilterState = 'all';
+
+function bumpPortalSessionGeneration() {
+  portalSessionGeneration += 1;
+  return portalSessionGeneration;
+}
+
+function portalProfileIdentityKey(profile) {
+  if (!profile || typeof profile !== 'object') return '';
+  const id = typeof profile.id === 'string' ? profile.id.trim() : '';
+  const email = typeof profile.email === 'string' ? profile.email.trim().toLowerCase() : '';
+  const first = typeof profile.first_name === 'string' ? profile.first_name.trim() : '';
+  const last = typeof profile.last_name === 'string' ? profile.last_name.trim() : '';
+  if (id || email) return id + '|' + email;
+  if (first || last) return 'name:' + first + '|' + last;
+  return '';
+}
+
+function resetPortalSessionState() {
+  portalSessionGeneration += 1;
+  portalActiveCaregiverKey = '';
+  portalQaSamplesActive = false;
+  portalRealEvents = [];
+  portalEventsFilterState = 'all';
+  portalSupportRealRequests = [];
+  portalSupportCacheCaregiverKey = '';
+  portalSupportHistoryUnavailable = false;
+  portalSupportFilterState = 'all';
+  if (typeof portalSupportPendingRequest !== 'undefined') {
+    portalSupportPendingRequest = null;
+  }
+  if (typeof portalSupportProfileContact !== 'undefined') {
+    portalSupportProfileContact = { email: '', phone: '' };
+  }
+  const eventsFilter = document.getElementById('portalEventsFilter');
+  if (eventsFilter) eventsFilter.value = 'all';
+  const supportFilter = document.getElementById('portalSupportFilter');
+  if (supportFilter) supportFilter.value = 'all';
+  syncPortalQaSampleChrome();
+  const eventsList = document.getElementById('portalEventsList');
+  if (eventsList) {
+    eventsList.innerHTML = '<p class="small muted m-0">No registered events yet.</p>';
+  }
+  const rowsEl = document.getElementById('portalSupportHistoryRows');
+  if (rowsEl) {
+    rowsEl.textContent = 'Your saved support requests will appear here.';
+  }
+  portalHighlightState.nextEvent = null;
+  portalHighlightState.nextSampleEvent = null;
+  portalHighlightState.sampleSupportSummary = null;
+  portalHighlightState.wellnessDue = false;
+  renderPortalHighlights();
+}
 
 function portalTextNode(text) {
   return typeof document !== 'undefined' && typeof document.createTextNode === 'function'
@@ -989,6 +1082,10 @@ function filterPortalSupport(filterValue) {
   }
 
   const rowsEl = document.getElementById('portalSupportHistoryRows');
+  if (portalSupportCacheCaregiverKey && portalSupportCacheCaregiverKey !== portalActiveCaregiverKey) {
+    portalSupportRealRequests = [];
+    portalSupportCacheCaregiverKey = portalActiveCaregiverKey;
+  }
   const realList = Array.isArray(portalSupportRealRequests) ? portalSupportRealRequests : [];
   const sampleList = portalQaSampleSupportRequests();
   const combined = realList.concat(sampleList);
@@ -1003,10 +1100,15 @@ function filterPortalSupport(filterValue) {
     return true;
   });
 
-  if (rowsEl && (portalQaSamplesActive || realList.length > 0 || activeFilter !== 'all')) {
-    const emptyText = (activeFilter === 'all' || (activeFilter === 'real' && realList.length === 0))
-      ? 'No support requests yet.'
-      : 'No support requests match this filter.';
+  if (rowsEl && (portalQaSamplesActive || realList.length > 0 || activeFilter !== 'all' || portalSupportHistoryUnavailable)) {
+    let emptyText;
+    if (portalSupportHistoryUnavailable && (!portalQaSamplesActive || activeFilter === 'real')) {
+      emptyText = 'Your support requests are not available right now.';
+    } else if (activeFilter === 'all' || (activeFilter === 'real' && realList.length === 0)) {
+      emptyText = 'No support requests yet.';
+    } else {
+      emptyText = 'No support requests match this filter.';
+    }
     renderPortalSupportEntryList(rowsEl, filtered, emptyText);
   }
 
@@ -1665,6 +1767,8 @@ document.addEventListener('submit', function (e) {
 let wellnessQuestions = [];
 
 async function loadWellness() {
+  const reqGen = typeof portalSessionGeneration === 'number' ? portalSessionGeneration : 0;
+  const reqKey = typeof portalActiveCaregiverKey === 'string' ? portalActiveCaregiverKey : '';
   const summary = document.getElementById('portalWellnessSummary');
   if (summary) summary.textContent = 'Loading your saved check-ins…';
   drawWellnessTrend(document.getElementById('portalWellnessTrend'), []);
@@ -1672,10 +1776,18 @@ async function loadWellness() {
   try {
     const res = await fetch('/api/portal/wellness', { credentials: 'same-origin' });
     const data = await res.json();
+    if ((typeof portalSessionGeneration === 'number' && reqGen !== portalSessionGeneration) ||
+        (typeof portalActiveCaregiverKey === 'string' && reqKey !== portalActiveCaregiverKey)) {
+      return;
+    }
     if (!res.ok || !data.ok) throw new Error('unavailable');
     wellnessQuestions = data.questions || [];
     renderWellness(data);
   } catch (e) {
+    if ((typeof portalSessionGeneration === 'number' && reqGen !== portalSessionGeneration) ||
+        (typeof portalActiveCaregiverKey === 'string' && reqKey !== portalActiveCaregiverKey)) {
+      return;
+    }
     if (summary) summary.textContent = 'Your wellness check-ins are not available right now.';
     renderWellnessHistory(document.getElementById('portalWellnessHistoryRows'), [], 'Your saved history is not available right now.');
   }
@@ -1847,11 +1959,17 @@ function newPortalSupportRequestId() {
 }
 
 async function loadPortalSupport() {
+  const reqGen = typeof portalSessionGeneration === 'number' ? portalSessionGeneration : 0;
+  const reqKey = typeof portalActiveCaregiverKey === 'string' ? portalActiveCaregiverKey : '';
   const rowsEl = document.getElementById('portalSupportHistoryRows');
   if (rowsEl) rowsEl.textContent = 'Loading your support requests…';
   try {
     const res = await fetch('/api/portal/support', { credentials: 'same-origin' });
     const data = await res.json();
+    if ((typeof portalSessionGeneration === 'number' && reqGen !== portalSessionGeneration) ||
+        (typeof portalActiveCaregiverKey === 'string' && reqKey !== portalActiveCaregiverKey)) {
+      return { ok: false, stale: true, requests: [], matchedReceipt: null };
+    }
     if (!res.ok || !data || !data.ok) throw new Error('unavailable');
     if (data.profile_contact && typeof data.profile_contact === 'object') {
       portalSupportProfileContact = {
@@ -1866,15 +1984,38 @@ async function loadPortalSupport() {
       matchedReceipt: matchedReceipt
     };
   } catch (e) {
-    renderPortalSupportHistory(rowsEl, [], 'Your support requests are not available right now.');
+    if ((typeof portalSessionGeneration === 'number' && reqGen !== portalSessionGeneration) ||
+        (typeof portalActiveCaregiverKey === 'string' && reqKey !== portalActiveCaregiverKey)) {
+      return { ok: false, stale: true, requests: [], matchedReceipt: null };
+    }
+    if (typeof portalSupportRealRequests !== 'undefined') {
+      portalSupportRealRequests = [];
+    }
+    if (typeof portalSupportCacheCaregiverKey !== 'undefined' && typeof portalActiveCaregiverKey === 'string') {
+      portalSupportCacheCaregiverKey = portalActiveCaregiverKey;
+    }
+    if (typeof portalSupportHistoryUnavailable !== 'undefined') {
+      portalSupportHistoryUnavailable = true;
+    }
+    if (typeof portalQaSamplesActive !== 'undefined' && portalQaSamplesActive && typeof filterPortalSupport === 'function') {
+      filterPortalSupport();
+    } else {
+      renderPortalSupportHistory(rowsEl, [], 'Your support requests are not available right now.');
+    }
     return { ok: false, requests: [], matchedReceipt: null };
   }
 }
 
 function renderPortalSupport(data) {
   const requests = Array.isArray(data && data.requests) ? data.requests : [];
+  if (typeof portalSupportHistoryUnavailable !== 'undefined') {
+    portalSupportHistoryUnavailable = false;
+  }
   if (typeof portalSupportRealRequests !== 'undefined') {
     portalSupportRealRequests = requests.slice();
+    if (typeof portalSupportCacheCaregiverKey !== 'undefined' && typeof portalActiveCaregiverKey === 'string') {
+      portalSupportCacheCaregiverKey = portalActiveCaregiverKey;
+    }
   }
   if (data && typeof data.qa_samples === 'boolean' && typeof portalQaSamplesActive !== 'undefined') {
     portalQaSamplesActive = data.qa_samples;
@@ -1945,7 +2086,8 @@ function renderPortalSupportHistory(container, requests, emptyText) {
     const isSample = Boolean(req && req.is_sample);
     if (isSample) {
       li.className = 'portal-sample-item';
-      li.setAttribute('data-sample-item', 'true');
+      li.setAttribute('data-portal-sample-item', 'support');
+      li.setAttribute('data-sample-status', String(req.status || ''));
     }
     const title = document.createElement('strong');
     title.textContent = String(req.support_type_label || req.support_type || 'Support request');
@@ -1965,7 +2107,7 @@ function renderPortalSupportHistory(container, requests, emptyText) {
     if (isSample) {
       const sampleBadge = document.createElement('span');
       sampleBadge.className = 'portal-sample-badge';
-      sampleBadge.textContent = 'QA SAMPLE';
+      sampleBadge.textContent = String(req.sample_badge || 'SAMPLE / TEST');
       li.appendChild(sampleBadge);
       li.appendChild(typeof document.createTextNode === 'function' ? document.createTextNode(' ') : { textContent: ' ' });
     }
