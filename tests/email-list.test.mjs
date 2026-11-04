@@ -1,4 +1,4 @@
-// Email list phase 1 (issue #301, schema/0019): public sign-up through /api/intake
+// Email list phase 1 (issue #301, schema/0020): public sign-up through /api/intake
 // (kind 'newsletter'), unsubscribe by token, staff Subscribers list/search/counts/CSV,
 // home page section and unsubscribe page markup, staff panel wiring.
 // Inert: real schema over node:sqlite, fake requests, vm-stubbed browser. No network, no
@@ -19,7 +19,7 @@ import {
 
 const read = (path) => readFileSync(new URL('../' + path, import.meta.url), 'utf8');
 const SCHEMA_1 = read('schema/0001_init.sql');
-const SCHEMA_19 = read('schema/0019_email_subscriber.sql');
+const SCHEMA_20 = read('schema/0020_email_subscriber.sql');
 
 function d1(db) {
   const wrap = (sql, params) => ({
@@ -65,7 +65,7 @@ let ipSerial = 0;
 beforeEach(() => {
   raw = new DatabaseSync(':memory:');
   raw.exec(SCHEMA_1);
-  raw.exec(SCHEMA_19);
+  raw.exec(SCHEMA_20);
   db = d1(raw);
 });
 
@@ -79,7 +79,7 @@ const count = (table) => raw.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get()
 const publicPost = (handler, url, body, ip = `192.0.2.${++ipSerial % 250}`) =>
   handler({ request: request(url, { method: 'POST', body, headers: { 'CF-Connecting-IP': ip } }), env: { LEGACY_DB: db } });
 
-test('migration 0019 creates email_subscriber with the documented constraints', () => {
+test('migration 0020 creates email_subscriber with the documented constraints', () => {
   const cols = Object.fromEntries(raw.prepare('PRAGMA table_info(email_subscriber)').all().map((c) => [c.name, c]));
   for (const name of ['id', 'email', 'first_name', 'status', 'source', 'external_ref', 'consent_text', 'unsubscribe_token', 'created_at', 'updated_at', 'unsubscribed_at']) {
     assert.ok(cols[name], `column ${name}`);
@@ -97,7 +97,7 @@ test('migration 0019 creates email_subscriber with the documented constraints', 
   assert.throws(() => insert.run('sub_4', 'd@example.invalid', 'd'.repeat(32), 's', 'r1'), /UNIQUE/);
   assert.throws(() => raw.exec(`UPDATE email_subscriber SET status = 'bounced' WHERE id = 'sub_1'`), /CHECK/);
   // Re-applying the migration is harmless.
-  raw.exec(SCHEMA_19);
+  raw.exec(SCHEMA_20);
 });
 
 test('validation: email required and well-formed; first name optional; external_ref required', () => {

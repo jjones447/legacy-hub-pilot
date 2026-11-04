@@ -1,4 +1,4 @@
-// Email list (schema/0019, issue #301 phase 1): sign-up, unsubscribe, and the staff view.
+// Email list (schema/0020, issue #301 phase 1): sign-up, unsubscribe, and the staff view.
 // Pure logic over a D1-shaped binding. No handler exports, so Pages creates no route here.
 //
 // Phase 1 never sends email. A sign-up never creates a caregiver record. The unsubscribe

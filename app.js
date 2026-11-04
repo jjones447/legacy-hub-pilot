@@ -302,7 +302,7 @@ function submitMembership(e) {
   return false;
 }
 
-/* ---------- Email list (schema 0019): join from the home page, leave from your own link ---------- */
+/* ---------- Email list (schema 0020): join from the home page, leave from your own link ---------- */
 // Joining saves an email_subscriber row only (no caregiver record) and sends no email.
 // The retry key lives in sessionStorage, so a retry after an error cannot add a second row.
 const emailListSubmissions = new WeakMap();

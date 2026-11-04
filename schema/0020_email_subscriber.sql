@@ -1,4 +1,4 @@
--- 0019: email list subscribers (phase 1, issue #301).
+-- 0020: email list subscribers (phase 1, issue #301).
 -- The home page "Join our email list" form saves a subscriber here through POST /api/intake
 -- (kind 'newsletter'). It never creates a caregiver record and never sends email: phase 1 only
 -- collects consented addresses, lets a subscriber leave with their own link, and lets staff

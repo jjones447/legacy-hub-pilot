@@ -1,4 +1,4 @@
-// POST /api/unsubscribe — leave the email list with the token from your own link (schema/0019).
+// POST /api/unsubscribe — leave the email list with the token from your own link (schema/0020).
 // Public by design, like /api/intake: the 128-bit token is the only credential. Known and
 // unknown tokens get the same answer, repeats are harmless, and the token is never logged
 // or echoed back.

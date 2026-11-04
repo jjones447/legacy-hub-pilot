@@ -296,7 +296,7 @@ export async function onRequestGet({ request, env }) {
     }
 
     if (subRoute === 'subscribers' || subRoute === 'subscribers.csv') {
-      // GET /api/staff/subscribers[?q=&status=&limit=] -- email list (schema/0019), read-only.
+      // GET /api/staff/subscribers[?q=&status=&limit=] -- email list (schema/0020), read-only.
       // GET /api/staff/subscribers.csv (or ?format=csv) -- every subscribed address as CSV.
       // Never returns unsubscribe tokens. Staff-only: /api/staff/ is behind the Access guard.
       if (pathSegments.length !== 3) return json({ ok: false, error: 'unsupported route' }, 404);

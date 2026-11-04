@@ -5,7 +5,7 @@ import { isSupportGroup, validateSupportGroupSession } from '../_lib/support-gro
 import { SUPPORT_SOURCE } from '../_lib/portal-support.js';
 import { handleNewsletter, validateNewsletter } from '../_lib/newsletter.mjs';
 
-// 'newsletter' (email list, schema/0019) writes only email_subscriber: no caregiver record.
+// 'newsletter' (email list, schema/0020) writes only email_subscriber: no caregiver record.
 export const INTAKE_KINDS = ['support_request', 'membership', 'event_registration', 'grant_application', 'newsletter'];
 
 export function validateIntake(body) {

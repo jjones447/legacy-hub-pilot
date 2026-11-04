@@ -265,7 +265,7 @@ function visibleGrants(grants, statusFilter) {
   return statusFilter === 'active' ? list.filter(g => g.status !== 'closed') : list;
 }
 
-// Email list subscribers (schema/0019): read-only list, search and counts.
+// Email list subscribers (schema/0020): read-only list, search and counts.
 // The API never returns unsubscribe tokens; CSV download is a plain link to the staff route.
 let subscribersEpoch = 0;
 
