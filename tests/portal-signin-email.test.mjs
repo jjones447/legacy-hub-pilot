@@ -47,6 +47,15 @@ test('canSendEmail: production with a key only; never preview or development; ne
   assert.equal(canSendEmail({}), false);
 });
 
+test('confirmation-only preview opt-in does not enable portal login or send a sign-in email', async () => {
+  const env={...PROD(),ENVIRONMENT:'preview',CONFIRMATION_PREVIEW_MAIL_ENABLED:'1',CONFIRMATION_PREVIEW_RECIPIENTS:'jane.doe@example.com'};
+  const res=await postPortal({request:request('https://staging.caregiversanctuary.org/api/portal/login',{email:'jane.doe@example.com'}),env});
+  assert.equal(res.status,503); // Existing uniform mail-disabled response.
+  assert.deepEqual(await res.json(),{ok:false,error:'preview_portal_disabled'});
+  assert.equal(calls.length,0);
+  assert.equal(raw.prepare('SELECT COUNT(*) n FROM portal_token').get().n,0);
+});
+
 test('production: a member gets one email with an absolute, single-use link from no-reply@caregiversanctuary.org', async () => {
   const res = await postPortal({ request: request('https://caregiversanctuary.org/api/portal/login', { email: 'jane.doe@example.com' }), env: PROD() });
   assert.deepEqual(await res.json(), { ok: true });

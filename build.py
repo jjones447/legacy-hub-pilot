@@ -70,7 +70,7 @@ PAGE_METADATA = {
     },
     "drop-in-respite.html": {
         "title": "Drop-In Respite — Legacy Home & Respite Care Foundation",
-        "description": "Drop-in respite for dementia caregivers: trained staff, engaging activities, and a moment to breathe.",
+        "description": "FREE monthly Drop-In Respite at Ebenezer in Milwaukee: every third Thursday, 10 AM–2 PM. Person-centered activities for your loved one, time for you.",
     },
     "coming-soon.html": {
         "title": "Caregiver Sanctuary &mdash; Legacy Home &amp; Respite Care Foundation",
@@ -110,7 +110,7 @@ PAGE_METADATA = {
     },
     "portal.html": {
         "title": "Caregiver Portal — Legacy Home & Respite Care Foundation",
-        "description": "Your events, your grant and your resources, in one place.",
+        "description": "Your events, your wellness and your resources, in one place.",
     },
     "programs-events.html": {
         "title": "Programs & Events — Legacy Home & Respite Care Foundation",

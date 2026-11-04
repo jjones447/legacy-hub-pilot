@@ -1,5 +1,88 @@
 # Staff chat source correction
 
+## Selected customer change activity — source increment, October 30
+
+[pc2-codex-42] The existing Staff **Change log** now has two sections: selected
+requested changes/releases, and its existing operational staff activity. Source
+home is the same protected `/api/staff/recent-changes` route and `staff.js` panel;
+the original audit response, ordering and supported Undo controls are unchanged.
+Release notes never acquire an audit ID or Undo button. This is a source feature,
+not an assertion that any actual release snapshot has been selected or installed.
+
+The release owner retains the canonical reviewed snapshot and original request,
+executor, approval and deployment evidence in the project's existing **private**
+release-record home. The public repository contains code and fictional fixtures
+only. Root delivery owns selection, exact customer wording and fact verification;
+the existing deployment owner prepares and installs the combined package. These
+are independent of the source author. Do not copy actual notes, requester names,
+private GitHub references or provenance into this public source, client scripts,
+static assets, test fixtures or PR bodies.
+
+Each selected input entry requires `selected: true`, `visibility: legacy_staff`,
+plain customer `summary`/`requested_by`, independent `request_origin` and
+`executor` enums, and all four `milestones`: source, staging, approval, production.
+Unknown attribution is explicitly `not_established`, never derived from a commit
+author. Staging, approval and production facts remain separate from merged code.
+Each milestone is `{state, at}` with a supported state and either a real UTC
+timestamp or null where the fact is not established. Completed states require
+timestamps no later than the snapshot's `as_of`; invalid dates/states refuse the
+whole snapshot. Optional `evidence_path` permits only plain same-site page paths,
+not external origins, encodings, traversal, query/fragment tokens or API paths.
+At most 50 selected entries are served. The schema and fictional examples live
+in `functions/_lib/customer-activity.mjs` and `tests/customer-activity.test.mjs`.
+
+Selection flags and labels are **not content approval**. An authorized reviewer
+must examine exact customer prose and source evidence, then independently record
+the SHA256 of the exact approved private snapshot bytes. The preparation command
+requires that reviewed digest, refuses mismatched bytes, strips all other keys
+(including private provenance), and replaces only the existing snapshot module
+inside an isolated Functions package **outside any Git worktree**:
+
+```
+node scripts/prepare-customer-activity.mjs PRIVATE_SNAPSHOT REVIEWED_SHA256 ISOLATED_PACKAGE_ROOT
+```
+
+This is a local packaging operation in existing release custody, not a service,
+GitHub API client, database writer, deployment or authorization mechanism. Do not
+compute a digest from unreviewed input and call that review. Fetch the exact
+reviewed private revision through existing authorized custody first; never put a
+GitHub token into site bindings. The tool checks the pre-existing Functions
+package, refuses symlink target escape and source-checkout writes, and returns
+source/projection digests and selected count. Record those with the package
+revision in the **private** release receipt. Then use the existing Functions
+compiler and static-site allowlist. `functions/` is never a static asset folder.
+The tool does not copy or fetch private provenance into the assembled package.
+The raw private input must remain outside the ENTIRE package root, including
+`media/`, which the existing builder publishes. Both lexical and realpath
+containment are refused (including directory aliases and Windows case variants),
+before reading/projecting the input. A refusal is a hard stop for that package,
+not permission to continue the static build. Preserve input and move back to the
+approved private-source location through its owner; the tool never deletes it.
+
+Public source defaults to a null snapshot. Missing/unprepared or malformed
+snapshots yield no release entries; there is no sample data or remote fallback.
+The API re-projects the packaged safe data through the same field allowlist and
+returns `release_activity`, `release_activity_as_of`, and `Cache-Control:
+no-store`. The review digest and private identifiers are not API fields. The UI
+escapes customer text and independently refuses unsafe links. Authentication
+continues through the existing Staff middleware; nothing is published as a
+public JSON feed. Existing operational audit fields are not repurposed as notes.
+
+Before integration delivery, the existing package owner must confirm it can
+retrieve the exact reviewed private revision and run this preparation in its
+normal isolated assembly. Source tests alone cannot establish that cross-owner
+access. A first actual snapshot remains separately selected/reviewed by delivery.
+Live acceptance verifies its exact installed revision through normal staff
+access, correct origin/executor/status, no private fields or static leakage,
+and unaffected staff audit/Undo behavior. Production requester approval remains
+separate. A prior qualified package/snapshot restores the view on rollback;
+do not mutate/delete audit records or automatically republish from ticket labels.
+
+Progressive Engineering: reuse proven manual release receipts, staff UI/API and
+package custody; codify one reviewed snapshot and automate deterministic
+validation/projection. A runtime GitHub synchronizer, new content-editing
+authority, queue or service is unnecessary for this first useful increment.
+
 ## Conversation and explicit guided modification — October 30
 
 [pc2-codex-41] Jacob's actual `You there?` feedback exposed that the old
