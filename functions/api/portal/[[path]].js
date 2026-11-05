@@ -2,6 +2,7 @@
 import { checkIpRequestLimit, IP_LIMITS } from '../_shared.mjs';
 import { canSendEmail, isPreviewMailOptIn, sendEmail, signInEmail } from '../../_lib/email.js';
 import { QUESTIONS, validateCheckin, recordCheckin, caregiverHistory, isCheckinDue, CHECKIN_EVERY_DAYS } from '../../_lib/wellness.js';
+import { handlePortalSupport, handlePortalSupportGet } from '../../_lib/portal-support.js';
 
 async function getHmacSha256(message, secret) {
   const enc = new TextEncoder();
@@ -84,6 +85,29 @@ const CLEARED_SESSION_COOKIE = 'portal_session=; HttpOnly; Secure; SameSite=Lax;
 const CONFIRM_COOKIE = '__Host-portal_confirm';
 const OPAQUE_TOKEN = /^[A-Za-z0-9_-]{1,128}$/;
 const CONFIRM_NONCE = /^[A-Za-z0-9_-]{43}$/;
+const SAMPLE_EMAIL_RE = /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/;
+const SAMPLE_CAREGIVER_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
+
+// Deliberate, single-identity production sample preview policy reader.
+// Defaults OFF until the explicit production environment and caregiver identity
+// tuple are configured; never infers from staging/preview QA variables.
+export function productionSampleCaregiver(env) {
+  if (env?.ENVIRONMENT !== 'production') return null;
+  const flag = String(env.PORTAL_PRODUCTION_SAMPLES_ENABLED ?? '').trim().toLowerCase();
+  if (flag !== '1' && flag !== 'true') return null;
+  if (typeof env.PORTAL_PRODUCTION_SAMPLE_CAREGIVER_ID !== 'string'
+      || typeof env.PORTAL_PRODUCTION_SAMPLE_EMAIL !== 'string') return null;
+  const id = env.PORTAL_PRODUCTION_SAMPLE_CAREGIVER_ID.trim();
+  const email = env.PORTAL_PRODUCTION_SAMPLE_EMAIL.trim().toLowerCase();
+  if (!SAMPLE_CAREGIVER_ID_RE.test(id) || email.length > 254 || !SAMPLE_EMAIL_RE.test(email)) return null;
+  return { id, email };
+}
+
+export function matchesProductionSampleCaregiver(env, id, email) {
+  const sample = productionSampleCaregiver(env);
+  return !!sample && id === sample.id && typeof email === 'string'
+    && email.trim().toLowerCase() === sample.email;
+}
 
 function confirmationCookieNonce(request) {
   const values = (request.headers.get('Cookie') || '').split(';')
@@ -293,11 +317,14 @@ export async function onRequestGet({ request, env }) {
         .bind(caregiverId)
         .all();
 
+      const qaSamples = matchesProductionSampleCaregiver(env, profile.id, profile.email);
+
       return json({
         ok: true,
         profile,
         grants,
-        events
+        events,
+        ...(qaSamples ? { qa_samples: true } : {})
       });
     }
 
@@ -314,6 +341,21 @@ export async function onRequestGet({ request, env }) {
       const history = await caregiverHistory(env.LEGACY_DB, caregiverId);
       const latest = history.length ? history[history.length - 1].created_at : null;
       return json({ ok: true, history, due: isCheckinDue(latest), every_days: CHECKIN_EVERY_DAYS, questions: QUESTIONS });
+    }
+
+    if (action === 'support' && pathSegments.length === 3) {
+      const cookie = request.headers.get('Cookie') || '';
+      const sessions = [...cookie.matchAll(/(?:^|;\s*)portal_session=([^;]*)/g)];
+      let caregiverId = null;
+      if (cookie.length <= 4096 && sessions.length === 1) {
+        try {
+          caregiverId = await parseSessionCookie(`portal_session=${sessions[0][1]}`, secret);
+        } catch {
+          caregiverId = null;
+        }
+      }
+      if (!caregiverId) return json({ ok: false, error: 'unauthorized' }, 401);
+      return await handlePortalSupportGet(request, env.LEGACY_DB, caregiverId);
     }
 
     return json({ ok: false, error: 'not_found' }, 404);
@@ -349,9 +391,9 @@ export async function onRequestPost({ request, env }) {
         return json({ ok: false, error: 'forbidden' }, 403);
       }
     }
-    // Confirmation is deliberate browser-only POST: absence, null, duplicates
-    // and off-origin spellings all refuse BEFORE body/cookie/store access.
-    if (action === 'verify') {
+    // Confirmation and My Support are deliberate browser-only POSTs: absence, null,
+    // duplicates and off-origin spellings all refuse BEFORE body/cookie/store access.
+    if (action === 'verify' || action === 'support') {
       const origin = request.headers.get('Origin');
       if (origin === null || origin === 'null' || origin !== url.origin) {
         return json({ ok: false, error: 'forbidden' }, 403);
@@ -361,6 +403,23 @@ export async function onRequestPost({ request, env }) {
     const secret = env.PORTAL_TOKEN_SECRET;
     if (!secret) {
       return json({ ok: false, error: 'auth_not_configured' }, 503);
+    }
+
+    if (action === 'support' && pathSegments.length === 3) {
+      // Keep this bounded slice separate from login, wellness and public intake.
+      // Only an exact, single portal_session cookie may establish its owner.
+      const cookie = request.headers.get('Cookie') || '';
+      const sessions = [...cookie.matchAll(/(?:^|;\s*)portal_session=([^;]*)/g)];
+      let caregiverId = null;
+      if (cookie.length <= 4096 && sessions.length === 1) {
+        try {
+          caregiverId = await parseSessionCookie(`portal_session=${sessions[0][1]}`, secret);
+        } catch {
+          // Malformed encoding is an authentication denial, not an internal leak.
+        }
+      }
+      if (!caregiverId) return json({ ok: false, error: 'unauthorized' }, 401);
+      return await handlePortalSupport(request, env.LEGACY_DB, caregiverId);
     }
 
     if (action === 'verify') {
