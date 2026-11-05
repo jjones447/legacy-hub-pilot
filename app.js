@@ -767,13 +767,12 @@ function renderPortalData(data) {
     }
   }
 
-  // Grant status
-  const grantStatus = document.getElementById('portalGrantStatus');
-  const grantRequestedFor = document.getElementById('portalGrantRequestedFor');
-  const grantAward = document.getElementById('portalGrantAward');
-  if (grantStatus && grantRequestedFor && grantAward) {
-    if (safeData.grants && safeData.grants.length > 0) {
-      const ga = safeData.grants[0];
+  // Grant status (populated in both #332 standalone card and #333 Sanctuary Updates & Perks card)
+  const ga = safeData.grants && safeData.grants.length > 0 ? safeData.grants[0] : null;
+  ['portalGrantStatus', 'portalQaGrantStatus'].forEach(function (statusId) {
+    const grantStatus = document.getElementById(statusId);
+    if (!grantStatus) return;
+    if (ga) {
       let badgeClass = 'badge-gray';
       if (ga.status === 'submitted' || ga.status === 'in_review') badgeClass = 'badge-amber';
       else if (ga.status === 'awarded' || ga.status === 'course_complete') badgeClass = 'badge-green';
@@ -784,14 +783,22 @@ function renderPortalData(data) {
       statusBadge.className = 'badge ' + badgeClass;
       statusBadge.textContent = ga.status === 'course_complete' ? 'Course complete' : String(ga.status || '').replace('_', ' ');
       grantStatus.appendChild(statusBadge);
-      grantRequestedFor.textContent = ga.requested_for || 'Wellness grant';
-      grantAward.textContent = ga.amount ? 'Awarded: ' + ga.amount + ' (' + (ga.care_package || 'No package') + ')' : 'Personalized on approval';
     } else {
       grantStatus.innerHTML = '<span class="badge badge-gray">No application</span>';
-      grantRequestedFor.textContent = '—';
-      grantAward.textContent = '—';
     }
-  }
+  });
+  const grantReqText = ga ? (ga.requested_for || 'Wellness grant') : '—';
+  const grantAwardText = ga
+    ? (ga.amount ? 'Awarded: ' + ga.amount + ' (' + (ga.care_package || 'No package') + ')' : 'Personalized on approval')
+    : '—';
+  ['portalGrantRequestedFor', 'portalQaGrantRequestedFor'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = grantReqText;
+  });
+  ['portalGrantAward', 'portalQaGrantAward'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = grantAwardText;
+  });
 
   syncPortalQaSampleChrome();
   filterPortalEvents();
@@ -800,29 +807,35 @@ function renderPortalData(data) {
     filterPortalSupport();
   }
 
-  // Memory socials count and details (uses real account events only)
-  const socialsCount = document.getElementById('portalSocialsCount');
-  const socialsLast = document.getElementById('portalSocialsLastVisit');
-  const socialsNext = document.getElementById('portalSocialsNext');
-  if (socialsCount && socialsLast && socialsNext) {
-    const socials = (safeData.events || []).filter(function (e) { return e.type === 'memory_social'; });
-    const attended = socials.filter(function (e) { return e.registration_status === 'attended'; });
-    const now = new Date();
-    const dated = socials.map(function (event) {
-      return { event: event, time: publicEventTime(event.starts_at, now, 'America/Chicago') };
-    }).filter(function (entry) { return entry.time; });
+  // Memory socials count and details (uses real account events only, populated in both #332 card and #333 My Events card)
+  const socials = (safeData.events || []).filter(function (e) { return e.type === 'memory_social'; });
+  const attended = socials.filter(function (e) { return e.registration_status === 'attended'; });
+  const now = new Date();
+  const dated = socials.map(function (event) {
+    return { event: event, time: publicEventTime(event.starts_at, now, 'America/Chicago') };
+  }).filter(function (entry) { return entry.time; });
 
-    socialsCount.textContent = attended.length + ' socials';
+  const socialsCountText = attended.length + ' socials';
+  const last = dated.filter(function (entry) { return entry.event.registration_status === 'attended'; })
+    .sort(function (a, b) { return b.time.instant - a.time.instant; })[0];
+  const socialsLastText = last ? last.event.starts_at.slice(0, 10) : '—';
+  const next = dated.filter(function (entry) {
+    return entry.event.registration_status === 'registered' && entry.time.future;
+  }).sort(function (a, b) { return a.time.instant - b.time.instant; })[0];
+  const socialsNextText = next ? next.event.title + ' · ' + next.event.starts_at.slice(0, 10) : '—';
 
-    const last = dated.filter(function (entry) { return entry.event.registration_status === 'attended'; })
-      .sort(function (a, b) { return b.time.instant - a.time.instant; })[0];
-    socialsLast.textContent = last ? last.event.starts_at.slice(0, 10) : '—';
-
-    const next = dated.filter(function (entry) {
-      return entry.event.registration_status === 'registered' && entry.time.future;
-    }).sort(function (a, b) { return a.time.instant - b.time.instant; })[0];
-    socialsNext.textContent = next ? next.event.title + ' · ' + next.event.starts_at.slice(0, 10) : '—';
-  }
+  ['portalSocialsCount', 'portalQaSocialsCount'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = socialsCountText;
+  });
+  ['portalSocialsLastVisit', 'portalQaSocialsLastVisit'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = socialsLastText;
+  });
+  ['portalSocialsNext', 'portalQaSocialsNext'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = socialsNextText;
+  });
 }
 
 var portalSessionGeneration = 0;
@@ -892,18 +905,18 @@ function resetPortalSessionState() {
   if (rowsEl) {
     rowsEl.textContent = 'Your support requests are not available right now.';
   }
-  const grantStatus = document.getElementById('portalGrantStatus');
-  if (grantStatus) grantStatus.innerHTML = '<span class="badge badge-gray">No application</span>';
-  const grantRequestedFor = document.getElementById('portalGrantRequestedFor');
-  if (grantRequestedFor) grantRequestedFor.textContent = '—';
-  const grantAward = document.getElementById('portalGrantAward');
-  if (grantAward) grantAward.textContent = '—';
-  const socialsCount = document.getElementById('portalSocialsCount');
-  if (socialsCount) socialsCount.textContent = '0 socials';
-  const socialsLast = document.getElementById('portalSocialsLastVisit');
-  if (socialsLast) socialsLast.textContent = '—';
-  const socialsNext = document.getElementById('portalSocialsNext');
-  if (socialsNext) socialsNext.textContent = '—';
+  ['portalGrantStatus', 'portalQaGrantStatus'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = '<span class="badge badge-gray">No application</span>';
+  });
+  ['portalGrantRequestedFor', 'portalQaGrantRequestedFor', 'portalGrantAward', 'portalQaGrantAward', 'portalSocialsLastVisit', 'portalQaSocialsLastVisit', 'portalSocialsNext', 'portalQaSocialsNext'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = '—';
+  });
+  ['portalSocialsCount', 'portalQaSocialsCount'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = '0 socials';
+  });
   portalHighlightState.nextEvent = null;
   portalHighlightState.nextSampleEvent = null;
   portalHighlightState.sampleSupportSummary = null;
@@ -1068,7 +1081,7 @@ function syncPortalSelectSampleOptions(selectEl, realLabel) {
 }
 
 function syncPortalQaSampleChrome() {
-  ['portalWelcomeSub', 'portalQaSampleBanner', 'portalProfileCard', 'portalProfileSampleNote', 'portalSupportCard', 'portalEventsFilterRow', 'portalResourcesSampleNote', 'portalResourcesComingSoon', 'portalUpdatesCard', 'portalUpdatesSampleNote'].forEach(function (id) {
+  ['portalWelcomeSub', 'portalQaSampleBanner', 'portalProfileCard', 'portalProfileSampleNote', 'portalSupportCard', 'portalEventsFilterRow', 'portalEventsSocialsSummary', 'portalResourcesSampleNote', 'portalResourcesComingSoon', 'portalUpdatesCard', 'portalUpdatesSampleNote'].forEach(function (id) {
     const el = document.getElementById(id);
     if (el) el.hidden = !portalQaSamplesActive;
   });

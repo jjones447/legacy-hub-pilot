@@ -134,6 +134,8 @@ function createPortalDashboardUi({ fetchHandler = null } = {}) {
     'portalSupportCard', 'portalEventsCard', 'portalEventsHeading', 'portalEventsIntro',
     'portalGrantCard', 'portalGrantStatus', 'portalGrantRequestedFor', 'portalGrantAward',
     'portalSocialsCard', 'portalSocialsCount', 'portalSocialsLastVisit', 'portalSocialsNext',
+    'portalEventsSocialsSummary', 'portalQaSocialsCount', 'portalQaSocialsLastVisit', 'portalQaSocialsNext',
+    'portalUpdatesGrantSummary', 'portalQaGrantStatus', 'portalQaGrantRequestedFor', 'portalQaGrantAward',
     'portalResourcesCard', 'portalResourcesHeading', 'portalResourcesIntro', 'portalResourcesComingSoon',
     'portalUpdatesCard', 'portalWellnessTile', 'portalWellnessHeading',
     'portalQaSampleBanner', 'portalProfileSampleNote', 'portalResourcesSampleNote', 'portalUpdatesSampleNote',
@@ -154,6 +156,7 @@ function createPortalDashboardUi({ fetchHandler = null } = {}) {
   el.portalProfileSampleNote.hidden = true;
   el.portalSupportCard.hidden = true;
   el.portalEventsFilterRow.hidden = true;
+  el.portalEventsSocialsSummary.hidden = true;
   el.portalResourcesSampleNote.hidden = true;
   el.portalResourcesComingSoon.hidden = true;
   el.portalUpdatesCard.hidden = true;
@@ -503,7 +506,11 @@ test('immediate in-section visibility: QA caregiver sees the redesigned normal-s
   assert.equal(ui.el.portalResourcesSampleNote.hidden, false);
   assert.equal(ui.el.portalUpdatesSampleNote.hidden, false);
 
-  // Real profile, grant, and Memory Socials summary fields are preserved intact and never altered by sample items
+  // Real profile, grant, and Memory Socials summary fields are visibly shown inside the new layout (#portalEventsSocialsSummary and #portalUpdatesGrantSummary) and never altered by sample items
+  assert.equal(ui.el.portalEventsCard.hidden, false);
+  assert.equal(ui.el.portalEventsSocialsSummary.hidden, false);
+  assert.equal(ui.el.portalUpdatesCard.hidden, false);
+  assert.equal(ui.el.portalUpdatesGrantSummary.hidden, false);
   assert.equal(ui.el.portalProfileName.textContent, 'Jacob QA');
   assert.equal(ui.el.portalProfileEmail.textContent, QA_EMAIL);
   assert.equal(ui.el.portalProfilePhone.textContent, '414-555-0154');
@@ -512,9 +519,15 @@ test('immediate in-section visibility: QA caregiver sees the redesigned normal-s
   assert.equal(ui.el.portalGrantStatus.textContent, 'awarded');
   assert.equal(ui.el.portalGrantRequestedFor.textContent, 'Respite care');
   assert.equal(ui.el.portalGrantAward.textContent, 'Awarded: $500 (Restorative Care Box)');
+  assert.equal(ui.el.portalQaGrantStatus.textContent, 'awarded');
+  assert.equal(ui.el.portalQaGrantRequestedFor.textContent, 'Respite care');
+  assert.equal(ui.el.portalQaGrantAward.textContent, 'Awarded: $500 (Restorative Care Box)');
   assert.equal(ui.el.portalSocialsCount.textContent, '0 socials', 'sample past social does not inflate real attended count');
   assert.equal(ui.el.portalSocialsLastVisit.textContent, '—');
   assert.equal(ui.el.portalSocialsNext.textContent, 'Real Milwaukee Memory Social · 2026-11-06');
+  assert.equal(ui.el.portalQaSocialsCount.textContent, '0 socials');
+  assert.equal(ui.el.portalQaSocialsLastVisit.textContent, '—');
+  assert.equal(ui.el.portalQaSocialsNext.textContent, 'Real Milwaukee Memory Social · 2026-11-06');
 
   // My Events immediately shows Upcoming (1 real + 3 sample) and Past (2 sample)
   const eventGroups = ui.el.portalEventsList.children;
@@ -756,6 +769,7 @@ test('reload stability, read-only sample safety, and second-caregiver isolation 
   assert.equal(ui.el.portalSupportCard.hidden, true);
   assert.equal(ui.el.portalUpdatesCard.hidden, true);
   assert.equal(ui.el.portalEventsFilterRow.hidden, true);
+  assert.equal(ui.el.portalEventsSocialsSummary.hidden, true);
   assert.equal(ui.el.portalEventsHeading.textContent, '📅 My Events');
   assert.equal(ui.el.portalEventsIntro.textContent, 'Your registrations are listed here. Browse all events opens the public calendar.');
   assert.equal(ui.el.portalResourcesHeading.textContent, '📚 Resource library');

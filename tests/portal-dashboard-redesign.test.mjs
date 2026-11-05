@@ -31,12 +31,14 @@ function ui({ search = '' } = {}) {
     'portalProfileCard', 'portalSupportCard', 'portalUpdatesCard',
     'portalWellnessSample', 'portalGrantCard', 'portalSocialsCard', 'portalAccountSummary',
     'portalGrantStatus', 'portalGrantRequestedFor', 'portalGrantAward',
-    'portalSocialsCount', 'portalSocialsLastVisit', 'portalSocialsNext'];
+    'portalSocialsCount', 'portalSocialsLastVisit', 'portalSocialsNext',
+    'portalEventsSocialsSummary', 'portalQaSocialsCount', 'portalQaSocialsLastVisit', 'portalQaSocialsNext',
+    'portalUpdatesGrantSummary', 'portalQaGrantStatus', 'portalQaGrantRequestedFor', 'portalQaGrantAward'];
   const el = Object.fromEntries(ids.map(id => [id, new Element()]));
   el.portalHighlights.hidden = true; el.portalQaSampleBanner.hidden = true;
   el.portalWelcomeSub.hidden = true; el.portalProfileCard.hidden = true;
   el.portalSupportCard.hidden = true; el.portalUpdatesCard.hidden = true;
-  el.portalEventsFilterRow.hidden = true; el.portalResourcesComingSoon.hidden = true;
+  el.portalEventsFilterRow.hidden = true; el.portalEventsSocialsSummary.hidden = true; el.portalResourcesComingSoon.hidden = true;
   el.portalEventsFilter.value = 'all';
   const calls = [];
   const context = vm.createContext({
@@ -160,8 +162,9 @@ test('query-string design preview (?preview=sample) is removed from production s
   assert.doesNotMatch(app, /portalDesignPreviewRequested|initPortalDesignPreview/);
 });
 
-test('real grant status and Memory Socials summary remain visible in the new 6-card layout for production caregivers', () => {
+test('real grant status and Memory Socials summary remain visible in both ordinary #332 layout and the qa_samples 6-card layout', () => {
   const h = ui();
+  // Ordinary caregiver (#332 layout): standalone #portalGrantCard and #portalSocialsCard are visible, while #portalEventsSocialsSummary and #portalUpdatesCard are hidden
   h.context.renderPortalData({
     profile: { first_name: 'Maria', sanctuary_member: 1 },
     grants: [{ status: 'awarded', requested_for: 'Respite weekend', amount: '$500', care_package: 'Self-Care Box' }],
@@ -170,10 +173,36 @@ test('real grant status and Memory Socials summary remain visible in the new 6-c
       { title: 'Upcoming Social', type: 'memory_social', starts_at: '2026-11-12 14:00', registration_status: 'registered' }
     ]
   });
+  assert.equal(h.el.portalGrantCard.hidden, false);
+  assert.equal(h.el.portalSocialsCard.hidden, false);
+  assert.equal(h.el.portalEventsSocialsSummary.hidden, true);
+  assert.equal(h.el.portalUpdatesCard.hidden, true);
   assert.equal(h.el.portalGrantStatus.textContent, 'awarded');
   assert.equal(h.el.portalGrantRequestedFor.textContent, 'Respite weekend');
   assert.equal(h.el.portalGrantAward.textContent, 'Awarded: $500 (Self-Care Box)');
   assert.equal(h.el.portalSocialsCount.textContent, '1 socials');
   assert.equal(h.el.portalSocialsLastVisit.textContent, '2026-10-10');
   assert.equal(h.el.portalSocialsNext.textContent, 'Upcoming Social · 2026-11-12');
+
+  // Named sample identity (qa_samples: true): #portalEventsSocialsSummary inside My Events and #portalUpdatesGrantSummary inside Sanctuary Updates & Perks are visible with the real values
+  h.context.renderPortalData({
+    qa_samples: true,
+    profile: { first_name: 'Jacob', sanctuary_member: 1 },
+    grants: [{ status: 'awarded', requested_for: 'Respite weekend', amount: '$500', care_package: 'Self-Care Box' }],
+    events: [
+      { title: 'Past Social', type: 'memory_social', starts_at: '2026-10-10 14:00', registration_status: 'attended' },
+      { title: 'Upcoming Social', type: 'memory_social', starts_at: '2026-11-12 14:00', registration_status: 'registered' }
+    ]
+  });
+  assert.equal(h.el.portalGrantCard.hidden, true);
+  assert.equal(h.el.portalSocialsCard.hidden, true);
+  assert.equal(h.el.portalEventsSocialsSummary.hidden, false);
+  assert.equal(h.el.portalUpdatesCard.hidden, false);
+  assert.equal(h.el.portalUpdatesGrantSummary.hidden, false);
+  assert.equal(h.el.portalQaGrantStatus.textContent, 'awarded');
+  assert.equal(h.el.portalQaGrantRequestedFor.textContent, 'Respite weekend');
+  assert.equal(h.el.portalQaGrantAward.textContent, 'Awarded: $500 (Self-Care Box)');
+  assert.equal(h.el.portalQaSocialsCount.textContent, '1 socials');
+  assert.equal(h.el.portalQaSocialsLastVisit.textContent, '2026-10-10');
+  assert.equal(h.el.portalQaSocialsNext.textContent, 'Upcoming Social · 2026-11-12');
 });

@@ -18,15 +18,20 @@ production identity check (`qa_samples: true` on `GET /api/portal/me`):
   with its `#332` copy), and the separate full-width `💛 My Wellness` panel below with
   collapsed check-in history (`open = false`).
 - **The single configured sample identity (`qa_samples: true`) sees the redesigned
-  normal-section dashboard and immediate in-section samples**: `"Welcome to Your
-  Sanctuary, <FirstName>!"` with subtitle, `#portalHighlights` (`For you right now`),
-  `#portalQaSampleBanner`, `My Profile & Intake` (`#portalProfileCard`), `My Support`
-  (`#portalSupportCard` with `#portalSupportHistory` and `#portalSupportFilter`),
-  `My Events` (grouped `Upcoming`/`Past` with event-type prefixes and
-  `#portalEventsFilter`), `Saved Resources`, `Sanctuary Updates & Perks`
-  (`#portalUpdatesCard`), and `My Wellness` with expanded saved history (`open = true`),
-  while `#portalWellnessSample`, `#portalGrantCard`, and `#portalSocialsCard` are hidden
-  and real grant/socials/profile/wellness values remain populated from real records.
+  normal-section dashboard, immediate in-section samples, and visible real grant &
+  Memory Socials summaries**: `"Welcome to Your Sanctuary, <FirstName>!"` with subtitle,
+  `#portalHighlights` (`For you right now`), `#portalQaSampleBanner`, `My Profile &
+  Intake` (`#portalProfileCard`), `My Support` (`#portalSupportCard` with
+  `#portalSupportHistory` and `#portalSupportFilter`), `My Events` (`#portalEventsCard`
+  with grouped `Upcoming`/`Past` event-type prefixes, `#portalEventsFilter`, and the
+  visible real Memory Socials summary `#portalEventsSocialsSummary`:
+  `#portalQaSocialsCount`, `#portalQaSocialsLastVisit`, `#portalQaSocialsNext`),
+  `My Resources` (`#portalResourcesCard`), `Sanctuary Updates & Perks`
+  (`#portalUpdatesCard` with the visible real Wellness Grant summary
+  `#portalUpdatesGrantSummary`: `#portalQaGrantStatus`, `#portalQaGrantRequestedFor`,
+  `#portalQaGrantAward` and `"Questions? Contact us"` link), and `My Wellness` with
+  expanded saved history (`open = true`), while the `#332` standalone
+  `#portalWellnessSample`, `#portalGrantCard`, and `#portalSocialsCard` are hidden.
 - Removes the staging `/portal?preview=sample` query-string design preview so no
   unauthenticated or non-sample visitor can trigger a fictional dashboard view.
 - Injects the `My real … only` (`real`) and `Sample / test entries only` (`sample`)

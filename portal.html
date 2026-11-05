@@ -7,7 +7,7 @@
 <meta name="description" content="Your events, your grant and your resources, in one place.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=74f370b3627d">
+<link rel="stylesheet" href="styles.css?v=8e8aeb4ab659">
 <link rel="icon" href="favicon.ico" sizes="32x32">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -249,6 +249,11 @@
         <div id="portalEventsList">
           <p class="small muted m-0">No registered events yet.</p>
         </div>
+        <div class="mt-16" id="portalEventsSocialsSummary" hidden>
+          <div class="kv-row"><span class="k">Memory Socials attended (all time)</span><span class="v" id="portalQaSocialsCount">0 socials</span></div>
+          <div class="kv-row"><span class="k">Last social visit</span><span class="v" id="portalQaSocialsLastVisit">—</span></div>
+          <div class="kv-row"><span class="k">Next Memory Social</span><span class="v" id="portalQaSocialsNext">—</span></div>
+        </div>
         <a href="events.html" class="btn btn-outline btn-sm mt-16 d-inline-block">Browse all events</a>
       </div>
 
@@ -285,6 +290,11 @@
       <div class="panel m-0 portal-card" id="portalUpdatesCard" hidden>
         <h4><span class="portal-card-icon" aria-hidden="true">✨</span> Sanctuary Updates &amp; Perks</h4>
         <p class="small muted m-0"><span class="badge badge-gray">Coming soon</span> Announcements, upcoming opportunities and member benefits will appear here.</p>
+        <div class="mt-12" id="portalUpdatesGrantSummary">
+          <div class="kv-row"><span class="k">Wellness Grant application</span><span class="v" id="portalQaGrantStatus"><span class="badge badge-gray">No application</span></span></div>
+          <div class="kv-row"><span class="k">Requested for</span><span class="v" id="portalQaGrantRequestedFor">—</span></div>
+          <div class="kv-row"><span class="k">Award &amp; care package</span><span class="v" id="portalQaGrantAward">—</span></div>
+        </div>
         <div class="portal-qa-sample-note small mt-12" id="portalUpdatesSampleNote" data-portal-sample="updates" hidden>
           <p class="small m-0"><span class="badge badge-amber">SAMPLE / TEST</span> <strong>Fictional community update placement preview:</strong></p>
           <ul class="portal-sample-list small muted mt-8 m-0">
@@ -292,6 +302,7 @@
             <li><strong>[SAMPLE] Priority Registration Window — Winter Wellness Series</strong> · Member benefit preview (fictional illustration)</li>
           </ul>
         </div>
+        <a href="request-support.html" class="btn btn-outline btn-sm mt-16 d-inline-block">Questions? Contact us</a>
       </div>
 
     </div>
@@ -341,7 +352,7 @@
 </footer>
 <!-- SHARED:footer:end -->
 
-<script src="app.js?v=8821108aa685"></script>
+<script src="app.js?v=52d243e0d597"></script>
 <script src="nav-v2.js"></script>
 </body>
 </html>

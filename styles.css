@@ -1427,7 +1427,7 @@ main ul.measure-620 { margin: 16px 0; padding-left: 24px; }
 /* Caregiver Portal dashboard (client request Oct 30): warm welcome, highlights strip, rounded cards. */
 #dashView .portal-welcome-sub { margin: 6px 0 0; font-size: 17px; color: var(--ink-soft); max-width: 620px; }
 #dashView .portal-highlights { margin: 0 0 24px; padding: 18px 22px; border-radius: 16px; background: #fbf3ec; border: 1px solid #efdfd3; }
-#dashView .portal-highlights[hidden], #dashView .portal-welcome-sub[hidden], #dashView #portalWellnessSample[hidden], #dashView .portal-summary-grid > .panel[hidden], #dashView #portalResourcesComingSoon[hidden] { display: none; }
+#dashView .portal-highlights[hidden], #dashView .portal-welcome-sub[hidden], #dashView #portalWellnessSample[hidden], #dashView .portal-summary-grid > .panel[hidden], #dashView #portalEventsSocialsSummary[hidden], #dashView #portalResourcesComingSoon[hidden] { display: none; }
 #dashView .portal-highlights h3 { margin: 0 0 10px; font-size: 18px; }
 #dashView .portal-highlights ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
 #dashView .portal-highlights li { display: flex; gap: 10px; align-items: baseline; font-size: 15.5px; line-height: 1.5; }
