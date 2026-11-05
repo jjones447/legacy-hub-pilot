@@ -2,6 +2,8 @@
 // requires an explicit source/review change here; filenames alone do not prove
 // absence of runtime effects. The separately gated workerd harness is excluded.
 export const UNIT_TEST_FILES = Object.freeze([
+  'people-add.test.mjs',
+  'email-list.test.mjs',
   'membership-continuation.test.mjs',
   'agent-conversation.test.mjs',
   'canonical-hosts.test.mjs',
@@ -58,6 +60,8 @@ export const UNIT_TEST_FILES = Object.freeze([
   'portal-banner.test.mjs',
   'portal-caregiver-status.test.mjs',
   'portal-dashboard-history.test.mjs',
+  'portal-dashboard-redesign.test.mjs',
+  'portal-qa-dashboard-samples.test.mjs',
   'portal-login-v0.test.mjs',
   'portal-logout-ui.test.mjs',
   'portal-no-demo.test.mjs',
@@ -66,8 +70,10 @@ export const UNIT_TEST_FILES = Object.freeze([
   'portal-preview-containment.test.mjs',
   'portal-signin-email.test.mjs',
   'public-events-render.test.mjs',
+  'drop-in-respite-page.test.mjs',
   'resource-closeout.test.mjs',
   'resource-links.test.mjs',
+  'sanctuary-our-approach.test.mjs',
   'restore-audit-integrity.test.mjs',
   'restore-count-report.test.mjs',
   'restore-identity-guard.test.mjs',
