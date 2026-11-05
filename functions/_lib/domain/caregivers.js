@@ -21,7 +21,7 @@ export const DO_NOT_CONTACT_SEGMENT_TAGS = Object.freeze(['qa_test', 'exclude_re
 
 export function isInternalTestCaregiverSql(alias = 'c') {
   return `(
-    LOWER(TRIM(COALESCE(${alias}.source, ''))) LIKE 'qa_%'
+    substr(LOWER(TRIM(COALESCE(${alias}.source, ''))), 1, 3) = 'qa_'
     OR EXISTS (
       SELECT 1
       FROM json_each(CASE WHEN json_valid(${alias}.segment_tags) AND json_type(${alias}.segment_tags) = 'array' THEN ${alias}.segment_tags ELSE '[]' END)
@@ -36,7 +36,7 @@ export function notInternalTestCaregiverSql(alias = 'c') {
 
 export function notDoNotContactCaregiverSql(alias = 'c') {
   return `(
-    LOWER(TRIM(COALESCE(${alias}.source, ''))) NOT LIKE 'qa_%'
+    substr(LOWER(TRIM(COALESCE(${alias}.source, ''))), 1, 3) != 'qa_'
     AND NOT EXISTS (
       SELECT 1
       FROM json_each(CASE WHEN json_valid(${alias}.segment_tags) AND json_type(${alias}.segment_tags) = 'array' THEN ${alias}.segment_tags ELSE '[]' END)

@@ -137,7 +137,9 @@ export async function onRequestGet({ request, env }) {
         params.push(pattern, pattern, pattern, pattern, pattern);
       }
 
-      if (segment) {
+      if (segment === 'qa_test') {
+        conditions.push(caregiversDomain.isInternalTestCaregiverSql('c'));
+      } else if (segment) {
         conditions.push(`EXISTS (
           SELECT 1 FROM json_each(COALESCE(NULLIF(c.segment_tags, ''), '[]'))
           WHERE value = ?
