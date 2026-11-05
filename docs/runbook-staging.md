@@ -1,5 +1,39 @@
 # Staging surface — historical preview runbook
 
+## Internal test-account exclusion guards and normal sign-in custody — November 5, 2026
+
+[pc2-gemini-ct-5] Built on installed production baseline `#335` (`5e5565376070fdad727ac4f51d122846a1f91466`)
+for [legacy-caregiver-hub#54](https://github.com/jjones447/legacy-caregiver-hub/issues/54#issuecomment-6661689963)
+(`c6660164573`, `c6661314002`, `c6661689963`, `c6662974621`). Author/publisher: `pc2-gemini-ct-5`; independent
+reviewer/support capacity: `pc2-codex-41`. Existing publisher (`pc2-gemini-ct-5`) and customer route (`pc2-claude-ct-2`)
+own their authorized delivery routes without a `41` GO gate.
+
+- **Existing internal QA caregiver records**: Both staging (`legacy-hub-db-staging` `42be536c-e354-44c7-b246-2dcac18d8ac6`,
+  `source = 'qa_account_staging'`, `id_sha256_16: bd1f773d365d00b7`) and production (`legacy-hub-db`
+  `3c06c3cb-e1a6-426c-ad85-0b8c94616ed2`, `source = 'qa_account_prod'`, `id_sha256_16: ccf784fe73941c36`) already
+  carry dedicated non-person internal test rows (`first_name` prefixed `TEST - Legacy - ...`, `last_name = 'Caregiver - Portal QA'`,
+  `status = 'inactive'`, `segment_tags` containing `qa_test`, `do_not_contact`, and `exclude_reporting`). No new
+  D1 rows or backdoor login paths are introduced.
+- **Source exclusion guards & internal Staff filter**: `functions/_lib/domain/caregivers.js` defines `isInternalTestCaregiverSql`,
+  `notInternalTestCaregiverSql`, and `notDoNotContactCaregiverSql` matching the literal prefix
+  `substr(LOWER(TRIM(COALESCE(source, ''))), 1, 3) = 'qa_'` or `segment_tags` JSON array entries `qa_test` /
+  `exclude_reporting` (plus `do_not_contact` for outbound reminders), without matching ordinary `qa...` sources such as
+  `qatar_referral`. Default customer counts and caregiver lists (`GET /api/staff/caregivers` unless explicitly filtered
+  by an internal QA segment tag or the Staff Console `#caregiverSearchSegment` `Internal QA` (`qa_test`) option in `staff.html`),
+  staff and public event registration counts (`GET /api/events`, `GET /api/staff/events`, `GET /api/registrations`),
+  open follow-up queues (`GET /api/staff/queue`, `GET /api/followups`), grant application lists (`GET /api/grants`),
+  staff wellness selectors and series (`caregiversWithCheckins`, `staffSeries`, `GET /api/staff/wellness`), staff recent
+  changes (`GET /api/staff/recent-changes`), and daily wellness reminder selection (`dueCaregivers` in `workers/reminders/src/index.mjs`)
+  exclude internal QA test accounts while preserving normal portal sign-in (`/api/portal/login` -> `/api/portal/verify` -> `/api/portal/me`),
+  direct staff profile lookup (`GET /api/staff/caregiver/:id`), and existing `xcentric-test` sample tuples.
+- **Normal sign-in mailbox custody**: Internal QA verification uses only the normal caregiver magic-link flow without
+  any skip-login or token-minting backdoor. Inbound verification-link custody reuses the existing fleet
+  `legacy-mailsource-graph` (`GraphMailSource`, Entra/Exchange `ApplicationAccessPolicy`-scoped read access to a
+  dedicated internal QA mailbox or approved alias) with credentials stored only in Vault by name (`secret/agent/legacy-qa-portal-Staging`,
+  `secret/agent/legacy-qa-portal-Prod`) and never printed in source, logs, or shared threads. Do not deploy a parallel
+  Cloudflare Email Routing Worker broker. Mailbox provisioning, inbox-read grant, and email-policy decisions remain
+  Jacob's specific decisions; source review does not establish live mailbox wiring or inbox-read permission.
+
 ## Production Staff usability and People Add join — November 4, 2026
 
 [pc2-codex-42] Root41 selected a source-only compatible join of accepted production

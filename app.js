@@ -318,6 +318,126 @@ function submitMembership(e) {
   return false;
 }
 
+/* ---------- Email list (schema 0020): join from the home page, leave from your own link ---------- */
+// Joining saves an email_subscriber row only (no caregiver record) and sends no email.
+// The retry key lives in sessionStorage, so a retry after an error cannot add a second row.
+const emailListSubmissions = new WeakMap();
+
+function showEmailListState(form, state, focusResult) {
+  emailListSubmissions.set(form, state);
+  setFormState(form, state.phase, state.message);
+  const pending = form.querySelector('[data-email-list-pending]');
+  if (pending) pending.hidden = state.phase !== 'pending';
+  const submit = form.querySelector('[type="submit"]');
+  if (submit) submit.disabled = ['pending', 'success'].includes(state.phase);
+  form.ariaBusy = state.phase === 'pending' ? 'true' : 'false';
+  const result = form.querySelector(state.phase === 'success' ? '[data-intake-success]' : '[data-intake-error]');
+  if (focusResult && result && typeof result.focus === 'function') result.focus();
+}
+
+// The sign-up form ships with its button disabled and no named fields (#302 review P3); it is
+// enabled only once this script is running and the submit dispatcher handles it.
+function initEmailListForm() {
+  const form = typeof document !== 'undefined' && document.getElementById ? document.getElementById('emailListForm') : null;
+  if (!form) return;
+  const submit = form.querySelector('[type="submit"]');
+  const note = form.querySelector('[data-email-list-not-ready]');
+  if (submit) submit.disabled = false;
+  if (note) note.hidden = true;
+}
+
+function submitEmailList(e) {
+  e.preventDefault();
+  const form = document.getElementById('emailListForm');
+  if (!form || ['pending', 'success'].includes(emailListSubmissions.get(form)?.phase)) return false;
+  let payload;
+  try {
+    const email = document.getElementById('emailListEmail').value.trim();
+    if (!email || !email.includes('@')) {
+      showEmailListState(form, { phase: 'error', message: 'Please enter your email address.' }, true);
+      return false;
+    }
+    payload = {
+      kind: 'newsletter',
+      source: 'site_form:newsletter',
+      external_ref: intakeExternalRef(form, 'newsletter'),
+      first_name: document.getElementById('emailListFirstName').value.trim(),
+      email: email,
+    };
+  } catch {
+    showEmailListState(form, { phase: 'error', message: "We couldn't prepare this form. It has not been sent. Please try again or contact Legacy." }, true);
+    return false;
+  }
+  showEmailListState(form, { phase: 'pending' });
+  Promise.resolve().then(() => postIntake(form, payload)).then(function () {
+    showEmailListState(form, { phase: 'success' }, true);
+  }).catch(function (error) {
+    showEmailListState(form, { phase: 'error', message: error && error.status === 429
+      ? 'Too many sign-ups from this connection just now. Please try again later.'
+      : "We couldn't add you to the email list just now. Please try again in a moment." }, true);
+  });
+  return false;
+}
+
+const UNSUBSCRIBE_ENDPOINT = '/api/unsubscribe';
+let unsubscribeToken = null;
+
+// Read the token once, then drop it from the address bar so it is not left in history or
+// shared by copying the URL. Nothing is sent until the person presses Unsubscribe.
+function initUnsubscribePage(loc, hist) {
+  const form = typeof document !== 'undefined' && document.getElementById ? document.getElementById('unsubscribeForm') : null;
+  if (!form) return;
+  let token = null;
+  try {
+    token = new URLSearchParams((loc && loc.search) || '').get('token');
+  } catch (err) {
+    token = null;
+  }
+  if (token !== null && hist && typeof hist.replaceState === 'function') {
+    try { hist.replaceState(null, '', loc.pathname); } catch (err) { /* the page still works */ }
+  }
+  unsubscribeToken = typeof token === 'string' && /^[0-9a-f]{32}$/.test(token) ? token : null;
+  const ready = form.querySelector('[data-unsubscribe-ready]');
+  const missing = form.querySelector('[data-unsubscribe-missing]');
+  const submit = form.querySelector('[type="submit"]');
+  if (ready) ready.hidden = !unsubscribeToken;
+  if (missing) missing.hidden = !!unsubscribeToken;
+  if (submit) submit.disabled = !unsubscribeToken;
+}
+
+function submitUnsubscribe(e) {
+  e.preventDefault();
+  const form = document.getElementById('unsubscribeForm');
+  if (!form || !unsubscribeToken) return false;
+  const pending = form.querySelector('[data-unsubscribe-pending]');
+  const submit = form.querySelector('[type="submit"]');
+  setFormState(form, 'pending');
+  if (pending) pending.hidden = false;
+  form.ariaBusy = 'true';
+  const finish = function (state, message) {
+    setFormState(form, state, message);
+    if (pending) pending.hidden = true;
+    form.ariaBusy = 'false';
+    if (submit) submit.disabled = state === 'success';
+    const result = form.querySelector(state === 'success' ? '[data-intake-success]' : '[data-intake-error]');
+    if (result && typeof result.focus === 'function') result.focus();
+  };
+  Promise.resolve().then(() => fetch(UNSUBSCRIBE_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: unsubscribeToken }),
+  })).then(async function (res) {
+    const body = await res.json().catch(function () { return {}; });
+    if (res.ok && body.ok) finish('success');
+    else finish('error', res.status === 429
+      ? 'Too many requests from this connection just now. Please try again later.'
+      : "We couldn't process this link. Please contact Legacy and we'll remove you.");
+  }).catch(function () {
+    finish('error', "We couldn't reach Legacy just now. Please try again in a moment.");
+  });
+  return false;
+}
+
 /* ---------- Virtual support group: sign up (saved for staff), then go to Google Meet ---------- */
 let supportGroupInterestOpener = null;
 let supportGroupSession = '';
@@ -1745,6 +1865,8 @@ function loadLiveEvents() {
 document.addEventListener('DOMContentLoaded', function() {
   initPortalSummaryPreview();
   initPortalSectionFilters();
+  if (typeof window !== 'undefined') initUnsubscribePage(window.location, window.history);
+  initEmailListForm();
   loadLiveEvents();
   checkPortalSession();
 });
@@ -1956,6 +2078,12 @@ document.addEventListener('submit', function (e) {
   } else if (action === 'submit-portal-support') {
     e.preventDefault();
     submitPortalSupport(e);
+  } else if (action === 'submit-email-list') {
+    e.preventDefault();
+    submitEmailList(e);
+  } else if (action === 'submit-unsubscribe') {
+    e.preventDefault();
+    submitUnsubscribe(e);
   }
 });
 
