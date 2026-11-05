@@ -175,7 +175,7 @@ test('card copy distinguishes account registrations, the public calendar/library
   assert.match(html, /Coming soon<\/span> Announcements, upcoming opportunities and member benefits/);
 });
 
-test('dashboard cards follow the requested order; wellness is a full-width card; grant and socials cards are gone', () => {
+test('dashboard cards follow the requested order; wellness is a full-width card; real grant and socials summaries remain visible inside the 6-card layout', () => {
   const gridStart = html.indexOf('id="portalAccountSummary"');
   const sample = html.indexOf('id="portalQaSampleBanner"');
   assert.ok(gridStart > 0 && sample < gridStart);
@@ -184,7 +184,10 @@ test('dashboard cards follow the requested order; wellness is a full-width card;
   const at = order.map(label => grid.indexOf(label));
   assert.ok(at.every(i => i > 0), JSON.stringify(at));
   assert.deepEqual([...at].sort((a, b) => a - b), at);
-  assert.doesNotMatch(html, /My Wellness Grant|My Memory Socials|Resource library|portalGrantStatus|portalSocialsCount/);
+  assert.doesNotMatch(html, /<h4>[^<]*My Wellness Grant|<h4>[^<]*My Memory Socials|<h4>[^<]*Resource library/);
+  for (const preservedId of ['portalGrantStatus', 'portalGrantRequestedFor', 'portalGrantAward', 'portalSocialsCount', 'portalSocialsLastVisit', 'portalSocialsNext']) {
+    assert.match(html, new RegExp(`id="${preservedId}"`), `${preservedId} preserved in 6-card layout`);
+  }
   assert.match(html, /class="panel m-0 portal-card portal-wellness-section" id="portalWellnessTile"/);
   const styles = readFileSync(new URL('../styles.css', import.meta.url), 'utf8');
   assert.match(styles, /#dashView \.portal-card-grid > \.portal-wellness-section[^}]*grid-column: 1 \/ -1/);

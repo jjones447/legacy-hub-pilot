@@ -24,9 +24,11 @@ function ui({ search = '' } = {}) {
   const ids = ['portalWelcome', 'portalProfileName', 'portalProfileEmail', 'portalProfilePhone', 'portalMembershipStatus',
     'portalEventsList', 'portalHighlights', 'portalHighlightsList', 'portalWellnessSummary', 'portalWellnessBtn',
     'portalWellnessTrendHint', 'portalWellnessTrend', 'portalWellnessHistoryRows', 'loginView', 'dashView',
-    'portalDesignPreview', 'portalLogoutBtn', 'portalQaSampleBanner'];
+    'portalLogoutBtn', 'portalQaSampleBanner',
+    'portalGrantStatus', 'portalGrantRequestedFor', 'portalGrantAward',
+    'portalSocialsCount', 'portalSocialsLastVisit', 'portalSocialsNext'];
   const el = Object.fromEntries(ids.map(id => [id, new Element()]));
-  el.portalDesignPreview.hidden = true; el.portalHighlights.hidden = true; el.portalQaSampleBanner.hidden = true;
+  el.portalHighlights.hidden = true; el.portalQaSampleBanner.hidden = true;
   const calls = [];
   const context = vm.createContext({
     Date: class extends Date { constructor(...a) { super(...(a.length ? a : [now])); } static now() { return now; } },
@@ -105,28 +107,30 @@ test('the next-event highlight is the first future REGISTERED event, even after 
   assert.equal(h.el.portalHighlights.hidden, true);
 });
 
-test('the design preview really hides Sign out: its .btn display rule cannot override [hidden]', () => {
+test('query-string design preview (?preview=sample) is removed from production source and cannot unlock a fictional dashboard', () => {
   const css = readFileSync(new URL('../styles.css', import.meta.url), 'utf8');
-  const button = html.match(/<button[^>]*id="portalLogoutBtn"[^>]*>/)[0];
-  const classes = button.match(/class="([^"]*)"/)[1].split(/\s+/);
-  const displayed = classes.filter(c => new RegExp('(^|\\n)\\.' + c + '\\s*\\{[^}]*\\bdisplay\\s*:').test(css));
-  assert.ok(displayed.includes('btn'), 'the button carries a class that sets display');
-  assert.match(css, /#dashView #portalLogoutBtn\[hidden\]\s*\{\s*display:\s*none;\s*\}/);
+  const h = ui({ search: '?preview=sample' });
+  assert.equal(typeof h.context.portalDesignPreviewRequested, 'undefined');
+  assert.equal(typeof h.context.initPortalDesignPreview, 'undefined');
+  assert.doesNotMatch(html, /portalDesignPreview|Design preview with sample information/);
+  assert.doesNotMatch(css, /portal-design-preview/);
+  assert.doesNotMatch(app, /portalDesignPreviewRequested|initPortalDesignPreview/);
 });
 
-test('design preview (?preview=sample) shows the layout with labeled fictional data and makes no requests', () => {
-  const h = ui({ search: '?preview=sample' });
-  assert.equal(h.context.portalDesignPreviewRequested(), true);
-  assert.equal(h.context.initPortalDesignPreview(), true);
-  assert.equal(h.el.dashView.style.display, 'block');
-  assert.equal(h.el.loginView.style.display, 'none');
-  assert.equal(h.el.portalDesignPreview.hidden, false);
-  assert.equal(h.el.portalLogoutBtn.hidden, true);
-  assert.equal(h.el.portalQaSampleBanner.hidden, true);
-  assert.ok(h.el.portalWellnessBtn.classes.has('d-none'), 'no check-in can be submitted');
-  assert.equal(h.el.portalWelcome.textContent, 'Welcome to Your Sanctuary, Jordan!');
-  assert.equal(h.el.portalWellnessTrend.children.length, 0, 'no fictional wellness scores');
-  assert.equal(h.calls.length, 0);
-  assert.equal(ui({ search: '' }).context.portalDesignPreviewRequested(), false);
-  assert.match(html, /Design preview with sample information\.<\/strong> This is not a real account/);
+test('real grant status and Memory Socials summary remain visible in the new 6-card layout for production caregivers', () => {
+  const h = ui();
+  h.context.renderPortalData({
+    profile: { first_name: 'Maria', sanctuary_member: 1 },
+    grants: [{ status: 'awarded', requested_for: 'Respite weekend', amount: '$500', care_package: 'Self-Care Box' }],
+    events: [
+      { title: 'Past Social', type: 'memory_social', starts_at: '2026-10-10 14:00', registration_status: 'attended' },
+      { title: 'Upcoming Social', type: 'memory_social', starts_at: '2026-11-12 14:00', registration_status: 'registered' }
+    ]
+  });
+  assert.equal(h.el.portalGrantStatus.textContent, 'awarded');
+  assert.equal(h.el.portalGrantRequestedFor.textContent, 'Respite weekend');
+  assert.equal(h.el.portalGrantAward.textContent, 'Awarded: $500 (Self-Care Box)');
+  assert.equal(h.el.portalSocialsCount.textContent, '1 socials');
+  assert.equal(h.el.portalSocialsLastVisit.textContent, '2026-10-10');
+  assert.equal(h.el.portalSocialsNext.textContent, 'Upcoming Social · 2026-11-12');
 });

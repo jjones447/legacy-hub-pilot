@@ -127,8 +127,10 @@ function createPortalDashboardUi({ fetchHandler = null } = {}) {
   }
 
   const ids = [
-    'loginView', 'dashView', 'portalDesignPreview', 'portalLogoutBtn', 'portalLogoutStatus', 'loginStatus', 'loginEmail',
+    'loginView', 'dashView', 'portalLogoutBtn', 'portalLogoutStatus', 'loginStatus', 'loginEmail',
     'portalWelcome', 'portalProfileName', 'portalProfileEmail', 'portalProfilePhone', 'portalMembershipStatus',
+    'portalGrantStatus', 'portalGrantRequestedFor', 'portalGrantAward',
+    'portalSocialsCount', 'portalSocialsLastVisit', 'portalSocialsNext',
     'portalQaSampleBanner', 'portalProfileSampleNote', 'portalResourcesSampleNote', 'portalUpdatesSampleNote',
     'portalHighlights', 'portalHighlightsList',
     'portalEventsList', 'portalEventsFilter', 'portalEventsFilterRow',
@@ -140,15 +142,28 @@ function createPortalDashboardUi({ fetchHandler = null } = {}) {
     'portalWellnessHistory', 'portalWellnessHistoryRows', 'portalWellnessForm', 'portalWellnessMsg'
   ];
   const el = Object.fromEntries(ids.map(id => [id, new Element()]));
-  el.portalDesignPreview.hidden = true;
   el.portalHighlights.hidden = true;
   el.portalQaSampleBanner.hidden = true;
   el.portalProfileSampleNote.hidden = true;
   el.portalResourcesSampleNote.hidden = true;
   el.portalUpdatesSampleNote.hidden = true;
   el.portalEventsFilter.value = 'all';
+  for (const val of ['all', 'upcoming', 'past', 'memory_social', 'support_group', 'caregiver_event', 'wellness']) {
+    const opt = new Element('option');
+    opt.value = val;
+    opt.setAttribute('value', val);
+    el.portalEventsFilter.appendChild(opt);
+  }
   el.portalSupportFilter.value = 'all';
-  el.portalSupportHistory.open = true;
+  for (const val of ['all', 'received', 'in_progress', 'completed']) {
+    const opt = new Element('option');
+    opt.value = val;
+    opt.setAttribute('value', val);
+    el.portalSupportFilter.appendChild(opt);
+  }
+  el.portalSupportHistory.hidden = true;
+  el.portalSupportHistory.open = false;
+  el.portalSupportFilterRow.hidden = true;
   el.portalWellnessHistory.open = true;
 
   const eventTimeSlice = APP_JS.slice(APP_JS.indexOf('function publicEventTime('), APP_JS.indexOf('function renderPublicEvents('));
@@ -334,7 +349,10 @@ test('server + UI: explicit production sample tuple enables qa_samples: true for
   const otherProdBody = await otherProdRes.json();
   assert.equal('qa_samples' in otherProdBody, false, 'second caregiver never receives qa_samples');
 
-  // 5. Before #331 form/endpoint is present on production HTML, checkPortalSession() does not fetch /api/portal/support and still renders sample/empty support rows
+  // 5. Before #331 form/endpoint is present on production HTML, checkPortalSession() does not fetch /api/portal/support;
+  //    sample caregiver gets sample options + sample support rows (and honest unavailable notice on 'real' filter),
+  //    while ordinary caregivers keep support history + sample filter options hidden and never see a false 'No support requests yet.'
+  assert.doesNotMatch(PORTAL_HTML, /<option value="real">|<option value="sample">/);
   const pre331Ui = createPortalDashboardUi({
     fetchHandler: async (url) => {
       if (url === '/api/portal/me') {
@@ -355,7 +373,45 @@ test('server + UI: explicit production sample tuple enables qa_samples: true for
     ['/api/portal/me', '/api/portal/wellness'],
     'does not request /api/portal/support when #portalSupportForm is absent'
   );
+  assert.equal(pre331Ui.el.portalSupportHistory.hidden, false);
+  assert.equal(pre331Ui.el.portalSupportFilterRow.hidden, false);
   assert.equal(collectSampleNodes(pre331Ui.el.portalSupportHistoryRows).length, 3);
+  assert.deepEqual(
+    pre331Ui.el.portalEventsFilter.children.map(o => o.value),
+    ['all', 'upcoming', 'past', 'memory_social', 'support_group', 'caregiver_event', 'wellness', 'real', 'sample']
+  );
+  assert.deepEqual(
+    pre331Ui.el.portalSupportFilter.children.map(o => o.value),
+    ['all', 'received', 'in_progress', 'completed', 'real', 'sample']
+  );
+  pre331Ui.context.filterPortalSupport('real');
+  assert.equal(
+    pre331Ui.el.portalSupportHistoryRows.textContent,
+    'Your support requests are not available right now.',
+    'when #331 support route has not loaded, real-only filter reports unavailable rather than No support requests yet.'
+  );
+
+  // Switch to ordinary caregiver on #332 (no #portalSupportForm, no qa_samples):
+  pre331Ui.context.renderPortalData(otherProdBody);
+  assert.equal(pre331Ui.el.portalSupportHistory.hidden, true, 'ordinary caregiver support history is hidden when #331 is absent');
+  assert.equal(pre331Ui.el.portalSupportFilterRow.hidden, true);
+  assert.deepEqual(
+    pre331Ui.el.portalEventsFilter.children.map(o => o.value),
+    ['all', 'upcoming', 'past', 'memory_social', 'support_group', 'caregiver_event', 'wellness'],
+    'sample filter options removed for ordinary caregiver'
+  );
+  assert.deepEqual(
+    pre331Ui.el.portalSupportFilter.children.map(o => o.value),
+    ['all', 'received', 'in_progress', 'completed'],
+    'sample support filter options removed for ordinary caregiver'
+  );
+  for (const f of ['all', 'received', 'in_progress', 'completed', 'real', 'sample']) {
+    pre331Ui.context.filterPortalSupport(f);
+    assert.equal(
+      pre331Ui.el.portalSupportHistoryRows.textContent,
+      'Your support requests are not available right now.'
+    );
+  }
 });
 
 test('immediate in-section visibility: QA caregiver sees labeled samples across sections without opening a collapsed demo, while real history is preserved', () => {
@@ -373,7 +429,14 @@ test('immediate in-section visibility: QA caregiver sees labeled samples across 
       phone: '414-555-0154',
       sanctuary_member: 1
     },
-    grants: [],
+    grants: [
+      {
+        status: 'awarded',
+        requested_for: 'Respite care',
+        amount: '$500',
+        care_package: 'Restorative Care Box'
+      }
+    ],
     events: [
       {
         id: 'ev-real-1',
@@ -418,11 +481,17 @@ test('immediate in-section visibility: QA caregiver sees labeled samples across 
   assert.equal(ui.el.portalResourcesSampleNote.hidden, false);
   assert.equal(ui.el.portalUpdatesSampleNote.hidden, false);
 
-  // Real profile fields are preserved intact
+  // Real profile, grant, and Memory Socials summary fields are preserved intact and never altered by sample items
   assert.equal(ui.el.portalProfileName.textContent, 'Jacob QA');
   assert.equal(ui.el.portalProfileEmail.textContent, QA_EMAIL);
   assert.equal(ui.el.portalProfilePhone.textContent, '414-555-0154');
   assert.match(ui.el.portalMembershipStatus.innerHTML, /Sanctuary member/);
+  assert.equal(ui.el.portalGrantStatus.textContent, 'awarded');
+  assert.equal(ui.el.portalGrantRequestedFor.textContent, 'Respite care');
+  assert.equal(ui.el.portalGrantAward.textContent, 'Awarded: $500 (Restorative Care Box)');
+  assert.equal(ui.el.portalSocialsCount.textContent, '0 socials', 'sample past social does not inflate real attended count');
+  assert.equal(ui.el.portalSocialsLastVisit.textContent, '—');
+  assert.equal(ui.el.portalSocialsNext.textContent, 'Real Milwaukee Memory Social · 2026-11-06');
 
   // My Events immediately shows Upcoming (1 real + 3 sample) and Past (2 sample)
   const eventGroups = ui.el.portalEventsList.children;

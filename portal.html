@@ -7,7 +7,7 @@
 <meta name="description" content="Your events, your grant and your resources, in one place.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=fb2f8f57fc4c">
+<link rel="stylesheet" href="styles.css?v=87948cf086ad">
 <link rel="icon" href="favicon.ico" sizes="32x32">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -146,7 +146,6 @@
 <!-- DASHBOARD VIEW -->
 <section class="d-none-py-44" id="dashView">
   <div class="container">
-    <p class="portal-design-preview" id="portalDesignPreview" role="note" hidden><strong>Design preview with sample information.</strong> This is not a real account. Nothing here can be saved, submitted or registered.</p>
     <div class="portal-head-row">
       <div class="portal-welcome">
         <span class="eyebrow">Caregiver Portal</span>
@@ -181,27 +180,30 @@
         <h4><span class="portal-card-icon" aria-hidden="true">🤝</span> My Support</h4>
         <p class="small muted m-0" id="portalSupportSummary">Need help with caregiving, respite or resources? Send a request and the Legacy team will follow up with you.</p>
         <a href="request-support.html" class="btn btn-plum btn-sm mt-16 d-inline-block">Request support</a>
-        <details class="mt-16" id="portalSupportHistory" open>
+        <details class="mt-16" id="portalSupportHistory" hidden>
           <summary>View my support requests</summary>
           <p class="small muted">Your past requests, current status (Received, In Progress, Completed), and last status update.</p>
-          <div class="portal-section-toolbar mt-8 mb-8" id="portalSupportFilterRow">
+          <div class="portal-section-toolbar mt-8 mb-8" id="portalSupportFilterRow" hidden>
             <label class="small" for="portalSupportFilter"><strong>Filter support requests:</strong></label>
             <select id="portalSupportFilter" class="staff-filter-select-sm" aria-label="Filter support requests">
               <option value="all">All requests</option>
               <option value="received">Received</option>
               <option value="in_progress">In Progress</option>
               <option value="completed">Completed</option>
-              <option value="real">My real requests only</option>
-              <option value="sample">Sample / test entries only</option>
             </select>
           </div>
-          <div id="portalSupportHistoryRows">Your saved support requests will appear here.</div>
+          <div id="portalSupportHistoryRows">Your support requests are not available right now.</div>
         </details>
       </div>
 
       <div class="panel m-0 portal-card portal-events-panel" id="portalEventsCard">
         <h4><span class="portal-card-icon" aria-hidden="true">📅</span> My Events</h4>
         <p class="small muted">Events you registered for on the Events page, including Memory Socials, support group sessions, workshops and community experiences.</p>
+        <div class="mt-12 mb-12" id="portalSocialsSummary">
+          <div class="kv-row"><span class="k">Memory Socials attended</span><span class="v" id="portalSocialsCount">0 socials</span></div>
+          <div class="kv-row"><span class="k">Last visit</span><span class="v" id="portalSocialsLastVisit">—</span></div>
+          <div class="kv-row"><span class="k">Next Memory Social</span><span class="v" id="portalSocialsNext">—</span></div>
+        </div>
         <div class="portal-section-toolbar mt-8 mb-8" id="portalEventsFilterRow">
           <label class="small" for="portalEventsFilter"><strong>Filter events:</strong></label>
           <select id="portalEventsFilter" class="staff-filter-select-sm" aria-label="Filter events">
@@ -212,8 +214,6 @@
             <option value="support_group">Support Groups</option>
             <option value="caregiver_event">Workshops &amp; Caregiver Events</option>
             <option value="wellness">Wellness Sessions</option>
-            <option value="real">My real registrations only</option>
-            <option value="sample">Sample / test entries only</option>
           </select>
         </div>
         <div id="portalEventsList">
@@ -245,7 +245,7 @@
         <div class="portal-qa-sample-note small mt-12" id="portalResourcesSampleNote" data-portal-sample="resources" hidden>
           <p class="small m-0"><span class="badge badge-amber">SAMPLE / TEST</span> <strong>Fictional saved-resource placement preview:</strong></p>
           <ul class="portal-sample-list small muted mt-8 m-0">
-            <li><strong>[SAMPLE] Milwaukee County Aging &amp; Disability Resource Guide</strong> · Local help &amp; referrals (fictional bookmark illustration)</li>
+            <li><strong>[SAMPLE] Fictional Caregiver Navigation &amp; Referral Handbook</strong> · Local help &amp; referrals (fictional bookmark illustration)</li>
             <li><strong>[SAMPLE] Home Safety &amp; Daily Routine Checklist</strong> · Caregiver tool (fictional bookmark illustration)</li>
           </ul>
         </div>
@@ -255,6 +255,11 @@
 
       <div class="panel m-0 portal-card" id="portalUpdatesCard">
         <h4><span class="portal-card-icon" aria-hidden="true">✨</span> Sanctuary Updates &amp; Perks</h4>
+        <div class="mb-12" id="portalGrantSummary">
+          <div class="kv-row"><span class="k">Wellness grant</span><span class="v" id="portalGrantStatus"><span class="badge badge-gray">No application</span></span></div>
+          <div class="kv-row"><span class="k">Requested for</span><span class="v" id="portalGrantRequestedFor">—</span></div>
+          <div class="kv-row"><span class="k">Award &amp; care package</span><span class="v" id="portalGrantAward">—</span></div>
+        </div>
         <p class="small muted m-0"><span class="badge badge-gray">Coming soon</span> Announcements, upcoming opportunities and member benefits will appear here.</p>
         <div class="portal-qa-sample-note small mt-12" id="portalUpdatesSampleNote" data-portal-sample="updates" hidden>
           <p class="small m-0"><span class="badge badge-amber">SAMPLE / TEST</span> <strong>Fictional community update placement preview:</strong></p>
@@ -295,7 +300,7 @@
 </footer>
 <!-- SHARED:footer:end -->
 
-<script src="app.js?v=96b2a021e9ca"></script>
+<script src="app.js?v=cf2a5bad6a7c"></script>
 <script src="nav-v2.js"></script>
 </body>
 </html>

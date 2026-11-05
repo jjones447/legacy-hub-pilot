@@ -14,6 +14,22 @@ tree:
   filters (`#portalEventsFilter`, `#portalSupportFilter`), and immediate, clearly
   labeled `[SAMPLE]` / `SAMPLE / TEST` items when `qa_samples: true` is returned by
   `GET /api/portal/me`.
+- Preserves all real caregiver data visible in `#332`: real profile fields and
+  membership status (`#portalProfileCard`), real event registrations and the Memory
+  Socials attended/last-visit/next-up summary (`#portalSocialsCount`,
+  `#portalSocialsLastVisit`, `#portalSocialsNext` in `#portalEventsCard`), real
+  Wellness Grant application/requested-for/award status (`#portalGrantStatus`,
+  `#portalGrantRequestedFor`, `#portalGrantAward` in `#portalUpdatesCard`), and real
+  wellness check-in history (`#portalWellnessTile`).
+- Removes the staging `/portal?preview=sample` query-string design preview so no
+  unauthenticated or non-sample visitor can trigger a fictional dashboard view.
+- Injects the `My real … only` (`real`) and `Sample / test entries only` (`sample`)
+  filter options dynamically only while `qa_samples: true` is active for the
+  authenticated session, removing them for ordinary caregivers and on session reset.
+- Keeps `#portalSupportHistory` and `#portalSupportFilterRow` hidden when neither
+  `qa_samples: true` nor the `#331` support route (`#portalSupportForm`) is active,
+  and reports `"Your support requests are not available right now."` whenever support
+  history has not been loaded rather than falsely claiming `"No support requests yet."`.
 - **Explicit production identity & environment gate (`matchesProductionSampleCaregiver`
   in `functions/api/portal/[[path]].js`)**:
   - Defaults **OFF** (`qa_samples` omitted) until the explicit production environment
@@ -25,7 +41,7 @@ tree:
     (`PORTAL_PREVIEW_QA_CAREGIVER_ID`, `PORTAL_PREVIEW_QA_EMAIL`,
     `PORTAL_PREVIEW_MAIL_ENABLED`) or Staff Access identity.
   - Ordinary caregivers and any second production caregiver session never receive
-    `qa_samples` and keep all sample banners, notes and entries hidden (`hidden`).
+    `qa_samples` and keep all sample banners, notes, filter options and entries hidden.
 - Preserves the full `#327` (`c2bab505`) session-generation and identity-fencing
   lifecycle across `checkPortalSession`, `portalLogout`, `renderPortalData`,
   `loadWellness`, and `loadPortalSupport` / `renderPortalSupport`. No real profile

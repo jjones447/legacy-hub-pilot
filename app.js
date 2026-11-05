@@ -706,6 +706,7 @@ function renderPortalData(data) {
     portalEventsFilterState = 'all';
     portalSupportRealRequests = [];
     portalSupportCacheCaregiverKey = nextCaregiverKey;
+    portalSupportLoadedOnce = false;
     portalSupportHistoryUnavailable = false;
     portalSupportFilterState = 'all';
     if (typeof portalSupportPendingRequest !== 'undefined') {
@@ -720,7 +721,7 @@ function renderPortalData(data) {
     if (supportFilter) supportFilter.value = 'all';
     const rowsEl = document.getElementById('portalSupportHistoryRows');
     if (rowsEl && !nextQaSamples) {
-      rowsEl.textContent = 'Your saved support requests will appear here.';
+      rowsEl.textContent = 'Your support requests are not available right now.';
     }
     portalHighlightState.wellnessDue = false;
   }
@@ -817,6 +818,7 @@ var portalRealEvents = [];
 var portalEventsFilterState = 'all';
 var portalSupportRealRequests = [];
 var portalSupportCacheCaregiverKey = '';
+var portalSupportLoadedOnce = false;
 var portalSupportHistoryUnavailable = false;
 var portalSupportFilterState = 'all';
 
@@ -844,6 +846,7 @@ function resetPortalSessionState() {
   portalEventsFilterState = 'all';
   portalSupportRealRequests = [];
   portalSupportCacheCaregiverKey = '';
+  portalSupportLoadedOnce = false;
   portalSupportHistoryUnavailable = false;
   portalSupportFilterState = 'all';
   if (typeof portalSupportPendingRequest !== 'undefined') {
@@ -863,8 +866,20 @@ function resetPortalSessionState() {
   }
   const rowsEl = document.getElementById('portalSupportHistoryRows');
   if (rowsEl) {
-    rowsEl.textContent = 'Your saved support requests will appear here.';
+    rowsEl.textContent = 'Your support requests are not available right now.';
   }
+  const grantStatus = document.getElementById('portalGrantStatus');
+  if (grantStatus) grantStatus.innerHTML = '<span class="badge badge-gray">No application</span>';
+  const grantRequestedFor = document.getElementById('portalGrantRequestedFor');
+  if (grantRequestedFor) grantRequestedFor.textContent = '—';
+  const grantAward = document.getElementById('portalGrantAward');
+  if (grantAward) grantAward.textContent = '—';
+  const socialsCount = document.getElementById('portalSocialsCount');
+  if (socialsCount) socialsCount.textContent = '0 socials';
+  const socialsLast = document.getElementById('portalSocialsLastVisit');
+  if (socialsLast) socialsLast.textContent = '—';
+  const socialsNext = document.getElementById('portalSocialsNext');
+  if (socialsNext) socialsNext.textContent = '—';
   portalHighlightState.nextEvent = null;
   portalHighlightState.nextSampleEvent = null;
   portalHighlightState.sampleSupportSummary = null;
@@ -993,14 +1008,64 @@ function portalQaSampleSupportRequests() {
   ];
 }
 
+function syncPortalSelectSampleOptions(selectEl, realLabel) {
+  if (!selectEl) return;
+  if (typeof selectEl.querySelectorAll === 'function') {
+    Array.from(selectEl.querySelectorAll('option[value="real"], option[value="sample"]')).forEach(function (opt) {
+      if (typeof opt.remove === 'function') opt.remove();
+      else if (opt.parentNode && typeof opt.parentNode.removeChild === 'function') opt.parentNode.removeChild(opt);
+    });
+  } else if (Array.isArray(selectEl.children)) {
+    selectEl.children = selectEl.children.filter(function (opt) {
+      const val = opt && (opt.value || (typeof opt.getAttribute === 'function' && opt.getAttribute('value')));
+      return val !== 'real' && val !== 'sample';
+    });
+  }
+  if (portalQaSamplesActive) {
+    if (typeof document !== 'undefined' && typeof document.createElement === 'function' && typeof selectEl.appendChild === 'function') {
+      const realOpt = document.createElement('option');
+      realOpt.value = 'real';
+      if (typeof realOpt.setAttribute === 'function') realOpt.setAttribute('value', 'real');
+      realOpt.textContent = realLabel;
+      const sampleOpt = document.createElement('option');
+      sampleOpt.value = 'sample';
+      if (typeof sampleOpt.setAttribute === 'function') sampleOpt.setAttribute('value', 'sample');
+      sampleOpt.textContent = 'Sample / test entries only';
+      selectEl.appendChild(realOpt);
+      selectEl.appendChild(sampleOpt);
+    }
+  } else if (selectEl.value === 'real' || selectEl.value === 'sample') {
+    selectEl.value = 'all';
+  }
+}
+
 function syncPortalQaSampleChrome() {
   ['portalQaSampleBanner', 'portalProfileSampleNote', 'portalResourcesSampleNote', 'portalUpdatesSampleNote'].forEach(function (id) {
     const el = document.getElementById(id);
     if (el) el.hidden = !portalQaSamplesActive;
   });
+  syncPortalSelectSampleOptions(document.getElementById('portalEventsFilter'), 'My real registrations only');
+  syncPortalSelectSampleOptions(document.getElementById('portalSupportFilter'), 'My real requests only');
+  const canShowSupportHistory = Boolean(
+    portalQaSamplesActive ||
+    document.getElementById('portalSupportForm') ||
+    portalSupportLoadedOnce ||
+    portalSupportHistoryUnavailable
+  );
+  const supportHistory = document.getElementById('portalSupportHistory');
+  if (supportHistory) {
+    supportHistory.hidden = !canShowSupportHistory;
+    if (portalQaSamplesActive) {
+      supportHistory.open = true;
+    } else if (!canShowSupportHistory) {
+      supportHistory.open = false;
+    }
+  }
+  const supportFilterRow = document.getElementById('portalSupportFilterRow');
+  if (supportFilterRow) {
+    supportFilterRow.hidden = !canShowSupportHistory;
+  }
   if (portalQaSamplesActive) {
-    const supportHistory = document.getElementById('portalSupportHistory');
-    if (supportHistory) supportHistory.open = true;
     const wellnessHistory = document.getElementById('portalWellnessHistory');
     if (wellnessHistory) wellnessHistory.open = true;
   }
@@ -1008,9 +1073,12 @@ function syncPortalQaSampleChrome() {
 
 function filterPortalEvents(filterValue) {
   const filterSelect = document.getElementById('portalEventsFilter');
-  const activeFilter = typeof filterValue === 'string' && filterValue
+  let activeFilter = typeof filterValue === 'string' && filterValue
     ? filterValue
     : (filterSelect && typeof filterSelect.value === 'string' && filterSelect.value ? filterSelect.value : (portalEventsFilterState || 'all'));
+  if (!portalQaSamplesActive && (activeFilter === 'real' || activeFilter === 'sample')) {
+    activeFilter = 'all';
+  }
   portalEventsFilterState = activeFilter;
   if (filterSelect && filterSelect.value !== activeFilter) {
     filterSelect.value = activeFilter;
@@ -1085,9 +1153,12 @@ function filterPortalEvents(filterValue) {
 
 function filterPortalSupport(filterValue) {
   const filterSelect = document.getElementById('portalSupportFilter');
-  const activeFilter = typeof filterValue === 'string' && filterValue
+  let activeFilter = typeof filterValue === 'string' && filterValue
     ? filterValue
     : (filterSelect && typeof filterSelect.value === 'string' && filterSelect.value ? filterSelect.value : (portalSupportFilterState || 'all'));
+  if (!portalQaSamplesActive && (activeFilter === 'real' || activeFilter === 'sample')) {
+    activeFilter = 'all';
+  }
   portalSupportFilterState = activeFilter;
   if (filterSelect && filterSelect.value !== activeFilter) {
     filterSelect.value = activeFilter;
@@ -1112,9 +1183,9 @@ function filterPortalSupport(filterValue) {
     return true;
   });
 
-  if (rowsEl && (portalQaSamplesActive || realList.length > 0 || activeFilter !== 'all' || portalSupportHistoryUnavailable)) {
+  if (rowsEl) {
     let emptyText;
-    if (portalSupportHistoryUnavailable && (!portalQaSamplesActive || activeFilter === 'real')) {
+    if ((portalSupportHistoryUnavailable || !portalSupportLoadedOnce) && (!portalQaSamplesActive || activeFilter === 'real')) {
       emptyText = 'Your support requests are not available right now.';
     } else if (activeFilter === 'all' || (activeFilter === 'real' && realList.length === 0)) {
       emptyText = 'No support requests yet.';
@@ -1281,51 +1352,9 @@ function renderPortalHighlights() {
   box.hidden = list.children.length === 0;
 }
 
-
-// Design preview (client review on the test site, where caregiver sign-in mail is off):
-// /portal?preview=sample shows the real dashboard layout with clearly labeled FICTIONAL
-// information. No session, API request, storage or submit control is used.
-function portalDesignPreviewRequested() {
-  try {
-    return typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('preview') === 'sample';
-  } catch (err) {
-    return false;
-  }
-}
-
 function portalSampleDate(daysFromNow, hhmm) {
   const d = new Date(Date.now() + daysFromNow * 86400000);
   return d.toISOString().slice(0, 10) + ' ' + hhmm;
-}
-
-function initPortalDesignPreview() {
-  const loginView = document.getElementById('loginView');
-  const dashView = document.getElementById('dashView');
-  if (!loginView || !dashView) return false;
-  loginView.style.display = 'none';
-  dashView.style.display = 'block';
-  const banner = document.getElementById('portalDesignPreview');
-  if (banner) banner.hidden = false;
-  ['portalLogoutBtn', 'portalQaSampleBanner'].forEach(function (id) {
-    const el = document.getElementById(id);
-    if (el) el.hidden = true;
-  });
-  renderPortalData({
-    profile: { first_name: 'Jordan', last_name: 'Example', email: 'jordan@example.invalid', phone: '(000) 000-0000', sanctuary_member: 1 },
-    grants: [],
-    events: [
-      { title: 'Example Memory Social', type: 'memory_social', starts_at: portalSampleDate(3, '14:00'), location: 'Sample community room', registration_status: 'registered' },
-      { title: 'Example Virtual Caregiver Support Group', type: 'support_group', starts_at: portalSampleDate(6, '17:00'), location: 'Online', registration_status: 'registered' },
-      { title: 'Example Family Education Workshop', type: 'caregiver_event', starts_at: portalSampleDate(-9, '18:00'), location: 'Sample community center', registration_status: 'attended' },
-    ],
-  });
-  // No fictional wellness scores; only the due prompt, and no check-in can be submitted.
-  renderWellness({ history: [], due: true });
-  const btn = document.getElementById('portalWellnessBtn');
-  if (btn) btn.classList.add('d-none');
-  const supportBtn = document.getElementById('portalSupportBtn');
-  if (supportBtn) supportBtn.classList.add('d-none');
-  return true;
 }
 
 
@@ -1598,7 +1627,7 @@ function loadLiveEvents() {
 document.addEventListener('DOMContentLoaded', function() {
   initPortalSectionFilters();
   loadLiveEvents();
-  if (!(portalDesignPreviewRequested() && initPortalDesignPreview())) checkPortalSession();
+  checkPortalSession();
 });
 
 
@@ -2027,8 +2056,14 @@ async function loadPortalSupport() {
     if (typeof portalSupportCacheCaregiverKey !== 'undefined' && typeof portalActiveCaregiverKey === 'string') {
       portalSupportCacheCaregiverKey = portalActiveCaregiverKey;
     }
+    if (typeof portalSupportLoadedOnce !== 'undefined') {
+      portalSupportLoadedOnce = false;
+    }
     if (typeof portalSupportHistoryUnavailable !== 'undefined') {
       portalSupportHistoryUnavailable = true;
+    }
+    if (typeof syncPortalQaSampleChrome === 'function') {
+      syncPortalQaSampleChrome();
     }
     if (typeof portalQaSamplesActive !== 'undefined' && portalQaSamplesActive && typeof filterPortalSupport === 'function') {
       filterPortalSupport();
@@ -2041,6 +2076,9 @@ async function loadPortalSupport() {
 
 function renderPortalSupport(data) {
   const requests = Array.isArray(data && data.requests) ? data.requests : [];
+  if (typeof portalSupportLoadedOnce !== 'undefined') {
+    portalSupportLoadedOnce = true;
+  }
   if (typeof portalSupportHistoryUnavailable !== 'undefined') {
     portalSupportHistoryUnavailable = false;
   }
@@ -2050,8 +2088,8 @@ function renderPortalSupport(data) {
       portalSupportCacheCaregiverKey = portalActiveCaregiverKey;
     }
   }
-  if (data && typeof data.qa_samples === 'boolean' && typeof portalQaSamplesActive !== 'undefined') {
-    portalQaSamplesActive = data.qa_samples;
+  if (typeof syncPortalQaSampleChrome === 'function') {
+    syncPortalQaSampleChrome();
   }
   const rowsEl = document.getElementById('portalSupportHistoryRows');
   const useDashboardFilter = typeof filterPortalSupport === 'function' && (
