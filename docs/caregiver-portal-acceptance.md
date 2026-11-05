@@ -5,27 +5,34 @@
 [pc2-gemini-ct-5] Source ports the normal-section Caregiver Portal dashboard layout and
 the corrected `#327` (`c2bab505`) in-section sample preview & lifecycle onto the
 installed production `#332` (`0e92e056`) lineage without promoting the whole staging
-tree:
+tree, and gates **both** the new layout and the in-section samples on the four-setting
+production identity check (`qa_samples: true` on `GET /api/portal/me`):
 
-- Replaces the collapsed `Preview a filled-out portal (sample data)` disclosure on
-  `portal.html` with the normal six-card dashboard (`My Profile & Intake`,
-  `My Support`, `My Events`, `My Wellness`, `My Resources`,
-  `Sanctuary Updates & Perks`), `For you right now` (`#portalHighlights`), section
-  filters (`#portalEventsFilter`, `#portalSupportFilter`), and immediate, clearly
-  labeled `[SAMPLE]` / `SAMPLE / TEST` items when `qa_samples: true` is returned by
-  `GET /api/portal/me`.
-- Preserves all real caregiver data visible in `#332`: real profile fields and
-  membership status (`#portalProfileCard`), real event registrations and the Memory
-  Socials attended/last-visit/next-up summary (`#portalSocialsCount`,
-  `#portalSocialsLastVisit`, `#portalSocialsNext` in `#portalEventsCard`), real
-  Wellness Grant application/requested-for/award status (`#portalGrantStatus`,
-  `#portalGrantRequestedFor`, `#portalGrantAward` in `#portalUpdatesCard`), and real
-  wellness check-in history (`#portalWellnessTile`).
+- **Ordinary caregivers (`qa_samples` absent / `false`) see 100% what `#332` shows
+  today**: `"Welcome back, <FirstName>"` (no subtitle, no `#portalHighlights` strip),
+  the opt-in collapsed `Preview a filled-out portal (sample data)` disclosure
+  (`#portalWellnessSample`), the four `#332` panels (`📅 My Events` with flat
+  `.timeline-item` list, `🌱 My Wellness Grant` with `"Non-member"` / `"Sanctuary
+  member"` badge and `"Questions? Contact us"` link, `🏡 My Memory Socials` with
+  `"Attended (all time)"` / `"Last visit"` / `"Next up"`, and `📚 Resource library`
+  with its `#332` copy), and the separate full-width `💛 My Wellness` panel below with
+  collapsed check-in history (`open = false`).
+- **The single configured sample identity (`qa_samples: true`) sees the redesigned
+  normal-section dashboard and immediate in-section samples**: `"Welcome to Your
+  Sanctuary, <FirstName>!"` with subtitle, `#portalHighlights` (`For you right now`),
+  `#portalQaSampleBanner`, `My Profile & Intake` (`#portalProfileCard`), `My Support`
+  (`#portalSupportCard` with `#portalSupportHistory` and `#portalSupportFilter`),
+  `My Events` (grouped `Upcoming`/`Past` with event-type prefixes and
+  `#portalEventsFilter`), `Saved Resources`, `Sanctuary Updates & Perks`
+  (`#portalUpdatesCard`), and `My Wellness` with expanded saved history (`open = true`),
+  while `#portalWellnessSample`, `#portalGrantCard`, and `#portalSocialsCard` are hidden
+  and real grant/socials/profile/wellness values remain populated from real records.
 - Removes the staging `/portal?preview=sample` query-string design preview so no
   unauthenticated or non-sample visitor can trigger a fictional dashboard view.
 - Injects the `My real … only` (`real`) and `Sample / test entries only` (`sample`)
   filter options dynamically only while `qa_samples: true` is active for the
-  authenticated session, removing them for ordinary caregivers and on session reset.
+  authenticated session (preserving any selected `real`/`sample` value across
+  re-renders), and removes them for ordinary caregivers and on session reset.
 - Keeps `#portalSupportHistory` and `#portalSupportFilterRow` hidden when neither
   `qa_samples: true` nor the `#331` support route (`#portalSupportForm`) is active,
   and reports `"Your support requests are not available right now."` whenever support
@@ -41,7 +48,7 @@ tree:
     (`PORTAL_PREVIEW_QA_CAREGIVER_ID`, `PORTAL_PREVIEW_QA_EMAIL`,
     `PORTAL_PREVIEW_MAIL_ENABLED`) or Staff Access identity.
   - Ordinary caregivers and any second production caregiver session never receive
-    `qa_samples` and keep all sample banners, notes, filter options and entries hidden.
+    `qa_samples` and see the exact `#332` page unchanged.
 - Preserves the full `#327` (`c2bab505`) session-generation and identity-fencing
   lifecycle across `checkPortalSession`, `portalLogout`, `renderPortalData`,
   `loadWellness`, and `loadPortalSupport` / `renderPortalSupport`. No real profile

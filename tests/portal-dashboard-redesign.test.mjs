@@ -21,14 +21,23 @@ function ui({ search = '' } = {}) {
     setAttribute(k, v) { this.attributes[k] = v; }
     appendChild(c) { this.children.push(c); return c; }
   }
-  const ids = ['portalWelcome', 'portalProfileName', 'portalProfileEmail', 'portalProfilePhone', 'portalMembershipStatus',
-    'portalEventsList', 'portalHighlights', 'portalHighlightsList', 'portalWellnessSummary', 'portalWellnessBtn',
-    'portalWellnessTrendHint', 'portalWellnessTrend', 'portalWellnessHistoryRows', 'loginView', 'dashView',
-    'portalLogoutBtn', 'portalQaSampleBanner',
+  const ids = ['portalWelcome', 'portalWelcomeSub', 'portalProfileName', 'portalProfileEmail', 'portalProfilePhone',
+    'portalMembershipStatus', 'portalProfileMembershipStatus',
+    'portalEventsList', 'portalEventsFilter', 'portalEventsFilterRow', 'portalEventsHeading', 'portalEventsIntro',
+    'portalResourcesHeading', 'portalResourcesIntro', 'portalResourcesComingSoon', 'portalWellnessHeading',
+    'portalHighlights', 'portalHighlightsList', 'portalWellnessSummary', 'portalWellnessBtn',
+    'portalWellnessTrendHint', 'portalWellnessTrend', 'portalWellnessHistory', 'portalWellnessHistoryRows',
+    'loginView', 'dashView', 'portalLogoutBtn', 'portalQaSampleBanner',
+    'portalProfileCard', 'portalSupportCard', 'portalUpdatesCard',
+    'portalWellnessSample', 'portalGrantCard', 'portalSocialsCard', 'portalAccountSummary',
     'portalGrantStatus', 'portalGrantRequestedFor', 'portalGrantAward',
     'portalSocialsCount', 'portalSocialsLastVisit', 'portalSocialsNext'];
   const el = Object.fromEntries(ids.map(id => [id, new Element()]));
   el.portalHighlights.hidden = true; el.portalQaSampleBanner.hidden = true;
+  el.portalWelcomeSub.hidden = true; el.portalProfileCard.hidden = true;
+  el.portalSupportCard.hidden = true; el.portalUpdatesCard.hidden = true;
+  el.portalEventsFilterRow.hidden = true; el.portalResourcesComingSoon.hidden = true;
+  el.portalEventsFilter.value = 'all';
   const calls = [];
   const context = vm.createContext({
     Date: class extends Date { constructor(...a) { super(...(a.length ? a : [now])); } static now() { return now; } },
@@ -43,32 +52,56 @@ function ui({ search = '' } = {}) {
 }
 const texts = list => list.children.map(c => c.textContent);
 
-test('welcome uses the first name, with a warm fallback', () => {
+test('welcome uses the warm sanctuary greeting only for the qa_samples identity and preserves #332 Welcome back for ordinary caregivers', () => {
   const h = ui();
-  h.context.renderPortalData({ profile: { first_name: ' Ana ' }, events: [], grants: [] });
-  assert.equal(h.el.portalWelcome.textContent, 'Welcome to Your Sanctuary, Ana!');
+  h.context.renderPortalData({ profile: { first_name: 'Ana' }, events: [], grants: [] });
+  assert.equal(h.el.portalWelcome.textContent, 'Welcome back, Ana');
+  assert.equal(h.el.portalWelcomeSub.hidden, true);
   h.context.renderPortalData({ profile: {}, events: [], grants: [] });
+  assert.equal(h.el.portalWelcome.textContent, 'Welcome back, Member');
+
+  h.context.renderPortalData({ qa_samples: true, profile: { first_name: ' Ana ' }, events: [], grants: [] });
+  assert.equal(h.el.portalWelcome.textContent, 'Welcome to Your Sanctuary, Ana!');
+  assert.equal(h.el.portalWelcomeSub.hidden, false);
+  h.context.renderPortalData({ qa_samples: true, profile: {}, events: [], grants: [] });
   assert.equal(h.el.portalWelcome.textContent, 'Welcome to Your Sanctuary!');
   assert.match(html, /Your space to stay connected, find support, and make time for your well-being\./);
 });
 
-test('profile shows the real read-only account fields as text (no HTML sink)', () => {
+test('profile shows the real read-only account fields as text (no HTML sink) and preserves Non-member badge for ordinary caregivers', () => {
   const h = ui();
-  h.context.renderPortalData({ profile: { first_name: '<img src=x>', last_name: 'Doe', email: 'a@example.invalid', phone: '', sanctuary_member: 1 }, events: [], grants: [] });
+  h.context.renderPortalData({ profile: { first_name: '<img src=x>', last_name: 'Doe', email: 'a@example.invalid', phone: '', sanctuary_member: 0 }, events: [], grants: [] });
   assert.equal(h.el.portalProfileName.textContent, '<img src=x> Doe');
   assert.equal(h.el.portalProfileName.html, undefined);
   assert.equal(h.el.portalProfileEmail.textContent, 'a@example.invalid');
   assert.equal(h.el.portalProfilePhone.textContent, '—');
+  assert.match(h.el.portalMembershipStatus.html, /Non-member/);
+  assert.equal(h.el.portalProfileCard.hidden, true);
+
+  h.context.renderPortalData({ qa_samples: true, profile: { first_name: '<img src=x>', last_name: 'Doe', email: 'a@example.invalid', phone: '', sanctuary_member: 1 }, events: [], grants: [] });
+  assert.equal(h.el.portalProfileCard.hidden, false);
   assert.match(h.el.portalMembershipStatus.html, /Sanctuary member/);
+  assert.match(h.el.portalProfileMembershipStatus.html, /Sanctuary member/);
 });
 
-test('My Events groups real registrations into upcoming (soonest first) and past, with type labels', () => {
+test('My Events groups registrations into upcoming and past with type labels for qa_samples, and keeps flat #332 list for ordinary caregivers', () => {
   const h = ui();
-  h.context.renderPortalData({ profile: {}, grants: [], events: [
+  const realEvents = [
     { title: 'Later Social', type: 'memory_social', starts_at: '2026-11-12 14:00', registration_status: 'registered' },
     { title: 'Past Workshop', type: 'caregiver_event', starts_at: '2026-10-01 18:00', registration_status: 'attended' },
     { title: 'Soon Group', type: 'support_group', starts_at: '2026-11-04 17:00', registration_status: 'registered', location: 'Online' },
-  ] });
+  ];
+  // Ordinary caregiver: flat #332 list in original order, no type prefix, no Upcoming/Past group headings
+  h.context.renderPortalData({ profile: {}, grants: [], events: realEvents });
+  assert.equal(h.el.portalEventsFilterRow.hidden, true);
+  assert.equal(h.el.portalEventsList.children.length, 3);
+  assert.deepEqual(h.el.portalEventsList.children.map(item => item.children[1].children[0].textContent), ['Later Social', 'Past Workshop', 'Soon Group']);
+  assert.equal(h.el.portalEventsList.children[2].children[1].children[3].textContent, '2026-11-04 17:00 · Online');
+
+  // QA sample identity: grouped Upcoming/Past with type prefix (filtering to 'real' to inspect real event ordering)
+  h.context.renderPortalData({ qa_samples: true, profile: {}, grants: [], events: realEvents });
+  assert.equal(h.el.portalEventsFilterRow.hidden, false);
+  h.context.filterPortalEvents('real');
   const groups = h.el.portalEventsList.children;
   assert.deepEqual(groups.map(g => g.children[0].textContent), ['Upcoming', 'Past']);
   assert.deepEqual(groups[0].children.slice(1).map(i => i.children[1].children[0].textContent), ['Soon Group', 'Later Social']);
@@ -76,34 +109,44 @@ test('My Events groups real registrations into upcoming (soonest first) and past
   assert.deepEqual(groups[1].children.slice(1).map(i => i.children[1].children[0].textContent), ['Past Workshop']);
 });
 
-test('highlights show only real account information and hide when there is none', () => {
+test('highlights appear only when qa_samples is active and hide for ordinary caregivers or when empty', () => {
   const h = ui();
-  h.context.renderPortalData({ profile: {}, grants: [], events: [] });
-  assert.equal(h.el.portalHighlights.hidden, true);
+  // Ordinary caregiver never sees highlights strip even with upcoming events and due wellness
   h.context.renderPortalData({ profile: {}, grants: [], events: [
     { title: 'Soon Group', type: 'support_group', starts_at: '2026-11-04 17:00', registration_status: 'registered' }] });
+  h.context.renderWellness({ history: [], due: true });
+  assert.equal(h.el.portalHighlights.hidden, true);
+
+  // QA sample caregiver sees highlights; when filtered to 'real' with no events and due=false, highlights hide
+  h.context.renderWellness({ history: [], due: false });
+  h.context.renderPortalData({ qa_samples: true, profile: {}, grants: [], events: [] });
+  h.context.filterPortalEvents('real');
+  assert.equal(h.el.portalHighlights.hidden, true);
+
+  h.context.renderPortalData({ qa_samples: true, profile: {}, grants: [], events: [
+    { title: 'Soon Group', type: 'support_group', starts_at: '2026-11-04 17:00', registration_status: 'registered' }] });
+  h.context.filterPortalEvents('real');
   assert.equal(h.el.portalHighlights.hidden, false);
   assert.deepEqual(texts(h.el.portalHighlightsList), ['📅Your next event: Soon Group · 2026-11-04 17:00']);
   h.context.renderWellness({ history: [], due: true });
   assert.equal(h.el.portalHighlightsList.children.length, 2);
   assert.match(texts(h.el.portalHighlightsList)[1], /time for a quick wellness check-in/);
-  h.context.renderWellness({ history: [], due: false });
-  h.context.renderPortalData({ profile: {}, grants: [], events: [] });
-  assert.equal(h.el.portalHighlights.hidden, true);
   assert.doesNotMatch(html, /intake (?:is )?(?:complete|incomplete)|announcement:|perk:/i, 'no invented intake status, announcements or perks');
 });
 
 test('the next-event highlight is the first future REGISTERED event, even after an earlier attended or no-show entry', () => {
   const h = ui();
-  h.context.renderPortalData({ profile: {}, grants: [], events: [
+  h.context.renderPortalData({ qa_samples: true, profile: {}, grants: [], events: [
     { title: 'Earlier Attended', type: 'workshop', starts_at: '2026-11-02 10:00', registration_status: 'attended' },
     { title: 'Earlier No-show', type: 'workshop', starts_at: '2026-11-03 10:00', registration_status: 'no_show' },
     { title: 'Later Registered', type: 'support_group', starts_at: '2026-11-11 17:00', registration_status: 'registered' }] });
+  h.context.filterPortalEvents('real');
   assert.equal(h.el.portalHighlights.hidden, false);
   assert.deepEqual(texts(h.el.portalHighlightsList), ['📅Your next event: Later Registered · 2026-11-11 17:00']);
   assert.equal(h.el.portalEventsList.children[0].children.length, 4, 'the full upcoming list still shows all three entries');
-  h.context.renderPortalData({ profile: {}, grants: [], events: [
+  h.context.renderPortalData({ qa_samples: true, profile: {}, grants: [], events: [
     { title: 'Only Attended', type: 'workshop', starts_at: '2026-11-02 10:00', registration_status: 'attended' }] });
+  h.context.filterPortalEvents('real');
   assert.equal(h.el.portalHighlights.hidden, true);
 });
 

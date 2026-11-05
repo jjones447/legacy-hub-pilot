@@ -128,9 +128,14 @@ function createPortalDashboardUi({ fetchHandler = null } = {}) {
 
   const ids = [
     'loginView', 'dashView', 'portalLogoutBtn', 'portalLogoutStatus', 'loginStatus', 'loginEmail',
-    'portalWelcome', 'portalProfileName', 'portalProfileEmail', 'portalProfilePhone', 'portalMembershipStatus',
-    'portalGrantStatus', 'portalGrantRequestedFor', 'portalGrantAward',
-    'portalSocialsCount', 'portalSocialsLastVisit', 'portalSocialsNext',
+    'portalWelcome', 'portalWelcomeSub', 'portalWellnessSample', 'portalAccountSummary',
+    'portalProfileCard', 'portalProfileName', 'portalProfileEmail', 'portalProfilePhone',
+    'portalMembershipStatus', 'portalProfileMembershipStatus',
+    'portalSupportCard', 'portalEventsCard', 'portalEventsHeading', 'portalEventsIntro',
+    'portalGrantCard', 'portalGrantStatus', 'portalGrantRequestedFor', 'portalGrantAward',
+    'portalSocialsCard', 'portalSocialsCount', 'portalSocialsLastVisit', 'portalSocialsNext',
+    'portalResourcesCard', 'portalResourcesHeading', 'portalResourcesIntro', 'portalResourcesComingSoon',
+    'portalUpdatesCard', 'portalWellnessTile', 'portalWellnessHeading',
     'portalQaSampleBanner', 'portalProfileSampleNote', 'portalResourcesSampleNote', 'portalUpdatesSampleNote',
     'portalHighlights', 'portalHighlightsList',
     'portalEventsList', 'portalEventsFilter', 'portalEventsFilterRow',
@@ -142,10 +147,16 @@ function createPortalDashboardUi({ fetchHandler = null } = {}) {
     'portalWellnessHistory', 'portalWellnessHistoryRows', 'portalWellnessForm', 'portalWellnessMsg'
   ];
   const el = Object.fromEntries(ids.map(id => [id, new Element()]));
+  el.portalWelcomeSub.hidden = true;
   el.portalHighlights.hidden = true;
   el.portalQaSampleBanner.hidden = true;
+  el.portalProfileCard.hidden = true;
   el.portalProfileSampleNote.hidden = true;
+  el.portalSupportCard.hidden = true;
+  el.portalEventsFilterRow.hidden = true;
   el.portalResourcesSampleNote.hidden = true;
+  el.portalResourcesComingSoon.hidden = true;
+  el.portalUpdatesCard.hidden = true;
   el.portalUpdatesSampleNote.hidden = true;
   el.portalEventsFilter.value = 'all';
   for (const val of ['all', 'upcoming', 'past', 'memory_social', 'support_group', 'caregiver_event', 'wellness']) {
@@ -164,7 +175,7 @@ function createPortalDashboardUi({ fetchHandler = null } = {}) {
   el.portalSupportHistory.hidden = true;
   el.portalSupportHistory.open = false;
   el.portalSupportFilterRow.hidden = true;
-  el.portalWellnessHistory.open = true;
+  el.portalWellnessHistory.open = false;
 
   const eventTimeSlice = APP_JS.slice(APP_JS.indexOf('function publicEventTime('), APP_JS.indexOf('function renderPublicEvents('));
   const portalLoginLogoutSlice = APP_JS.slice(APP_JS.indexOf('function checkPortalSession('), APP_JS.indexOf('function renderPortalData('));
@@ -414,8 +425,8 @@ test('server + UI: explicit production sample tuple enables qa_samples: true for
   }
 });
 
-test('immediate in-section visibility: QA caregiver sees labeled samples across sections without opening a collapsed demo, while real history is preserved', () => {
-  assert.doesNotMatch(PORTAL_HTML, /id="portalWellnessSample"|Preview a filled-out portal \(sample data\)/);
+test('immediate in-section visibility: QA caregiver sees the redesigned normal-section layout and labeled samples without opening a collapsed demo, while real history is preserved', () => {
+  assert.match(PORTAL_HTML, /id="portalWellnessSample"/, 'default static HTML keeps #332 summary preview for ordinary caregivers');
 
   const ui = createPortalDashboardUi();
   const mePayload = {
@@ -475,7 +486,18 @@ test('immediate in-section visibility: QA caregiver sees labeled samples across 
     due: false
   });
 
-  // Top QA sample banner and section notes are immediately visible (not collapsed)
+  // Top QA sample banner, redesigned cards, and section notes are immediately visible (not collapsed), while #332 standalone panels are hidden
+  assert.equal(ui.el.portalWelcome.textContent, 'Welcome to Your Sanctuary, Jacob!');
+  assert.equal(ui.el.portalWelcomeSub.hidden, false);
+  assert.equal(ui.el.portalWellnessSample.hidden, true);
+  assert.equal(ui.el.portalGrantCard.hidden, true);
+  assert.equal(ui.el.portalSocialsCard.hidden, true);
+  assert.equal(ui.el.portalProfileCard.hidden, false);
+  assert.equal(ui.el.portalSupportCard.hidden, false);
+  assert.equal(ui.el.portalUpdatesCard.hidden, false);
+  assert.equal(ui.el.portalEventsFilterRow.hidden, false);
+  assert.equal(ui.el.portalResourcesComingSoon.hidden, false);
+  assert.equal(ui.el.portalWellnessHistory.open, true);
   assert.equal(ui.el.portalQaSampleBanner.hidden, false);
   assert.equal(ui.el.portalProfileSampleNote.hidden, false);
   assert.equal(ui.el.portalResourcesSampleNote.hidden, false);
@@ -486,6 +508,7 @@ test('immediate in-section visibility: QA caregiver sees labeled samples across 
   assert.equal(ui.el.portalProfileEmail.textContent, QA_EMAIL);
   assert.equal(ui.el.portalProfilePhone.textContent, '414-555-0154');
   assert.match(ui.el.portalMembershipStatus.innerHTML, /Sanctuary member/);
+  assert.match(ui.el.portalProfileMembershipStatus.innerHTML, /Sanctuary member/);
   assert.equal(ui.el.portalGrantStatus.textContent, 'awarded');
   assert.equal(ui.el.portalGrantRequestedFor.textContent, 'Respite care');
   assert.equal(ui.el.portalGrantAward.textContent, 'Awarded: $500 (Restorative Care Box)');
@@ -658,9 +681,16 @@ test('section filters include and exclude expected sample and real items across 
   supText = setSupportFilter('sample');
   assert.doesNotMatch(supText, /Speak With a Legacy Team Member/);
   assert.equal(collectSampleNodes(ui.el.portalSupportHistoryRows).length, 3);
+
+  // Re-rendering support while 'sample' / 'real' filter is selected preserves the select value
+  ui.el.portalEventsFilter.value = 'real';
+  ui.el.portalEventsFilter.listeners.change();
+  ui.context.renderPortalSupport({ ok: true, requests: [] });
+  assert.equal(ui.el.portalEventsFilter.value, 'real');
+  assert.equal(ui.el.portalSupportFilter.value, 'sample');
 });
 
-test('reload stability, read-only sample safety, and second-caregiver isolation', () => {
+test('reload stability, read-only sample safety, and second-caregiver isolation (second caregiver page is unchanged from #332)', () => {
   const ui = createPortalDashboardUi();
   const qaMe = {
     ok: true,
@@ -706,17 +736,42 @@ test('reload stability, read-only sample safety, and second-caregiver isolation'
   }
   assert.equal(ui.networkCalls.length, 0);
 
-  // Second caregiver session (no qa_samples) hides banner, sample notes, and all sample entries
+  // Second caregiver session (no qa_samples) sees the exact #332 page with zero redesign or sample elements
   ui.context.renderPortalData({
     ok: true,
-    profile: { first_name: 'Alex' },
-    grants: [],
-    events: []
+    profile: { first_name: 'Alex', sanctuary_member: 0 },
+    grants: [{ status: 'in_review', requested_for: 'In-home respite', amount: '' }],
+    events: [{ id: 'ev-alex-1', title: 'Community Social', type: 'memory_social', starts_at: '2026-11-09 14:00', location: 'Main Room', registration_status: 'registered' }]
   });
   ui.context.renderPortalSupport({
     ok: true,
     requests: []
   });
+  assert.equal(ui.el.portalWelcome.textContent, 'Welcome back, Alex');
+  assert.equal(ui.el.portalWelcomeSub.hidden, true);
+  assert.equal(ui.el.portalWellnessSample.hidden, false);
+  assert.equal(ui.el.portalGrantCard.hidden, false);
+  assert.equal(ui.el.portalSocialsCard.hidden, false);
+  assert.equal(ui.el.portalProfileCard.hidden, true);
+  assert.equal(ui.el.portalSupportCard.hidden, true);
+  assert.equal(ui.el.portalUpdatesCard.hidden, true);
+  assert.equal(ui.el.portalEventsFilterRow.hidden, true);
+  assert.equal(ui.el.portalEventsHeading.textContent, '📅 My Events');
+  assert.equal(ui.el.portalEventsIntro.textContent, 'Your registrations are listed here. Browse all events opens the public calendar.');
+  assert.equal(ui.el.portalResourcesHeading.textContent, '📚 Resource library');
+  assert.equal(ui.el.portalResourcesIntro.textContent, 'Shared guides, tools and trusted local help for caregivers. This library is public, not a personalized saved list.');
+  assert.equal(ui.el.portalResourcesComingSoon.hidden, true);
+  assert.equal(ui.el.portalWellnessHeading.textContent, '💛 My Wellness');
+  assert.equal(ui.el.portalWellnessHistory.open, false);
+  assert.equal(ui.el.portalMembershipStatus.innerHTML, '<span class="badge badge-gray">Non-member</span>');
+  assert.equal(ui.el.portalGrantStatus.textContent, 'in review');
+  assert.equal(ui.el.portalGrantRequestedFor.textContent, 'In-home respite');
+  assert.equal(ui.el.portalGrantAward.textContent, 'Personalized on approval');
+  assert.equal(ui.el.portalSocialsCount.textContent, '0 socials');
+  assert.equal(ui.el.portalSocialsNext.textContent, 'Community Social · 2026-11-09');
+  assert.equal(ui.el.portalEventsList.children.length, 1);
+  assert.equal(ui.el.portalEventsList.children[0].className, 'timeline-item');
+  assert.equal(ui.el.portalEventsList.children[0].children[1].children[3].textContent, '2026-11-09 14:00 · Main Room', 'flat #332 event item without type prefix or Upcoming/Past group');
   assert.equal(ui.el.portalQaSampleBanner.hidden, true);
   assert.equal(ui.el.portalProfileSampleNote.hidden, true);
   assert.equal(ui.el.portalResourcesSampleNote.hidden, true);
