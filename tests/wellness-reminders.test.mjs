@@ -78,3 +78,23 @@ test('config: ships disabled, targets Legacy production DB, runs daily, no publi
 test('the email escapes the name', () => {
   assert.match(reminderEmail('<b>x</b>', 'https://x.test/p').html, /&lt;b&gt;x&lt;\/b&gt;/);
 });
+
+test('internal QA and do_not_contact accounts are never selected or emailed by reminders', async () => {
+  raw.exec(`
+    INSERT INTO caregiver (id, first_name, last_name, email, source, status, segment_tags) VALUES
+      ('qa_source', 'TEST - Legacy - PROD', 'Caregiver - Portal QA', 'qa.prod@example.com', 'qa_account_prod', 'active', '[]'),
+      ('qa_tag', 'QA Tagged', 'User', 'qa.tag@example.com', 'seed', 'active', '["qa_test"]'),
+      ('exclude_rep', 'Exclude', 'Reporting', 'exclude@example.com', 'seed', 'active', '["exclude_reporting"]'),
+      ('dnc_tag', 'Do Not', 'Contact', 'dnc@example.com', 'seed', 'active', '["do_not_contact"]');
+    INSERT INTO wellness_checkin (caregiver_id, answers_json, score, created_at) VALUES
+      ('qa_source', '{}', 50, datetime('now', '-40 days')),
+      ('qa_tag', '{}', 50, datetime('now', '-40 days')),
+      ('exclude_rep', '{}', 50, datetime('now', '-40 days')),
+      ('dnc_tag', '{}', 50, datetime('now', '-40 days'));
+  `);
+  const due = await dueCaregivers(env.LEGACY_DB);
+  assert.deepEqual(due.map((c) => c.id), ['due']);
+  const r = await runReminders(env, fakeFetch);
+  assert.deepEqual(r, { enabled: true, sent: 1, failed: 0 });
+  assert.deepEqual(sent.map((s) => s.to[0]), ['ann@example.com']);
+});

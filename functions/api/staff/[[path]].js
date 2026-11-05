@@ -33,6 +33,7 @@ export async function onRequestGet({ request, env }) {
         FROM followup f
         JOIN caregiver c ON f.caregiver_id = c.id
         WHERE f.status = 'open'
+          AND ${caregiversDomain.notInternalTestCaregiverSql('c')}
         ORDER BY COALESCE(f.due, f.created_at) ASC, f.created_at ASC
       `).all();
 
@@ -149,6 +150,10 @@ export async function onRequestGet({ request, env }) {
         params.push(status);
       }
 
+      if (!caregiversDomain.INTERNAL_TEST_QUERY_SEGMENTS.includes(segment)) {
+        conditions.push(caregiversDomain.notInternalTestCaregiverSql('c'));
+      }
+
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
       // Count total
@@ -206,12 +211,22 @@ export async function onRequestGet({ request, env }) {
       const { results: changes } = await env.LEGACY_DB.prepare(`
         SELECT id, actor, action, entity, entity_id, before_json, after_json, at
         FROM audit_log
-        WHERE action LIKE 'content_item.%'
-           OR action LIKE 'caregiver.%'
-           OR (entity IN ('content_item', 'caregiver') AND action = 'undo')
-           OR action LIKE '%.undo'
-           OR (entity = 'event' AND action IN ('event.create', 'event.update', 'event.publish', 'event.unpublish', 'event.archive', 'event.photo.updated'))
-           OR (entity = 'staff_member' AND action IN ('staff.created', 'staff.updated', 'staff.first_sign_in'))
+        WHERE (
+          action LIKE 'content_item.%'
+          OR action LIKE 'caregiver.%'
+          OR (entity IN ('content_item', 'caregiver') AND action = 'undo')
+          OR action LIKE '%.undo'
+          OR (entity = 'event' AND action IN ('event.create', 'event.update', 'event.publish', 'event.unpublish', 'event.archive', 'event.photo.updated'))
+          OR (entity = 'staff_member' AND action IN ('staff.created', 'staff.updated', 'staff.first_sign_in'))
+        )
+        AND NOT (
+          (entity = 'caregiver' OR action LIKE 'caregiver.%')
+          AND EXISTS (
+            SELECT 1 FROM caregiver c
+            WHERE c.id = audit_log.entity_id
+              AND ${caregiversDomain.isInternalTestCaregiverSql('c')}
+          )
+        )
         ORDER BY id DESC
         LIMIT 50
       `).all();
@@ -272,7 +287,13 @@ export async function onRequestGet({ request, env }) {
                e.photo_key, e.photo_alt,
                COUNT(r.id) AS registered_count
         FROM event e
-        LEFT JOIN registration r ON e.id = r.event_id AND r.status IN ('registered', 'attended')
+        LEFT JOIN registration r ON e.id = r.event_id
+          AND r.status IN ('registered', 'attended')
+          AND NOT EXISTS (
+            SELECT 1 FROM caregiver c
+            WHERE c.id = r.caregiver_id
+              AND ${caregiversDomain.isInternalTestCaregiverSql('c')}
+          )
         GROUP BY e.id
         ORDER BY e.starts_at ASC
       `).all();

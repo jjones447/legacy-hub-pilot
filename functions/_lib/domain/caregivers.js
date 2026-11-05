@@ -15,6 +15,36 @@ export const ALLOWED_CAREGIVER_UPDATE_FIELDS = [
   'outcome_notes'
 ];
 
+export const INTERNAL_TEST_SEGMENT_TAGS = Object.freeze(['qa_test', 'exclude_reporting']);
+export const INTERNAL_TEST_QUERY_SEGMENTS = Object.freeze(['qa_test', 'exclude_reporting', 'qa_staging', 'qa_prod']);
+export const DO_NOT_CONTACT_SEGMENT_TAGS = Object.freeze(['qa_test', 'exclude_reporting', 'do_not_contact']);
+
+export function isInternalTestCaregiverSql(alias = 'c') {
+  return `(
+    LOWER(TRIM(COALESCE(${alias}.source, ''))) LIKE 'qa_%'
+    OR EXISTS (
+      SELECT 1
+      FROM json_each(CASE WHEN json_valid(${alias}.segment_tags) AND json_type(${alias}.segment_tags) = 'array' THEN ${alias}.segment_tags ELSE '[]' END)
+      WHERE value IN ('qa_test', 'exclude_reporting')
+    )
+  )`;
+}
+
+export function notInternalTestCaregiverSql(alias = 'c') {
+  return `NOT ${isInternalTestCaregiverSql(alias)}`;
+}
+
+export function notDoNotContactCaregiverSql(alias = 'c') {
+  return `(
+    LOWER(TRIM(COALESCE(${alias}.source, ''))) NOT LIKE 'qa_%'
+    AND NOT EXISTS (
+      SELECT 1
+      FROM json_each(CASE WHEN json_valid(${alias}.segment_tags) AND json_type(${alias}.segment_tags) = 'array' THEN ${alias}.segment_tags ELSE '[]' END)
+      WHERE value IN ('qa_test', 'exclude_reporting', 'do_not_contact')
+    )
+  )`;
+}
+
 export async function validate(db, { id, operation, payload = {} }) {
   if (!id) {
     return { ok: false, status: 400, error: 'missing caregiver id' };
