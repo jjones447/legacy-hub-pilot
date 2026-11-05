@@ -33,6 +33,7 @@ export async function onRequestGet({ request, env }) {
         FROM followup f
         JOIN caregiver c ON f.caregiver_id = c.id
         WHERE f.status = 'open'
+          AND ${caregiversDomain.notInternalTestCaregiverSql('c')}
         ORDER BY COALESCE(f.due, f.created_at) ASC, f.created_at ASC
       `).all();
 
@@ -136,7 +137,9 @@ export async function onRequestGet({ request, env }) {
         params.push(pattern, pattern, pattern, pattern, pattern);
       }
 
-      if (segment) {
+      if (segment === 'qa_test') {
+        conditions.push(caregiversDomain.isInternalTestCaregiverSql('c'));
+      } else if (segment) {
         conditions.push(`EXISTS (
           SELECT 1 FROM json_each(COALESCE(NULLIF(c.segment_tags, ''), '[]'))
           WHERE value = ?
@@ -147,6 +150,10 @@ export async function onRequestGet({ request, env }) {
       if (status) {
         conditions.push(`c.status = ?`);
         params.push(status);
+      }
+
+      if (!caregiversDomain.INTERNAL_TEST_QUERY_SEGMENTS.includes(segment)) {
+        conditions.push(caregiversDomain.notInternalTestCaregiverSql('c'));
       }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -206,12 +213,22 @@ export async function onRequestGet({ request, env }) {
       const { results: changes } = await env.LEGACY_DB.prepare(`
         SELECT id, actor, action, entity, entity_id, before_json, after_json, at
         FROM audit_log
-        WHERE action LIKE 'content_item.%'
-           OR action LIKE 'caregiver.%'
-           OR (entity IN ('content_item', 'caregiver') AND action = 'undo')
-           OR action LIKE '%.undo'
-           OR (entity = 'event' AND action IN ('event.create', 'event.update', 'event.publish', 'event.unpublish', 'event.archive', 'event.photo.updated'))
-           OR (entity = 'staff_member' AND action IN ('staff.created', 'staff.updated', 'staff.first_sign_in'))
+        WHERE (
+          action LIKE 'content_item.%'
+          OR action LIKE 'caregiver.%'
+          OR (entity IN ('content_item', 'caregiver') AND action = 'undo')
+          OR action LIKE '%.undo'
+          OR (entity = 'event' AND action IN ('event.create', 'event.update', 'event.publish', 'event.unpublish', 'event.archive', 'event.photo.updated'))
+          OR (entity = 'staff_member' AND action IN ('staff.created', 'staff.updated', 'staff.first_sign_in'))
+        )
+        AND NOT (
+          (entity = 'caregiver' OR action LIKE 'caregiver.%')
+          AND EXISTS (
+            SELECT 1 FROM caregiver c
+            WHERE c.id = audit_log.entity_id
+              AND ${caregiversDomain.isInternalTestCaregiverSql('c')}
+          )
+        )
         ORDER BY id DESC
         LIMIT 50
       `).all();
@@ -272,7 +289,13 @@ export async function onRequestGet({ request, env }) {
                e.photo_key, e.photo_alt,
                COUNT(r.id) AS registered_count
         FROM event e
-        LEFT JOIN registration r ON e.id = r.event_id AND r.status IN ('registered', 'attended')
+        LEFT JOIN registration r ON e.id = r.event_id
+          AND r.status IN ('registered', 'attended')
+          AND NOT EXISTS (
+            SELECT 1 FROM caregiver c
+            WHERE c.id = r.caregiver_id
+              AND ${caregiversDomain.isInternalTestCaregiverSql('c')}
+          )
         GROUP BY e.id
         ORDER BY e.starts_at ASC
       `).all();
@@ -312,6 +335,36 @@ export async function onRequestPost({ request, env }) {
   try {
     const url = new URL(request.url);
     const pathSegments = url.pathname.split('/').filter(Boolean);
+
+    if (pathSegments.length === 3 && pathSegments[2] === 'caregivers') {
+      // Browser-only record creation; separate from enrollment/intake and staff access.
+      if (request.headers.get('Origin') !== url.origin ||
+          ![null, 'same-origin'].includes(request.headers.get('Sec-Fetch-Site'))) {
+        return json({ ok: false, error: 'Refresh the staff page before adding a person.' }, 403);
+      }
+      if ((request.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase() !== 'application/json') {
+        return json({ ok: false, error: 'Use a JSON record.' }, 415);
+      }
+      const reader = request.body?.getReader();
+      if (!reader) return json({ ok: false, error: 'Enter a caregiver record.' }, 400);
+      let body;
+      try {
+        const chunks = []; let size = 0;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          size += value.byteLength;
+          if (size > 4096) { await reader.cancel(); return json({ ok: false, error: 'The record is too large.' }, 413); }
+          chunks.push(value);
+        }
+        const bytes = new Uint8Array(size); let offset = 0;
+        for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+        body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+      } catch { return json({ ok: false, error: 'Enter a valid caregiver record.' }, 400); }
+      finally { reader.releaseLock(); }
+      const result = await caregiversDomain.create(env.LEGACY_DB, body, getActor(request, env));
+      return json(result, result.status);
+    }
 
     if (pathSegments.length === 3 && pathSegments[2] === 'team') {
       let body;

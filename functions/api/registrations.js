@@ -1,4 +1,5 @@
 import { internalError } from '../_lib/errors.js';
+import { notInternalTestCaregiverSql } from '../_lib/domain/caregivers.js';
 
 // GET/POST /api/registrations — manages event registrations and attendance (slice 05).
 export async function onRequestGet({ request, env }) {
@@ -19,6 +20,7 @@ export async function onRequestGet({ request, env }) {
         FROM registration r
         JOIN caregiver c ON r.caregiver_id = c.id
         WHERE r.event_id = ?
+          AND ${notInternalTestCaregiverSql('c')}
         ORDER BY r.created_at ASC
       `)
       .bind(eventId)
