@@ -5,6 +5,8 @@
 // token is only ever placed in the subscriber's own link: no function here returns it,
 // logs it or writes it to the audit log.
 
+import { isInternalTestCaregiverSql } from './domain/caregivers.js';
+
 // The exact consent line shown beside the home page form; stored with every sign-up.
 // tests/email-list.test.mjs asserts the rendered home page shows this same text.
 export const NEWSLETTER_CONSENT_TEXT =
@@ -159,6 +161,16 @@ export async function handleUnsubscribe(db, body) {
 // Columns staff may see. unsubscribe_token is deliberately absent.
 const STAFF_COLUMNS = 'id, email, first_name, status, source, consent_text, created_at, updated_at, unsubscribed_at';
 
+// Internal QA accounts stay out of the staff view and export (Jacob, Legacy54 c6660164573): a
+// subscriber is hidden only when its stored (normalized) address exactly matches a caregiver
+// that the canonical #336 classifier marks internal. The row itself is never changed.
+export const NOT_INTERNAL_SUBSCRIBER_SQL = `NOT EXISTS (
+    SELECT 1 FROM caregiver c
+     WHERE TRIM(COALESCE(c.email, '')) != ''
+       AND LOWER(TRIM(c.email)) = email_subscriber.email
+       AND ${isInternalTestCaregiverSql('c')}
+  )`;
+
 function likePattern(q) {
   return '%' + q.replace(/[\\%_]/g, (c) => '\\' + c) + '%';
 }
@@ -166,7 +178,7 @@ function likePattern(q) {
 // GET /api/staff/subscribers — list (newest first) with whole-list counts and optional search.
 export async function listSubscribers(db, { q = '', status = '', limit = 200 } = {}) {
   const query = String(q || '').trim().slice(0, 200);
-  const conditions = [];
+  const conditions = [NOT_INTERNAL_SUBSCRIBER_SQL];
   const params = [];
   if (query) {
     const pattern = likePattern(query.toLowerCase());
@@ -177,7 +189,7 @@ export async function listSubscribers(db, { q = '', status = '', limit = 200 } =
     conditions.push('status = ?');
     params.push(status);
   }
-  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  const where = `WHERE ${conditions.join(' AND ')}`;
   const cap = Math.min(Math.max(Number.parseInt(limit, 10) || 200, 1), 500);
 
   const countsRow = await db
@@ -185,7 +197,7 @@ export async function listSubscribers(db, { q = '', status = '', limit = 200 } =
       `SELECT COUNT(*) AS total,
               COALESCE(SUM(CASE WHEN status = 'subscribed' THEN 1 ELSE 0 END), 0) AS subscribed,
               COALESCE(SUM(CASE WHEN status = 'unsubscribed' THEN 1 ELSE 0 END), 0) AS unsubscribed
-         FROM email_subscriber`
+         FROM email_subscriber WHERE ${NOT_INTERNAL_SUBSCRIBER_SQL}`
     )
     .first();
   const matchRow = await db.prepare(`SELECT COUNT(*) AS n FROM email_subscriber ${where}`).bind(...params).first();
@@ -226,7 +238,8 @@ export async function subscribedForExport(db) {
   const { results } = await db
     .prepare(
       `SELECT email, first_name, status, source, created_at, updated_at
-         FROM email_subscriber WHERE status = 'subscribed' ORDER BY created_at ASC, id ASC`
+         FROM email_subscriber WHERE status = 'subscribed' AND ${NOT_INTERNAL_SUBSCRIBER_SQL}
+        ORDER BY created_at ASC, id ASC`
     )
     .all();
   return results || [];

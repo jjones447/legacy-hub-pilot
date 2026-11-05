@@ -618,3 +618,58 @@ test('staff Subscribers panel renders escaped rows and counts from the API', asy
   assert.match(els.subscribersTableBody.innerHTML, /2026-10-31/);
   assert.doesNotMatch(els.subscribersTableBody.innerHTML, /<script>|<b>/);
 });
+
+// ---- Internal QA accounts stay out of the staff view and export (Legacy54 c6660164573).
+function caregiver(id, email, { source = 'site_form', tags = '[]', status = 'active' } = {}) {
+  raw.prepare(`INSERT INTO caregiver (id, first_name, email, source, segment_tags, status) VALUES (?, 'Fictional', ?, ?, ?, ?)`)
+    .run(id, email, source, tags, status);
+}
+async function seedInternalMix() {
+  // Fictional internal accounts: one by qa_ source, one by tag; mixed case and spaces in caregiver.email.
+  caregiver('cg_qa_source', '  QA.Source@Example.Invalid ', { source: 'qa_staging' });
+  caregiver('cg_qa_tag', 'qa.tagged@example.invalid', { tags: '["exclude_reporting"]' });
+  // Ordinary look-alikes that must stay visible.
+  caregiver('cg_qatar', 'qatar.referral@example.invalid', { source: 'qatar_referral' });
+  caregiver('cg_xcentric', 'xcentric-test@example.invalid', { source: 'site_form', tags: '["volunteer"]' });
+  for (const [email, first_name] of [
+    ['qa.source@example.invalid', 'Internal'], ['qa.tagged@example.invalid', 'Internal'],
+    ['qatar.referral@example.invalid', 'Ordinary'], ['xcentric-test@example.invalid', 'Ordinary'],
+    ['unmatched@example.invalid', 'Ordinary'],
+  ]) await handleIntake(db, signup({ email, first_name }));
+}
+
+test('internal QA subscribers are hidden from list, counts, search, status filter and CSV; look-alikes stay', async () => {
+  await seedInternalMix();
+  const list = async (qs = '') => (await (await staffGet('/api/staff/subscribers' + (qs ? '?' + qs : ''))).json());
+  const all = await list();
+  const shown = all.subscribers.map((r) => r.email).sort();
+  assert.deepEqual(shown, ['qatar.referral@example.invalid', 'unmatched@example.invalid', 'xcentric-test@example.invalid']);
+  assert.deepEqual(all.counts, { subscribed: 3, unsubscribed: 0, total: 3 });
+  assert.equal(all.matching, 3);
+  assert.deepEqual((await list('q=qa')).subscribers.map((r) => r.email), ['qatar.referral@example.invalid'], 'search cannot surface internal rows');
+  assert.equal((await list('status=subscribed')).matching, 3);
+  const csv = (await (await staffGet('/api/staff/subscribers.csv')).text()).replace(/^﻿/, '');
+  assert.equal(csv.trimEnd().split('\r\n').length, 4, 'header + three ordinary rows');
+  assert.equal(/qa\.source|qa\.tagged/.test(csv), false);
+  const audit = raw.prepare(`SELECT after_json FROM audit_log WHERE action = 'subscriber.export'`).all();
+  assert.deepEqual(JSON.parse(audit.at(-1).after_json), { rows: 3 }, 'export audit counts what was exported');
+});
+
+test('the exclusion is a view only: internal subscriber rows, consent and tokens are untouched', async () => {
+  await seedInternalMix();
+  await staffGet('/api/staff/subscribers');
+  await staffGet('/api/staff/subscribers.csv');
+  assert.equal(count('email_subscriber'), 5);
+  const internal = raw.prepare(`SELECT status, consent_text, unsubscribe_token FROM email_subscriber WHERE email = 'qa.tagged@example.invalid'`).get();
+  assert.equal(internal.status, 'subscribed');
+  assert.ok(internal.consent_text && /^[0-9a-f]{32}$/.test(internal.unsubscribe_token));
+});
+
+test('without matching internal caregivers nothing is hidden; an archived internal caregiver still hides its address', async () => {
+  await seedList();
+  assert.deepEqual((await (await staffGet('/api/staff/subscribers')).json()).counts, { subscribed: 6, unsubscribed: 1, total: 7 });
+  caregiver('cg_qa_archived', 'ada@example.invalid', { source: 'qa_prod', status: 'archived' });
+  const after = await (await staffGet('/api/staff/subscribers')).json();
+  assert.deepEqual(after.counts, { subscribed: 5, unsubscribed: 1, total: 6 });
+  assert.equal(after.subscribers.some((r) => r.email === 'ada@example.invalid'), false);
+});
