@@ -1,5 +1,37 @@
 # Caregiver Portal — what "done" means
 
+## Production normal-section caregiver dashboard samples — November 5, 2026
+
+[pc2-gemini-ct-5] Source ports the normal-section Caregiver Portal dashboard layout and
+the corrected `#327` (`c2bab505`) in-section sample preview & lifecycle onto the
+installed production `#332` (`0e92e056`) lineage without promoting the whole staging
+tree:
+
+- Replaces the collapsed `Preview a filled-out portal (sample data)` disclosure on
+  `portal.html` with the normal six-card dashboard (`My Profile & Intake`,
+  `My Support`, `My Events`, `My Wellness`, `My Resources`,
+  `Sanctuary Updates & Perks`), `For you right now` (`#portalHighlights`), section
+  filters (`#portalEventsFilter`, `#portalSupportFilter`), and immediate, clearly
+  labeled `[SAMPLE]` / `SAMPLE / TEST` items when `qa_samples: true` is returned by
+  `GET /api/portal/me`.
+- **Explicit production identity & environment gate (`matchesProductionSampleCaregiver`
+  in `functions/api/portal/[[path]].js`)**:
+  - Defaults **OFF** (`qa_samples` omitted) until the explicit production environment
+    and single-caregiver identity tuple are configured on the production host:
+    `ENVIRONMENT="production"`, `PORTAL_PRODUCTION_SAMPLES_ENABLED="1"` (or `"true"`),
+    `PORTAL_PRODUCTION_SAMPLE_CAREGIVER_ID="<verified production caregiver.id>"`, and
+    `PORTAL_PRODUCTION_SAMPLE_EMAIL="<verified production caregiver.email>"`.
+  - Never infers production sample eligibility from staging/preview QA variables
+    (`PORTAL_PREVIEW_QA_CAREGIVER_ID`, `PORTAL_PREVIEW_QA_EMAIL`,
+    `PORTAL_PREVIEW_MAIL_ENABLED`) or Staff Access identity.
+  - Ordinary caregivers and any second production caregiver session never receive
+    `qa_samples` and keep all sample banners, notes and entries hidden (`hidden`).
+- Preserves the full `#327` (`c2bab505`) session-generation and identity-fencing
+  lifecycle across `checkPortalSession`, `portalLogout`, `renderPortalData`,
+  `loadWellness`, and `loadPortalSupport` / `renderPortalSupport`. No real profile
+  read, database seed, clinical scores, mail, configuration or runtime change is
+  performed in this source increment.
+
 ## Populated summary preview — October 30, 2026
 
 [pc2-codex-42] Jacob requested a populated layout example without adding wellness
