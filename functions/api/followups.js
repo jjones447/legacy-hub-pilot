@@ -1,5 +1,6 @@
 import { internalError } from '../_lib/errors.js';
 import { SUPPORT_SOURCE } from '../_lib/portal-support.js';
+import { notInternalTestCaregiverSql } from '../_lib/domain/caregivers.js';
 
 // GET/POST /api/followups — manages the follow-up queue (slice 05).
 export async function onRequestGet({ env }) {
@@ -10,6 +11,7 @@ export async function onRequestGet({ env }) {
                c.first_name, c.last_name, c.email
         FROM followup f
         JOIN caregiver c ON f.caregiver_id = c.id
+        WHERE ${notInternalTestCaregiverSql('c')}
         ORDER BY f.created_at DESC
       `)
       .all();
