@@ -100,7 +100,7 @@ test('a missing, zero, negative, faster-than-normal or non-numeric rate leaves n
   }
 });
 
-test('Home, Drop-In Respite and Sanctuary header videos ask for 0.4x speed (requester: half, then a little slower, Nov 3)', () => {
+test('Home, Drop-In Respite and Sanctuary header videos ask for 0.5x speed (requester: a bit faster, Nov 10)', () => {
   for (const page of ['index', 'drop-in-respite']) {
     const html = readFileSync(new URL(`../templates/${page}.html.j2`, import.meta.url), 'utf8');
     assert.match(html, /<video class="hero-video"[^>]*data-playback-rate="0\.5"/);
