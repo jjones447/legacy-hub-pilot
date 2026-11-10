@@ -363,3 +363,38 @@ test('additional recipient email drift and archival refuse before token use; no 
   assert.equal((await post({ env, request: form.request() })).status, 400);
   assert.equal(calls.length, 1);
 });
+
+test('matched recipient email rotation invalidates old token and session; fresh rotated address signs in', async () => {
+  env.PORTAL_PREVIEW_RECIPIENTS = JSON.stringify([{ id: OTHER, email: 'other@example.invalid' }]);
+  await login('other@example.invalid');
+  const first = await prepareConfirmation(link(), env);
+  const signedIn = await post({ env, request: first.request() });
+  assert.equal(signedIn.status, 302);
+  const oldCookie = cookieOf(signedIn);
+  await login('other@example.invalid');
+  const unused = await prepareConfirmation(link(), env);
+  env.PORTAL_PREVIEW_RECIPIENTS = JSON.stringify([{ id: OTHER, email: 'new@example.invalid' }]);
+  raw.prepare('UPDATE caregiver SET email = ? WHERE id = ?').run('new@example.invalid', OTHER);
+  assert.equal((await post({ env, request: unused.request() })).status, 400);
+  assert.equal((await get({ env, request: request('me', 'GET', null, oldCookie) })).status, 401);
+  assert.equal(raw.prepare('SELECT COUNT(*) n FROM portal_token WHERE used = 0').get().n, 1);
+  await login('new@example.invalid');
+  const fresh = await prepareConfirmation(link(), env);
+  const rotated = await post({ env, request: fresh.request() });
+  assert.equal(rotated.status, 302);
+  const me = await get({ env, request: request('me', 'GET', null, cookieOf(rotated)) });
+  assert.equal(me.status, 200);
+  assert.equal((await me.json()).profile.email, 'new@example.invalid');
+});
+
+test('preview address suppression reveals neither approved nor unlisted membership and stops mail', async () => {
+  env.PORTAL_PREVIEW_RECIPIENTS = JSON.stringify([{ id: OTHER, email: 'other@example.invalid' }]);
+  for (let i = 0; i < 5; i++) await login('other@example.invalid');
+  assert.equal(calls.length, 5);
+  const admitted = await login('other@example.invalid');
+  const unlisted = await login('unlisted@example.invalid');
+  assert.equal(admitted.status, 200);
+  assert.equal(unlisted.status, 200);
+  assert.deepEqual(await admitted.json(), await unlisted.json());
+  assert.equal(calls.length, 5);
+});

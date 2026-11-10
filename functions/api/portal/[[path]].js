@@ -1,7 +1,7 @@
 // GET/POST /api/portal/[[path]] — Magic-link authentication and gated caregiver portal API endpoints (slice 09).
 import { checkIpRequestLimit, IP_LIMITS } from '../_shared.mjs';
 import { canSendEmail, isPreviewMailOptIn, sendEmail, signInEmail } from '../../_lib/email.js';
-import { previewQACaregiver, matchesPreviewQACaregiver, previewRecipient } from '../../_lib/portal-preview.mjs';
+import { previewQACaregiver, matchesPreviewQACaregiver, previewRecipient, previewRecipients } from '../../_lib/portal-preview.mjs';
 import { QUESTIONS, validateCheckin, recordCheckin, caregiverHistory, isCheckinDue, CHECKIN_EVERY_DAYS } from '../../_lib/wellness.js';
 import { handlePortalSupport, handlePortalSupportGet } from '../../_lib/portal-support.js';
 
@@ -95,13 +95,22 @@ function previewAuthPrefix(env) {
   return `preview-qa:${qa.id}:${qa.email}:`;
 }
 
-async function portalTokenHash(token, env) {
-  const prefix = previewAuthPrefix(env);
+function recipientAuthPrefix(env, recipient) {
+  const original = previewQACaregiver(env);
+  if (!recipient || (recipient.id === original?.id && recipient.email === original?.email)) return previewAuthPrefix(env);
+  return `preview-recipient:${recipient.id}:${recipient.email}:`;
+}
+
+async function portalTokenHash(token, env, recipient) {
+  const prefix = env.ENVIRONMENT === 'preview' ? recipientAuthPrefix(env, recipient) : '';
   return sha256(prefix ? `${prefix}token:${token}` : token);
 }
 
 function sessionMessage(payload, env) {
-  return `${previewAuthPrefix(env)}session:${payload}`;
+  if (env.ENVIRONMENT !== 'preview') return `session:${payload}`;
+  const recipient = previewRecipient(env, { id: payload.split(':')[0] });
+  if (!recipient) throw new Error('preview_recipient_not_configured');
+  return `${recipientAuthPrefix(env, recipient)}session:${payload}`;
 }
 
 const CLEARED_SESSION_COOKIE = 'portal_session=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT';
@@ -224,10 +233,19 @@ async function parseSessionCookie(cookieHeader, secret, env) {
 }
 
 async function redeemToken(token, env, secret) {
-  const tokenHash = await portalTokenHash(token, env);
-  const tokenRow = await env.LEGACY_DB
-    .prepare(`SELECT caregiver_id, used, expires_at FROM portal_token WHERE token_hash = ?`)
-    .bind(tokenHash).first();
+  let tokenHash, tokenRow;
+  const recipients = env.ENVIRONMENT === 'preview' ? previewRecipients(env) : [null];
+  for (const recipient of recipients) {
+    const candidateHash = await portalTokenHash(token, env, recipient);
+    const candidate = await env.LEGACY_DB
+      .prepare(`SELECT caregiver_id, used, expires_at FROM portal_token WHERE token_hash = ?`)
+      .bind(candidateHash).first();
+    if (candidate && (!recipient || candidate.caregiver_id === recipient.id)) {
+      tokenHash = candidateHash;
+      tokenRow = candidate;
+      break;
+    }
+  }
   if (!tokenRow) return htmlErrorPage('This access link is unrecognized or has been revoked.');
   if (tokenRow.used === 1) return htmlErrorPage('This access link has already been used.');
   const expiresAtMs = Date.parse(tokenRow.expires_at.replace(' ', 'T') + 'Z');
@@ -485,7 +503,7 @@ export async function onRequestPost({ request, env }) {
         .first();
 
       if (rateLimitRow && rateLimitRow.n >= 5) {
-        return json({ ok: false, error: 'rate_limited' }, 429);
+        return env.ENVIRONMENT === 'preview' ? json({ ok: true }) : json({ ok: false, error: 'rate_limited' }, 429);
       }
 
       // Check if a non-archived caregiver has that email
@@ -510,7 +528,7 @@ export async function onRequestPost({ request, env }) {
         const expiresAt = Date.now() + 15 * 60 * 1000;
         const tokenValue = randomToken();
 
-        const tokenHash = await portalTokenHash(tokenValue, env);
+        const tokenHash = await portalTokenHash(tokenValue, env, qa);
         const expiresAtIso = new Date(expiresAt).toISOString().replace('T', ' ').slice(0, 19);
 
         // Store hash in portal_token table
