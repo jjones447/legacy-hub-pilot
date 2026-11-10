@@ -41,7 +41,7 @@ test('the header has the heading, lede and only How it works; details carry the 
   assert.match(page, /<address>3132 N\. Dr\. Martin Luther King Jr\. Drive<br>Milwaukee, WI 53212<\/address>/);
   assert.match(page, /Ebenezer Ministry &amp; Family Worship Center/);
   assert.equal((page.match(/>Register for Free Respite</g) || []).length, 1, 'the Program Details button remains');
-  assert.match(page, /data-playback-rate="0\.5"/, 'keeps the slower header video');
+  assert.match(page, /data-playback-rate="0\.75"/, 'keeps the slower header video');
 });
 
 test('the requested sections are present in order, and Memory Social and grant references are gone', () => {
