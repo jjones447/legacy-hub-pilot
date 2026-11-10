@@ -1,7 +1,7 @@
 // GET/POST /api/portal/[[path]] — Magic-link authentication and gated caregiver portal API endpoints (slice 09).
 import { checkIpRequestLimit, IP_LIMITS } from '../_shared.mjs';
 import { canSendEmail, isPreviewMailOptIn, sendEmail, signInEmail } from '../../_lib/email.js';
-import { previewQACaregiver, matchesPreviewQACaregiver } from '../../_lib/portal-preview.mjs';
+import { previewQACaregiver, matchesPreviewQACaregiver, previewRecipient } from '../../_lib/portal-preview.mjs';
 import { QUESTIONS, validateCheckin, recordCheckin, caregiverHistory, isCheckinDue, CHECKIN_EVERY_DAYS } from '../../_lib/wellness.js';
 import { handlePortalSupport, handlePortalSupportGet } from '../../_lib/portal-support.js';
 
@@ -75,11 +75,11 @@ async function hasNonarchivedCaregiver(db, caregiverId, env) {
   if (!env || typeof env !== 'object') return false;
   if (typeof caregiverId !== 'string' || !caregiverId || caregiverId.length > 256) return false;
   if (env.ENVIRONMENT === 'preview') {
-    const qa = previewQACaregiver(env);
-    if (!qa || caregiverId !== qa.id) return false;
+    const qa = previewRecipient(env, { id: caregiverId });
+    if (!qa) return false;
     const caregiver = await db.prepare(`SELECT id, email FROM caregiver WHERE id = ? AND status != 'archived'`)
       .bind(caregiverId).first();
-    return matchesPreviewQACaregiver(env, caregiver?.id, caregiver?.email);
+    return previewRecipient(env, { id: caregiver?.id, email: caregiver?.email }) !== null;
   }
   const caregiver = await db
     .prepare(`SELECT id FROM caregiver WHERE id = ? AND status != 'archived'`)
@@ -215,7 +215,7 @@ async function parseSessionCookie(cookieHeader, secret, env) {
   // SEC-3: domain-separate session vs magic-link. A session cookie is signed over
   // `session:<payload>`; an opaque magic-link token pasted as a cookie is not an
   // `id:exp:session-hmac` value and cannot establish a session.
-  if (env.ENVIRONMENT === 'preview' && caregiverId !== previewQACaregiver(env)?.id) return null;
+  if (env.ENVIRONMENT === 'preview' && !previewRecipient(env, { id: caregiverId })) return null;
   const computedSig = await getHmacSha256(sessionMessage(`${caregiverId}:${exp}`, env), secret);
   if (!constantTimeEqual(computedSig, signature)) return null;
   const expMs = Number(exp);
@@ -236,7 +236,7 @@ async function redeemToken(token, env, secret) {
   if (!await hasNonarchivedCaregiver(env.LEGACY_DB, caregiverId, env)) return htmlErrorPage('This access link is unrecognized or has been revoked.');
   // Preserve the exact one-winner claim and current identity fence. Ambiguous
   // commit metadata remains fail-closed; never reset used after an unknown save.
-  const qa = previewQACaregiver(env);
+  const qa = previewRecipient(env, { id: caregiverId });
   const claimSql = `UPDATE portal_token SET used = 1 WHERE token_hash = ? AND used = 0 AND caregiver_id = ?
                   AND EXISTS (SELECT 1 FROM caregiver WHERE id = portal_token.caregiver_id AND status != 'archived'${qa ? ' AND LOWER(TRIM(email)) = ?' : ''})`;
   const claim = await env.LEGACY_DB.prepare(claimSql)
@@ -453,9 +453,10 @@ export async function onRequestPost({ request, env }) {
         return json({ ok: false, error: 'invalid_email' }, 400);
       }
 
-      const qa = previewQACaregiver(env);
-      const emailEnabled = qa
-        ? canSendEmail(env, { purpose: 'portal-signin', recipient: qa.email, caregiverId: qa.id })
+      const qa = previewRecipient(env, { email });
+      const readiness = qa || previewQACaregiver(env);
+      const emailEnabled = readiness
+        ? canSendEmail(env, { purpose: 'portal-signin', recipient: readiness.email, caregiverId: readiness.id })
         : canSendEmail(env);
       // Deployment-wide readiness is checked before membership lookup, so the
       // unavailable response cannot reveal whether this address is registered.
@@ -472,6 +473,7 @@ export async function onRequestPost({ request, env }) {
         return json({ ok: false, error: 'signin_unavailable' }, 503);
       }
 
+      if (env.ENVIRONMENT === 'preview' && !qa) return json({ ok: true });
       const normalizedEmail = email.toLowerCase().trim();
       if (qa && normalizedEmail !== qa.email) return json({ ok: true });
       const emailHash = await sha256(normalizedEmail);
@@ -493,7 +495,7 @@ export async function onRequestPost({ request, env }) {
           : `SELECT id, email FROM caregiver WHERE LOWER(TRIM(email)) = ? AND status != 'archived'`)
         .bind(...(qa ? [qa.id, normalizedEmail] : [normalizedEmail]))
         .first();
-      if (qa && !matchesPreviewQACaregiver(env, caregiver?.id, caregiver?.email)) return json({ ok: true });
+      if (qa && !previewRecipient(env, { id: caregiver?.id, email: caregiver?.email })) return json({ ok: true });
 
       // Log audit trail login request
       await env.LEGACY_DB

@@ -309,3 +309,57 @@ test('disabled frontend feedback is explicit without revealing configured identi
   assert.doesNotMatch(nodes.loginStatus.textContent, /qa@example|fixture-qa/);
   assert.equal(button.disabled, false);
 });
+
+test('additional recipient signs in without samples; original QA session survives; removal revokes new session', async () => {
+  const originalCookie = session(QA, prefix(env));
+  env.PORTAL_PREVIEW_RECIPIENTS = JSON.stringify([{ id: OTHER, email: 'other@example.invalid' }]);
+  assert.equal((await get({ env, request: request('me', 'GET', null, originalCookie) })).status, 200);
+  assert.equal((await login('other@example.invalid')).status, 200);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].body.to, ['other@example.invalid']);
+  const form = await prepareConfirmation(link(), env);
+  assert.equal(raw.prepare('SELECT used FROM portal_token').get().used, 0);
+  const signedIn = await post({ env, request: form.request() });
+  assert.equal(signedIn.status, 302);
+  const cookie = cookieOf(signedIn);
+  const response = await get({ env, request: request('me', 'GET', null, cookie) });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.profile.id, OTHER);
+  assert.notEqual(body.qa_samples, true, 'allow-list access never grants QA sample eligibility');
+  assert.equal((await post({ env, request: form.request() })).status, 400);
+  assert.equal((await post({ env, request: request('wellness', 'POST', { answers, caregiver_id: QA }, cookie) })).status, 200);
+  assert.deepEqual(raw.prepare('SELECT caregiver_id FROM wellness_checkin').all().map(r => r.caregiver_id), [OTHER]);
+  env.PORTAL_PREVIEW_RECIPIENTS = '[]';
+  assert.equal((await get({ env, request: request('me', 'GET', null, cookie) })).status, 401);
+  assert.equal((await get({ env, request: request('wellness', 'GET', null, cookie) })).status, 401);
+  assert.equal((await get({ env, request: request('me', 'GET', null, originalCookie) })).status, 200);
+});
+
+test('malformed extra recipient policy fails closed before database, body or sending', async () => {
+  const variants = ['{}', 'null', '[null]', '[{"id":"fixture-other","email":"OTHER@example.invalid"}]',
+    '[{"id":"fixture-qa","email":"other@example.invalid"}]',
+    '[{"id":"fixture-other","email":"qa@example.invalid"}]',
+    '[{"id":"fixture-other","email":"other@example.invalid","samples":true}]',
+    JSON.stringify(Array.from({ length: 20 }, (_, i) => ({id: 'extra'+i, email: 'extra'+i+'@example.invalid'}))), ' '.repeat(8193)];
+  for (const value of variants) {
+    const blocked = { ...env, PORTAL_PREVIEW_RECIPIENTS: value,
+      LEGACY_DB: { prepare() { throw new Error('must refuse before DB'); } } };
+    const r = await post({ env: blocked, request: request('login', 'POST', { email: EMAIL }) });
+    assert.equal(r.status, 503);
+  }
+  assert.equal(calls.length, 0);
+});
+
+test('additional recipient email drift and archival refuse before token use; no identity fallback', async () => {
+  env.PORTAL_PREVIEW_RECIPIENTS = JSON.stringify([{ id: OTHER, email: 'other@example.invalid' }]);
+  await login('other@example.invalid');
+  const form = await prepareConfirmation(link(), env);
+  raw.prepare('UPDATE caregiver SET email = ? WHERE id = ?').run('changed@example.invalid', OTHER);
+  const denied = await post({ env, request: form.request() });
+  assert.equal(denied.status, 400);
+  assert.equal(raw.prepare('SELECT used FROM portal_token').get().used, 0);
+  raw.prepare('UPDATE caregiver SET email = ?, status = ? WHERE id = ?').run('other@example.invalid', 'archived', OTHER);
+  assert.equal((await post({ env, request: form.request() })).status, 400);
+  assert.equal(calls.length, 1);
+});

@@ -1,7 +1,7 @@
 // Transactional email through Resend (https://resend.com/docs/api-reference/emails/send-email).
 // Preview confirmation and portal mail have independent opt-ins. Confirmation
 // purpose is selected only by the server caller, never from an intake payload.
-import { previewQACaregiver, matchesPreviewQACaregiver } from './portal-preview.mjs';
+import { previewRecipients, previewRecipient } from './portal-preview.mjs';
 
 export const EMAIL_FROM = 'Caregiver Sanctuary <no-reply@caregiversanctuary.org>';
 export const EMAIL_REPLY_TO = 'info@legacyhomehealthservices.org';
@@ -9,14 +9,15 @@ const RESEND_URL = 'https://api.resend.com/emails';
 const EMAIL = /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/;
 
 export function isPreviewMailOptIn(env) {
-  return previewQACaregiver(env) !== null;
+  return previewRecipients(env).length > 0;
 }
 
 export function canSendEmail(env, { purpose, recipient, caregiverId } = {}) {
   if (!env || !String(env.EMAIL_API_KEY || '').trim()) return false;
   if (purpose === 'portal-signin') {
     if (typeof recipient !== 'string' || !EMAIL.test(recipient.trim())) return false;
-    if (env.ENVIRONMENT === 'preview') return matchesPreviewQACaregiver(env, caregiverId, recipient);
+    if (env.ENVIRONMENT === 'preview' && typeof caregiverId !== 'string') return false;
+    if (env.ENVIRONMENT === 'preview') return previewRecipient(env, { id: caregiverId, email: recipient }) !== null;
     return !env.ENVIRONMENT || env.ENVIRONMENT === 'production';
   }
   if (purpose !== undefined) {

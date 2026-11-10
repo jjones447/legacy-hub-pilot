@@ -20,3 +20,36 @@ export function matchesPreviewQACaregiver(env, id, email) {
   return !!qa && id === qa.id && typeof email === 'string'
     && email.trim().toLowerCase() === qa.email;
 }
+
+// Explicit additional preview recipients never gain QA/sample eligibility.
+// The original QA identity remains the stable token/session namespace anchor.
+export function previewRecipients(env) {
+  const qa = previewQACaregiver(env);
+  if (!qa) return [];
+  const raw = env.PORTAL_PREVIEW_RECIPIENTS;
+  if (raw === undefined || raw === '') return [qa];
+  if (typeof raw !== 'string' || new TextEncoder().encode(raw).length > 8192) return [];
+  let extra;
+  try { extra = JSON.parse(raw); } catch { return []; }
+  if (!Array.isArray(extra) || extra.length > 19) return [];
+  const result = [qa];
+  for (const row of extra) {
+    if (!row || typeof row !== 'object' || Array.isArray(row)
+        || Object.keys(row).sort().join(',') !== 'email,id'
+        || typeof row.id !== 'string' || typeof row.email !== 'string') return [];
+    const id = row.id.trim(), email = row.email.trim().toLowerCase();
+    if (id !== row.id || email !== row.email || !CAREGIVER_ID.test(id)
+        || email.length > 254 || !EMAIL.test(email)
+        || result.some(r => r.id === id || r.email === email)) return [];
+    result.push({ id, email });
+  }
+  return result;
+}
+
+export function previewRecipient(env, { id, email } = {}) {
+  if (id === undefined && email === undefined) return null;
+  return previewRecipients(env).find(row =>
+    (id === undefined || row.id === id)
+    && (email === undefined || (typeof email === 'string' && row.email === email.trim().toLowerCase()))
+  ) || null;
+}
