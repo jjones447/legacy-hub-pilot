@@ -302,6 +302,126 @@ function submitMembership(e) {
   return false;
 }
 
+/* ---------- Email list (schema 0020): join from the home page, leave from your own link ---------- */
+// Joining saves an email_subscriber row only (no caregiver record) and sends no email.
+// The retry key lives in sessionStorage, so a retry after an error cannot add a second row.
+const emailListSubmissions = new WeakMap();
+
+function showEmailListState(form, state, focusResult) {
+  emailListSubmissions.set(form, state);
+  setFormState(form, state.phase, state.message);
+  const pending = form.querySelector('[data-email-list-pending]');
+  if (pending) pending.hidden = state.phase !== 'pending';
+  const submit = form.querySelector('[type="submit"]');
+  if (submit) submit.disabled = ['pending', 'success'].includes(state.phase);
+  form.ariaBusy = state.phase === 'pending' ? 'true' : 'false';
+  const result = form.querySelector(state.phase === 'success' ? '[data-intake-success]' : '[data-intake-error]');
+  if (focusResult && result && typeof result.focus === 'function') result.focus();
+}
+
+// The sign-up form ships with its button disabled and no named fields (#302 review P3); it is
+// enabled only once this script is running and the submit dispatcher handles it.
+function initEmailListForm() {
+  const form = typeof document !== 'undefined' && document.getElementById ? document.getElementById('emailListForm') : null;
+  if (!form) return;
+  const submit = form.querySelector('[type="submit"]');
+  const note = form.querySelector('[data-email-list-not-ready]');
+  if (submit) submit.disabled = false;
+  if (note) note.hidden = true;
+}
+
+function submitEmailList(e) {
+  e.preventDefault();
+  const form = document.getElementById('emailListForm');
+  if (!form || ['pending', 'success'].includes(emailListSubmissions.get(form)?.phase)) return false;
+  let payload;
+  try {
+    const email = document.getElementById('emailListEmail').value.trim();
+    if (!email || !email.includes('@')) {
+      showEmailListState(form, { phase: 'error', message: 'Please enter your email address.' }, true);
+      return false;
+    }
+    payload = {
+      kind: 'newsletter',
+      source: 'site_form:newsletter',
+      external_ref: intakeExternalRef(form, 'newsletter'),
+      first_name: document.getElementById('emailListFirstName').value.trim(),
+      email: email,
+    };
+  } catch {
+    showEmailListState(form, { phase: 'error', message: "We couldn't prepare this form. It has not been sent. Please try again or contact Legacy." }, true);
+    return false;
+  }
+  showEmailListState(form, { phase: 'pending' });
+  Promise.resolve().then(() => postIntake(form, payload)).then(function () {
+    showEmailListState(form, { phase: 'success' }, true);
+  }).catch(function (error) {
+    showEmailListState(form, { phase: 'error', message: error && error.status === 429
+      ? 'Too many sign-ups from this connection just now. Please try again later.'
+      : "We couldn't add you to the email list just now. Please try again in a moment." }, true);
+  });
+  return false;
+}
+
+const UNSUBSCRIBE_ENDPOINT = '/api/unsubscribe';
+let unsubscribeToken = null;
+
+// Read the token once, then drop it from the address bar so it is not left in history or
+// shared by copying the URL. Nothing is sent until the person presses Unsubscribe.
+function initUnsubscribePage(loc, hist) {
+  const form = typeof document !== 'undefined' && document.getElementById ? document.getElementById('unsubscribeForm') : null;
+  if (!form) return;
+  let token = null;
+  try {
+    token = new URLSearchParams((loc && loc.search) || '').get('token');
+  } catch (err) {
+    token = null;
+  }
+  if (token !== null && hist && typeof hist.replaceState === 'function') {
+    try { hist.replaceState(null, '', loc.pathname); } catch (err) { /* the page still works */ }
+  }
+  unsubscribeToken = typeof token === 'string' && /^[0-9a-f]{32}$/.test(token) ? token : null;
+  const ready = form.querySelector('[data-unsubscribe-ready]');
+  const missing = form.querySelector('[data-unsubscribe-missing]');
+  const submit = form.querySelector('[type="submit"]');
+  if (ready) ready.hidden = !unsubscribeToken;
+  if (missing) missing.hidden = !!unsubscribeToken;
+  if (submit) submit.disabled = !unsubscribeToken;
+}
+
+function submitUnsubscribe(e) {
+  e.preventDefault();
+  const form = document.getElementById('unsubscribeForm');
+  if (!form || !unsubscribeToken) return false;
+  const pending = form.querySelector('[data-unsubscribe-pending]');
+  const submit = form.querySelector('[type="submit"]');
+  setFormState(form, 'pending');
+  if (pending) pending.hidden = false;
+  form.ariaBusy = 'true';
+  const finish = function (state, message) {
+    setFormState(form, state, message);
+    if (pending) pending.hidden = true;
+    form.ariaBusy = 'false';
+    if (submit) submit.disabled = state === 'success';
+    const result = form.querySelector(state === 'success' ? '[data-intake-success]' : '[data-intake-error]');
+    if (result && typeof result.focus === 'function') result.focus();
+  };
+  Promise.resolve().then(() => fetch(UNSUBSCRIBE_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: unsubscribeToken }),
+  })).then(async function (res) {
+    const body = await res.json().catch(function () { return {}; });
+    if (res.ok && body.ok) finish('success');
+    else finish('error', res.status === 429
+      ? 'Too many requests from this connection just now. Please try again later.'
+      : "We couldn't process this link. Please contact Legacy and we'll remove you.");
+  }).catch(function () {
+    finish('error', "We couldn't reach Legacy just now. Please try again in a moment.");
+  });
+  return false;
+}
+
 /* ---------- Virtual support group: sign up (saved for staff), then go to Google Meet ---------- */
 let supportGroupInterestOpener = null;
 let supportGroupSession = '';
@@ -466,7 +586,11 @@ function submitRegister(e) {
     relationship: document.getElementById('regRole').value,
   };
 
-  postIntake(form, payload).then(function () {
+  postIntake(form, payload).then(function (result) {
+    const success = form.querySelector('[data-intake-success]');
+    if (success) success.textContent = result.confirmation_email === 'submitted'
+      ? 'Registration saved. Your confirmation email has been submitted. Check your inbox and spam folder.'
+      : 'Registration saved. We could not confirm the email was sent. Please contact Legacy for the details; do not register again.';
     setFormState(form, 'success');
   }).catch(function (err) {
     if (err.message === 'event_full') {
@@ -495,6 +619,8 @@ function checkPortalSession() {
   const dashView = document.getElementById('dashView');
   if (!loginView || !dashView) return; // not on portal page
 
+  const checkGen = typeof bumpPortalSessionGeneration === 'function' ? bumpPortalSessionGeneration() : 0;
+
   // Only a confirmed signed-out answer (HTTP 401) may start the one automatic sign-in
   // link request from a membership hand-off. A signed-in session discards the hand-off;
   // an unavailable or unreadable session check only prefills the email (manual send).
@@ -506,19 +632,24 @@ function checkPortalSession() {
       return { outcome: res.status === 401 ? 'signed_out' : 'unavailable' };
     })
     .then(function (result) {
+      if (typeof portalSessionGeneration === 'number' && checkGen && checkGen !== portalSessionGeneration) return;
       if (result.outcome === 'signed_in') {
         takePortalHandoff(); // discard: an existing session wins, nothing is sent
         renderPortalData(result.data);
         loadWellness();
+        loadPortalSupport();
         loginView.style.display = 'none';
         dashView.style.display = 'block';
       } else {
+        if (typeof resetPortalSessionState === 'function') resetPortalSessionState();
         dashView.style.display = 'none';
         loginView.style.display = 'block';
         continueMembershipHandoff(result.outcome === 'signed_out' ? 'auto' : 'manual');
       }
     })
     .catch(function () {
+      if (typeof portalSessionGeneration === 'number' && checkGen && checkGen !== portalSessionGeneration) return;
+      if (typeof resetPortalSessionState === 'function') resetPortalSessionState();
       dashView.style.display = 'none';
       loginView.style.display = 'block';
       continueMembershipHandoff('manual');
@@ -614,6 +745,8 @@ function submitPortalLogin(e) {
         statusDiv.textContent = 'Too many requests. Please wait a few minutes and try again.';
       } else if (err.message === 'signin_unavailable') {
         statusDiv.textContent = 'Sign-in is temporarily unavailable. Please contact Legacy or try again later.';
+      } else if (err.message === 'preview_portal_disabled') {
+        statusDiv.textContent = 'Staging caregiver sign-in is disabled. Only the specifically configured QA caregiver can sign in after the release owner enables it.';
       } else {
         statusDiv.textContent = "We couldn't request a sign-in link just now. Please try again later.";
       }
@@ -640,6 +773,7 @@ function portalLogout() {
     })
     .then(function (data) {
       if (!data || data.ok !== true) throw new Error('logout_unconfirmed');
+      if (typeof resetPortalSessionState === 'function') resetPortalSessionState();
       const loginView = document.getElementById('loginView');
       const dashView = document.getElementById('dashView');
       const statusDiv = document.getElementById('loginStatus');
@@ -667,18 +801,62 @@ function portalLogout() {
 }
 
 function renderPortalData(data) {
+  const safeData = data || {};
+  const profile = safeData.profile || {};
+  const nextCaregiverKey = portalProfileIdentityKey(profile);
+  const nextQaSamples = Boolean(safeData.qa_samples === true);
+  const identityChanged = !nextCaregiverKey ||
+    nextCaregiverKey !== portalActiveCaregiverKey ||
+    nextQaSamples !== portalQaSamplesActive ||
+    (portalSupportCacheCaregiverKey && portalSupportCacheCaregiverKey !== nextCaregiverKey);
+  if (identityChanged) {
+    portalSessionGeneration += 1;
+    portalEventsFilterState = 'all';
+    portalSupportRealRequests = [];
+    portalSupportCacheCaregiverKey = nextCaregiverKey;
+    portalSupportHistoryUnavailable = false;
+    portalSupportFilterState = 'all';
+    if (typeof portalSupportPendingRequest !== 'undefined') {
+      portalSupportPendingRequest = null;
+    }
+    if (typeof portalSupportProfileContact !== 'undefined') {
+      portalSupportProfileContact = { email: '', phone: '' };
+    }
+    const eventsFilter = document.getElementById('portalEventsFilter');
+    if (eventsFilter) eventsFilter.value = 'all';
+    const supportFilter = document.getElementById('portalSupportFilter');
+    if (supportFilter) supportFilter.value = 'all';
+    const rowsEl = document.getElementById('portalSupportHistoryRows');
+    if (rowsEl && !nextQaSamples) {
+      rowsEl.textContent = 'Your saved support requests will appear here.';
+    }
+    portalHighlightState.wellnessDue = false;
+  }
+  portalActiveCaregiverKey = nextCaregiverKey;
+  portalQaSamplesActive = nextQaSamples;
+  portalRealEvents = Array.isArray(safeData.events) ? safeData.events.slice() : [];
   const welcome = document.getElementById('portalWelcome');
   if (welcome) {
-    welcome.textContent = 'Welcome back, ' + (data.profile.first_name || 'Member');
+    const first = typeof profile.first_name === 'string' ? profile.first_name.trim() : '';
+    welcome.textContent = first ? 'Welcome to Your Sanctuary, ' + first + '!' : 'Welcome to Your Sanctuary!';
   }
+
+  // My Profile & Intake: read-only account details (updates/intake are not built yet).
+  const setText = function (id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value ? String(value) : '—';
+  };
+  setText('portalProfileName', [profile.first_name, profile.last_name].filter(Boolean).join(' '));
+  setText('portalProfileEmail', profile.email);
+  setText('portalProfilePhone', profile.phone);
 
   // Membership status
   const memberStatus = document.getElementById('portalMembershipStatus');
   if (memberStatus) {
-    if (data.profile.sanctuary_member === 1) {
+    if (profile.sanctuary_member === 1) {
       memberStatus.innerHTML = '<span class="badge badge-green">Sanctuary member</span>';
     } else {
-      memberStatus.innerHTML = '<span class="badge badge-gray">Non-member</span>';
+      memberStatus.innerHTML = '<span class="badge badge-gray">Not yet a member</span>';
     }
   }
 
@@ -687,8 +865,8 @@ function renderPortalData(data) {
   const grantRequestedFor = document.getElementById('portalGrantRequestedFor');
   const grantAward = document.getElementById('portalGrantAward');
   if (grantStatus && grantRequestedFor && grantAward) {
-    if (data.grants && data.grants.length > 0) {
-      const ga = data.grants[0];
+    if (safeData.grants && safeData.grants.length > 0) {
+      const ga = safeData.grants[0];
       let badgeClass = 'badge-gray';
       if (ga.status === 'submitted' || ga.status === 'in_review') badgeClass = 'badge-amber';
       else if (ga.status === 'awarded' || ga.status === 'course_complete') badgeClass = 'badge-green';
@@ -708,59 +886,19 @@ function renderPortalData(data) {
     }
   }
 
-  // Events list
-  const eventsList = document.getElementById('portalEventsList');
-  if (eventsList) {
-    eventsList.innerHTML = '';
-    if (data.events && data.events.length > 0) {
-      data.events.forEach(function (e) {
-        const item = document.createElement('div');
-        item.className = 'timeline-item';
-        let dotColor = 'var(--ink-soft)';
-        if (e.type === 'support_group') dotColor = 'var(--green)';
-        else if (e.type === 'memory_social') dotColor = 'var(--amber)';
-        else if (e.type === 'wellness') dotColor = 'var(--plum)';
+  syncPortalQaSampleChrome();
+  filterPortalEvents();
 
-        // Built as DOM nodes, not an HTML string. e.title and e.location are free text
-        // authored in the staff console, and concatenating them into innerHTML made the
-        // caregiver portal a stored-XSS sink. Everywhere else in this file already uses
-        // textContent; these were the outliers.
-        const dot = document.createElement('div');
-        dot.className = 'timeline-dot';
-        dot.style.background = dotColor;
-
-        const title = document.createElement('strong');
-        title.textContent = e.title || 'Event';
-
-        const badge = document.createElement('span');
-        badge.className = 'badge badge-green';
-        badge.textContent = e.registration_status || '';
-
-        const when = document.createElement('div');
-        when.className = 'when';
-        when.textContent = (e.starts_at || '') + ' · ' + (e.location || 'Online');
-
-        const body = document.createElement('div');
-        body.appendChild(title);
-        body.appendChild(document.createTextNode(' '));
-        body.appendChild(badge);
-        body.appendChild(when);
-
-        item.appendChild(dot);
-        item.appendChild(body);
-        eventsList.appendChild(item);
-      });
-    } else {
-      eventsList.innerHTML = '<p class="small muted m-0">No registered events yet.</p>';
-    }
+  if (typeof filterPortalSupport === 'function') {
+    filterPortalSupport();
   }
 
-  // Memory socials count and details
+  // Memory socials count and details (uses real account events only)
   const socialsCount = document.getElementById('portalSocialsCount');
   const socialsLast = document.getElementById('portalSocialsLastVisit');
   const socialsNext = document.getElementById('portalSocialsNext');
   if (socialsCount && socialsLast && socialsNext) {
-    const socials = (data.events || []).filter(function (e) { return e.type === 'memory_social'; });
+    const socials = (safeData.events || []).filter(function (e) { return e.type === 'memory_social'; });
     const attended = socials.filter(function (e) { return e.registration_status === 'attended'; });
     const now = new Date();
     const dated = socials.map(function (event) {
@@ -780,6 +918,523 @@ function renderPortalData(data) {
   }
 }
 
+var portalSessionGeneration = 0;
+var portalActiveCaregiverKey = '';
+var portalQaSamplesActive = false;
+var portalRealEvents = [];
+var portalEventsFilterState = 'all';
+var portalSupportRealRequests = [];
+var portalSupportCacheCaregiverKey = '';
+var portalSupportHistoryUnavailable = false;
+var portalSupportFilterState = 'all';
+
+function bumpPortalSessionGeneration() {
+  portalSessionGeneration += 1;
+  return portalSessionGeneration;
+}
+
+function portalProfileIdentityKey(profile) {
+  if (!profile || typeof profile !== 'object') return '';
+  const id = typeof profile.id === 'string' ? profile.id.trim() : '';
+  const email = typeof profile.email === 'string' ? profile.email.trim().toLowerCase() : '';
+  const first = typeof profile.first_name === 'string' ? profile.first_name.trim() : '';
+  const last = typeof profile.last_name === 'string' ? profile.last_name.trim() : '';
+  if (id || email) return id + '|' + email;
+  if (first || last) return 'name:' + first + '|' + last;
+  return '';
+}
+
+function resetPortalSessionState() {
+  portalSessionGeneration += 1;
+  portalActiveCaregiverKey = '';
+  portalQaSamplesActive = false;
+  portalRealEvents = [];
+  portalEventsFilterState = 'all';
+  portalSupportRealRequests = [];
+  portalSupportCacheCaregiverKey = '';
+  portalSupportHistoryUnavailable = false;
+  portalSupportFilterState = 'all';
+  if (typeof portalSupportPendingRequest !== 'undefined') {
+    portalSupportPendingRequest = null;
+  }
+  if (typeof portalSupportProfileContact !== 'undefined') {
+    portalSupportProfileContact = { email: '', phone: '' };
+  }
+  const eventsFilter = document.getElementById('portalEventsFilter');
+  if (eventsFilter) eventsFilter.value = 'all';
+  const supportFilter = document.getElementById('portalSupportFilter');
+  if (supportFilter) supportFilter.value = 'all';
+  syncPortalQaSampleChrome();
+  const eventsList = document.getElementById('portalEventsList');
+  if (eventsList) {
+    eventsList.innerHTML = '<p class="small muted m-0">No registered events yet.</p>';
+  }
+  const rowsEl = document.getElementById('portalSupportHistoryRows');
+  if (rowsEl) {
+    rowsEl.textContent = 'Your saved support requests will appear here.';
+  }
+  portalHighlightState.nextEvent = null;
+  portalHighlightState.nextSampleEvent = null;
+  portalHighlightState.sampleSupportSummary = null;
+  portalHighlightState.wellnessDue = false;
+  renderPortalHighlights();
+}
+
+function portalTextNode(text) {
+  return typeof document !== 'undefined' && typeof document.createTextNode === 'function'
+    ? document.createTextNode(text)
+    : { textContent: String(text) };
+}
+
+function portalQaSampleEvents() {
+  if (!portalQaSamplesActive) return [];
+  return [
+    {
+      id: 'qa-sample-event-social-upcoming',
+      title: '[SAMPLE] Thursday Afternoon Memory Social',
+      type: 'memory_social',
+      starts_at: portalSampleDate(3, '14:00'),
+      location: 'Sample Community Room (QA Illustration)',
+      registration_status: 'registered',
+      is_sample: true,
+      sample_badge: 'SAMPLE / TEST',
+      sample_note: 'Fictional sample registration — read-only; does not reserve a seat, send notifications or create a payment.'
+    },
+    {
+      id: 'qa-sample-event-group-upcoming',
+      title: '[SAMPLE] Virtual Caregiver Support Group',
+      type: 'support_group',
+      starts_at: portalSampleDate(6, '17:00'),
+      location: 'Online (QA Illustration)',
+      registration_status: 'registered',
+      is_sample: true,
+      sample_badge: 'SAMPLE / TEST',
+      sample_note: 'Fictional sample registration — read-only; does not reserve a seat, send notifications or create a payment.'
+    },
+    {
+      id: 'qa-sample-event-wellness-upcoming',
+      title: '[SAMPLE] Restorative Breath & Caregiver Renewal',
+      type: 'wellness',
+      starts_at: portalSampleDate(10, '10:00'),
+      location: 'Sanctuary Studio (QA Illustration)',
+      registration_status: 'registered',
+      is_sample: true,
+      sample_badge: 'SAMPLE / TEST',
+      sample_note: 'Fictional sample registration — read-only; does not reserve a seat, send notifications or create a payment.'
+    },
+    {
+      id: 'qa-sample-event-workshop-past',
+      title: '[SAMPLE] Family Dementia Education Workshop',
+      type: 'caregiver_event',
+      starts_at: portalSampleDate(-9, '18:00'),
+      location: 'Milwaukee Community Center (QA Illustration)',
+      registration_status: 'attended',
+      is_sample: true,
+      sample_badge: 'SAMPLE / TEST',
+      sample_note: 'Fictional past attendance entry — read-only; not part of your actual attendance history.'
+    },
+    {
+      id: 'qa-sample-event-social-past',
+      title: '[SAMPLE] Autumn Gathering Memory Social',
+      type: 'memory_social',
+      starts_at: portalSampleDate(-21, '14:00'),
+      location: 'Sample Community Room (QA Illustration)',
+      registration_status: 'attended',
+      is_sample: true,
+      sample_badge: 'SAMPLE / TEST',
+      sample_note: 'Fictional past attendance entry — read-only; not part of your actual attendance history.'
+    }
+  ];
+}
+
+function portalQaSampleSupportRequests() {
+  if (!portalQaSamplesActive) return [];
+  return [
+    {
+      request_id: 'qa-sample-support-in-progress',
+      support_type: 'respite_services',
+      support_type_label: '[SAMPLE] Respite Services',
+      status: 'in_progress',
+      status_label: 'In Progress',
+      urgency: 'next_few_days',
+      urgency_label: 'Next few days',
+      contact_preference: 'phone_call',
+      contact_preference_label: 'Phone Call',
+      submitted_at: portalSampleDate(-2, '10:15'),
+      last_status_updated_at: portalSampleDate(-1, '14:30'),
+      is_sample: true,
+      sample_badge: 'SAMPLE / TEST',
+      sample_note: 'Fictional sample support request — read-only; creates no Staff queue task, clinical history, notification or payment.'
+    },
+    {
+      request_id: 'qa-sample-support-received',
+      support_type: 'caregiver_support_guidance',
+      support_type_label: '[SAMPLE] Caregiver Support & Guidance',
+      status: 'received',
+      status_label: 'Received',
+      urgency: 'general_inquiry',
+      urgency_label: 'General inquiry',
+      contact_preference: 'email',
+      contact_preference_label: 'Email',
+      submitted_at: portalSampleDate(0, '09:00'),
+      last_status_updated_at: portalSampleDate(0, '09:00'),
+      is_sample: true,
+      sample_badge: 'SAMPLE / TEST',
+      sample_note: 'Fictional sample support request — read-only; creates no Staff queue task, clinical history, notification or payment.'
+    },
+    {
+      request_id: 'qa-sample-support-completed',
+      support_type: 'community_resources_referrals',
+      support_type_label: '[SAMPLE] Community Resources & Referrals',
+      status: 'completed',
+      status_label: 'Completed',
+      urgency: 'general_inquiry',
+      urgency_label: 'General inquiry',
+      contact_preference: 'email',
+      contact_preference_label: 'Email',
+      submitted_at: portalSampleDate(-14, '11:20'),
+      last_status_updated_at: portalSampleDate(-10, '16:05'),
+      is_sample: true,
+      sample_badge: 'SAMPLE / TEST',
+      sample_note: 'Fictional sample support request — read-only; creates no Staff queue task, clinical history, notification or payment.'
+    }
+  ];
+}
+
+function syncPortalQaSampleChrome() {
+  ['portalQaSampleBanner', 'portalProfileSampleNote', 'portalResourcesSampleNote', 'portalUpdatesSampleNote'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el) el.hidden = !portalQaSamplesActive;
+  });
+  if (portalQaSamplesActive) {
+    const supportHistory = document.getElementById('portalSupportHistory');
+    if (supportHistory) supportHistory.open = true;
+    const wellnessHistory = document.getElementById('portalWellnessHistory');
+    if (wellnessHistory) wellnessHistory.open = true;
+  }
+}
+
+function filterPortalEvents(filterValue) {
+  const filterSelect = document.getElementById('portalEventsFilter');
+  const activeFilter = typeof filterValue === 'string' && filterValue
+    ? filterValue
+    : (filterSelect && typeof filterSelect.value === 'string' && filterSelect.value ? filterSelect.value : (portalEventsFilterState || 'all'));
+  portalEventsFilterState = activeFilter;
+  if (filterSelect && filterSelect.value !== activeFilter) {
+    filterSelect.value = activeFilter;
+  }
+
+  const eventsList = document.getElementById('portalEventsList');
+  const nowDate = new Date();
+  const realTimed = (portalRealEvents || []).map(function (e) {
+    return { event: e, time: publicEventTime(e.starts_at, nowDate, 'America/Chicago') };
+  });
+  const sampleTimed = portalQaSampleEvents().map(function (e) {
+    return { event: e, time: publicEventTime(e.starts_at, nowDate, 'America/Chicago') };
+  });
+  const combined = realTimed.concat(sampleTimed);
+
+  const filtered = combined.filter(function (entry) {
+    const ev = entry.event;
+    const isFuture = Boolean(entry.time && entry.time.future);
+    if (activeFilter === 'upcoming') return isFuture;
+    if (activeFilter === 'past') return !isFuture;
+    if (activeFilter === 'real') return !ev.is_sample;
+    if (activeFilter === 'sample') return Boolean(ev.is_sample);
+    if (activeFilter === 'memory_social' || activeFilter === 'support_group' || activeFilter === 'caregiver_event' || activeFilter === 'wellness') {
+      return ev.type === activeFilter;
+    }
+    return true;
+  });
+
+  const upcoming = filtered.filter(function (x) { return x.time && x.time.future; })
+    .sort(function (a, b) { return a.time.instant - b.time.instant; });
+  const past = filtered.filter(function (x) { return !(x.time && x.time.future); })
+    .sort(function (a, b) { return (b.time ? b.time.instant : -Infinity) - (a.time ? a.time.instant : -Infinity); });
+
+  if (eventsList) {
+    eventsList.innerHTML = '';
+    if (filtered.length === 0) {
+      eventsList.innerHTML = (activeFilter === 'all' || (activeFilter === 'real' && realTimed.length === 0))
+        ? '<p class="small muted m-0">No registered events yet.</p>'
+        : '<p class="small muted m-0">No events match this filter.</p>';
+    } else {
+      [['Upcoming', upcoming], ['Past', past]].forEach(function (group) {
+        if (!group[1].length) return;
+        const section = document.createElement('div');
+        section.className = 'portal-events-group';
+        const heading = document.createElement('h5');
+        heading.textContent = group[0];
+        section.appendChild(heading);
+        group[1].forEach(function (entry) { section.appendChild(portalEventItem(entry.event)); });
+        eventsList.appendChild(section);
+      });
+    }
+  }
+
+  const realUpcoming = realTimed.filter(function (x) { return x.time && x.time.future; })
+    .sort(function (a, b) { return a.time.instant - b.time.instant; });
+  const nextRegistered = realUpcoming.find(function (x) { return x.event.registration_status === 'registered'; });
+  portalHighlightState.nextEvent = nextRegistered ? nextRegistered.event : null;
+
+  const sampleUpcoming = sampleTimed.filter(function (x) { return x.time && x.time.future; })
+    .sort(function (a, b) { return a.time.instant - b.time.instant; });
+  const nextSampleRegistered = (portalQaSamplesActive && activeFilter !== 'real')
+    ? sampleUpcoming.find(function (x) { return x.event.registration_status === 'registered'; })
+    : null;
+  portalHighlightState.nextSampleEvent = nextSampleRegistered ? nextSampleRegistered.event : null;
+  portalHighlightState.sampleSupportSummary = (portalQaSamplesActive && activeFilter !== 'real' && portalSupportFilterState !== 'real')
+    ? '[SAMPLE / TEST] Sample support follow-up (In Progress): [SAMPLE] Respite Services'
+    : null;
+  renderPortalHighlights();
+
+  return { upcoming: upcoming.map(function (x) { return x.event; }), past: past.map(function (x) { return x.event; }) };
+}
+
+function filterPortalSupport(filterValue) {
+  const filterSelect = document.getElementById('portalSupportFilter');
+  const activeFilter = typeof filterValue === 'string' && filterValue
+    ? filterValue
+    : (filterSelect && typeof filterSelect.value === 'string' && filterSelect.value ? filterSelect.value : (portalSupportFilterState || 'all'));
+  portalSupportFilterState = activeFilter;
+  if (filterSelect && filterSelect.value !== activeFilter) {
+    filterSelect.value = activeFilter;
+  }
+
+  const rowsEl = document.getElementById('portalSupportHistoryRows');
+  if (portalSupportCacheCaregiverKey && portalSupportCacheCaregiverKey !== portalActiveCaregiverKey) {
+    portalSupportRealRequests = [];
+    portalSupportCacheCaregiverKey = portalActiveCaregiverKey;
+  }
+  const realList = Array.isArray(portalSupportRealRequests) ? portalSupportRealRequests : [];
+  const sampleList = portalQaSampleSupportRequests();
+  const combined = realList.concat(sampleList);
+
+  const filtered = combined.filter(function (req) {
+    if (!req) return false;
+    if (activeFilter === 'real') return !req.is_sample;
+    if (activeFilter === 'sample') return Boolean(req.is_sample);
+    if (activeFilter === 'received' || activeFilter === 'in_progress' || activeFilter === 'completed') {
+      return req.status === activeFilter;
+    }
+    return true;
+  });
+
+  if (rowsEl && (portalQaSamplesActive || realList.length > 0 || activeFilter !== 'all' || portalSupportHistoryUnavailable)) {
+    let emptyText;
+    if (portalSupportHistoryUnavailable && (!portalQaSamplesActive || activeFilter === 'real')) {
+      emptyText = 'Your support requests are not available right now.';
+    } else if (activeFilter === 'all' || (activeFilter === 'real' && realList.length === 0)) {
+      emptyText = 'No support requests yet.';
+    } else {
+      emptyText = 'No support requests match this filter.';
+    }
+    renderPortalSupportEntryList(rowsEl, filtered, emptyText);
+  }
+
+  portalHighlightState.sampleSupportSummary = (portalQaSamplesActive && portalEventsFilterState !== 'real' && activeFilter !== 'real')
+    ? '[SAMPLE / TEST] Sample support follow-up (In Progress): [SAMPLE] Respite Services'
+    : null;
+  renderPortalHighlights();
+
+  return filtered;
+}
+
+function renderPortalSupportEntryList(container, requests, emptyText) {
+  if (!container) return;
+  container.textContent = '';
+  if (!Array.isArray(requests) || requests.length === 0) {
+    container.textContent = emptyText;
+    return;
+  }
+  const list = document.createElement('ol');
+  requests.forEach(function (req) {
+    const li = document.createElement('li');
+    if (req && req.is_sample) {
+      li.className = 'portal-sample-item';
+      li.setAttribute('data-portal-sample-item', 'support');
+      li.setAttribute('data-sample-status', String(req.status || ''));
+    }
+    const title = document.createElement('strong');
+    title.textContent = String(req.support_type_label || req.support_type || 'Support request');
+    const badge = document.createElement('span');
+    let badgeClass = 'badge-amber';
+    if (req.status === 'completed') badgeClass = 'badge-green';
+    else if (req.status === 'in_progress') badgeClass = 'badge-plum';
+    badge.className = 'badge ' + badgeClass;
+    badge.textContent = String(req.status_label || req.status || 'Received');
+    const submitted = String(req.submitted_at || '').slice(0, 10) || '—';
+    const updated = String(req.last_status_updated_at || req.submitted_at || '').slice(0, 10) || submitted;
+    const meta = document.createElement('span');
+    meta.className = 'small muted d-block';
+    meta.textContent = 'Submitted ' + submitted + ' · Last status update ' + updated +
+      (req.urgency_label ? ' · ' + String(req.urgency_label) : '') +
+      (req.contact_preference_label ? ' · Prefer ' + String(req.contact_preference_label) : '');
+    li.appendChild(title);
+    li.appendChild(portalTextNode(' '));
+    li.appendChild(badge);
+    if (req && req.is_sample) {
+      li.appendChild(portalTextNode(' '));
+      const sampleBadge = document.createElement('span');
+      sampleBadge.className = 'badge badge-amber portal-sample-badge';
+      sampleBadge.textContent = String(req.sample_badge || 'SAMPLE / TEST');
+      li.appendChild(sampleBadge);
+    }
+    li.appendChild(meta);
+    if (req && req.is_sample && req.sample_note) {
+      const note = document.createElement('span');
+      note.className = 'small muted d-block portal-sample-note';
+      note.textContent = String(req.sample_note);
+      li.appendChild(note);
+    }
+    list.appendChild(li);
+  });
+  container.appendChild(list);
+}
+
+function initPortalSectionFilters() {
+  const eventsFilter = document.getElementById('portalEventsFilter');
+  if (eventsFilter && typeof eventsFilter.addEventListener === 'function') {
+    eventsFilter.addEventListener('change', function () {
+      filterPortalEvents(eventsFilter.value);
+    });
+  }
+  const supportFilter = document.getElementById('portalSupportFilter');
+  if (supportFilter && typeof supportFilter.addEventListener === 'function') {
+    supportFilter.addEventListener('change', function () {
+      filterPortalSupport(supportFilter.value);
+    });
+  }
+}
+
+
+const PORTAL_EVENT_TYPE_LABELS = { support_group: 'Support Group', memory_social: 'Memory Social', wellness: 'Wellness', caregiver_event: 'Caregiver Event' };
+
+// Built as DOM nodes, not an HTML string: event titles and locations are free text
+// authored in the staff console (stored-XSS hardening).
+function portalEventItem(e) {
+  const item = document.createElement('div');
+  item.className = e && e.is_sample ? 'timeline-item portal-sample-item' : 'timeline-item';
+  if (e && e.is_sample) {
+    item.setAttribute('data-portal-sample-item', 'event');
+    item.setAttribute('data-sample-type', String(e.type || ''));
+    item.setAttribute('data-sample-status', String(e.registration_status || ''));
+  }
+  let dotColor = 'var(--ink-soft)';
+  if (e.type === 'support_group') dotColor = 'var(--green)';
+  else if (e.type === 'memory_social') dotColor = 'var(--amber)';
+  else if (e.type === 'wellness') dotColor = 'var(--plum)';
+  const dot = document.createElement('div');
+  dot.className = 'timeline-dot';
+  dot.style.background = dotColor;
+  const title = document.createElement('strong');
+  title.textContent = e.title || 'Event';
+  const badge = document.createElement('span');
+  badge.className = 'badge badge-green';
+  badge.textContent = e.registration_status || '';
+  const when = document.createElement('div');
+  when.className = 'when';
+  const kind = PORTAL_EVENT_TYPE_LABELS[e.type] ? PORTAL_EVENT_TYPE_LABELS[e.type] + ' · ' : '';
+  when.textContent = kind + (e.starts_at || '') + ' · ' + (e.location || 'Online');
+  const body = document.createElement('div');
+  body.appendChild(title);
+  body.appendChild(portalTextNode(' '));
+  body.appendChild(badge);
+  if (e && e.is_sample) {
+    body.appendChild(portalTextNode(' '));
+    const sampleBadge = document.createElement('span');
+    sampleBadge.className = 'badge badge-amber portal-sample-badge';
+    sampleBadge.textContent = e.sample_badge || 'SAMPLE / TEST';
+    body.appendChild(sampleBadge);
+  }
+  body.appendChild(when);
+  if (e && e.is_sample && e.sample_note) {
+    const note = document.createElement('div');
+    note.className = 'small muted portal-sample-note';
+    note.textContent = String(e.sample_note);
+    body.appendChild(note);
+  }
+  item.appendChild(dot);
+  item.appendChild(body);
+  return item;
+}
+
+// Dashboard highlights: only information connected to this account (next registered
+// event, a due wellness check-in), plus labeled QA sample highlights when the
+// verified QA caregiver session is active. Nothing is shown when there is nothing to show.
+const portalHighlightState = { nextEvent: null, nextSampleEvent: null, sampleSupportSummary: null, wellnessDue: false };
+
+function renderPortalHighlights() {
+  const box = document.getElementById('portalHighlights');
+  const list = document.getElementById('portalHighlightsList');
+  if (!box || !list) return;
+  list.textContent = '';
+  const add = function (icon, text) {
+    const li = document.createElement('li');
+    const mark = document.createElement('span');
+    mark.setAttribute('aria-hidden', 'true');
+    mark.textContent = icon;
+    const body = document.createElement('span');
+    body.textContent = text;
+    li.appendChild(mark);
+    li.appendChild(body);
+    list.appendChild(li);
+  };
+  const e = portalHighlightState.nextEvent;
+  if (e) add('📅', 'Your next event: ' + (e.title || 'Event') + ' · ' + String(e.starts_at || '').slice(0, 16));
+  const se = portalHighlightState.nextSampleEvent;
+  if (se) add('📅', '[SAMPLE / TEST] Sample upcoming event: ' + (se.title || 'Event') + ' · ' + String(se.starts_at || '').slice(0, 16));
+  if (portalHighlightState.sampleSupportSummary) add('🤝', portalHighlightState.sampleSupportSummary);
+  if (portalHighlightState.wellnessDue) add('💛', 'It’s time for a quick wellness check-in. See My Wellness below.');
+  box.hidden = list.children.length === 0;
+}
+
+
+// Design preview (client review on the test site, where caregiver sign-in mail is off):
+// /portal?preview=sample shows the real dashboard layout with clearly labeled FICTIONAL
+// information. No session, API request, storage or submit control is used.
+function portalDesignPreviewRequested() {
+  try {
+    return typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('preview') === 'sample';
+  } catch (err) {
+    return false;
+  }
+}
+
+function portalSampleDate(daysFromNow, hhmm) {
+  const d = new Date(Date.now() + daysFromNow * 86400000);
+  return d.toISOString().slice(0, 10) + ' ' + hhmm;
+}
+
+function initPortalDesignPreview() {
+  const loginView = document.getElementById('loginView');
+  const dashView = document.getElementById('dashView');
+  if (!loginView || !dashView) return false;
+  loginView.style.display = 'none';
+  dashView.style.display = 'block';
+  const banner = document.getElementById('portalDesignPreview');
+  if (banner) banner.hidden = false;
+  ['portalLogoutBtn', 'portalQaSampleBanner'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el) el.hidden = true;
+  });
+  renderPortalData({
+    profile: { first_name: 'Jordan', last_name: 'Example', email: 'jordan@example.invalid', phone: '(000) 000-0000', sanctuary_member: 1 },
+    grants: [],
+    events: [
+      { title: 'Example Memory Social', type: 'memory_social', starts_at: portalSampleDate(3, '14:00'), location: 'Sample community room', registration_status: 'registered' },
+      { title: 'Example Virtual Caregiver Support Group', type: 'support_group', starts_at: portalSampleDate(6, '17:00'), location: 'Online', registration_status: 'registered' },
+      { title: 'Example Family Education Workshop', type: 'caregiver_event', starts_at: portalSampleDate(-9, '18:00'), location: 'Sample community center', registration_status: 'attended' },
+    ],
+  });
+  // No fictional wellness scores; only the due prompt, and no check-in can be submitted.
+  renderWellness({ history: [], due: true });
+  const btn = document.getElementById('portalWellnessBtn');
+  if (btn) btn.classList.add('d-none');
+  const supportBtn = document.getElementById('portalSupportBtn');
+  if (supportBtn) supportBtn.classList.add('d-none');
+  return true;
+}
 
 /* ---------- Staff console: governed agent chat mock ---------- */
 function agentConfirm(btn) {
@@ -1013,9 +1668,11 @@ function loadLiveEvents() {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-  initPortalSummaryPreview();
+  initPortalSectionFilters();
+  if (typeof window !== 'undefined') initUnsubscribePage(window.location, window.history);
+  initEmailListForm();
   loadLiveEvents();
-  checkPortalSession();
+  if (!(portalDesignPreviewRequested() && initPortalDesignPreview())) checkPortalSession();
 });
 
 
@@ -1222,6 +1879,15 @@ document.addEventListener('submit', function (e) {
   } else if (action === 'submit-register') {
     e.preventDefault();
     submitRegister(e);
+  } else if (action === 'submit-portal-support') {
+    e.preventDefault();
+    submitPortalSupport(e);
+  } else if (action === 'submit-email-list') {
+    e.preventDefault();
+    submitEmailList(e);
+  } else if (action === 'submit-unsubscribe') {
+    e.preventDefault();
+    submitUnsubscribe(e);
   }
 });
 
@@ -1229,6 +1895,8 @@ document.addEventListener('submit', function (e) {
 let wellnessQuestions = [];
 
 async function loadWellness() {
+  const reqGen = typeof portalSessionGeneration === 'number' ? portalSessionGeneration : 0;
+  const reqKey = typeof portalActiveCaregiverKey === 'string' ? portalActiveCaregiverKey : '';
   const summary = document.getElementById('portalWellnessSummary');
   if (summary) summary.textContent = 'Loading your saved check-ins…';
   drawWellnessTrend(document.getElementById('portalWellnessTrend'), []);
@@ -1236,10 +1904,18 @@ async function loadWellness() {
   try {
     const res = await fetch('/api/portal/wellness', { credentials: 'same-origin' });
     const data = await res.json();
+    if ((typeof portalSessionGeneration === 'number' && reqGen !== portalSessionGeneration) ||
+        (typeof portalActiveCaregiverKey === 'string' && reqKey !== portalActiveCaregiverKey)) {
+      return;
+    }
     if (!res.ok || !data.ok) throw new Error('unavailable');
     wellnessQuestions = data.questions || [];
     renderWellness(data);
   } catch (e) {
+    if ((typeof portalSessionGeneration === 'number' && reqGen !== portalSessionGeneration) ||
+        (typeof portalActiveCaregiverKey === 'string' && reqKey !== portalActiveCaregiverKey)) {
+      return;
+    }
     if (summary) summary.textContent = 'Your wellness check-ins are not available right now.';
     renderWellnessHistory(document.getElementById('portalWellnessHistoryRows'), [], 'Your saved history is not available right now.');
   }
@@ -1260,6 +1936,10 @@ function renderWellness(data) {
     }
   }
   if (btn) btn.classList.toggle('d-none', !data.due);
+  if (typeof portalHighlightState === 'object' && typeof renderPortalHighlights === 'function') {
+    portalHighlightState.wellnessDue = !!data.due;
+    renderPortalHighlights();
+  }
   const trendHint = document.getElementById('portalWellnessTrendHint');
   if (trendHint) trendHint.textContent = history.length < 2
     ? 'A trend appears after two check-ins.' : 'Scores shown oldest to newest.';
@@ -1278,22 +1958,6 @@ function renderWellnessHistory(container, history, emptyText) {
     list.appendChild(row);
   });
   container.appendChild(list);
-}
-
-function initPortalSummaryPreview() {
-  const preview = document.getElementById('portalWellnessSample');
-  const actual = document.getElementById('portalAccountSummary');
-  if (!preview || !actual) return;
-  // Display-only examples: no session, storage, API data or check-in changes.
-  const sync = function () { actual.hidden = preview.open; };
-  preview.open = false;
-  sync();
-  preview.addEventListener('toggle', sync);
-  document.getElementById('portalPreviewReturn')?.addEventListener('click', function () {
-    preview.open = false;
-    sync();
-    document.getElementById('portalPreviewToggle')?.focus();
-  });
 }
 
 function drawWellnessTrend(container, scores, accessibleLabel) {
@@ -1406,6 +2070,329 @@ async function submitWellness(button) {
   }
 }
 
+/* ---------- Portal: My Support requests & history (LP-02 staged increment) ---------- */
+let portalSupportPendingRequest = null;
+let portalSupportProfileContact = { email: '', phone: '' };
+
+function newPortalSupportRequestId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, function (b) { return b.toString(16).padStart(2, '0'); }).join('');
+  return hex.slice(0, 8) + '-' + hex.slice(8, 12) + '-' + hex.slice(12, 16) + '-' + hex.slice(16, 20) + '-' + hex.slice(20);
+}
+
+async function loadPortalSupport() {
+  const reqGen = typeof portalSessionGeneration === 'number' ? portalSessionGeneration : 0;
+  const reqKey = typeof portalActiveCaregiverKey === 'string' ? portalActiveCaregiverKey : '';
+  const rowsEl = document.getElementById('portalSupportHistoryRows');
+  if (rowsEl) rowsEl.textContent = 'Loading your support requests…';
+  try {
+    const res = await fetch('/api/portal/support', { credentials: 'same-origin' });
+    const data = await res.json();
+    if ((typeof portalSessionGeneration === 'number' && reqGen !== portalSessionGeneration) ||
+        (typeof portalActiveCaregiverKey === 'string' && reqKey !== portalActiveCaregiverKey)) {
+      return { ok: false, stale: true, requests: [], matchedReceipt: null };
+    }
+    if (!res.ok || !data || !data.ok) throw new Error('unavailable');
+    if (data.profile_contact && typeof data.profile_contact === 'object') {
+      portalSupportProfileContact = {
+        email: String(data.profile_contact.email || ''),
+        phone: String(data.profile_contact.phone || '')
+      };
+    }
+    const matchedReceipt = renderPortalSupport(data);
+    return {
+      ok: true,
+      requests: Array.isArray(data.requests) ? data.requests : [],
+      matchedReceipt: matchedReceipt
+    };
+  } catch (e) {
+    if ((typeof portalSessionGeneration === 'number' && reqGen !== portalSessionGeneration) ||
+        (typeof portalActiveCaregiverKey === 'string' && reqKey !== portalActiveCaregiverKey)) {
+      return { ok: false, stale: true, requests: [], matchedReceipt: null };
+    }
+    if (typeof portalSupportRealRequests !== 'undefined') {
+      portalSupportRealRequests = [];
+    }
+    if (typeof portalSupportCacheCaregiverKey !== 'undefined' && typeof portalActiveCaregiverKey === 'string') {
+      portalSupportCacheCaregiverKey = portalActiveCaregiverKey;
+    }
+    if (typeof portalSupportHistoryUnavailable !== 'undefined') {
+      portalSupportHistoryUnavailable = true;
+    }
+    if (typeof portalQaSamplesActive !== 'undefined' && portalQaSamplesActive && typeof filterPortalSupport === 'function') {
+      filterPortalSupport();
+    } else {
+      renderPortalSupportHistory(rowsEl, [], 'Your support requests are not available right now.');
+    }
+    return { ok: false, requests: [], matchedReceipt: null };
+  }
+}
+
+function renderPortalSupport(data) {
+  const requests = Array.isArray(data && data.requests) ? data.requests : [];
+  if (typeof portalSupportHistoryUnavailable !== 'undefined') {
+    portalSupportHistoryUnavailable = false;
+  }
+  if (typeof portalSupportRealRequests !== 'undefined') {
+    portalSupportRealRequests = requests.slice();
+    if (typeof portalSupportCacheCaregiverKey !== 'undefined' && typeof portalActiveCaregiverKey === 'string') {
+      portalSupportCacheCaregiverKey = portalActiveCaregiverKey;
+    }
+  }
+  if (data && typeof data.qa_samples === 'boolean' && typeof portalQaSamplesActive !== 'undefined') {
+    portalQaSamplesActive = data.qa_samples;
+  }
+  const rowsEl = document.getElementById('portalSupportHistoryRows');
+  const useDashboardFilter = typeof filterPortalSupport === 'function' && (
+    (typeof portalQaSamplesActive !== 'undefined' && portalQaSamplesActive) ||
+    (typeof portalSupportFilterState === 'string' && portalSupportFilterState !== 'all')
+  );
+  if (useDashboardFilter) {
+    filterPortalSupport();
+  } else {
+    renderPortalSupportHistory(rowsEl, requests, 'No support requests yet.');
+    if (typeof portalHighlightState === 'object' && typeof renderPortalHighlights === 'function') {
+      portalHighlightState.supportCount = requests.length;
+      renderPortalHighlights();
+    }
+  }
+  if (portalSupportPendingRequest) {
+    const matched = requests.find(function (r) {
+      return r && !r.is_sample && r.request_id === portalSupportPendingRequest.requestId;
+    }) || null;
+    if (matched) {
+      const wasUnresolved = Boolean(portalSupportPendingRequest.unresolved);
+      const wasConflict = Boolean(portalSupportPendingRequest.conflict);
+      portalSupportPendingRequest = null;
+      const form = document.getElementById('portalSupportForm');
+      if (form) {
+        form.reset();
+        form.classList.add('d-none');
+      }
+      const openBtn = document.getElementById('portalSupportBtn');
+      if (openBtn) openBtn.classList.remove('d-none');
+      const historyDetails = document.getElementById('portalSupportHistory');
+      if (historyDetails) historyDetails.open = true;
+      if (wasConflict || wasUnresolved) {
+        const msg = document.getElementById('portalSupportMsg');
+        if (msg) {
+          if (wasConflict) {
+            msg.textContent = 'Your original support request was already saved and is shown in your history below. If you still need additional changes, you can start a new request.';
+          } else {
+            msg.textContent = 'Confirmed: your support request (' +
+              (matched.support_type_label || 'Support request') + ') was saved (' +
+              (matched.status_label || 'Received') + ').';
+          }
+        }
+      }
+      return matched;
+    }
+  }
+  return null;
+}
+
+function renderPortalSupportHistory(container, requests, emptyText) {
+  if (typeof renderPortalSupportEntryList === 'function') {
+    renderPortalSupportEntryList(container, requests, emptyText);
+    return;
+  }
+  if (!container) return;
+  container.textContent = '';
+  if (!Array.isArray(requests) || requests.length === 0) {
+    container.textContent = emptyText;
+    return;
+  }
+  const list = document.createElement('ol');
+  requests.forEach(function (req) {
+    const li = document.createElement('li');
+    const isSample = Boolean(req && req.is_sample);
+    if (isSample) {
+      li.className = 'portal-sample-item';
+      li.setAttribute('data-portal-sample-item', 'support');
+      li.setAttribute('data-sample-status', String(req.status || ''));
+    }
+    const title = document.createElement('strong');
+    title.textContent = String(req.support_type_label || req.support_type || 'Support request');
+    const badge = document.createElement('span');
+    let badgeClass = 'badge-amber';
+    if (req.status === 'completed') badgeClass = 'badge-green';
+    else if (req.status === 'in_progress') badgeClass = 'badge-plum';
+    badge.className = 'badge ' + badgeClass;
+    badge.textContent = String(req.status_label || req.status || 'Received');
+    const submitted = String(req.submitted_at || '').slice(0, 10) || '—';
+    const updated = String(req.last_status_updated_at || req.submitted_at || '').slice(0, 10) || submitted;
+    const meta = document.createElement('span');
+    meta.className = 'small muted d-block';
+    meta.textContent = 'Submitted ' + submitted + ' · Last status update ' + updated +
+      (req.urgency_label ? ' · ' + String(req.urgency_label) : '') +
+      (req.contact_preference_label ? ' · Prefer ' + String(req.contact_preference_label) : '');
+    if (isSample) {
+      const sampleBadge = document.createElement('span');
+      sampleBadge.className = 'portal-sample-badge';
+      sampleBadge.textContent = String(req.sample_badge || 'SAMPLE / TEST');
+      li.appendChild(sampleBadge);
+      li.appendChild(typeof document.createTextNode === 'function' ? document.createTextNode(' ') : { textContent: ' ' });
+    }
+    li.appendChild(title);
+    li.appendChild(typeof document.createTextNode === 'function' ? document.createTextNode(' ') : { textContent: ' ' });
+    li.appendChild(badge);
+    li.appendChild(meta);
+    list.appendChild(li);
+  });
+  container.appendChild(list);
+}
+
+function openPortalSupportForm() {
+  const form = document.getElementById('portalSupportForm');
+  const btn = document.getElementById('portalSupportBtn');
+  const emailInput = document.getElementById('portalSupportEmail');
+  const phoneInput = document.getElementById('portalSupportPhone');
+  const profileEmailEl = document.getElementById('portalProfileEmail');
+  const profilePhoneEl = document.getElementById('portalProfilePhone');
+  if (!form) return;
+  if (emailInput && !emailInput.value) {
+    const fallbackEmail = portalSupportProfileContact.email ||
+      (profileEmailEl && profileEmailEl.textContent !== '—' ? profileEmailEl.textContent : '');
+    emailInput.value = fallbackEmail || '';
+  }
+  if (phoneInput && !phoneInput.value) {
+    const fallbackPhone = portalSupportProfileContact.phone ||
+      (profilePhoneEl && profilePhoneEl.textContent !== '—' ? profilePhoneEl.textContent : '');
+    phoneInput.value = fallbackPhone || '';
+  }
+  form.classList.remove('d-none');
+  if (btn) btn.classList.add('d-none');
+}
+
+function closePortalSupportForm() {
+  const form = document.getElementById('portalSupportForm');
+  const btn = document.getElementById('portalSupportBtn');
+  if (form) form.classList.add('d-none');
+  if (btn) btn.classList.remove('d-none');
+}
+
+async function submitPortalSupport(e) {
+  if (e) e.preventDefault();
+  const form = document.getElementById('portalSupportForm');
+  const msg = document.getElementById('portalSupportMsg');
+  const submitBtn = document.getElementById('portalSupportSubmitBtn');
+  const typeEl = document.getElementById('portalSupportType');
+  const urgencyEl = document.getElementById('portalSupportUrgency');
+  const prefEl = document.getElementById('portalSupportContactPref');
+  const emailEl = document.getElementById('portalSupportEmail');
+  const phoneEl = document.getElementById('portalSupportPhone');
+  const detailEl = document.getElementById('portalSupportDetail');
+
+  const supportType = typeEl ? typeEl.value.trim() : '';
+  const urgency = urgencyEl ? urgencyEl.value.trim() : '';
+  const contactPref = prefEl ? prefEl.value.trim() : '';
+  const contactEmail = emailEl ? emailEl.value.trim() : '';
+  const contactPhone = phoneEl ? phoneEl.value.trim() : '';
+  const detail = detailEl ? detailEl.value.trim() : '';
+
+  if (!supportType || !urgency || !contactPref) {
+    if (msg) msg.textContent = 'Please select a support type, urgency, and preferred contact method.';
+    return;
+  }
+  if (contactPref === 'email' && (!contactEmail || !contactEmail.includes('@'))) {
+    if (msg) msg.textContent = 'Please provide an email address for Email follow-up.';
+    return;
+  }
+  if ((contactPref === 'phone_call' || contactPref === 'text_message') && !contactPhone) {
+    if (msg) msg.textContent = 'Please provide a phone number for Phone or Text follow-up.';
+    return;
+  }
+
+  const signature = JSON.stringify([supportType, urgency, contactPref, contactEmail.toLowerCase(), contactPhone, detail]);
+  if (!portalSupportPendingRequest) {
+    portalSupportPendingRequest = {
+      requestId: newPortalSupportRequestId(),
+      signature: signature,
+      unresolved: false
+    };
+  } else {
+    portalSupportPendingRequest.signature = signature;
+  }
+
+  if (submitBtn) submitBtn.disabled = true;
+  if (msg) msg.textContent = 'Saving your support request…';
+
+  try {
+    const res = await fetch('/api/portal/support', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        request_id: portalSupportPendingRequest.requestId,
+        support_type: supportType,
+        urgency: urgency,
+        contact_preference: contactPref,
+        contact_email: contactEmail || undefined,
+        contact_phone: contactPhone || undefined,
+        detail: detail || undefined
+      })
+    });
+    const data = await res.json().catch(function () { return {}; });
+    if (res.status === 409 && data && data.error === 'request_id_conflict') {
+      if (portalSupportPendingRequest) {
+        portalSupportPendingRequest.unresolved = true;
+        portalSupportPendingRequest.conflict = true;
+      }
+      const historyDetails = document.getElementById('portalSupportHistory');
+      if (historyDetails) historyDetails.open = true;
+      const historyOutcome = await loadPortalSupport();
+      if (historyOutcome && historyOutcome.ok && historyOutcome.matchedReceipt) {
+        return;
+      }
+      if (msg) {
+        if (!historyOutcome || !historyOutcome.ok) {
+          msg.textContent = 'Your original support request ID (' +
+            (portalSupportPendingRequest ? portalSupportPendingRequest.requestId : '') +
+            ') was already recorded, but your support request history is not available right now to confirm the saved receipt. Your pending reference is preserved until your history loads.';
+        } else {
+          msg.textContent = 'We could not verify a matching receipt for request ID (' +
+            (portalSupportPendingRequest ? portalSupportPendingRequest.requestId : '') +
+            ') in your support history yet. Your pending reference is preserved until the saved receipt appears in your history.';
+        }
+      }
+      return;
+    }
+    if (!res.ok || !data || !data.ok || !data.request) {
+      throw new Error(data && data.error ? data.error : 'unavailable');
+    }
+    portalSupportPendingRequest = null;
+    if (form) {
+      form.reset();
+      form.classList.add('d-none');
+    }
+    const openBtn = document.getElementById('portalSupportBtn');
+    if (openBtn) openBtn.classList.remove('d-none');
+    if (msg) {
+      msg.textContent = 'Request received: ' + (data.request.support_type_label || 'Support request') +
+        ' (' + (data.request.status_label || 'Received') + '). Our team will follow up via ' +
+        (data.request.contact_preference_label || 'your preferred contact method') + '.';
+    }
+    const historyDetails = document.getElementById('portalSupportHistory');
+    if (historyDetails) historyDetails.open = true;
+    await loadPortalSupport();
+  } catch (err) {
+    if (portalSupportPendingRequest) {
+      portalSupportPendingRequest.unresolved = true;
+    }
+    if (msg) {
+      msg.textContent = 'We could not confirm your support request was saved. You can submit again safely without creating a duplicate.';
+    }
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
+  }
+}
+
 document.addEventListener('click', function (e) {
   const target = e.target.closest('[data-action]');
   if (!target || target.tagName === 'FORM') return;
@@ -1464,6 +2451,12 @@ document.addEventListener('click', function (e) {
   } else if (action === 'wellness-submit') {
     e.preventDefault();
     submitWellness(target);
+  } else if (action === 'portal-support-open') {
+    e.preventDefault();
+    openPortalSupportForm();
+  } else if (action === 'portal-support-cancel') {
+    e.preventDefault();
+    closePortalSupportForm();
   } else if (action === 'portal-logout') {
     e.preventDefault();
     portalLogout();

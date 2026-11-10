@@ -1,4 +1,6 @@
 import { internalError } from '../_lib/errors.js';
+import { SUPPORT_SOURCE } from '../_lib/portal-support.js';
+import { notInternalTestCaregiverSql } from '../_lib/domain/caregivers.js';
 
 // GET/POST /api/followups — manages the follow-up queue (slice 05).
 export async function onRequestGet({ env }) {
@@ -9,6 +11,7 @@ export async function onRequestGet({ env }) {
                c.first_name, c.last_name, c.email
         FROM followup f
         JOIN caregiver c ON f.caregiver_id = c.id
+        WHERE ${notInternalTestCaregiverSql('c')}
         ORDER BY f.created_at DESC
       `)
       .all();
@@ -40,13 +43,20 @@ export async function onRequestPost({ request, env }) {
     }
 
     const oldFollowup = await env.LEGACY_DB
-      .prepare(`SELECT status FROM followup WHERE id = ?`)
+      .prepare(`SELECT status, source FROM followup WHERE id = ?`)
       .bind(body.id)
       .first();
 
     if (!oldFollowup) {
       return new Response(JSON.stringify({ ok: false, error: 'followup not found' }), {
         status: 404,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+
+    if (oldFollowup.source === SUPPORT_SOURCE) {
+      return new Response(JSON.stringify({ ok: false, error: 'managed_support_request_use_staff_api' }), {
+        status: 409,
         headers: { 'content-type': 'application/json' },
       });
     }
