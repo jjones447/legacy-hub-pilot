@@ -76,3 +76,18 @@ test('staff summary renders only reference/status; explicit detail click then ex
   assert.equal(decisions.length,1);assert.equal(decisions[0].revision,2);assert.equal(decisions[0].action,'decline');
   assert.equal(h.calls.some(x=>/api\/intake|api\/agent/.test(x.url)),false);
 });
+
+test('collection-off page exposes every question, choice and acknowledgment without input or transport',()=>{
+  const preview=template.split('<section aria-labelledby="questionPreview">')[1].split('</section>')[0];
+  const escape=value=>value.replaceAll('&','&amp;').replaceAll("'",'&#x27;').replaceAll('"','&quot;').replaceAll('<','&lt;').replaceAll('>','&gt;');
+  const textFields=[...code.split('const booleanLabels')[0].matchAll(/\w+: \['([^']+)', (\d+), (true|false)\]/g)];
+  assert.equal(textFields.length,16);
+  for(const [,label,max,required] of textFields){assert.ok(preview.includes(escape(label)),label);assert.ok(preview.includes('up to '+max+' characters.'));}
+  const booleans=[...code.split('const booleanLabels = {')[1].split('};')[0].matchAll(/\w+: '([^']+)'/g)];
+  assert.equal(booleans.length,4);
+  for(const [,label] of booleans)assert.ok(preview.includes(escape(label)),label);
+  assert.equal((preview.match(/choose Yes or No/g)||[]).length,4);
+  for(const copy of Object.values(ACK_COPY))assert.ok(preview.includes(escape(copy)));
+  assert.match(preview,/Requested session/);assert.match(preview,/no session is selected/);
+  assert.doesNotMatch(preview,/<(?:input|textarea|select|button|form)\b/);
+});
