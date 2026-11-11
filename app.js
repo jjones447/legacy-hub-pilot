@@ -850,12 +850,9 @@ function renderPortalData(data) {
   portalRealEvents = Array.isArray(safeData.events) ? safeData.events.slice() : [];
   const welcome = document.getElementById('portalWelcome');
   if (welcome) {
-    if (portalQaSamplesActive) {
-      const first = typeof profile.first_name === 'string' ? profile.first_name.trim() : '';
-      welcome.textContent = first ? 'Welcome to Your Sanctuary, ' + first + '!' : 'Welcome to Your Sanctuary!';
-    } else {
-      welcome.textContent = 'Welcome back, ' + (profile.first_name || 'Member');
-    }
+    // Redesigned greeting for every signed-in caregiver (requester-approved 2026-11-11).
+    const first = typeof profile.first_name === 'string' ? profile.first_name.trim() : '';
+    welcome.textContent = first ? 'Welcome to Your Sanctuary, ' + first + '!' : 'Welcome to Your Sanctuary!';
   }
 
   // My Profile & Intake: read-only account details (updates/intake are not built yet).
@@ -872,10 +869,8 @@ function renderPortalData(data) {
   if (memberStatus) {
     if (profile.sanctuary_member === 1) {
       memberStatus.innerHTML = '<span class="badge badge-green">Sanctuary member</span>';
-    } else if (portalQaSamplesActive) {
-      memberStatus.innerHTML = '<span class="badge badge-gray">Not yet a member</span>';
     } else {
-      memberStatus.innerHTML = '<span class="badge badge-gray">Non-member</span>';
+      memberStatus.innerHTML = '<span class="badge badge-gray">Not yet a member</span>';
     }
   }
   const profileMemberStatus = document.getElementById('portalProfileMembershipStatus');
@@ -1201,36 +1196,42 @@ function syncPortalSelectSampleOptions(selectEl, realLabel) {
 }
 
 function syncPortalQaSampleChrome() {
-  ['portalWelcomeSub', 'portalQaSampleBanner', 'portalProfileCard', 'portalProfileSampleNote', 'portalSupportCard', 'portalEventsFilterRow', 'portalEventsSocialsSummary', 'portalResourcesSampleNote', 'portalResourcesComingSoon', 'portalUpdatesCard', 'portalUpdatesSampleNote'].forEach(function (id) {
+  // The redesigned dashboard is for every signed-in caregiver (requester-approved 2026-11-11);
+  // only the SAMPLE / TEST notes, banner and fictional items still follow portalQaSamplesActive.
+  ['portalQaSampleBanner', 'portalProfileSampleNote', 'portalResourcesSampleNote', 'portalUpdatesSampleNote'].forEach(function (id) {
     const el = document.getElementById(id);
     if (el) el.hidden = !portalQaSamplesActive;
   });
+  ['portalWelcomeSub', 'portalProfileCard', 'portalSupportCard', 'portalEventsFilterRow', 'portalEventsSocialsSummary', 'portalResourcesComingSoon', 'portalUpdatesCard'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el) el.hidden = false;
+  });
   ['portalWellnessSample', 'portalGrantCard', 'portalSocialsCard'].forEach(function (id) {
     const el = document.getElementById(id);
-    if (el) el.hidden = Boolean(portalQaSamplesActive);
+    if (el) el.hidden = true;
   });
   const preview = document.getElementById('portalWellnessSample');
-  if (portalQaSamplesActive && preview) {
+  if (preview) {
     preview.open = false;
   }
   const accountSummary = document.getElementById('portalAccountSummary');
   if (accountSummary) {
     if (accountSummary.classList && typeof accountSummary.classList.toggle === 'function') {
-      accountSummary.classList.toggle('portal-card-grid', Boolean(portalQaSamplesActive));
+      accountSummary.classList.toggle('portal-card-grid', true);
     }
-    accountSummary.hidden = Boolean(!portalQaSamplesActive && preview && preview.open);
+    accountSummary.hidden = false;
   }
   ['portalEventsCard', 'portalResourcesCard', 'portalWellnessTile'].forEach(function (id) {
     const el = document.getElementById(id);
     if (el && el.classList && typeof el.classList.toggle === 'function') {
-      el.classList.toggle('portal-card', Boolean(portalQaSamplesActive));
+      el.classList.toggle('portal-card', true);
     }
   });
   const setCardHeading = function (id, iconText, labelText) {
     const el = document.getElementById(id);
     if (!el) return;
     el.textContent = '';
-    if (portalQaSamplesActive && typeof document !== 'undefined' && typeof document.createElement === 'function' && typeof el.appendChild === 'function') {
+    if (typeof document !== 'undefined' && typeof document.createElement === 'function' && typeof el.appendChild === 'function') {
       const icon = document.createElement('span');
       icon.className = 'portal-card-icon';
       if (typeof icon.setAttribute === 'function') icon.setAttribute('aria-hidden', 'true');
@@ -1246,9 +1247,9 @@ function syncPortalQaSampleChrome() {
   if (eventsIntro) {
     eventsIntro.textContent = portalQaSamplesActive
       ? 'Your upcoming and past registrations. Filter by timeframe, type or real vs. sample below.'
-      : 'Your registrations are listed here. Browse all events opens the public calendar.';
+      : 'Your upcoming and past registrations. Filter by timeframe or type below.';
   }
-  setCardHeading('portalResourcesHeading', '📚', portalQaSamplesActive ? 'My Resources' : 'Resource library');
+  setCardHeading('portalResourcesHeading', '📚', 'My Resources');
   const resourcesIntro = document.getElementById('portalResourcesIntro');
   if (resourcesIntro) {
     resourcesIntro.textContent = portalQaSamplesActive
@@ -1296,22 +1297,9 @@ function filterPortalEvents(filterValue) {
     filterSelect.value = activeFilter;
   }
 
+  // Every caregiver gets the Upcoming / Past grouping and real highlights; fictional sample
+  // events stay empty unless portalQaSamplesActive (portalQaSampleEvents returns []).
   const eventsList = document.getElementById('portalEventsList');
-  if (!portalQaSamplesActive) {
-    if (eventsList) {
-      eventsList.innerHTML = '';
-      if (portalRealEvents && portalRealEvents.length > 0) {
-        portalRealEvents.forEach(function (e) { eventsList.appendChild(portalEventItem(e)); });
-      } else {
-        eventsList.innerHTML = '<p class="small muted m-0">No registered events yet.</p>';
-      }
-    }
-    portalHighlightState.nextEvent = null;
-    portalHighlightState.nextSampleEvent = null;
-    portalHighlightState.sampleSupportSummary = null;
-    renderPortalHighlights();
-    return { upcoming: [], past: [] };
-  }
 
   const nowDate = new Date();
   const realTimed = (portalRealEvents || []).map(function (e) {
@@ -1525,7 +1513,7 @@ function portalEventItem(e) {
   badge.textContent = e.registration_status || '';
   const when = document.createElement('div');
   when.className = 'when';
-  const kind = (portalQaSamplesActive && PORTAL_EVENT_TYPE_LABELS[e.type])
+  const kind = PORTAL_EVENT_TYPE_LABELS[e.type]
     ? PORTAL_EVENT_TYPE_LABELS[e.type] + ' · '
     : '';
   when.textContent = kind + (e.starts_at || '') + ' · ' + (e.location || 'Online');
@@ -1562,10 +1550,6 @@ function renderPortalHighlights() {
   const list = document.getElementById('portalHighlightsList');
   if (!box || !list) return;
   list.textContent = '';
-  if (!portalQaSamplesActive) {
-    box.hidden = true;
-    return;
-  }
   const add = function (icon, text) {
     const li = document.createElement('li');
     const mark = document.createElement('span');

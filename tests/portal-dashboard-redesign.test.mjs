@@ -54,13 +54,13 @@ function ui({ search = '' } = {}) {
 }
 const texts = list => list.children.map(c => c.textContent);
 
-test('welcome uses the warm sanctuary greeting only for the qa_samples identity and preserves #332 Welcome back for ordinary caregivers', () => {
+test('every signed-in caregiver gets the warm sanctuary greeting (requester-approved layout, 2026-11-11)', () => {
   const h = ui();
   h.context.renderPortalData({ profile: { first_name: 'Ana' }, events: [], grants: [] });
-  assert.equal(h.el.portalWelcome.textContent, 'Welcome back, Ana');
-  assert.equal(h.el.portalWelcomeSub.hidden, true);
+  assert.equal(h.el.portalWelcome.textContent, 'Welcome to Your Sanctuary, Ana!');
+  assert.equal(h.el.portalWelcomeSub.hidden, false);
   h.context.renderPortalData({ profile: {}, events: [], grants: [] });
-  assert.equal(h.el.portalWelcome.textContent, 'Welcome back, Member');
+  assert.equal(h.el.portalWelcome.textContent, 'Welcome to Your Sanctuary!');
 
   h.context.renderPortalData({ qa_samples: true, profile: { first_name: ' Ana ' }, events: [], grants: [] });
   assert.equal(h.el.portalWelcome.textContent, 'Welcome to Your Sanctuary, Ana!');
@@ -70,15 +70,15 @@ test('welcome uses the warm sanctuary greeting only for the qa_samples identity 
   assert.match(html, /Your space to stay connected, find support, and make time for your well-being\./);
 });
 
-test('profile shows the real read-only account fields as text (no HTML sink) and preserves Non-member badge for ordinary caregivers', () => {
+test('profile shows the real read-only account fields as text (no HTML sink) in the profile card for every caregiver', () => {
   const h = ui();
   h.context.renderPortalData({ profile: { first_name: '<img src=x>', last_name: 'Doe', email: 'a@example.invalid', phone: '', sanctuary_member: 0 }, events: [], grants: [] });
   assert.equal(h.el.portalProfileName.textContent, '<img src=x> Doe');
   assert.equal(h.el.portalProfileName.html, undefined);
   assert.equal(h.el.portalProfileEmail.textContent, 'a@example.invalid');
   assert.equal(h.el.portalProfilePhone.textContent, '—');
-  assert.match(h.el.portalMembershipStatus.html, /Non-member/);
-  assert.equal(h.el.portalProfileCard.hidden, true);
+  assert.match(h.el.portalMembershipStatus.html, /Not yet a member/);
+  assert.equal(h.el.portalProfileCard.hidden, false);
 
   h.context.renderPortalData({ qa_samples: true, profile: { first_name: '<img src=x>', last_name: 'Doe', email: 'a@example.invalid', phone: '', sanctuary_member: 1 }, events: [], grants: [] });
   assert.equal(h.el.portalProfileCard.hidden, false);
@@ -86,19 +86,21 @@ test('profile shows the real read-only account fields as text (no HTML sink) and
   assert.match(h.el.portalProfileMembershipStatus.html, /Sanctuary member/);
 });
 
-test('My Events groups registrations into upcoming and past with type labels for qa_samples, and keeps flat #332 list for ordinary caregivers', () => {
+test('My Events groups registrations into upcoming and past with type labels for every caregiver; samples only for qa_samples', () => {
   const h = ui();
   const realEvents = [
     { title: 'Later Social', type: 'memory_social', starts_at: '2026-11-12 14:00', registration_status: 'registered' },
     { title: 'Past Workshop', type: 'caregiver_event', starts_at: '2026-10-01 18:00', registration_status: 'attended' },
     { title: 'Soon Group', type: 'support_group', starts_at: '2026-11-04 17:00', registration_status: 'registered', location: 'Online' },
   ];
-  // Ordinary caregiver: flat #332 list in original order, no type prefix, no Upcoming/Past group headings
+  // Ordinary caregiver: the same Upcoming/Past grouping with type labels, and no sample entries
   h.context.renderPortalData({ profile: {}, grants: [], events: realEvents });
-  assert.equal(h.el.portalEventsFilterRow.hidden, true);
-  assert.equal(h.el.portalEventsList.children.length, 3);
-  assert.deepEqual(h.el.portalEventsList.children.map(item => item.children[1].children[0].textContent), ['Later Social', 'Past Workshop', 'Soon Group']);
-  assert.equal(h.el.portalEventsList.children[2].children[1].children[3].textContent, '2026-11-04 17:00 · Online');
+  assert.equal(h.el.portalEventsFilterRow.hidden, false);
+  const ordinary = h.el.portalEventsList.children;
+  assert.deepEqual(ordinary.map(g => g.children[0].textContent), ['Upcoming', 'Past']);
+  assert.deepEqual(ordinary[0].children.slice(1).map(i => i.children[1].children[0].textContent), ['Soon Group', 'Later Social']);
+  assert.match(ordinary[0].children[1].textContent, /Support Group · 2026-11-04 17:00 · Online/);
+  assert.doesNotMatch(h.el.portalEventsList.textContent, /SAMPLE/);
 
   // QA sample identity: grouped Upcoming/Past with type prefix (filtering to 'real' to inspect real event ordering)
   h.context.renderPortalData({ qa_samples: true, profile: {}, grants: [], events: realEvents });
@@ -111,12 +113,20 @@ test('My Events groups registrations into upcoming and past with type labels for
   assert.deepEqual(groups[1].children.slice(1).map(i => i.children[1].children[0].textContent), ['Past Workshop']);
 });
 
-test('highlights appear only when qa_samples is active and hide for ordinary caregivers or when empty', () => {
+test('highlights show only real items for ordinary caregivers, add samples only for qa_samples, and hide when empty', () => {
   const h = ui();
-  // Ordinary caregiver never sees highlights strip even with upcoming events and due wellness
+  // Ordinary caregiver: real next event and due wellness only, never a sample line
   h.context.renderPortalData({ profile: {}, grants: [], events: [
     { title: 'Soon Group', type: 'support_group', starts_at: '2026-11-04 17:00', registration_status: 'registered' }] });
   h.context.renderWellness({ history: [], due: true });
+  assert.equal(h.el.portalHighlights.hidden, false);
+  const ordinaryLines = texts(h.el.portalHighlightsList);
+  assert.equal(ordinaryLines.length, 2);
+  assert.match(ordinaryLines[0], /^📅Your next event: Soon Group/);
+  assert.match(ordinaryLines[1], /time for a quick wellness check-in/);
+  assert.doesNotMatch(texts(h.el.portalHighlightsList).join(' '), /SAMPLE/);
+  h.context.renderWellness({ history: [], due: false });
+  h.context.renderPortalData({ profile: {}, grants: [], events: [] });
   assert.equal(h.el.portalHighlights.hidden, true);
 
   // QA sample caregiver sees highlights; when filtered to 'real' with no events and due=false, highlights hide
@@ -162,9 +172,9 @@ test('query-string design preview (?preview=sample) is removed from production s
   assert.doesNotMatch(app, /portalDesignPreviewRequested|initPortalDesignPreview/);
 });
 
-test('real grant status and Memory Socials summary remain visible in both ordinary #332 layout and the qa_samples 6-card layout', () => {
+test('real grant status and Memory Socials summary stay visible inside the redesigned cards for every caregiver', () => {
   const h = ui();
-  // Ordinary caregiver (#332 layout): standalone #portalGrantCard and #portalSocialsCard are visible, while #portalEventsSocialsSummary and #portalUpdatesCard are hidden
+  // Ordinary caregiver: the redesigned 6-card layout, with the real summaries inside My Events and Sanctuary Updates & Perks
   h.context.renderPortalData({
     profile: { first_name: 'Maria', sanctuary_member: 1 },
     grants: [{ status: 'awarded', requested_for: 'Respite weekend', amount: '$500', care_package: 'Self-Care Box' }],
@@ -173,16 +183,17 @@ test('real grant status and Memory Socials summary remain visible in both ordina
       { title: 'Upcoming Social', type: 'memory_social', starts_at: '2026-11-12 14:00', registration_status: 'registered' }
     ]
   });
-  assert.equal(h.el.portalGrantCard.hidden, false);
-  assert.equal(h.el.portalSocialsCard.hidden, false);
-  assert.equal(h.el.portalEventsSocialsSummary.hidden, true);
-  assert.equal(h.el.portalUpdatesCard.hidden, true);
-  assert.equal(h.el.portalGrantStatus.textContent, 'awarded');
-  assert.equal(h.el.portalGrantRequestedFor.textContent, 'Respite weekend');
-  assert.equal(h.el.portalGrantAward.textContent, 'Awarded: $500 (Self-Care Box)');
-  assert.equal(h.el.portalSocialsCount.textContent, '1 socials');
-  assert.equal(h.el.portalSocialsLastVisit.textContent, '2026-10-10');
-  assert.equal(h.el.portalSocialsNext.textContent, 'Upcoming Social · 2026-11-12');
+  assert.equal(h.el.portalGrantCard.hidden, true);
+  assert.equal(h.el.portalSocialsCard.hidden, true);
+  assert.equal(h.el.portalEventsSocialsSummary.hidden, false);
+  assert.equal(h.el.portalUpdatesCard.hidden, false);
+  assert.equal(h.el.portalUpdatesGrantSummary.hidden, false);
+  assert.equal(h.el.portalQaGrantStatus.textContent, 'awarded');
+  assert.equal(h.el.portalQaGrantRequestedFor.textContent, 'Respite weekend');
+  assert.equal(h.el.portalQaGrantAward.textContent, 'Awarded: $500 (Self-Care Box)');
+  assert.equal(h.el.portalQaSocialsCount.textContent, '1 socials');
+  assert.equal(h.el.portalQaSocialsLastVisit.textContent, '2026-10-10');
+  assert.equal(h.el.portalQaSocialsNext.textContent, 'Upcoming Social · 2026-11-12');
 
   // Named sample identity (qa_samples: true): #portalEventsSocialsSummary inside My Events and #portalUpdatesGrantSummary inside Sanctuary Updates & Perks are visible with the real values
   h.context.renderPortalData({

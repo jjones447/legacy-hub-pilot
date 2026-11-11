@@ -703,7 +703,7 @@ test('section filters include and exclude expected sample and real items across 
   assert.equal(ui.el.portalSupportFilter.value, 'sample');
 });
 
-test('reload stability, read-only sample safety, and second-caregiver isolation (second caregiver page is unchanged from #332)', () => {
+test('reload stability, read-only sample safety, and second-caregiver isolation (second caregiver gets the redesign with zero sample content)', () => {
   const ui = createPortalDashboardUi();
   const qaMe = {
     ok: true,
@@ -749,7 +749,7 @@ test('reload stability, read-only sample safety, and second-caregiver isolation 
   }
   assert.equal(ui.networkCalls.length, 0);
 
-  // Second caregiver session (no qa_samples) sees the exact #332 page with zero redesign or sample elements
+  // Second caregiver session (no qa_samples) gets the redesigned layout (requester-approved 2026-11-11) with zero sample elements
   ui.context.renderPortalData({
     ok: true,
     profile: { first_name: 'Alex', sanctuary_member: 0 },
@@ -760,32 +760,32 @@ test('reload stability, read-only sample safety, and second-caregiver isolation 
     ok: true,
     requests: []
   });
-  assert.equal(ui.el.portalWelcome.textContent, 'Welcome back, Alex');
-  assert.equal(ui.el.portalWelcomeSub.hidden, true);
-  assert.equal(ui.el.portalWellnessSample.hidden, false);
-  assert.equal(ui.el.portalGrantCard.hidden, false);
-  assert.equal(ui.el.portalSocialsCard.hidden, false);
-  assert.equal(ui.el.portalProfileCard.hidden, true);
-  assert.equal(ui.el.portalSupportCard.hidden, true);
-  assert.equal(ui.el.portalUpdatesCard.hidden, true);
-  assert.equal(ui.el.portalEventsFilterRow.hidden, true);
-  assert.equal(ui.el.portalEventsSocialsSummary.hidden, true);
+  assert.equal(ui.el.portalWelcome.textContent, 'Welcome to Your Sanctuary, Alex!');
+  assert.equal(ui.el.portalWelcomeSub.hidden, false);
+  assert.equal(ui.el.portalWellnessSample.hidden, true);
+  assert.equal(ui.el.portalGrantCard.hidden, true);
+  assert.equal(ui.el.portalSocialsCard.hidden, true);
+  assert.equal(ui.el.portalProfileCard.hidden, false);
+  assert.equal(ui.el.portalSupportCard.hidden, false);
+  assert.equal(ui.el.portalUpdatesCard.hidden, false);
+  assert.equal(ui.el.portalEventsFilterRow.hidden, false);
+  assert.equal(ui.el.portalEventsSocialsSummary.hidden, false);
   assert.equal(ui.el.portalEventsHeading.textContent, '📅 My Events');
-  assert.equal(ui.el.portalEventsIntro.textContent, 'Your registrations are listed here. Browse all events opens the public calendar.');
-  assert.equal(ui.el.portalResourcesHeading.textContent, '📚 Resource library');
+  assert.equal(ui.el.portalEventsIntro.textContent, 'Your upcoming and past registrations. Filter by timeframe or type below.');
+  assert.equal(ui.el.portalResourcesHeading.textContent, '📚 My Resources');
   assert.equal(ui.el.portalResourcesIntro.textContent, 'Shared guides, tools and trusted local help for caregivers. This library is public, not a personalized saved list.');
-  assert.equal(ui.el.portalResourcesComingSoon.hidden, true);
+  assert.equal(ui.el.portalResourcesComingSoon.hidden, false);
   assert.equal(ui.el.portalWellnessHeading.textContent, '💛 My Wellness');
   assert.equal(ui.el.portalWellnessHistory.open, false);
-  assert.equal(ui.el.portalMembershipStatus.innerHTML, '<span class="badge badge-gray">Non-member</span>');
-  assert.equal(ui.el.portalGrantStatus.textContent, 'in review');
-  assert.equal(ui.el.portalGrantRequestedFor.textContent, 'In-home respite');
-  assert.equal(ui.el.portalGrantAward.textContent, 'Personalized on approval');
-  assert.equal(ui.el.portalSocialsCount.textContent, '0 socials');
-  assert.equal(ui.el.portalSocialsNext.textContent, 'Community Social · 2026-11-09');
-  assert.equal(ui.el.portalEventsList.children.length, 1);
-  assert.equal(ui.el.portalEventsList.children[0].className, 'timeline-item');
-  assert.equal(ui.el.portalEventsList.children[0].children[1].children[3].textContent, '2026-11-09 14:00 · Main Room', 'flat #332 event item without type prefix or Upcoming/Past group');
+  assert.equal(ui.el.portalMembershipStatus.innerHTML, '<span class="badge badge-gray">Not yet a member</span>');
+  assert.equal(ui.el.portalQaGrantStatus.textContent, 'in review');
+  assert.equal(ui.el.portalQaGrantRequestedFor.textContent, 'In-home respite');
+  assert.equal(ui.el.portalQaGrantAward.textContent, 'Personalized on approval');
+  assert.equal(ui.el.portalQaSocialsCount.textContent, '0 socials');
+  assert.equal(ui.el.portalQaSocialsNext.textContent, 'Community Social · 2026-11-09');
+  const groups = ui.el.portalEventsList.children;
+  assert.deepEqual(groups.map(g => g.children[0].textContent), ['Upcoming']);
+  assert.match(groups[0].children[1].textContent, /2026-11-09 14:00 · Main Room/);
   assert.equal(ui.el.portalQaSampleBanner.hidden, true);
   assert.equal(ui.el.portalProfileSampleNote.hidden, true);
   assert.equal(ui.el.portalResourcesSampleNote.hidden, true);
@@ -794,7 +794,9 @@ test('reload stability, read-only sample safety, and second-caregiver isolation 
   assert.equal(collectSampleNodes(ui.el.portalSupportHistoryRows).length, 0);
   assert.doesNotMatch(ui.el.portalEventsList.textContent, /SAMPLE \/ TEST/);
   assert.doesNotMatch(ui.el.portalSupportHistoryRows.textContent, /SAMPLE \/ TEST/);
-  assert.equal(ui.el.portalHighlights.hidden, true);
+  // Only the second caregiver's own next event can be highlighted, never a sample line.
+  const secondHighlights = ui.el.portalHighlightsList.children.map(c => c.textContent).join(' | ');
+  assert.doesNotMatch(secondHighlights, /SAMPLE/);
 });
 
 test('session lifecycle: confirmed logout, changed/absent identity, failed/delayed history, and same-identity pending reconciliation', async () => {
