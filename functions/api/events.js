@@ -1,4 +1,5 @@
 import { internalError } from '../_lib/errors.js';
+import { isInternalTestCaregiverSql } from '../_lib/domain/caregivers.js';
 
 // GET /api/events — returns published events with current registration counts from D1 (slice 05).
 export async function onRequestGet({ env }) {
@@ -9,7 +10,13 @@ export async function onRequestGet({ env }) {
                e.description, e.registration_url, e.photo_key, e.photo_alt,
                COUNT(r.id) AS registered_count
         FROM event e
-        LEFT JOIN registration r ON e.id = r.event_id AND r.status IN ('registered', 'attended')
+        LEFT JOIN registration r ON e.id = r.event_id
+          AND r.status IN ('registered', 'attended')
+          AND NOT EXISTS (
+            SELECT 1 FROM caregiver c
+            WHERE c.id = r.caregiver_id
+              AND ${isInternalTestCaregiverSql('c')}
+          )
         WHERE e.publish_state = 'published'
         GROUP BY e.id
         ORDER BY e.starts_at ASC
