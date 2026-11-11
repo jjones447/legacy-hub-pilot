@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Respite Request Draft — Legacy Home &amp; Respite Care Foundation</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+{% set active_page = '' %}
+{% include '_header.html.j2' %}
+<section><div class="container">
+  <h1>Drop-In Respite request — qualification draft</h1>
+  <p>This draft is for fictional-data source qualification only. Do not enter real personal or health details.</p>
+  <p>A request is pending until staff review support needs and capacity. First-time participants need a staff follow-up before confirmation. Medication assistance requires staff discussion; this form does not promise accommodation.</p>
+  <section aria-labelledby="privacyDraft"><h2 id="privacyDraft">Privacy wording for review — draft</h2>
+    <p>The form will ask about the participant’s needs and the requested session so Legacy can review availability and coordinate respite. Only authorized Legacy staff may view these details.</p>
+    <p>To request a correction or removal, <a href="about.html#contact">contact Legacy</a>. Removal requests will be reviewed; this does not promise immediate removal from every backup or export.</p>
+    <p>This is a non-medical group program. Sending a request does not confirm a place. Staff must review support needs and availability first.</p>
+    <p>Collection remains off while the wording, retention period, backup and export handling, and contact details are confirmed.</p>
+  </section>
+  <p id="respiteMessage" role="status" aria-live="polite">Collection is not available.</p>
+  <section aria-labelledby="questionPreview"><h2 id="questionPreview">Proposed questions — read-only preview</h2>
+  <p>No answers can be entered or submitted here. Please review the questions and wording only.</p>
+  <dl>
+  <dt>Requested session</dt><dd>Choose an explicitly published session; no session is selected in this preview.</dd>
+  <dt>Caregiver full name</dt><dd>Required; text answer, up to 120 characters.</dd>
+  <dt>Caregiver contact email</dt><dd>Required; text answer, up to 254 characters.</dd>
+  <dt>Best contact phone</dt><dd>Required; text answer, up to 40 characters.</dd>
+  <dt>Loved one full name</dt><dd>Required; text answer, up to 120 characters.</dd>
+  <dt>Age (optional)</dt><dd>Optional / conditional; text answer, up to 3 characters.</dd>
+  <dt>Relationship to loved one</dt><dd>Required; text answer, up to 80 characters.</dd>
+  <dt>Mobility and support needs (write none if none)</dt><dd>Required; text answer, up to 600 characters.</dd>
+  <dt>Communication preferences and support</dt><dd>Required; text answer, up to 600 characters.</dd>
+  <dt>Personal-care help explanation (required if yes)</dt><dd>Optional / conditional; text answer, up to 600 characters.</dd>
+  <dt>Safety considerations (optional)</dt><dd>Optional / conditional; text answer, up to 600 characters.</dd>
+  <dt>Allergies / dietary needs (write none if none)</dt><dd>Required; text answer, up to 600 characters.</dd>
+  <dt>Enjoyable activities</dt><dd>Required; text answer, up to 600 characters.</dd>
+  <dt>Comfort and support preferences (optional)</dt><dd>Optional / conditional; text answer, up to 600 characters.</dd>
+  <dt>Emergency contact full name</dt><dd>Required; text answer, up to 120 characters.</dd>
+  <dt>Emergency contact relationship</dt><dd>Required; text answer, up to 80 characters.</dd>
+  <dt>Emergency contact phone</dt><dd>Required; text answer, up to 40 characters.</dd>
+  <dt>First time attending?</dt><dd>Required; choose Yes or No. Neither answer is selected.</dd>
+  <dt>Personal-care assistance needed?</dt><dd>Required; choose Yes or No. Neither answer is selected.</dd>
+  <dt>Medication assistance needed? Staff must discuss accommodation.</dt><dd>Required; choose Yes or No. Neither answer is selected.</dd>
+  <dt>Will the caregiver stay on site?</dt><dd>Required; choose Yes or No. Neither answer is selected.</dd>
+  </dl><h3>Proposed acknowledgments — not accepted in this preview</h3>
+  <p>DRAFT — fictional qualification only: I allow these one-session details to be used by the authorized respite coordination team for review and follow-up.</p>
+  <p>DRAFT — fictional qualification only: I understand this is non-medical group respite, subject to staffing, support needs and capacity review. Submitting is not confirmation.</p>
+  </section>
+  <form id="respiteForm" hidden>
+    <fieldset id="respiteFields" disabled><legend>One session request — not a saved profile</legend>
+      <label>Requested session <select name="event_id" required></select></label>
+      <div id="respiteQuestions"></div>
+      <label><input type="checkbox" name="privacy_ack" required> <span id="respitePrivacy"></span></label>
+      <label><input type="checkbox" name="nonmedical_ack" required> <span id="respiteNonmedical"></span></label>
+      <p>No caregiver profile is automatically created, matched or updated. This does not save a reusable loved-one profile.</p>
+      <button type="submit" class="btn btn-coral">Submit pending request</button>
+    </fieldset>
+  </form>
+</div></section>
+{% include '_footer.html.j2' %}
+<script src="app.js"></script>
+<script src="nav-v2.js"></script>
+<script src="respite-b1.js"></script>
+</body>
+</html>

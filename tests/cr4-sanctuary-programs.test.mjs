@@ -162,7 +162,7 @@ test('every generated public header shares the new hierarchy, first-focus skip l
     assert.equal(html.indexOf('<a ', html.indexOf('<body>')), html.indexOf('<a class="skip-link"'), file);
     assert.match(html, /<main id="main">/);
   }
-  assert.equal(checked, 23, 'all current public headers must be checked');
+  assert.equal(checked, 25, 'all current public headers, including the disabled B1 draft page, must be checked');
 });
 
 test('Sanctuary merges the overview and exposes join/contact before the program and Network sections', () => {
@@ -319,11 +319,15 @@ test('O26-02/03/04: Sanctuary, About, and Get Involved place hero text over supp
 
   for (const rel of ['about.html', 'templates/about.html.j2']) {
     const aboutHtml = loadFile(rel);
-    const aboutHero = aboutHtml.match(/<section class="hero has-media about-hero[^"]*">([\s\S]*?)<\/section>/)?.[1];
+    // Nov 1 request: the family photo was cropped in the hero; it now sits uncropped beside
+    // "From One Family's Journey to a Community's Sanctuary" and the hero is text only.
+    const aboutHero = aboutHtml.match(/<section class="hero about-hero[^"]*">([\s\S]*?)<\/section>/)?.[1];
     assert.ok(aboutHero, `${rel}: About hero section must exist`);
-    assert.doesNotMatch(aboutHero, /client-photo-hero|client-hero-layout/);
-    assert.match(aboutHero, /<img class="hero-media" src="media\/client-oct16\/about-family-img-1846\.jpg" alt="" aria-hidden="true" width="2058" height="1474" decoding="async">/);
-    assert.match(aboutHero, /<div class="hero-scrim" aria-hidden="true"><\/div>\s*<div class="container hero-content">/);
+    assert.doesNotMatch(aboutHero, /client-photo-hero|client-hero-layout|hero-media|about-family-img-1846/);
+    const story = aboutHtml.match(/<section id="story">([\s\S]*?)<\/section>/)?.[1];
+    assert.ok(story, `${rel}: About story section must exist`);
+    assert.match(story, /<figure class="about-story-photo">\s*<img src="media\/client-oct16\/about-family-img-1846\.jpg" alt="[^"]+" width="2058" height="1474"/);
+    assert.match(story, /id="mission"/, 'the values block and its #mission anchor stay in the story section');
     assert.match(aboutHtml, /<figure class="client-founder-photo">\s*<img src="media\/client-oct16\/founder-img-7045\.jpg"/);
   }
 

@@ -3,6 +3,8 @@
 // the wording and the schedule; the stored answers are keyed by question id, so old check-ins stay
 // readable if a question is reworded.
 
+import { notInternalTestCaregiverSql } from './domain/caregivers.js';
+
 export const CHECKIN_EVERY_DAYS = 30;
 
 // value 1..5; `good` says which end of the scale means "doing well".
@@ -83,7 +85,7 @@ export async function staffSeries(db, caregiverIds, range = 'quarter', now = Dat
   const ids = [...new Set((caregiverIds || []).filter((x) => typeof x === 'string' && x))].slice(0, 10);
   const series = [];
   for (const id of ids) {
-    const person = await db.prepare('SELECT id, first_name, last_name FROM caregiver WHERE id = ?').bind(id).first();
+    const person = await db.prepare(`SELECT id, first_name, last_name FROM caregiver c WHERE c.id = ? AND ${notInternalTestCaregiverSql('c')}`).bind(id).first();
     if (!person) continue;
     const { results } = await db
       .prepare('SELECT score, created_at FROM wellness_checkin WHERE caregiver_id = ? AND created_at >= ? ORDER BY created_at ASC, id ASC')
@@ -99,6 +101,7 @@ export async function caregiversWithCheckins(db) {
   const { results } = await db
     .prepare(`SELECT c.id, c.first_name, c.last_name, COUNT(w.id) AS checkins, MAX(w.created_at) AS latest
               FROM wellness_checkin w JOIN caregiver c ON c.id = w.caregiver_id
+              WHERE ${notInternalTestCaregiverSql('c')}
               GROUP BY c.id ORDER BY c.last_name COLLATE NOCASE, c.first_name COLLATE NOCASE`)
     .all();
   return results || [];

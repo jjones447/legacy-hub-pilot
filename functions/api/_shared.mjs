@@ -1,17 +1,25 @@
 // Intake core — pure logic over a D1-shaped binding (prepare/bind/run/first/batch).
 // No handler exports, so Pages creates no route for this file. Tested directly
 // in tests/intake.test.mjs against the real schema via node:sqlite.
+import { isSupportGroup, validateSupportGroupSession } from '../_lib/support-group-session.mjs';
+import { SUPPORT_SOURCE } from '../_lib/portal-support.js';
+import { handleNewsletter, validateNewsletter } from '../_lib/newsletter.mjs';
 
-export const INTAKE_KINDS = ['support_request', 'membership', 'event_registration', 'grant_application'];
+// 'newsletter' (email list, schema/0020) writes only email_subscriber: no caregiver record.
+export const INTAKE_KINDS = ['support_request', 'membership', 'event_registration', 'grant_application', 'newsletter'];
 
 export function validateIntake(body) {
   if (!body || typeof body !== 'object') return 'body must be a JSON object';
   if (!INTAKE_KINDS.includes(body.kind)) return `kind must be one of ${INTAKE_KINDS.join(', ')}`;
+  if (body.kind === 'newsletter') return validateNewsletter(body);
   if (!body.first_name || typeof body.first_name !== 'string') return 'first_name is required';
   if (!body.email && !body.phone) return 'email or phone is required';
   if (!body.external_ref || typeof body.external_ref !== 'string') return 'external_ref is required';
+  // This keyspace belongs only to the signed-session portal support producer.
+  // Reject before duplicate lookup, caregiver upsert, or any workflow mutation.
+  if (body.source === SUPPORT_SOURCE || (typeof body.source === 'string' && body.source.startsWith('respite_b1'))) return 'source is reserved';
   if (body.kind === 'event_registration' && !body.event_id) return 'event_id is required for event_registration';
-  return null;
+  return validateSupportGroupSession(body);
 }
 
 function nowIso() {
@@ -27,6 +35,9 @@ const KIND_TABLE = {
 };
 
 export async function handleIntake(db, body) {
+  // Email-list sign-ups keep the intake conventions (validation, IP limit, idempotency on
+  // (source, external_ref)) but never touch caregiver, followup or any email sender.
+  if (body && typeof body === 'object' && body.kind === 'newsletter') return handleNewsletter(db, body);
   const err = validateIntake(body);
   if (err) return { status: 400, body: { ok: false, error: err } };
 
@@ -74,9 +85,9 @@ export async function handleIntake(db, body) {
       );
   }
 
-  // Membership/support business mutations and their original audit commit together.
-  // Keep the existing event/grant workflow and request-limit accounting unchanged.
-  const atomic = body.kind === 'membership' || body.kind === 'support_request';
+  // Registration and its confirmation task/audit must also commit together before
+  // the HTTP handler can attempt any external email. Grant behavior is unchanged.
+  const atomic = ['membership', 'support_request', 'event_registration'].includes(body.kind);
   const writes = atomic ? [caregiverWrite] : null;
   if (!atomic) await caregiverWrite.run();
 
@@ -96,14 +107,12 @@ export async function handleIntake(db, body) {
         return { status: 409, body: { ok: false, error: 'event_full' } };
       }
     }
-    await db
+    writes.push(db
       .prepare(`INSERT INTO registration (caregiver_id, event_id, source, external_ref) VALUES (?, ?, ?, ?)`)
-      .bind(caregiverId, body.event_id, source, body.external_ref)
-      .run();
-    await db
+      .bind(caregiverId, body.event_id, source, body.external_ref));
+    writes.push(db
       .prepare(`INSERT INTO followup (caregiver_id, kind, detail, source, external_ref) VALUES (?, 'event_confirmation', ?, ?, ?)`)
-      .bind(caregiverId, `Confirm registration for ${body.event_id}`, source, body.external_ref + ':fu')
-      .run();
+      .bind(caregiverId, `Confirm registration for ${body.event_id}`, source, body.external_ref + ':fu'));
   } else if (body.kind === 'membership') {
     writes.push(db
       .prepare(`UPDATE caregiver SET sanctuary_member = 1, member_since = COALESCE(member_since, ?), updated_at = ? WHERE id = ?`)
@@ -139,7 +148,8 @@ export async function handleIntake(db, body) {
       source,
       `intake.${body.kind}`,
       caregiverId,
-      JSON.stringify({ kind: body.kind, external_ref: body.external_ref, event_id: body.event_id || null })
+      JSON.stringify({ kind: body.kind, external_ref: body.external_ref, event_id: body.event_id || null,
+        ...(isSupportGroup(body) ? { session_date: body.session_date ?? null } : {}) })
     );
 
   if (atomic) {
@@ -161,6 +171,7 @@ export async function handleIntake(db, body) {
 export const IP_LIMITS = {
   portalLogin: { action: 'portal.login_ip', limit: 20, windowMinutes: 15 },
   intake: { action: 'intake.submit_ip', limit: 10, windowMinutes: 60 },
+  unsubscribe: { action: 'unsubscribe.submit_ip', limit: 20, windowMinutes: 60 },
 };
 
 async function sha256Hex(text) {

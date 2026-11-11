@@ -246,7 +246,8 @@ async function loadStaffConsole() {
     loadSiteContent(),
     loadRecentChanges(),
     loadStaffTeam(),
-    loadWellnessCaregivers()
+    loadWellnessCaregivers(),
+    loadSubscribers()
   ]);
   if (currentEventId) {
     await loadRegistrations(currentEventId, currentEventTitle);
@@ -254,9 +255,74 @@ async function loadStaffConsole() {
   updateStatusLine();
 }
 
+// "active" is a view only: the full list is fetched and closed applications are hidden here.
+function grantsRequestUrl(statusFilter) {
+  return statusFilter && statusFilter !== 'active' ? `/api/grants?status=${encodeURIComponent(statusFilter)}` : '/api/grants';
+}
+
+function visibleGrants(grants, statusFilter) {
+  const list = Array.isArray(grants) ? grants : [];
+  return statusFilter === 'active' ? list.filter(g => g.status !== 'closed') : list;
+}
+
+// Email list subscribers (schema/0020): read-only list, search and counts.
+// The API never returns unsubscribe tokens; CSV download is a plain link to the staff route.
+let subscribersEpoch = 0;
+
+function formatSubscriberCounts(counts, matching, shown, filtered) {
+  const subscribed = Number(counts?.subscribed || 0);
+  const unsubscribed = Number(counts?.unsubscribed || 0);
+  let text = `${subscribed} subscribed · ${unsubscribed} unsubscribed`;
+  if (filtered) text += ` · ${matching} matching`;
+  if (shown < matching) text += ` (showing the newest ${shown})`;
+  return text;
+}
+
+async function loadSubscribers() {
+  const epoch = ++subscribersEpoch;
+  const body = document.getElementById('subscribersTableBody');
+  const countsLine = document.getElementById('subscribersCounts');
+  const q = String(document.getElementById('subscribersSearchQuery')?.value || '').trim();
+  const status = document.getElementById('subscribersStatusFilter')?.value || '';
+  const params = new URLSearchParams();
+  if (q) params.set('q', q);
+  if (status) params.set('status', status);
+  const query = params.toString();
+  try {
+    const res = await fetch('/api/staff/subscribers' + (query ? `?${query}` : ''));
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to load subscribers');
+    if (epoch !== subscribersEpoch) return;
+    const rows = Array.isArray(data.subscribers) ? data.subscribers : [];
+    if (countsLine) countsLine.textContent = formatSubscriberCounts(data.counts, Number(data.matching || 0), rows.length, !!(q || status));
+    if (!body) return;
+    if (rows.length === 0) {
+      body.innerHTML = `<tr><td colspan="4" class="text-center muted small">${q || status ? 'No subscribers match this search.' : 'No one has joined the email list yet.'}</td></tr>`;
+      return;
+    }
+    body.innerHTML = rows.map(sub => {
+      const badge = sub.status === 'subscribed' ? 'badge-green' : 'badge-outline';
+      const joined = sub.created_at ? escapeHtml(String(sub.created_at).split(' ')[0]) : '';
+      return `
+        <tr>
+          <td data-label="Email">${escapeHtml(sub.email)}</td>
+          <td data-label="First name">${escapeHtml(sub.first_name || '')}</td>
+          <td data-label="Status"><span class="badge ${badge}">${escapeHtml(sub.status)}</span></td>
+          <td data-label="Joined"><span class="small">${joined}</span></td>
+        </tr>
+      `;
+    }).join('');
+  } catch (e) {
+    if (epoch !== subscribersEpoch) return;
+    if (countsLine) countsLine.textContent = 'Subscribers are unavailable right now.';
+    if (body) body.innerHTML = `<tr><td colspan="4" role="alert">Could not load subscribers: ${escapeHtml(e.message)}. Use Search subscribers to try again.</td></tr>`;
+  }
+}
+
 async function loadGrants() {
   const statusFilter = document.getElementById('grantsStatusFilter')?.value || '';
-  const url = statusFilter ? `/api/grants?status=${encodeURIComponent(statusFilter)}` : '/api/grants';
+  const url = grantsRequestUrl(statusFilter);
+  const count = document.getElementById('grantsCount');
   try {
     const res = await fetch(url);
     const data = await res.json();
@@ -264,12 +330,15 @@ async function loadGrants() {
 
     const body = document.getElementById('grantsTableBody');
     if (!body) return;
-    if (!data.grants || data.grants.length === 0) {
-      body.innerHTML = '<tr><td colspan="4" class="text-center muted small">No grant applications found.</td></tr>';
+    const grants = visibleGrants(data.grants, statusFilter);
+    const shown = grants.length === 1 ? '1 application' : `${grants.length} applications`;
+    if (count) count.textContent = statusFilter ? `(${shown} shown)` : `(${shown})`;
+    if (grants.length === 0) {
+      body.innerHTML = '<tr><td colspan="5" class="text-center muted small">No grant applications found.</td></tr>';
       return;
     }
 
-    body.innerHTML = data.grants.map(g => {
+    body.innerHTML = grants.map(g => {
       const first = (g.caregiver_first_name || '').trim();
       const last = (g.caregiver_last_name || '').trim();
       const rawName = `${first} ${last}`.trim() || 'Anonymous';
@@ -295,10 +364,14 @@ async function loadGrants() {
           <td>${escapeHtml(g.requested_for || 'General')}</td>
           <td><span class="badge ${gBadge}">${escapeHtml(label)}</span></td>
           <td><span class="small">${awardText}</span></td>
+          <td><button type="button" class="btn btn-sm btn-outline btn-compact" data-action="view-caregiver" data-caregiver-id="${escapeHtml(g.caregiver_id)}" aria-describedby="grantActionsHelp" aria-label="Open application: ${caregiverName}">Open application</button></td>
         </tr>
       `;
     }).join('');
   } catch (e) {
+    if (count) count.textContent = '(could not load)';
+    const body = document.getElementById('grantsTableBody');
+    if (body) body.innerHTML = '<tr><td colspan="5" class="text-center muted small" role="alert">Could not load grant applications. Reload the page to try again.</td></tr>';
     console.error(e);
   }
 }
@@ -633,7 +706,23 @@ async function archiveNote(id, target) {
 }
 
 
+// Follow-ups: "Mark complete" posts the existing {status:'done'} transition once per item.
+// It sends no email and deletes nothing; failures are shown in the panel, not only the console.
+const followupPending = new Set();
+
+function staffFollowupSupportUrl(followupId) {
+  return `/api/staff/${'followup'}/${encodeURIComponent(followupId)}/support`;
+}
+
+function setNeedsAttentionMessage(text, isError = false) {
+  const message = document.getElementById('needsAttentionMessage');
+  if (!message) return;
+  message.textContent = text;
+  message.classList?.toggle('is-error', isError);
+}
+
 async function loadFollowups() {
+  const count = document.getElementById('needsAttentionCount');
   try {
     const res = await fetch('/api/staff/queue');
     const data = await res.json();
@@ -641,28 +730,47 @@ async function loadFollowups() {
     
     const body = document.getElementById('needsAttentionBody');
     if (!body) return;
-    if (!data.queue || data.queue.length === 0) {
-      body.innerHTML = '<tr><td colspan="3" class="text-center muted small">No follow-ups in queue.</td></tr>';
+    const queue = Array.isArray(data.queue) ? data.queue : [];
+    const openCount = queue.filter(fu => fu.status === 'open').length;
+    const shanelleInbox = Number.isInteger(data.shanelle_support_inbox_count) && data.shanelle_support_inbox_count > 0
+      ? ` · ${data.shanelle_support_inbox_count} in Shanelle support inbox`
+      : '';
+    if (count) count.textContent = openCount === 0 ? '(nothing open)' : `(${openCount} open${shanelleInbox})`;
+    noteNeedsAttentionActionable(openCount > 0);
+    if (queue.length === 0) {
+      body.innerHTML = '<tr><td colspan="3" class="text-center muted small">No open follow-ups.</td></tr>';
       return;
     }
     
-    body.innerHTML = data.queue.map(fu => {
+    body.innerHTML = queue.map(fu => {
       const first = (fu.caregiver_first_name || '').trim();
       const last = (fu.caregiver_last_name || '').trim();
       const rawName = `${first} ${last}`.trim() || 'Anonymous';
       const caregiverName = escapeHtml(rawName);
       const badgeClass = fu.status === 'open' ? 'badge-plum' : 'badge-green';
-      const statusText = fu.status === 'open' ? 'Queued' : 'Resolved';
+      const statusText = fu.status === 'open' ? 'Open' : 'Completed';
+      const sr = fu.support_request && typeof fu.support_request === 'object' ? fu.support_request : null;
+      const supportMetaHtml = sr
+        ? `<div class="small muted mt-4">Request ID: <code>${escapeHtml(sr.request_id)}</code> · v${escapeHtml(sr.version)} · Status: <strong>${escapeHtml(sr.status_label || sr.status)}</strong> · Assigned: <strong>${escapeHtml(sr.assigned_to_name || sr.assigned_to)}</strong></div>`
+        : '';
       
       let actionHtml = '';
       if (fu.status === 'open') {
-        actionHtml = `<button class="btn btn-sm btn-coral btn-compact-ml" data-action="resolve-followup" data-followup-id="${escapeHtml(fu.id)}">Resolve</button>`;
+        const pending = followupPending.has(Number(fu.id));
+        if (sr) {
+          const inProgressBtn = sr.status === 'received'
+            ? `<button type="button" class="btn btn-sm btn-outline btn-compact-ml" data-action="support-in-progress" data-followup-id="${escapeHtml(fu.id)}" data-support-version="${escapeHtml(sr.version)}"${pending ? ' disabled aria-busy="true"' : ''}>Mark in progress</button>`
+            : '';
+          actionHtml = `${inProgressBtn}<button type="button" class="btn btn-sm btn-coral btn-compact-ml" data-action="resolve-followup" data-followup-id="${escapeHtml(fu.id)}" data-support-version="${escapeHtml(sr.version)}" aria-describedby="needsAttentionHelp"${pending ? ' disabled aria-busy="true"' : ''}>${pending ? 'Marking complete…' : 'Mark complete'}</button>`;
+        } else {
+          actionHtml = `<button type="button" class="btn btn-sm btn-coral btn-compact-ml" data-action="resolve-followup" data-followup-id="${escapeHtml(fu.id)}" aria-describedby="needsAttentionHelp"${pending ? ' disabled aria-busy="true"' : ''}>${pending ? 'Marking complete…' : 'Mark complete'}</button>`;
+        }
       }
       
       return `
         <tr class="cursor-pointer" data-action="view-caregiver" data-caregiver-id="${escapeHtml(fu.caregiver_id)}">
           <td><strong>${caregiverName}</strong></td>
-          <td>${escapeHtml(fu.kind)}: ${escapeHtml(fu.detail || '')}</td>
+          <td>${escapeHtml(fu.kind)}: ${escapeHtml(fu.detail || '')}${supportMetaHtml}</td>
           <td>
             <span class="badge ${badgeClass}">${statusText}</span>
             ${actionHtml}
@@ -671,27 +779,116 @@ async function loadFollowups() {
       `;
     }).join('');
   } catch (e) {
+    if (count) count.textContent = '(could not load)';
+    const body = document.getElementById('needsAttentionBody');
+    if (body) body.innerHTML = '<tr><td colspan="3" class="text-center muted small" role="alert">Could not load follow-ups. Reload the page to try again.</td></tr>';
     console.error(e);
+  }
+}
+
+async function transitionSupportFollowup(id, expectedVersion, status, event) {
+  if (event) event.stopPropagation();
+  if (!Number.isInteger(id) || id <= 0 || followupPending.has(id)) return;
+  followupPending.add(id);
+  const button = event?.target?.closest?.('[data-action="support-in-progress"]') || null;
+  if (button) {
+    button.disabled = true;
+    button.setAttribute('aria-busy', 'true');
+  }
+  setNeedsAttentionMessage('Updating support request status…');
+  let failure = null;
+  let unconfirmed = false;
+  try {
+    const res = await fetch(staffFollowupSupportUrl(id), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status, expected_version: expectedVersion })
+    });
+    const data = await res.json().catch(() => null);
+    if (res.ok && data && data.ok === true) failure = null;
+    else if (res.ok) { unconfirmed = true; failure = 'the server did not confirm it'; }
+    else failure = (data && data.error) || `the server answered ${res.status}`;
+  } catch (e) {
+    unconfirmed = true;
+    failure = 'the request did not finish';
+  }
+  followupPending.delete(id);
+  if (unconfirmed) {
+    setNeedsAttentionMessage(`We could not confirm whether the support request was updated (${failure}). The list has been refreshed; check its status before trying again.`, true);
+    await loadFollowups();
+    return;
+  }
+  if (failure) {
+    if (button) {
+      button.disabled = false;
+      button.removeAttribute('aria-busy');
+    }
+    setNeedsAttentionMessage(`Could not update support request: ${failure}. Reload the queue to check the latest version before trying again.`, true);
+    return;
+  }
+  setNeedsAttentionMessage('Support request marked In Progress. No email was sent.');
+  await loadFollowups();
+  const panel = document.getElementById('caregiverRecordPanel');
+  if (panel && panel.dataset.caregiverId) {
+    await viewCaregiver(panel.dataset.caregiverId);
   }
 }
 
 async function resolveFollowup(id, event) {
   if (event) event.stopPropagation();
+  if (!Number.isInteger(id) || id <= 0 || followupPending.has(id)) return;
+  followupPending.add(id);
+  const button = event?.target?.closest?.('[data-action="resolve-followup"]') || null;
+  const supportVersionAttr = button?.getAttribute?.('data-support-version');
+  const payload = supportVersionAttr !== null && supportVersionAttr !== undefined && supportVersionAttr !== ''
+    ? { status: 'done', expected_version: Number(supportVersionAttr) }
+    : { status: 'done' };
+  if (button) {
+    button.disabled = true;
+    button.setAttribute('aria-busy', 'true');
+    button.textContent = 'Marking complete…';
+  }
+  setNeedsAttentionMessage('Marking the follow-up complete…');
+  let failure = null;
+  let unconfirmed = false;
   try {
     const res = await fetch(`/api/staff/followup/${id}/resolve`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'done' })
+      body: JSON.stringify(payload)
     });
-    if (res.ok) {
-      await loadFollowups();
-      const panel = document.getElementById('caregiverRecordPanel');
-      if (panel && panel.dataset.caregiverId) {
-        await viewCaregiver(panel.dataset.caregiverId);
-      }
-    }
+    const data = await res.json().catch(() => null);
+    // Only the explicit positive acknowledgment counts as done (#306 review): a 200 with an
+    // unreadable or unexpected body is "unconfirmed", never "completed".
+    if (res.ok && data && data.ok === true) failure = null;
+    else if (res.ok) { unconfirmed = true; failure = 'the server did not confirm it'; }
+    else failure = (data && data.error) || `the server answered ${res.status}`;
   } catch (e) {
-    console.error(e);
+    unconfirmed = true;
+    failure = 'the request did not finish';
+  }
+  followupPending.delete(id);
+  if (unconfirmed) {
+    // Never retry automatically: re-read the queue so the list shows the real state, and
+    // only then allow another attempt from the refreshed row.
+    setNeedsAttentionMessage(`We could not confirm whether this follow-up was marked complete (${failure}). The list has been refreshed; check whether it is still open before trying again.`, true);
+    await loadFollowups();
+    return;
+  }
+  if (failure) {
+    if (button) {
+      button.disabled = false;
+      button.removeAttribute('aria-busy');
+      button.textContent = 'Mark complete';
+    }
+    setNeedsAttentionMessage(`Could not mark this follow-up complete: ${failure}. Reload the page to check whether it is still open before trying again.`, true);
+    return;
+  }
+  setNeedsAttentionMessage('Marked complete and removed from the open list. No email was sent.');
+  await loadFollowups();
+  const panel = document.getElementById('caregiverRecordPanel');
+  if (panel && panel.dataset.caregiverId) {
+    await viewCaregiver(panel.dataset.caregiverId);
   }
 }
 
@@ -897,6 +1094,11 @@ async function viewCaregiver(id) {
     }
 
     const nowLocal = localDateTimeValue(new Date());
+    const recordStatus = p.status || 'active';
+    const lifecycleButton = recordStatus === 'archived'
+      ? '<button type="button" class="btn btn-sm btn-plum" data-action="caregiver-restore" aria-describedby="caregiverLifecycleHelp">Restore to active</button>'
+      : '<button type="button" class="btn btn-sm btn-outline" data-action="caregiver-archive" aria-describedby="caregiverLifecycleHelp">Archive caregiver</button>';
+    const supportRequestsHtml = renderCaregiverSupportRequestsHtml(data.followups);
 
     panel.innerHTML = `
       <h2 id="caregiverDetailHeading" tabindex="-1">Caregiver record — ${name} ${memberBadge} ${statusBadge}</h2>
@@ -911,9 +1113,19 @@ async function viewCaregiver(id) {
       <div class="kv-row"><span class="k">Last attended</span><span class="v">${lastAttended}</span></div>
       <div class="kv-row"><span class="k">Total attended</span><span class="v">${socialsCount} event(s)</span></div>
       <div class="kv-row"><span class="k">Staff Notes</span><span class="v"><div class="note-error-msg alert-inline-banner form-error-banner d-none"></div>${notesHtml}</span></div>
+      <div class="caregiver-lifecycle" id="caregiverLifecycle">
+        <span class="k staff-section-title">Record status: ${escapeHtml(recordStatus)}</span>
+        <p class="small muted mt-6" id="caregiverLifecycleHelp">Archive keeps this caregiver's profile, registrations, grants, notes and history; nothing is deleted. An archived caregiver cannot sign in to the Caregiver Portal. Archiving does not close their open follow-ups, and the record still appears when you search All statuses. Restore to active lets them sign in again.</p>
+        ${lifecycleButton}
+        <p class="small caregiver-lifecycle-message" id="caregiverLifecycleMessage" role="status" aria-live="polite"></p>
+      </div>
       <div class="mt-14">
         <span class="k staff-section-title">Grants &amp; Workflow:</span>
         <div class="mt-8">${grantsHtml}</div>
+      </div>
+      <div class="mt-14" id="caregiverSupportRequestsSection">
+        <span class="k staff-section-title">My Support Requests:</span>
+        <div class="mt-8">${supportRequestsHtml}</div>
       </div>
 
       <details class="mt-16" open>
@@ -1053,7 +1265,241 @@ async function viewCaregiver(id) {
   }
 }
 
+function eventsCountText(events) {
+  const list = Array.isArray(events) ? events : [];
+  const total = list.length === 1 ? '1 event' : `${list.length} events`;
+  const byState = {};
+  for (const ev of list) {
+    const state = ev.publish_state || 'published';
+    byState[state] = (byState[state] || 0) + 1;
+  }
+  const parts = ['published', 'draft', 'archived'].filter(state => byState[state]).map(state => `${byState[state]} ${state}`);
+  return parts.length ? `(${total}: ${parts.join(', ')})` : `(${total})`;
+}
+
+// Archive / Restore reuse the existing caregiver PATCH with only {status}; no new transition.
+let caregiverStatusPending = false;
+
+function setCaregiverLifecycleMessage(text, isError = false) {
+  const message = document.getElementById('caregiverLifecycleMessage');
+  if (!message) return;
+  message.textContent = text;
+  message.classList?.toggle('is-error', isError);
+}
+
+async function setCaregiverRecordStatus(status, target) {
+  const panel = document.getElementById('caregiverRecordPanel');
+  const caregiverId = panel?.dataset?.caregiverId;
+  if (!caregiverId || caregiverStatusPending || (status !== 'archived' && status !== 'active')) return;
+  const archiving = status === 'archived';
+  const question = archiving
+    ? 'Archive this caregiver? Their record and history are kept, but they will not be able to sign in to the Caregiver Portal. Open follow-ups stay open. You can restore them to active later.'
+    : 'Restore this caregiver to active? They will be able to sign in to the Caregiver Portal again.';
+  if (!window.confirm(question)) return;
+  // The view generation fences the response too: opening another record (even while it is still
+  // loading and the panel still names this one) or returning to the dashboard bumps the epoch.
+  let viewEpoch = caregiverDetailEpoch;
+  const stillShowing = () => caregiverDetailEpoch === viewEpoch
+    && document.getElementById('caregiverRecordPanel')?.dataset?.caregiverId === caregiverId;
+  caregiverStatusPending = true;
+  if (target) target.disabled = true;
+  setCaregiverLifecycleMessage(archiving ? 'Archiving…' : 'Restoring…');
+  try {
+    const res = await fetch(`/api/staff/caregiver/${encodeURIComponent(caregiverId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data || data.ok !== true) throw new Error((data && data.error) || `the server answered ${res.status}`);
+    caregiverStatusPending = false;
+    // Only refresh and report on the record that is still on screen (#306 review): if staff
+    // opened another caregiver meanwhile, never navigate back to this one.
+    if (stillShowing()) {
+      const refreshed = viewCaregiver(caregiverId);
+      viewEpoch = caregiverDetailEpoch; // the refresh's own generation, taken synchronously
+      await refreshed;
+      if (stillShowing()) {
+        setCaregiverLifecycleMessage(archiving
+          ? 'Archived. This caregiver can no longer sign in to the Caregiver Portal.'
+          : 'Restored to active. This caregiver can sign in to the Caregiver Portal again.');
+      }
+    }
+    await searchCaregivers(currentSearchOffset);
+  } catch (e) {
+    if (stillShowing()) {
+      if (target) target.disabled = false;
+      setCaregiverLifecycleMessage(`Could not change the status: ${e.message}. Reopen the record to check its current status before trying again.`, true);
+    }
+  } finally {
+    caregiverStatusPending = false;
+  }
+}
+
+const supportTriagePending = new Set();
+
+function renderCaregiverSupportRequestsHtml(followups) {
+  const items = (Array.isArray(followups) ? followups : []).filter(
+    fu => fu && fu.support_request && typeof fu.support_request === 'object'
+  );
+  if (items.length === 0) {
+    return '<div class="small muted">None</div>';
+  }
+  return items.map(fu => {
+    const sr = fu.support_request;
+    let sBadge = 'badge-plum';
+    if (sr.status === 'in_progress') sBadge = 'badge-amber';
+    if (sr.status === 'completed') sBadge = 'badge-green';
+
+    let statusOptionsHtml = '';
+    if (sr.status === 'received') {
+      statusOptionsHtml = `
+        <option value="received" selected>Received</option>
+        <option value="in_progress">In Progress</option>
+        <option value="completed">Completed</option>
+      `;
+    } else if (sr.status === 'in_progress') {
+      statusOptionsHtml = `
+        <option value="in_progress" selected>In Progress</option>
+        <option value="completed">Completed</option>
+      `;
+    } else {
+      statusOptionsHtml = `<option value="completed" selected>Completed</option>`;
+    }
+
+    const privateNotes = Array.isArray(sr.private_notes) ? sr.private_notes : [];
+    const privateNotesHtml = privateNotes.length === 0
+      ? '<div class="small muted">No request-linked private notes yet.</div>'
+      : `<ul class="small mt-4">${privateNotes.map(n => `<li><strong>${escapeHtml(n.author)}:</strong> ${escapeHtml(n.body)} <span class="muted">(${escapeHtml(n.created_at || '')})</span></li>`).join('')}</ul>`;
+
+    const history = Array.isArray(sr.reporting_history) ? sr.reporting_history : [];
+    const reportingHistoryHtml = history.length === 0
+      ? '<div class="small muted">No audit transitions recorded.</div>'
+      : `<ul class="small mt-4">${history.map(h => `<li><code>${escapeHtml(h.action)}</code> by <strong>${escapeHtml(h.actor)}</strong> <span class="muted">(${escapeHtml(h.at || '')})</span></li>`).join('')}</ul>`;
+
+    return `
+      <div class="support-request-card record-form-panel mb-12" data-followup-id="${escapeHtml(fu.id)}" data-request-id="${escapeHtml(sr.request_id)}" data-support-version="${escapeHtml(sr.version)}">
+        <div>
+          <strong>${escapeHtml(sr.support_type_label || sr.support_type)}</strong>
+          <span class="badge ${sBadge}">${escapeHtml(sr.status_label || sr.status)}</span>
+          <span class="small muted">Request ID: <code>${escapeHtml(sr.request_id)}</code> · v${escapeHtml(sr.version)}</span>
+        </div>
+        <div class="small mt-4">
+          Urgency: <strong>${escapeHtml(sr.urgency_label || sr.urgency)}</strong> ·
+          Preferred contact: <strong>${escapeHtml(sr.contact_preference_label || sr.contact_preference)}</strong> ·
+          Assigned to: <strong>${escapeHtml(sr.assigned_to_name || sr.assigned_to)}</strong> (${escapeHtml(sr.assigned_to || '')})
+        </div>
+        <div class="small muted mt-4">
+          Snapshot contact — Email: ${escapeHtml(sr.contact_email || 'N/A')} · Phone: ${escapeHtml(sr.contact_phone || 'N/A')} ·
+          Submitted: ${escapeHtml(sr.submitted_at || 'N/A')} · Last status update: ${escapeHtml(sr.last_status_updated_at || sr.submitted_at || 'N/A')}
+        </div>
+        ${sr.detail ? `<div class="small mt-4">Member detail: ${escapeHtml(sr.detail)}</div>` : ''}
+        <div class="mt-8">
+          <strong class="small">Request-linked private notes (staff only):</strong>
+          ${privateNotesHtml}
+        </div>
+        <details class="mt-8">
+          <summary class="small cursor-pointer">Reporting &amp; audit history (${history.length})</summary>
+          ${reportingHistoryHtml}
+        </details>
+        <form data-action="submit-support-triage" data-followup-id="${escapeHtml(fu.id)}" data-expected-version="${escapeHtml(sr.version)}" class="mt-8">
+          <input type="hidden" name="expected_version" value="${escapeHtml(sr.version)}">
+          <div class="form-row-compact">
+            <div class="field form-col-flex">
+              <label class="form-label-small">Status:</label>
+              <select name="status" class="form-input-compact">
+                ${statusOptionsHtml}
+              </select>
+            </div>
+            <div class="field form-col-flex">
+              <label class="form-label-small">Assigned staff email:</label>
+              <input type="email" name="assigned_to" value="${escapeHtml(sr.assigned_to || '')}" class="form-input-compact" required>
+            </div>
+          </div>
+          <div class="field mb-8">
+            <label class="form-label-small">Add request-linked private note (optional):</label>
+            <textarea name="note" rows="2" class="form-textarea-compact" maxlength="2000" placeholder="Private triage note for staff (never shown to caregiver)..."></textarea>
+          </div>
+          <div class="support-triage-msg form-error-msg alert-inline-banner form-error-banner d-none" role="status" aria-live="polite"></div>
+          <button type="submit" class="btn btn-sm btn-plum">Save Support Triage</button>
+        </form>
+      </div>
+    `;
+  }).join('');
+}
+
+async function submitStaffSupportTriage(form) {
+  if (!form) return;
+  const panel = document.getElementById('caregiverRecordPanel');
+  const caregiverId = panel?.dataset?.caregiverId;
+  const followupId = Number(form.getAttribute('data-followup-id'));
+  if (!Number.isInteger(followupId) || followupId <= 0 || supportTriagePending.has(followupId)) return;
+
+  const expectedVersionRaw = form.getAttribute('data-expected-version') || form.querySelector('[name="expected_version"]')?.value;
+  const expectedVersion = Number(expectedVersionRaw);
+  const statusVal = form.querySelector('[name="status"]')?.value?.trim() || '';
+  const assignedToVal = form.querySelector('[name="assigned_to"]')?.value?.trim() || '';
+  const noteVal = form.querySelector('[name="note"]')?.value?.trim() || '';
+  const msgBox = form.querySelector('.support-triage-msg');
+  const submitBtn = form.querySelector('button[type="submit"]');
+
+  if (msgBox) {
+    msgBox.textContent = '';
+    msgBox.classList?.add('d-none');
+  }
+
+  const payload = { expected_version: expectedVersion };
+  if (statusVal) payload.status = statusVal;
+  if (assignedToVal) payload.assigned_to = assignedToVal;
+  if (noteVal) payload.note = noteVal;
+
+  supportTriagePending.add(followupId);
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.setAttribute('aria-busy', 'true');
+  }
+
+  let viewEpoch = caregiverDetailEpoch;
+  const stillShowing = () => caregiverDetailEpoch === viewEpoch
+    && (!caregiverId || document.getElementById('caregiverRecordPanel')?.dataset?.caregiverId === caregiverId);
+
+  try {
+    const res = await fetch(`/api/staff/${'followup'}/${encodeURIComponent(followupId)}/support`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data || data.ok !== true) {
+      const errText = (data && data.error) || `the server answered ${res.status}`;
+      throw new Error(errText);
+    }
+    supportTriagePending.delete(followupId);
+    if (caregiverId && stillShowing()) {
+      await viewCaregiver(caregiverId);
+    }
+    if (typeof loadFollowups === 'function') {
+      await loadFollowups();
+    }
+    if (typeof loadRecentChanges === 'function') {
+      await loadRecentChanges();
+    }
+  } catch (e) {
+    if (stillShowing() && msgBox) {
+      msgBox.textContent = `Could not save support triage: ${e.message}. Reopen the record to check the latest version before trying again.`;
+      msgBox.classList?.remove('d-none');
+    }
+  } finally {
+    supportTriagePending.delete(followupId);
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.removeAttribute('aria-busy');
+    }
+  }
+}
+
 async function loadEvents() {
+  const count = document.getElementById('eventsCount');
   try {
     let res = await fetch('/api/staff/events');
     let data;
@@ -1066,6 +1512,7 @@ async function loadEvents() {
     if (!data || !data.ok) throw new Error(data?.error || 'Failed to fetch events');
 
     staffEvents = data.events || [];
+    if (count) count.textContent = eventsCountText(staffEvents);
     const body = document.getElementById('upcomingEventsBody');
     if (!body) return;
     if (staffEvents.length === 0) {
@@ -1086,10 +1533,10 @@ async function loadEvents() {
         actions.push(`<button type="button" class="btn btn-sm btn-plum btn-compact" data-action="publish-event" data-event-id="${escapeHtml(ev.id)}">Publish</button>`);
       }
       if (state === 'published') {
-        actions.push(`<button type="button" class="btn btn-sm btn-outline btn-compact" data-action="unpublish-event" data-event-id="${escapeHtml(ev.id)}">Unpublish</button>`);
+        actions.push(`<button type="button" class="btn btn-sm btn-outline btn-compact" data-action="unpublish-event" data-event-id="${escapeHtml(ev.id)}" aria-describedby="eventLifecycleHelp" title="Hide from the public calendar; you can publish it again">Unpublish</button>`);
       }
       if (state !== 'archived') {
-        actions.push(`<button type="button" class="btn btn-sm btn-outline btn-compact" data-action="archive-event" data-event-id="${escapeHtml(ev.id)}">Archive</button>`);
+        actions.push(`<button type="button" class="btn btn-sm btn-outline btn-compact" data-action="archive-event" data-event-id="${escapeHtml(ev.id)}" aria-describedby="eventLifecycleHelp" title="Retire this event; it cannot be restored or published again">Archive</button>`);
       }
       actions.push(`<button type="button" class="btn btn-sm btn-outline btn-compact" data-action="edit-event" data-event-id="${escapeHtml(ev.id)}">Edit</button>`);
 
@@ -1108,6 +1555,9 @@ async function loadEvents() {
       `;
     }).join('');
   } catch (e) {
+    if (count) count.textContent = '(could not load)';
+    const body = document.getElementById('upcomingEventsBody');
+    if (body) body.innerHTML = '<tr><td colspan="5" class="text-center muted small" role="alert">Could not load events. Reload the page to try again.</td></tr>';
     console.error(e);
   }
 }
@@ -1550,6 +2000,7 @@ async function unpublishEvent(eventId) {
 }
 
 async function archiveEvent(eventId, confirmWithRegistrations = false) {
+  if (!confirmWithRegistrations && !confirm('Archive this event for good? Its details, registrations and history are kept and it stays off the public calendar, but it cannot be published again and there is no restore.')) return;
   try {
     const body = confirmWithRegistrations ? { confirm_with_registrations: true } : {};
     const res = await fetch(`/api/staff/event/${encodeURIComponent(eventId)}/archive`, {
@@ -1594,6 +2045,8 @@ async function loadRegistrations(eventId, eventTitle) {
     if (!panel || !content) return;
     
     panel.style.display = 'block';
+    panel.open = true;
+    if (window.LegacyRespite) await window.LegacyRespite.loadPending(eventId);
     
     if (data.registrations.length === 0) {
       content.innerHTML = '<p class="small muted text-center">No caregivers registered for this event yet.</p>';
@@ -1663,6 +2116,7 @@ async function updateAttendance(id, status, event) {
 }
 
 document.addEventListener('DOMContentLoaded', function () {
+  initStaffPanels();
   initStaffAssistantDisclosure();
   void initWebJobFeature();
   initStaffChatTargets();
@@ -1711,6 +2165,15 @@ document.addEventListener('DOMContentLoaded', function () {
       loadWellnessCaregivers();
     });
   }
+  document.getElementById('subscribersSearchBtn')?.addEventListener('click', function () {
+    loadSubscribers();
+  });
+  document.getElementById('subscribersStatusFilter')?.addEventListener('change', function () {
+    loadSubscribers();
+  });
+  document.getElementById('subscribersSearchQuery')?.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') loadSubscribers();
+  });
   const refreshStaffBtn = document.getElementById('refreshStaffTeamBtn');
   if (refreshStaffBtn) {
     refreshStaffBtn.addEventListener('click', function () {
@@ -1734,31 +2197,37 @@ document.addEventListener('DOMContentLoaded', function () {
 document.addEventListener('submit', function (e) {
   const form = e.target;
   if (!form) return;
-  const formAction = form.getAttribute('data-action');
-  if (formAction === 'submit-edit-caregiver') {
+  const action = form.getAttribute('data-action');
+  if (action === 'submit-edit-caregiver') {
     e.preventDefault();
     submitEditCaregiver(form);
-  } else if (formAction === 'submit-add-contact') {
+  } else if (action === 'submit-add-contact') {
     e.preventDefault();
     submitAddContact(form);
-  } else if (formAction === 'submit-add-note') {
+  } else if (action === 'submit-add-note') {
     e.preventDefault();
     submitAddNote(form);
-  } else if (formAction === 'submit-direct-content') {
+  } else if (action === 'submit-direct-content') {
     e.preventDefault();
     submitDirectContent(form);
-  } else if (formAction === 'submit-create-event') {
+  } else if (action === 'submit-create-event') {
     e.preventDefault();
     submitCreateEvent(form);
-  } else if (formAction === 'submit-edit-event') {
+  } else if (action === 'submit-edit-event') {
     e.preventDefault();
     submitEditEvent(form);
-  } else if (formAction === 'submit-event-photo') {
+  } else if (action === 'submit-event-photo') {
     e.preventDefault();
     submitEventPhoto(form, e.submitter?.value === 'remove');
-  } else if (formAction === 'submit-add-staff') {
+  } else if (action === 'submit-add-caregiver') {
+    e.preventDefault();
+    void submitAddCaregiver(form);
+  } else if (action === 'submit-add-staff') {
     e.preventDefault();
     submitAddStaff(form);
+  } else if (action === 'submit-support-triage') {
+    e.preventDefault();
+    submitStaffSupportTriage(form);
   }
 });
 
@@ -1920,6 +2389,11 @@ document.addEventListener('click', function (e) {
     e.stopPropagation();
     const id = Number(target.getAttribute('data-followup-id'));
     resolveFollowup(id, e);
+  } else if (action === 'support-in-progress') {
+    e.stopPropagation();
+    const id = Number(target.getAttribute('data-followup-id'));
+    const expectedVersion = Number(target.getAttribute('data-support-version'));
+    transitionSupportFollowup(id, expectedVersion, 'in_progress', e);
   } else if (action === 'update-attendance') {
     e.stopPropagation();
     const id = Number(target.getAttribute('data-registration-id'));
@@ -1928,6 +2402,12 @@ document.addEventListener('click', function (e) {
   } else if (action === 'caregiver-edit') {
     e.stopPropagation();
     openCaregiverEditor();
+  } else if (action === 'caregiver-archive') {
+    e.stopPropagation();
+    setCaregiverRecordStatus('archived', target);
+  } else if (action === 'caregiver-restore') {
+    e.stopPropagation();
+    setCaregiverRecordStatus('active', target);
   } else if (action === 'caregiver-back') {
     e.stopPropagation();
     backToStaffDashboard();
@@ -1938,6 +2418,14 @@ document.addEventListener('click', function (e) {
     const id = target.getAttribute('data-event-id');
     const title = target.getAttribute('data-event-title');
     selectEvent(id, title);
+  } else if (action === 'open-people-add') {
+    void openPeopleAdd();
+  } else if (action === 'close-people-add') {
+    closePeopleAdd();
+  } else if (action === 'open-caregiver-create') {
+    openCaregiverCreate();
+  } else if (action === 'open-staff-create') {
+    void openStaffCreate();
   } else if (action === 'search-caregivers') {
     searchCaregivers(0);
   } else if (action === 'search-prev') {
@@ -2034,6 +2522,135 @@ document.addEventListener('click', function (e) {
     archiveEvent(id);
   }
 });
+
+// Staff section disclosures: every main panel is a native <details>, so the summary is
+// keyboard operable and collapsing never fetches or changes records. Only open/closed
+// booleans are remembered, under a key for this origin and a hash of the signed-in staff
+// email; nothing is remembered until /api/staff/me names a person. The Legacy Assistant
+// is deliberately not part of this list.
+const STAFF_PANEL_IDS = Object.freeze(['staffHelpPanel', 'needsAttentionPanel', 'eventsPanel', 'grantsPanel', 'wellnessPanel', 'peopleManagementPanel', 'recentChangesPanel', 'siteContentPanel']);
+const STAFF_PANEL_STORAGE_PREFIX = 'staff-console-panels-v1';
+const staffPanelDefaults = {};
+const staffPanelTouched = new Set();
+const staffPanelProgrammatic = new Map();
+let staffPanelStorageKey = null;
+let staffPanelSaved = null;
+let staffPanelKeyEpoch = 0;
+let needsAttentionActionable = null;
+
+function staffPanelStorage() {
+  try { return window.localStorage || null; } catch { return null; }
+}
+
+async function staffPanelKeyFor(me, origin) {
+  const email = String(me?.email || '').trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+$/.test(email) || !origin) return null;
+  const subtle = window.crypto?.subtle;
+  if (!subtle || typeof TextEncoder !== 'function') return null;
+  const digest = await subtle.digest('SHA-256', new TextEncoder().encode(email));
+  const hex = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
+  return `${STAFF_PANEL_STORAGE_PREFIX}:${origin}:${hex.slice(0, 32)}`;
+}
+
+function readStaffPanelChoices(key) {
+  try {
+    const parsed = JSON.parse(staffPanelStorage()?.getItem(key) || '{}');
+    const choices = {};
+    for (const id of STAFF_PANEL_IDS) {
+      if (typeof parsed?.[id] === 'boolean') choices[id] = parsed[id];
+    }
+    return choices;
+  } catch {
+    return {};
+  }
+}
+
+function saveStaffPanelChoice(id, open) {
+  if (!staffPanelStorageKey || !staffPanelSaved) return;
+  staffPanelSaved = { ...staffPanelSaved, [id]: open };
+  try {
+    staffPanelStorage()?.setItem(staffPanelStorageKey, JSON.stringify(staffPanelSaved));
+  } catch {
+    // Storage full, blocked or private: the choice still applies for this page.
+  }
+}
+
+function setStaffPanelOpen(id, open) {
+  const panel = document.getElementById(id);
+  if (!panel || panel.open === open) return;
+  staffPanelProgrammatic.set(id, open);
+  panel.open = open;
+}
+
+// A person's saved choice wins; otherwise Needs attention opens only when something is
+// open, and every other section keeps its markup default.
+function applyStaffPanelDefaults() {
+  for (const id of STAFF_PANEL_IDS) {
+    if (staffPanelTouched.has(id) || !(id in staffPanelDefaults)) continue;
+    if (staffPanelSaved && typeof staffPanelSaved[id] === 'boolean') setStaffPanelOpen(id, staffPanelSaved[id]);
+    else if (id === 'needsAttentionPanel' && needsAttentionActionable !== null) setStaffPanelOpen(id, needsAttentionActionable);
+    else setStaffPanelOpen(id, staffPanelDefaults[id]);
+  }
+}
+
+function onStaffPanelToggle(panel) {
+  const id = panel.id;
+  if (staffPanelProgrammatic.has(id)) {
+    const expected = staffPanelProgrammatic.get(id);
+    staffPanelProgrammatic.delete(id);
+    if (expected === panel.open) return;
+  }
+  staffPanelTouched.add(id);
+  saveStaffPanelChoice(id, panel.open);
+}
+
+function initStaffPanels() {
+  for (const id of STAFF_PANEL_IDS) {
+    const panel = document.getElementById(id);
+    if (!panel) continue;
+    staffPanelDefaults[id] = Boolean(panel.open);
+    panel.addEventListener('toggle', () => onStaffPanelToggle(panel));
+  }
+}
+
+// Only the first successful load decides the Needs attention default; reloads after
+// Mark complete never reopen or close the section.
+function noteNeedsAttentionActionable(actionable) {
+  if (needsAttentionActionable !== null) return;
+  needsAttentionActionable = Boolean(actionable);
+  applyStaffPanelDefaults();
+}
+
+// The current person can't be established (#306 review): stop writing anyone's choices.
+// Cancels a pending identity hash; stored choices are kept, never deleted.
+function forgetStaffPanelIdentity() {
+  staffPanelKeyEpoch++;
+  staffPanelStorageKey = null;
+  staffPanelSaved = null;
+  staffPanelTouched.clear();
+}
+
+async function rememberStaffPanelsFor(me) {
+  const epoch = ++staffPanelKeyEpoch;
+  let key = null;
+  try {
+    key = await staffPanelKeyFor(me, window.location?.origin);
+  } catch {
+    key = null;
+  }
+  if (epoch !== staffPanelKeyEpoch || key === staffPanelStorageKey) return;
+  if (staffPanelStorageKey) staffPanelTouched.clear();
+  staffPanelStorageKey = key;
+  staffPanelSaved = key ? readStaffPanelChoices(key) : null;
+  if (key) {
+    for (const id of staffPanelTouched) {
+      const panel = document.getElementById(id);
+      if (panel) saveStaffPanelChoice(id, Boolean(panel.open));
+    }
+  }
+  applyStaffPanelDefaults();
+}
+// End staff section disclosures.
 
 // Presentation only: hiding the panel never resets drafts, selection or HOLD.
 function setStaffAssistantExpanded(expanded, moveFocus = true) {
@@ -3034,6 +3651,8 @@ async function submitDirectContent(form) {
 }
 
 let recentChanges = [];
+let releaseActivity = [];
+let releaseActivityAsOf = null;
 
 async function loadRecentChanges() {
   try {
@@ -3042,6 +3661,8 @@ async function loadRecentChanges() {
     if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to load recent changes');
 
     recentChanges = data.changes || data.recent_changes || [];
+    releaseActivity = Array.isArray(data.release_activity) ? data.release_activity : [];
+    releaseActivityAsOf = data.release_activity_as_of || null;
     renderRecentChanges();
   } catch (e) {
     const list = document.getElementById('recentChangesList');
@@ -3053,12 +3674,34 @@ function renderRecentChanges() {
   const container = document.getElementById('recentChangesList');
   if (!container) return;
 
-  if (recentChanges.length === 0) {
-    container.innerHTML = '<p class="muted small text-center my-20">No changes recorded.</p>';
-    return;
+  const notes = typeof releaseActivity === 'undefined' ? [] : releaseActivity;
+  const labels = {
+    legacy_staff: 'Legacy staff request', xcentric_maintenance: 'X-Centric maintenance',
+    not_established: 'Not established', legacy_assistant: 'Legacy assistant', xcentric_team: 'X-Centric team',
+    requested: 'Requested', in_progress: 'In progress', reviewed: 'Reviewed', merged: 'Code complete',
+    not_deployed: 'Not installed', available: 'Ready to review', verified: 'Verified',
+    pending: 'Awaiting approval', approved: 'Approved', not_required: 'Not required',
+    deployed: 'Installed; verification pending', rolled_back: 'Rolled back',
+  };
+  let html = '<h3>Requested changes and releases</h3><p class="small muted">Selected updates reviewed for Legacy staff. Request origin and who carried out the work are recorded separately. Code completion does not mean a change is live.</p>';
+  if (typeof releaseActivityAsOf !== 'undefined' && releaseActivityAsOf) html += `<p class="small muted">Last reviewed update: ${escapeHtml(releaseActivityAsOf)}</p>`;
+  if (!notes.length) html += '<p class="small muted">No reviewed release updates are available.</p>';
+  for (const note of notes) {
+    html += `<div class="recent-change-row"><div class="recent-change-meta"><div class="recent-change-action">${escapeHtml(note.summary)}</div>`;
+    html += `<div class="recent-change-detail">Requested by: ${escapeHtml(note.requested_by)} · Origin: ${escapeHtml(labels[note.request_origin] || 'Not established')} · Carried out by: ${escapeHtml(labels[note.executor] || 'Not established')}</div>`;
+    for (const [key, title] of [['source','Code'],['staging','Staging'],['approval','Approval'],['production','Production']]) {
+      const m = note.milestones?.[key];
+      html += `<div class="small">${title}: ${escapeHtml(labels[m?.state] || 'Not established')}${m?.at ? ` · ${escapeHtml(m.at)}` : ''}</div>`;
+    }
+    // Defense in depth: accept only plain same-site page paths, never arbitrary links.
+    if (typeof note.evidence_path === 'string' && /^\/[a-z0-9][a-z0-9/_-]*$/.test(note.evidence_path)
+        && !note.evidence_path.includes('//') && !/^\/(api|cdn-cgi)(\/|$)/.test(note.evidence_path)) {
+      html += `<a href="${escapeHtml(note.evidence_path)}">Related page</a>`;
+    }
+    html += '</div></div>';
   }
-
-  let html = '';
+  html += '<h3>Staff activity</h3><p class="small muted">Recent supported staff edits and their original audit records. This is not a complete list of every system action.</p>';
+  if (recentChanges.length === 0) html += '<p class="muted small text-center my-20">No changes recorded.</p>';
   for (const c of recentChanges) {
     const isUndone = c.is_undone;
     const canUndo = c.restorable || c.can_undo;
@@ -3122,20 +3765,27 @@ let staffTeamError = null;
 
 async function loadStaffTeam() {
   const list = document.getElementById('staffTeamList');
+  let identityKnown = false;
   try {
     const [meRes, teamRes] = await Promise.all([fetch('/api/staff/me'), fetch('/api/staff/team')]);
     const meData = await meRes.json();
     const teamData = await teamRes.json();
     if (!meRes.ok || !meData.ok) throw new Error(meData.error || 'Failed to load your staff record');
+    identityKnown = true;
+    // Section open/closed choices belong to this signed-in person (see staff section disclosures).
+    if (typeof rememberStaffPanelsFor === 'function') void rememberStaffPanelsFor(meData.me);
     if (!teamRes.ok || !teamData.ok) throw new Error(teamData.error || 'Failed to load staff');
     staffMe = meData.me;
+    if (typeof updatePeopleAddActions === 'function') updatePeopleAddActions();
     staffTeam = teamData.team || [];
     staffTeamError = null;
     renderStaffTeam();
     return true;
   } catch (e) {
     staffTeamError = e.message;
+    if (!identityKnown && typeof forgetStaffPanelIdentity === 'function') forgetStaffPanelIdentity();
     staffMe = null;
+    if (typeof updatePeopleAddActions === 'function') updatePeopleAddActions();
     staffTeam = [];
     if (list) list.innerHTML = `<p class="muted small text-center my-20">Error loading staff: ${escapeHtml(e.message)}</p>`;
     return false;
@@ -3207,6 +3857,84 @@ function renderStaffTeam() {
     </table></div>`;
 }
 
+// People creation reuses the existing staff writer; caregiver creation is record-only.
+function closePeopleAdd() {
+  document.getElementById('peopleAddPanel')?.classList.add('d-none');
+  document.querySelector('[data-action="open-people-add"]')?.setAttribute('aria-expanded', 'false');
+}
+
+function openCaregiverCreate() {
+  document.getElementById('addCaregiverForm')?.classList.remove('d-none');
+  document.querySelector('#addCaregiverForm [name="first_name"]')?.focus();
+}
+
+function updatePeopleAddActions() {
+  const admin = staffMe?.role === 'admin' && staffMe?.status === 'active';
+  document.getElementById('addStaffFromPeopleBtn')?.classList?.toggle('d-none', !admin);
+}
+
+async function openPeopleAdd() {
+  const panel = document.getElementById('peopleAddPanel');
+  panel?.classList.remove('d-none');
+  document.querySelector('[data-action="open-people-add"]')?.setAttribute('aria-expanded', 'true');
+  await loadStaffTeam();
+  updatePeopleAddActions();
+}
+
+async function openStaffCreate() {
+  if (staffMe?.role !== 'admin' || staffMe?.status !== 'active') {
+    const message = document.getElementById('peopleAddMessage');
+    if (message) message.textContent = 'Only an active admin can add staff. Caregiver records do not grant staff access.';
+    return;
+  }
+  document.getElementById('peopleRoleFilter').value = 'team';
+  document.getElementById('caregiverSearchQuery').value = '';
+  document.getElementById('addCaregiverForm')?.classList.add('d-none');
+  filterPeopleByRole();
+  const form = document.querySelector('form[data-action="submit-add-staff"]');
+  if (form) {
+    form.closest('details').open = true;
+    form.querySelector('[name="display_name"]').focus();
+  }
+}
+
+async function submitAddCaregiver(form) {
+  const button = form.querySelector('button[type="submit"]');
+  const message = form.querySelector('[data-add-caregiver-message]');
+  if (button.disabled) return;
+  const fields = new FormData(form);
+  const payload = Object.fromEntries(['first_name', 'last_name', 'email', 'phone'].map(key => [key, String(fields.get(key) || '').trim()]));
+  if (!payload.email && !payload.phone) { message.textContent = 'Enter at least one email address or phone number.'; return; }
+  button.disabled = true;
+  message.textContent = 'Checking for an existing caregiver and saving…';
+  try {
+    const res = await fetch('/api/staff/caregivers', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload)
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 409 && Array.isArray(data.matches) && data.matches.length) {
+      message.innerHTML = `<p>${escapeHtml(data.error || 'Open an existing caregiver record.')}</p>` + data.matches.map(person =>
+        `<button type="button" class="btn btn-sm btn-outline" data-action="view-caregiver" data-caregiver-id="${escapeHtml(person.id)}">Open ${escapeHtml([person.first_name, person.last_name].filter(Boolean).join(' '))} (${escapeHtml(person.status)})</button>`).join(' ');
+      return;
+    }
+    if (!res.ok || data.ok !== true || !data.profile?.id) throw new Error(data.error || 'The save could not be confirmed. Search for this contact before trying again.');
+    // Explicit acknowledgement only: keep entered values on any refusal or uncertain result.
+    document.getElementById('peopleRoleFilter').value = 'caregiver';
+    document.getElementById('caregiverSearchQuery').value = data.profile.email || data.profile.phone || '';
+    for (const id of ['caregiverSearchSegment', 'caregiverSearchStatus']) document.getElementById(id).value = '';
+    document.getElementById('staffTeamPanel')?.classList.add('d-none');
+    document.getElementById('caregiverSearchPanel')?.classList.remove('d-none');
+    await searchCaregivers(0);
+    await viewCaregiver(data.profile.id);
+    form.reset(); form.classList.add('d-none'); message.textContent = '';
+    const saved = document.getElementById('peopleAddMessage');
+    if (saved) saved.textContent = 'Caregiver record saved. No enrollment, invitation or follow-up was created.';
+    void loadRecentChanges();
+  } catch (e) {
+    message.textContent = `Could not add caregiver: ${e.message}`;
+  } finally { button.disabled = false; }
+}
+
 async function submitAddStaff(form) {
   const button = form.querySelector('button[type="submit"]');
   const message = form.querySelector('[data-add-staff-message]');
@@ -3222,6 +3950,10 @@ async function submitAddStaff(form) {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.ok) throw new Error(data.error || 'Could not add staff. Try again.');
+    const filter = document.getElementById('peopleRoleFilter');
+    if (filter) filter.value = 'team';
+    const query = document.getElementById('caregiverSearchQuery');
+    if (query) query.value = String(data.member?.email || fields.get('email') || '');
     await loadStaffTeam();
     const after = document.getElementById('staffTeamMessage');
     if (after) after.textContent = 'Staff member added. They can sign in with their approved email address. No invitation was sent.';
@@ -3354,6 +4086,8 @@ async function loadWellnessCaregivers() {
     if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to load');
     wellnessCaregivers = data.caregivers || [];
     wellnessListLoading = false;
+    const count = document.getElementById('wellnessCount');
+    if (count) count.textContent = `(${wellnessCaregivers.length} with check-ins)`;
     await filterWellnessCaregivers();
   } catch (e) {
     if (epoch !== wellnessListEpoch) return;
@@ -3363,6 +4097,8 @@ async function loadWellnessCaregivers() {
     select.disabled = true;
     const status = document.getElementById('wellnessPickerStatus');
     if (status) status.textContent = 'Caregiver list unavailable. Use Refresh to check again.';
+    const count = document.getElementById('wellnessCount');
+    if (count) count.textContent = '(could not load)';
     if (chart) chart.innerHTML = `<p class="muted small text-center my-20">Error loading wellness: ${escapeHtml(e.message)}</p>`;
   }
 }
