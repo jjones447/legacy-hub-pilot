@@ -2046,6 +2046,7 @@ async function loadRegistrations(eventId, eventTitle) {
     
     panel.style.display = 'block';
     panel.open = true;
+    if (window.LegacyRespite) await window.LegacyRespite.loadPending(eventId);
     
     if (data.registrations.length === 0) {
       content.innerHTML = '<p class="small muted text-center">No caregivers registered for this event yet.</p>';
