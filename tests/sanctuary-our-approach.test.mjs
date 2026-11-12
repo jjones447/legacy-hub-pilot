@@ -15,5 +15,6 @@ test('the Sanctuary "what" section uses the requester\'s Our Approach copy verba
     'Because caregivers deserve care, too.',
   ]) assert.ok(section.includes(line), line);
   assert.doesNotMatch(section, /The idea|Join free as a caregiver member|approach to caregiver support: by partnering/);
-  assert.match(section, /<a class="btn btn-coral" href="#programs-events">Explore today's Sanctuary programs<\/a>/);
+  // Requester, Nov 12 (ts 1794514035.669429): no buttons that only scroll the same page.
+  assert.doesNotMatch(section, /Explore today's Sanctuary programs/);
 });

@@ -92,3 +92,8 @@ test('the Community Series registration modal is identical to the Events one', (
   assert.ok(modal(page).includes('id="regForm" data-action="submit-register"'));
   assert.equal(modal(page), modal(events));
 });
+
+test('Community Series hero keeps only buttons that open another page (requester, Nov 12, ts 1794514035.669429)', async () => {
+  assert.doesNotMatch(page, /href="#partner" class="btn/);
+  assert.match(page, /<div class="btn-row">\s*<a href="events\.html" class="btn btn-coral">View Upcoming Events<\/a>\s*<\/div>/);
+});

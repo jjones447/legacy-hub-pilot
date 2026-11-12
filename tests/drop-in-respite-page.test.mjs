@@ -32,15 +32,17 @@ const slots = grid => grid.children.map(el => el.dataset.plannedDate ? `planned 
 const descendants = el => [el, ...el.children.flatMap(descendants)];
 const text = el => descendants(el).map(item => item.textContent).join(' ');
 
-test('the header has the heading, lede and only How it works; details carry the time and full address', () => {
+test('the header has the heading and lede with no same-page buttons; details carry the time and full address', () => {
   assert.match(page, /<h1>Drop-In Respite Program<\/h1>/, 'requester, Nov 4: no FREE in the header');
-  assert.match(page, /<p class="lede">A Break for You\. Meaningful Moments for Your Loved One\.<\/p>\s*<div class="btn-row">\s*<a href="#how-it-works" class="btn btn-outline-light">How it works<\/a>\s*<\/div>/);
+  // Requester, Nov 12 (ts 1794514035.669429): buttons only for new pages, so no "How it works" jump.
+  assert.match(page, /<p class="lede">A Break for You\. Meaningful Moments for Your Loved One\.<\/p>\s*<\/div>/);
+  assert.doesNotMatch(page, /href="#how-it-works" class="btn/);
   // Requester, Nov 3 19:54Z: no FREE / Every Third Thursday / 10–2 bubbles in the header.
   assert.doesNotMatch(page, /respite-facts/);
   assert.match(page, /<dt>When<\/dt><dd>Every Third Thursday of the Month<\/dd>\s*<dt>Time<\/dt><dd>10:00 AM &ndash; 2:00 PM<\/dd>/);
   assert.match(page, /<address>3132 N\. Dr\. Martin Luther King Jr\. Drive<br>Milwaukee, WI 53212<\/address>/);
   assert.match(page, /Ebenezer Ministry &amp; Family Worship Center/);
-  assert.equal((page.match(/>Register for Free Respite</g) || []).length, 1, 'the Program Details button remains');
+  assert.doesNotMatch(page, /href="#sessions" class="btn/, 'no button that only scrolls to the sessions');
   assert.match(page, /data-playback-rate="0\.75"/, 'keeps the slower header video');
 });
 
