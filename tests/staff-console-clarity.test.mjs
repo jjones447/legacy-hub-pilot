@@ -32,7 +32,7 @@ test('Change log and Site content use native default-closed details at the end',
 test('wording distinguishes staff, selected caregiver records and portal check-ins', () => {
   assert.match(html, /Staff accounts are for the team who manage the Hub/);
   assert.match(html, /Caregivers use the Caregiver Portal for their own membership and wellness information/);
-  assert.match(html, /Choose Open\/Edit to open a focused caregiver view/);
+  assert.match(html, /Choose Open\/Edit to open a focused view/); // People search (requester, Nov 12)
   assert.match(html, /data-action="caregiver-back"/);
   assert.match(html, /id="caregiverDetailView" class="staff-workspace d-none"/);
   assert.match(html, /Only caregivers with recorded check-ins appear in this list/);
@@ -423,7 +423,7 @@ test('People role choices show exactly one group and retain the shared search', 
   const filter = html.match(/id="peopleRoleFilter"[\s\S]*?<\/select>/)[0];
   assert.doesNotMatch(filter, /value="all"/);
   assert.match(html, /id="staffTeamPanel" class="d-none"/);
-  assert.match(html, /class="people-results-scroll" tabindex="0" role="region" aria-label="Caregiver search results"/);
+  assert.match(html, /class="people-results-scroll" tabindex="0" role="region" aria-label="People search results"/);
 });
 
 function wellnessHarness(fetchOverride) {

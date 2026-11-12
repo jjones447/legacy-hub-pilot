@@ -121,11 +121,13 @@ async function searchCaregivers(offset = 0) {
   const q = document.getElementById('caregiverSearchQuery')?.value?.trim() || '';
   const segment = document.getElementById('caregiverSearchSegment')?.value?.trim() || '';
   const status = document.getElementById('caregiverSearchStatus')?.value?.trim() || '';
+  const personType = document.getElementById('caregiverSearchType')?.value?.trim() || '';
 
   const params = new URLSearchParams();
   if (q) params.set('q', q);
   if (segment) params.set('segment', segment);
   if (status) params.set('status', status);
+  if (personType) params.set('caregiver', personType);
   params.set('limit', String(searchLimit));
   params.set('offset', String(offset));
 
@@ -143,8 +145,8 @@ async function searchCaregivers(offset = 0) {
     totalSearchResults = data.total || 0;
 
     if (!data.caregivers || data.caregivers.length === 0) {
-      if (body) body.innerHTML = '<tr><td colspan="5" class="text-center muted small">No caregivers found matching criteria.</td></tr>';
-      if (pagingInfo) pagingInfo.textContent = '0 caregivers';
+      if (body) body.innerHTML = '<tr><td colspan="6" class="text-center muted small">No people found matching criteria.</td></tr>';
+      if (pagingInfo) pagingInfo.textContent = '0 people';
       if (prevBtn) prevBtn.disabled = true;
       if (nextBtn) nextBtn.disabled = true;
       return;
@@ -174,11 +176,13 @@ async function searchCaregivers(offset = 0) {
 
         const contact = [cg.email, cg.phone].filter(Boolean).map(escapeHtml).join(' · ') || 'None';
         const statusBadge = cg.status === 'active' ? 'badge-green' : 'badge-outline';
+        const caregiverLabel = cg.is_caregiver === 'yes' ? 'Yes' : cg.is_caregiver === 'no' ? 'No' : 'Not yet identified';
 
         return `
           <tr>
-            <td data-label="Caregiver"><strong>${name}</strong></td>
+            <td data-label="Person"><strong>${name}</strong></td>
             <td data-label="Contact"><span class="small">${contact}</span></td>
+            <td data-label="Caregiver?"><span class="small">${caregiverLabel}</span></td>
             <td data-label="Record status"><span class="badge ${statusBadge}">${escapeHtml(cg.status || 'unknown')}</span></td>
             <td data-label="Segments"><span class="small muted">${segmentsStr || 'None'}</span></td>
             <td data-label="Actions"><button type="button" class="btn btn-sm btn-outline" data-action="view-caregiver" data-caregiver-id="${escapeHtml(cg.id)}" aria-label="Open or edit caregiver: ${name}">Open/Edit</button></td>
@@ -190,14 +194,14 @@ async function searchCaregivers(offset = 0) {
     const start = totalSearchResults > 0 ? offset + 1 : 0;
     const end = Math.min(offset + data.caregivers.length, totalSearchResults);
     if (pagingInfo) {
-      pagingInfo.textContent = `Showing ${start}-${end} of ${totalSearchResults} caregiver(s)`;
+      pagingInfo.textContent = `Showing ${start}-${end} of ${totalSearchResults} people`;
     }
     if (prevBtn) prevBtn.disabled = offset <= 0;
     if (nextBtn) nextBtn.disabled = offset + searchLimit >= totalSearchResults;
   } catch (e) {
     if (epoch !== caregiverSearchEpoch) return;
     const body = document.getElementById('caregiverSearchResultsBody');
-    if (body) body.innerHTML = `<tr><td colspan="5" role="alert">Could not load caregivers: ${escapeHtml(e.message)}. Use Search people to try again.</td></tr>`;
+    if (body) body.innerHTML = `<tr><td colspan="6" role="alert">Could not load people: ${escapeHtml(e.message)}. Use Search people to try again.</td></tr>`;
     const paging = document.getElementById('caregiverSearchPagingInfo');
     if (paging) paging.textContent = 'Caregiver list unavailable';
     for (const id of ['caregiverSearchPrevBtn', 'caregiverSearchNextBtn']) {
@@ -509,6 +513,11 @@ async function submitEditCaregiver(form) {
     outcome_status: form.querySelector('[name="outcome_status"]')?.value || null,
     outcome_notes: form.querySelector('[name="outcome_notes"]')?.value?.trim() || ''
   };
+  // Send "Caregiver?" only when staff changed it, so other edits never depend on that field.
+  const caregiverSelect = form.querySelector('[name="is_caregiver"]');
+  if (caregiverSelect && (caregiverSelect.value || '') !== (caregiverSelect.dataset.current || '')) {
+    payload.is_caregiver = caregiverSelect.value || null;
+  }
 
   try {
     const res = await fetch(`/api/staff/caregiver/${caregiverId}`, {
@@ -1080,6 +1089,14 @@ async function viewCaregiver(id) {
               <label class="form-label-small">Relationship:</label>
               <input type="text" name="relationship" value="${escapeHtml(p.relationship || '')}" class="form-input-compact">
             </div>
+          </div>
+          <div class="field mb-8">
+            <label class="form-label-small" for="editIsCaregiver">Caregiver?</label>
+            <select name="is_caregiver" id="editIsCaregiver" class="form-input-compact" data-current="${escapeHtml(p.is_caregiver || '')}">
+              <option value="" ${!p.is_caregiver ? 'selected' : ''}>Not yet identified</option>
+              <option value="yes" ${p.is_caregiver === 'yes' ? 'selected' : ''}>Yes, a caregiver</option>
+              <option value="no" ${p.is_caregiver === 'no' ? 'selected' : ''}>No, not a caregiver</option>
+            </select>
           </div>
           <div class="field mb-8">
             <label class="form-label-small">Segments (comma-separated):</label>
@@ -1768,6 +1785,12 @@ document.addEventListener('DOMContentLoaded', function () {
   const segmentSelect = document.getElementById('caregiverSearchSegment');
   if (segmentSelect) {
     segmentSelect.addEventListener('change', function () {
+      searchCaregivers(0);
+    });
+  }
+  const typeSelect = document.getElementById('caregiverSearchType');
+  if (typeSelect) {
+    typeSelect.addEventListener('change', function () {
       searchCaregivers(0);
     });
   }
@@ -3518,7 +3541,7 @@ async function submitAddCaregiver(form) {
     // Explicit acknowledgement only: keep entered values on any refusal or uncertain result.
     document.getElementById('peopleRoleFilter').value = 'caregiver';
     document.getElementById('caregiverSearchQuery').value = data.profile.email || data.profile.phone || '';
-    for (const id of ['caregiverSearchSegment', 'caregiverSearchStatus']) document.getElementById(id).value = '';
+    for (const id of ['caregiverSearchSegment', 'caregiverSearchStatus', 'caregiverSearchType']) { const el = document.getElementById(id); if (el) el.value = ''; }
     document.getElementById('staffTeamPanel')?.classList.add('d-none');
     document.getElementById('caregiverSearchPanel')?.classList.remove('d-none');
     await searchCaregivers(0);

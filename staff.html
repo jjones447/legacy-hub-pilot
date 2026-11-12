@@ -82,7 +82,7 @@
           <div class="staff-search-controls">
             <input type="search" id="caregiverSearchQuery" placeholder="Search names, email or phone" class="staff-search-input" aria-label="Search people">
             <select id="peopleRoleFilter" class="staff-search-select" aria-label="Filter people by role">
-              <option value="caregiver">Caregivers</option>
+              <option value="caregiver">People</option>
               <option value="team">Staff &amp; admins</option>
               <option value="staff">Staff</option>
               <option value="admin">Admins</option>
@@ -126,8 +126,8 @@
           </div>
         </div>
         <div role="region" id="caregiverSearchPanel" aria-labelledby="caregiverListHeading">
-          <h4 id="caregiverListHeading">Caregivers</h4>
-          <p class="small muted mb-12" id="caregiverSearchHelp">Search caregiver records by name, contact, status, or segment. Choose Open/Edit to open a focused caregiver view. Back keeps your search and results. Archived records cannot use the caregiver portal; inactive records can still sign in.</p>
+          <h4 id="caregiverListHeading">People</h4>
+          <p class="small muted mb-12" id="caregiverSearchHelp">Everyone who has signed up for anything (events, the support group, membership, support requests or donations) has a record here. Use Type to see caregivers, people who are not caregivers, or people not yet identified, and set "Caregiver?" on their record. Choose Open/Edit to open a focused view. Back keeps your search and results. Archived records cannot use the caregiver portal; inactive records can still sign in.</p>
           <div class="staff-search-controls">
             <select id="caregiverSearchSegment" class="staff-search-select" aria-label="Caregiver segment">
               <option value="">All segments</option>
@@ -139,6 +139,12 @@
               <option value="general">General</option>
               <option value="qa_test">Internal QA</option>
             </select>
+            <select id="caregiverSearchType" class="staff-search-select" aria-label="Type of person">
+              <option value="">All people</option>
+              <option value="yes">Caregivers</option>
+              <option value="no">Not caregivers</option>
+              <option value="unknown">Not yet identified</option>
+            </select>
             <select id="caregiverSearchStatus" class="staff-search-select" aria-label="Caregiver record status">
               <option value="">All statuses</option>
               <option value="active">Active</option>
@@ -147,16 +153,16 @@
             </select>
           </div>
           <div id="caregiverSearchResultsContainer">
-            <div class="people-results-scroll" tabindex="0" role="region" aria-label="Caregiver search results">
+            <div class="people-results-scroll" tabindex="0" role="region" aria-label="People search results">
             <table class="data">
-              <thead><tr><th>Caregiver</th><th>Contact</th><th>Status</th><th>Segments</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Person</th><th>Contact</th><th>Caregiver?</th><th>Status</th><th>Segments</th><th>Actions</th></tr></thead>
               <tbody id="caregiverSearchResultsBody">
-                <tr><td colspan="5" class="text-center muted small">Use the search box above to find caregivers.</td></tr>
+                <tr><td colspan="6" class="text-center muted small">Use the search box above to find people.</td></tr>
               </tbody>
             </table>
             </div>
             <div class="staff-paging-bar" id="caregiverSearchPaginationRow">
-              <span id="caregiverSearchPagingInfo" class="small muted">0 caregivers</span>
+              <span id="caregiverSearchPagingInfo" class="small muted">0 people</span>
               <div class="staff-btn-group">
                 <button class="btn btn-sm btn-outline" data-action="search-prev" id="caregiverSearchPrevBtn" disabled>Previous</button>
                 <button class="btn btn-sm btn-outline" data-action="search-next" id="caregiverSearchNextBtn" disabled>Next</button>
@@ -320,7 +326,7 @@
 
 <script src="app.js?v=1fea75bcaab4"></script>
 <script src="nav-v2.js"></script>
-<script src="staff.js?v=9023f88f3be3"></script>
+<script src="staff.js?v=37815d342834"></script>
 </body>
 </html>
 

@@ -117,6 +117,7 @@ export async function onRequestGet({ request, env }) {
       const q = (url.searchParams.get('q') || '').trim();
       const segment = (url.searchParams.get('segment') || '').trim();
       const status = (url.searchParams.get('status') || '').trim();
+      const caregiverType = (url.searchParams.get('caregiver') || '').trim();
       const limitRaw = parseInt(url.searchParams.get('limit') || '25', 10);
       const offsetRaw = parseInt(url.searchParams.get('offset') || '0', 10);
 
@@ -151,6 +152,16 @@ export async function onRequestGet({ request, env }) {
       if (status) {
         conditions.push(`c.status = ?`);
         params.push(status);
+      }
+
+      // People search Type filter: caregivers, not caregivers, or not yet identified.
+      if (caregiverType === 'yes' || caregiverType === 'no') {
+        conditions.push(`c.is_caregiver = ?`);
+        params.push(caregiverType);
+      } else if (caregiverType === 'unknown') {
+        conditions.push(`c.is_caregiver IS NULL`);
+      } else if (caregiverType) {
+        return json({ ok: false, error: 'caregiver must be yes, no or unknown' }, 400);
       }
 
       if (!caregiversDomain.INTERNAL_TEST_QUERY_SEGMENTS.includes(segment)) {
