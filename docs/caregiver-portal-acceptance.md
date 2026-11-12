@@ -1,5 +1,65 @@
 # Caregiver Portal — what "done" means
 
+## Production normal-section caregiver dashboard samples — November 5, 2026
+
+[pc2-gemini-ct-5] Source ports the normal-section Caregiver Portal dashboard layout and
+the corrected `#327` (`c2bab505`) in-section sample preview & lifecycle onto the
+installed production `#332` (`0e92e056`) lineage without promoting the whole staging
+tree, and gates **both** the new layout and the in-section samples on the four-setting
+production identity check (`qa_samples: true` on `GET /api/portal/me`):
+
+- **Ordinary caregivers (`qa_samples` absent / `false`) see 100% what `#332` shows
+  today**: `"Welcome back, <FirstName>"` (no subtitle, no `#portalHighlights` strip),
+  the opt-in collapsed `Preview a filled-out portal (sample data)` disclosure
+  (`#portalWellnessSample`), the four `#332` panels (`📅 My Events` with flat
+  `.timeline-item` list, `🌱 My Wellness Grant` with `"Non-member"` / `"Sanctuary
+  member"` badge and `"Questions? Contact us"` link, `🏡 My Memory Socials` with
+  `"Attended (all time)"` / `"Last visit"` / `"Next up"`, and `📚 Resource library`
+  with its `#332` copy), and the separate full-width `💛 My Wellness` panel below with
+  collapsed check-in history (`open = false`).
+- **The single configured sample identity (`qa_samples: true`) sees the redesigned
+  normal-section dashboard, immediate in-section samples, and visible real grant &
+  Memory Socials summaries**: `"Welcome to Your Sanctuary, <FirstName>!"` with subtitle,
+  `#portalHighlights` (`For you right now`), `#portalQaSampleBanner`, `My Profile &
+  Intake` (`#portalProfileCard`), `My Support` (`#portalSupportCard` with
+  `#portalSupportHistory` and `#portalSupportFilter`), `My Events` (`#portalEventsCard`
+  with grouped `Upcoming`/`Past` event-type prefixes, `#portalEventsFilter`, and the
+  visible real Memory Socials summary `#portalEventsSocialsSummary`:
+  `#portalQaSocialsCount`, `#portalQaSocialsLastVisit`, `#portalQaSocialsNext`),
+  `My Resources` (`#portalResourcesCard`), `Sanctuary Updates & Perks`
+  (`#portalUpdatesCard` with the visible real Wellness Grant summary
+  `#portalUpdatesGrantSummary`: `#portalQaGrantStatus`, `#portalQaGrantRequestedFor`,
+  `#portalQaGrantAward` and `"Questions? Contact us"` link), and `My Wellness` with
+  expanded saved history (`open = true`), while the `#332` standalone
+  `#portalWellnessSample`, `#portalGrantCard`, and `#portalSocialsCard` are hidden.
+- Removes the staging `/portal?preview=sample` query-string design preview so no
+  unauthenticated or non-sample visitor can trigger a fictional dashboard view.
+- Injects the `My real … only` (`real`) and `Sample / test entries only` (`sample`)
+  filter options dynamically only while `qa_samples: true` is active for the
+  authenticated session (preserving any selected `real`/`sample` value across
+  re-renders), and removes them for ordinary caregivers and on session reset.
+- Keeps `#portalSupportHistory` and `#portalSupportFilterRow` hidden when neither
+  `qa_samples: true` nor the `#331` support route (`#portalSupportForm`) is active,
+  and reports `"Your support requests are not available right now."` whenever support
+  history has not been loaded rather than falsely claiming `"No support requests yet."`.
+- **Explicit production identity & environment gate (`matchesProductionSampleCaregiver`
+  in `functions/api/portal/[[path]].js`)**:
+  - Defaults **OFF** (`qa_samples` omitted) until the explicit production environment
+    and single-caregiver identity tuple are configured on the production host:
+    `ENVIRONMENT="production"`, `PORTAL_PRODUCTION_SAMPLES_ENABLED="1"` (or `"true"`),
+    `PORTAL_PRODUCTION_SAMPLE_CAREGIVER_ID="<verified production caregiver.id>"`, and
+    `PORTAL_PRODUCTION_SAMPLE_EMAIL="<verified production caregiver.email>"`.
+  - Never infers production sample eligibility from staging/preview QA variables
+    (`PORTAL_PREVIEW_QA_CAREGIVER_ID`, `PORTAL_PREVIEW_QA_EMAIL`,
+    `PORTAL_PREVIEW_MAIL_ENABLED`) or Staff Access identity.
+  - Ordinary caregivers and any second production caregiver session never receive
+    `qa_samples` and see the exact `#332` page unchanged.
+- Preserves the full `#327` (`c2bab505`) session-generation and identity-fencing
+  lifecycle across `checkPortalSession`, `portalLogout`, `renderPortalData`,
+  `loadWellness`, and `loadPortalSupport` / `renderPortalSupport`. No real profile
+  read, database seed, clinical scores, mail, configuration or runtime change is
+  performed in this source increment.
+
 ## Populated summary preview — October 30, 2026
 
 [pc2-codex-42] Jacob requested a populated layout example without adding wellness
