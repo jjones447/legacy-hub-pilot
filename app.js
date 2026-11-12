@@ -1779,7 +1779,8 @@ function renderPublicEvents(events, grid, now) {
     body.appendChild(row);
     card.appendChild(body);
     cards.push(card);
-    cardDates.push(start.display.slice(0, 10));
+    // Match planned cards by the same grid-zone day the card shows (an offset start can roll over).
+    cardDates.push(new Intl.DateTimeFormat('en-CA', { timeZone: timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(start.instant)));
   });
   if (keepWhenEmpty) return mergePlannedEvents(grid, cards, cardDates, now, timeZone);
   if (!cards.length) {
