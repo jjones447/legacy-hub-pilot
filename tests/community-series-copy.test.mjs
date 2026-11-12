@@ -19,7 +19,7 @@ test('Community Series uses the requested headings, copy and buttons in order', 
     '<h2>Partner With Us</h2>',
     'We believe supporting caregivers is a community effort.',
     'Interested in hosting a gathering or partnering with us?',
-    '<a class="btn btn-coral" href="get-involved.html#partner">Become a Community Partner</a>',
+    '<a class="btn btn-coral" href="get-involved.html#partner">Become a Caregiver Sanctuary Partner</a>',
   ];
   const positions = order.map(text => page.indexOf(text));
   positions.forEach((p, i) => assert.ok(p > 0, order[i]));
