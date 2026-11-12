@@ -8,6 +8,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { onRequestGet as getAgent } from '../functions/api/agent/[[path]].js';
 import { postAgentFixture as postAgent, captureSeededPreview } from './helpers/confirmed-agent.mjs';
 import * as caregiversDomain from '../functions/_lib/domain/caregivers.js';
+import { draftOwner } from '../functions/_lib/agent-confirmation.mjs';
 import * as grantsDomain from '../functions/_lib/domain/grants.js';
 import * as eventsDomain from '../functions/_lib/domain/events.js';
 import { onRequestPost as postGrants } from '../functions/api/grants/[[path]].js';
@@ -115,6 +116,9 @@ const mockWorkflowBackend = ({ area, target_id, request, current }) => {
     }
     if (request.includes('update status to inactive')) {
       return { ok: true, operation: 'update', payload: { status: 'inactive' } };
+    }
+    if (request.includes('mark as caregiver')) {
+      return { ok: true, operation: 'update', payload: { is_caregiver: 'yes' } };
     }
     if (request.includes('update outcome')) {
       return {
@@ -935,3 +939,41 @@ for (const [name, badPayload, requestOverride] of [
     assert.deepEqual(raw.prepare('SELECT * FROM caregiver WHERE id = ?').get('cg_test_1'), beforeCaregiver);
   });
 }
+
+// People search (requester, Nov 12; 41 review of #359): the Caregiver? marker is Staff Console only.
+const IDENTITY_MIGRATION = readFileSync(new URL('../schema/candidates/0021_caregiver_identity.sql', import.meta.url), 'utf8');
+
+test('People: the authenticated Staff PATCH may set Caregiver? and audits it', async () => {
+  raw.exec(IDENTITY_MIGRATION);
+  const res = await patchStaff({ request: new Request('http://localhost/api/staff/caregiver/cg_test_1', {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json', 'x-dev-actor': 'staff@example.org' },
+    body: JSON.stringify({ is_caregiver: 'yes' })
+  }), env });
+  assert.equal(res.status, 200);
+  assert.equal(raw.prepare(`SELECT is_caregiver FROM caregiver WHERE id = 'cg_test_1'`).get().is_caregiver, 'yes');
+  const audit = raw.prepare(`SELECT after_json FROM audit_log WHERE action = 'caregiver.update' ORDER BY id DESC`).get();
+  assert.match(audit.after_json, /"is_caregiver":"yes"/);
+});
+
+test('People: an assistant draft cannot set Caregiver?, and a stored draft carrying it is refused on confirm', async () => {
+  raw.exec(IDENTITY_MIGRATION);
+  const draft = await postAgent({ request: new Request('http://localhost/api/agent/change/draft', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'x-dev-actor': 'staff_drafter@example.org' },
+    body: JSON.stringify({ area: 'caregiver', target_id: 'cg_test_1', request: 'mark as caregiver' })
+  }), env });
+  const drafted = await draft.json();
+  assert.notEqual(drafted.ok, true);
+  assert.equal(raw.prepare(`SELECT COUNT(*) AS n FROM agent_change`).get().n, 0);
+
+  raw.prepare(`INSERT INTO agent_change (id, area, operation, target_id, payload_json, status, requested_by)
+    VALUES ('ac_identity', 'caregiver', 'update', 'cg_test_1', '{"is_caregiver":"yes"}', 'draft', ?)`).run(draftOwner('staff_drafter@example.org'));
+  const confirm = await postAgent({ request: new Request('http://localhost/api/agent/change/confirm', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'x-dev-actor': 'staff_drafter@example.org' },
+    body: JSON.stringify({ change_id: 'ac_identity' })
+  }), env });
+  const confirmBody = await confirm.json();
+  assert.equal(confirm.status, 409, JSON.stringify(confirmBody));
+  assert.match(confirmBody.error, /forbidden field: is_caregiver/);
+  assert.equal(raw.prepare(`SELECT is_caregiver FROM caregiver WHERE id = 'cg_test_1'`).get().is_caregiver, null);
+  assert.equal(raw.prepare(`SELECT status FROM agent_change WHERE id = 'ac_identity'`).get().status, 'draft');
+});

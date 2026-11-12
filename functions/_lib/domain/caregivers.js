@@ -17,8 +17,12 @@ export const ALLOWED_CAREGIVER_UPDATE_FIELDS = [
 
 // Staff-console-only fields (not offered to the assistant mapper): the People search
 // "Caregiver?" marker (requester, Nov 12; schema/candidates/0021_caregiver_identity.sql).
+// Callers get the original allowlist by default; only the authenticated Staff PATCH route
+// opts in with { staffConsole: true }. Assistant drafts are validated without it.
 export const STAFF_ONLY_CAREGIVER_UPDATE_FIELDS = ['is_caregiver'];
-const CAREGIVER_UPDATE_FIELDS = [...ALLOWED_CAREGIVER_UPDATE_FIELDS, ...STAFF_ONLY_CAREGIVER_UPDATE_FIELDS];
+const updateFieldsFor = staffConsole => staffConsole
+  ? [...ALLOWED_CAREGIVER_UPDATE_FIELDS, ...STAFF_ONLY_CAREGIVER_UPDATE_FIELDS]
+  : ALLOWED_CAREGIVER_UPDATE_FIELDS;
 
 export const INTERNAL_TEST_SEGMENT_TAGS = Object.freeze(['qa_test', 'exclude_reporting']);
 export const INTERNAL_TEST_QUERY_SEGMENTS = Object.freeze(['qa_test', 'exclude_reporting', 'qa_staging', 'qa_prod']);
@@ -50,7 +54,8 @@ export function notDoNotContactCaregiverSql(alias = 'c') {
   )`;
 }
 
-export async function validate(db, { id, operation, payload = {} }) {
+export async function validate(db, { id, operation, payload = {}, staffConsole = false }) {
+  const CAREGIVER_UPDATE_FIELDS = updateFieldsFor(staffConsole);
   if (!id) {
     return { ok: false, status: 400, error: 'missing caregiver id' };
   }
@@ -146,8 +151,9 @@ export async function validate(db, { id, operation, payload = {} }) {
 }
 
 // Additional statements are supplied only by trusted server callers (not request payloads).
-export async function apply(db, { id, operation, payload = {} }, actor, additionalStatements = [], preconditions = []) {
-  const v = await validate(db, { id, operation, payload });
+export async function apply(db, { id, operation, payload = {}, staffConsole = false }, actor, additionalStatements = [], preconditions = []) {
+  const CAREGIVER_UPDATE_FIELDS = updateFieldsFor(staffConsole);
+  const v = await validate(db, { id, operation, payload, staffConsole });
   if (!v.ok) {
     return v;
   }

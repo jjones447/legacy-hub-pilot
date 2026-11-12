@@ -38,12 +38,15 @@ test('the candidate migration adds a nullable yes/no marker and leaves existing 
 test('staff can set Caregiver? to yes, no or back to not yet identified; other values are refused', async () => {
   raw.prepare(`INSERT INTO caregiver (id, first_name) VALUES ('cg_p', 'Pat')`).run();
   for (const value of ['yes', 'no', null, '']) {
-    const v = await caregivers.validate(db, { id: 'cg_p', operation: 'update', payload: { is_caregiver: value } });
+    const v = await caregivers.validate(db, { id: 'cg_p', operation: 'update', payload: { is_caregiver: value }, staffConsole: true });
     assert.equal(v.ok, true, String(value));
     assert.equal(v.payload.is_caregiver, value === '' ? null : value);
   }
-  const bad = await caregivers.validate(db, { id: 'cg_p', operation: 'update', payload: { is_caregiver: 'maybe' } });
+  const bad = await caregivers.validate(db, { id: 'cg_p', operation: 'update', payload: { is_caregiver: 'maybe' }, staffConsole: true });
   assert.equal(bad.status, 400);
+  // Without the Staff Console opt-in (any other caller) the field is refused.
+  const other = await caregivers.validate(db, { id: 'cg_p', operation: 'update', payload: { is_caregiver: 'yes' } });
+  assert.match(other.error, /forbidden field: is_caregiver/);
 });
 
 test('the assistant mapper surface is unchanged: Caregiver? is staff-console only', () => {
