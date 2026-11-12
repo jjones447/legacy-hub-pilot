@@ -64,6 +64,10 @@ PAGE_METADATA = {
         "title": "Caregiver Tools & Guides — Legacy Home & Respite Care Foundation",
         "description": "Guides, worksheets, checklists and downloads for dementia caregiving.",
     },
+    "caregiver-stories.html": {
+        "title": "Caregiver Stories — Legacy Home & Respite Care Foundation",
+        "description": "Caregivers share, in their own words, what Legacy Home & Respite Care Foundation and the Caregiver Sanctuary have meant to them.",
+    },
     "community-series.html": {
         "title": "Caregiver Sanctuary Community Series — Legacy Home & Respite Care Foundation",
         "description": "Connection. Community. Time for You. Gatherings and experiences for dementia family caregivers, hosted with local businesses and community spaces.",
@@ -140,6 +144,7 @@ PAGES = {
     "follow-and-learn.html": "follow-and-learn.html.j2",
     "caregiver-tools.html": "caregiver-tools.html.j2",
     "community-series.html": "community-series.html.j2",
+    "caregiver-stories.html": "caregiver-stories.html.j2",
     "drop-in-respite.html": "drop-in-respite.html.j2",
     "coming-soon.html": "coming-soon.html.j2",
     "blog.html": "blog.html.j2",
