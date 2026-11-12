@@ -214,6 +214,7 @@ nav.main-nav a.active { color: var(--plum); border-bottom-color: var(--coral); }
 .hero .btn-coral:hover { background: var(--coral-dark); }
 .hero h1 { color: #fff; font-size: clamp(34px, 5vw, 54px); max-width: 640px; margin-bottom: 20px; }
 .hero p.lede { font-size: 19px; max-width: 560px; color: #eeddd2; margin-bottom: 34px; }
+.hero p.lede.resources-hero-sub { font-family: var(--font-display); font-size: clamp(22px, 2.6vw, 28px); color: #fff; margin-bottom: 14px; }
 .hero .btn-row { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
 .btn-row { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
 
@@ -428,6 +429,9 @@ section { padding: 64px 0; }
 
 /* ---------- Cards ---------- */
 .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 22px; }
+/* Board of Directors (requester, Nov 12): two columns on desktop, one on mobile. */
+.card-grid.board-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 760px; }
+@media (max-width: 640px) { .card-grid.board-grid { grid-template-columns: minmax(0, 1fr); } }
 .card {
   background: var(--white); border-radius: var(--radius); padding: 28px;
   box-shadow: 0 4px 16px rgba(30, 11, 9, 0.09); border: 1px solid #f0e8dd;
@@ -680,6 +684,14 @@ footer a:hover { color: #fff; }
 }
 .routing-note { font-size: 12.5px; color: var(--ink-soft); margin-top: 12px; display: none; }
 .privacy-line { font-size: 12.5px; color: var(--ink-soft); line-height: 1.45; margin: 4px 0 14px; }
+
+/* ---------- Email list sign-up (home) and unsubscribe page ---------- */
+.email-list-card {
+  max-width: 520px; margin: 0 auto; background: #fff; border-radius: var(--radius);
+  padding: 32px; box-shadow: var(--shadow); border: 1px solid #efdfd3;
+}
+.email-list-card h1 { font-size: 30px; }
+@media (max-width: 600px) { .email-list-card { padding: 22px 18px; } }
 
 /* ---------- Utility ---------- */
 .mt-8 { margin-top: 8px; } .mt-16 { margin-top: 16px; } .mt-24 { margin-top: 24px; } .mt-32 { margin-top: 32px; }
@@ -1234,7 +1246,8 @@ footer a:hover { color: #fff; }
 }
 .hero.has-media.resources-hero .hero-media {
   object-fit: cover;
-  object-position: 50% 4%;
+  /* Requester photo, Nov 12: keep the two faces at the table in view. */
+  object-position: 50% 34%;
 }
 .client-founder-layout { grid-template-columns: minmax(0, 1fr) minmax(240px, 360px); }
 .client-founder-photo { margin: 0; }
@@ -1414,3 +1427,49 @@ main ul.measure-620 { margin: 16px 0; padding-left: 24px; }
 
 /* Portal: one-time membership hand-off status (pc2-claude-ct-2, Oct 30). Visible when not [hidden]. */
 .portal-handoff-note { margin: 0 0 12px; padding: 10px 12px; border-radius: 6px; background: #f3f4f6; color: #374151; font-size: 14px; }
+
+/* Staff panel disclosures; no layout or business-flow changes outside these sections. */
+.staff-section > summary { cursor: pointer; }
+.staff-section > summary .staff-section-heading { display: inline; margin: 0; }
+.staff-section > summary:focus-visible { outline: 2px solid var(--plum); outline-offset: 2px; border-radius: 4px; }
+.staff-section[open] > summary { margin-bottom: 12px; }
+.staff-section-count { margin-left: 4px; }
+.staff-section-tools { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 12px; margin-bottom: 12px; }
+.staff-section-tools > :last-child { margin-left: auto; }
+
+/* Caregiver Portal dashboard (client request Oct 30): warm welcome, highlights strip, rounded cards. */
+#dashView .portal-welcome-sub { margin: 6px 0 0; font-size: 17px; color: var(--ink-soft); max-width: 620px; }
+#dashView .portal-highlights { margin: 0 0 24px; padding: 18px 22px; border-radius: 16px; background: #fbf3ec; border: 1px solid #efdfd3; }
+#dashView .portal-highlights[hidden], #dashView .portal-welcome-sub[hidden], #dashView #portalWellnessSample[hidden], #dashView .portal-summary-grid > .panel[hidden], #dashView #portalEventsSocialsSummary[hidden], #dashView #portalResourcesComingSoon[hidden] { display: none; }
+#dashView .portal-highlights h3 { margin: 0 0 10px; font-size: 18px; }
+#dashView .portal-highlights ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+#dashView .portal-highlights li { display: flex; gap: 10px; align-items: baseline; font-size: 15.5px; line-height: 1.5; }
+#dashView .portal-card { border-radius: 18px; padding: 24px; box-shadow: 0 2px 10px rgba(90, 53, 38, 0.06); }
+#dashView .portal-card h4 { display: flex; align-items: center; gap: 10px; font-size: 19px; margin: 0 0 14px; }
+#dashView .portal-card-icon { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 50%; background: #f6e9df; font-size: 19px; flex: 0 0 auto; }
+#dashView .portal-card-grid { gap: 26px; }
+#dashView .portal-card-grid > .portal-wellness-section { grid-column: 1 / -1; margin: 0; }
+#dashView .portal-events-group + .portal-events-group { margin-top: 18px; }
+#dashView .portal-events-group h5 { margin: 0 0 8px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-soft); }
+#dashView .portal-qa-sample-banner { margin: 0 0 24px; padding: 14px 18px; border-radius: 12px; background: #fff7e6; border: 1.5px solid #e7c67d; color: #5c4313; font-size: 14.5px; line-height: 1.5; }
+#dashView .portal-qa-sample-banner[hidden], #dashView .portal-qa-sample-note[hidden], #dashView #portalSupportHistory[hidden], #dashView .portal-section-toolbar[hidden] { display: none; }
+#dashView .portal-qa-sample-note { padding: 10px 12px; border-radius: 10px; background: #fffaf0; border: 1px dashed #e2c483; color: var(--ink); line-height: 1.45; }
+#dashView .portal-section-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; }
+#dashView .portal-sample-item { padding: 8px 10px; border-radius: 8px; background: #fffaf2; border-left: 3px solid var(--amber); margin-bottom: 8px; }
+#dashView .portal-sample-badge { font-weight: 700; letter-spacing: 0.03em; }
+#dashView .portal-sample-note { font-style: italic; margin-top: 2px; }
+#dashView .portal-sample-list { padding-left: 18px; }
+
+/* About: the family photo sits beside "From One Family's Journey…" uncropped (requested Nov 1), not in the hero. */
+.about-story-photo { margin: 0; }
+.about-story-photo img { display: block; width: 100%; height: auto; border-radius: 16px; }
+
+/* Drop-In Respite (Nov 3 rebuild): program details, numbered steps. */
+.respite-intro { display: grid; grid-template-columns: 1.2fr 1fr; gap: 48px; align-items: start; }
+@media (max-width: 900px) { .respite-intro { grid-template-columns: 1fr; gap: 28px; } }
+.respite-details-list { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; margin: 0 0 20px; }
+.respite-details-list dt { font-weight: 700; color: var(--plum-dark); }
+.respite-details-list dd { margin: 0; color: var(--ink); }
+.respite-details-list address { font-style: normal; font-weight: 600; }
+.respite-note { color: var(--ink-soft); margin-top: 8px; }
+.respite-steps { list-style: none; padding: 0; margin: 24px 0 0; }

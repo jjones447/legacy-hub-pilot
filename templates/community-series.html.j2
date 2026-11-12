@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Caregiver Sanctuary Community Series &mdash; Legacy Home &amp; Respite Care Foundation</title>
-<meta name="description" content="A rotating series of caregiver gatherings and wellness experiences across the Milwaukee community, hosted by Legacy Home &amp; Respite Care Foundation.">
+<meta name="description" content="Connection. Community. Time for You. Gatherings and experiences for dementia family caregivers, hosted with local businesses and community spaces.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
@@ -15,78 +15,95 @@
 {% set active_page = 'community-series' %}
 {% include '_header.html.j2' %}
 
+{# Page copy: Shanelle's Nov 12 rewrite request (#legacy-agent thread 1794493253.041949). #}
 <section class="hero py-56-64">
   <div class="container">
     <p class="eyebrow text-sand-light"><a class="text-sand-light" href="programs-events.html">Programs &amp; Events</a></p>
     <h1 class="hero-title-clamp">Caregiver Sanctuary Community Series</h1>
-    <p class="lede">A rotating series of gatherings and wellness experiences for caregivers, hosted around the community &mdash; somewhere to go that is just for you.</p>
+    <p class="lede">Connection. Community. Time for You.</p>
     <div class="btn-row">
-      <a href="#upcoming" class="btn btn-coral">See what's coming up</a>
-      <a href="request-support.html" class="btn btn-outline-light">Ask us a question</a>
+      <a href="events.html" class="btn btn-coral">View Upcoming Events</a>
+      <a href="#partner" class="btn btn-outline-light">Partner With Us</a>
     </div>
   </div>
 </section>
 
 <section>
   <div class="container">
-    <div class="section-head"><h2>What the series is</h2></div>
-    <p class="muted measure-640">Caring for someone with dementia narrows your world fast. The Community Series
-      exists to widen it again for a few hours at a time &mdash; a gathering, a wellness session, a
-      conversation with people who understand the day you have just had.</p>
-    <p class="muted measure-640">Sessions move around the community rather than sitting in one building, so there is
-      usually something within reach. You do not need to be enrolled in any Legacy programme to come.</p>
+    <p class="muted measure-640 mb-16">Caregiving can be isolating. Between the responsibilities, routines, and demands of caring for someone else, it can be easy to lose opportunities to connect with others or simply enjoy time for yourself.</p>
+    <p class="muted measure-640 mb-16">Our Caregiver Sanctuary Community Series was created to change that.</p>
+    <p class="muted measure-640 mb-16">Through gatherings and experiences hosted in partnership with local businesses and community spaces, we bring family caregivers together to connect, build relationships, and enjoy experiences that support their well-being.</p>
+    <p class="muted measure-640">Created with dementia family caregivers in mind, the Community Series offers a welcoming space to meet others who understand the caregiving journey while enjoying moments that aren&rsquo;t centered on caregiving itself.</p>
   </div>
 </section>
 
-<section class="section-sand" id="upcoming">
+<section class="section-sand" id="what-to-expect">
   <div class="container">
-    <div class="section-head"><span class="eyebrow">Dates</span><h2>Upcoming sessions</h2></div>
-    <p class="muted measure-640">The schedule for the coming season is being finalised. Once dates are set they will
-      be listed here, each with its own registration link.</p>
-    <span class="badge-phase2">Schedule coming</span>
-    <p class="mt-24"><a class="btn btn-outline" href="programs-events.html#calendar">See the full events calendar</a></p>
+    <div class="section-head"><h2>What to Expect</h2></div>
+    <p class="muted measure-640 mb-16">From conversations over coffee to creative activities and wellness experiences, our gatherings offer opportunities to step outside your everyday routine, meet new people, and enjoy time that&rsquo;s centered on you.</p>
+    <p class="muted measure-640">Whether you&rsquo;re joining us for the first time or returning to connect with familiar faces, there&rsquo;s a place for you here.</p>
   </div>
 </section>
 
-<section id="register">
+<section id="upcoming">
   <div class="container">
-    <div class="section-head"><h2>Registering for a session</h2></div>
-    <p class="muted measure-640">Sessions have limited places, so each one takes registration in advance. When a
-      session opens, its registration link appears beside the date above.</p>
+    <div class="section-head"><h2>Join an Upcoming Gathering</h2></div>
+    <p class="muted measure-640">Take some time for yourself and connect with us at an upcoming Community Series gathering.</p>
     {#
-      Registration runs through GiveButter, which Legacy already uses for donations and which
-      supports event pages and ticketing. That keeps this inside the systems the engagement
-      already covers rather than introducing a new one. The link below stays a placeholder until
-      Legacy creates the first event and sends the URL - do not invent a GiveButter URL.
+      Published Staff-console events whose title starts with "Community Series" are listed here
+      with their own Register button (requester, Nov 12: title convention to start).
     #}
-    <span class="badge-phase2">Registration links coming</span>
-    <p class="muted mt-24 measure-640">Cannot find a session that works, or need something to be accessible in a
-      particular way? <a href="request-support.html">Tell us</a> and we will help.</p>
+    <div class="card-grid grid-autofit-240 mt-24" id="liveEventsGrid" data-event-time-zone="America/Chicago"
+         data-event-title-prefix="Community Series" data-event-badge="Community Series"
+         data-empty-text="No Community Series gatherings are scheduled right now. Check back soon, or see all upcoming events." aria-live="polite">
+      <p class="small muted">Loading upcoming Community Series gatherings…</p>
+    </div>
+    <p class="mt-24"><a class="btn btn-coral" href="events.html">View Upcoming Events</a></p>
   </div>
 </section>
 
-<section class="section-sand">
+<section class="section-sand" id="partner">
   <div class="container">
-    <div class="section-head"><h2>More from Legacy</h2></div>
-    <div class="card-grid mt-24">
-      <div class="card">
-        <h3>Drop-In Respite</h3>
-        <p>Time to breathe while your loved one is somewhere safe, engaged and cared for.</p>
-        <a class="more" href="programs-events.html#drop-in">About Drop-In Respite &rarr;</a>
-      </div>
-      <div class="card">
-        <h3>Virtual Support Group</h3>
-        <p>A regular group you can join from home, no travel needed.</p>
-        <a class="more" href="programs-events.html#support-group">Join the group &rarr;</a>
-      </div>
-      <div class="card">
-        <h3>Caregiver Sanctuary</h3>
-        <p>Dementia-friendly businesses and partners across the community.</p>
-        <a class="more" href="sanctuary.html">About Caregiver Sanctuary &rarr;</a>
-      </div>
-    </div>
+    <div class="section-head"><h2>Partner With Us</h2></div>
+    <p class="muted measure-640 mb-16">We believe supporting caregivers is a community effort. Through partnerships with local businesses and organizations, we&rsquo;re creating more opportunities for caregivers to connect, explore new experiences, and feel supported.</p>
+    <p class="muted measure-640">Interested in hosting a gathering or partnering with us?</p>
+    <p class="mt-24"><a class="btn btn-coral" href="get-involved.html#partner">Become a Caregiver Sanctuary Partner</a></p>
   </div>
 </section>
+
+{# Same registration modal as the Events page; tests keep the two identical. #}
+<!-- Registration modal -->
+<div class="modal-overlay" id="registerModal">
+  <div class="modal">
+    <button class="modal-close" data-action="close-register">✕</button>
+    <h3 id="regTitle">Register</h3>
+    <p class="sub">One quick form — no re-typing your details every time.</p>
+    <form id="regForm" data-action="submit-register">
+      <div class="field">
+        <label for="regName">Your name</label>
+        <input id="regName" type="text" placeholder="e.g., Maria Gonzalez" required>
+      </div>
+      <div class="field">
+        <label for="regEmail">Email</label>
+        <input id="regEmail" type="email" placeholder="you@example.com" required>
+      </div>
+      <div class="field">
+        <label for="regRole">I am a…</label>
+        <select id="regRole">
+          <option>Family caregiver</option>
+          <option>Professional caregiver</option>
+          <option>Volunteer</option>
+          <option>Community member</option>
+        </select>
+      </div>
+      <p class="privacy-line">By registering, you consent to Legacy using these details to create or update your caregiver record, manage attendance, and send event follow-up. Please do not include medical record numbers or emergency details.</p>
+      <button type="submit" class="btn btn-coral w-100">Complete registration</button>
+      <div class="success-note" id="regSuccess" data-intake-success role="status" aria-live="polite">✓ Registration received — thank you.</div>
+      <div class="error-note" data-intake-error role="alert" aria-live="assertive"></div>
+      <div class="routing-note" id="regRouting" data-intake-routing>Behind the scenes: this registration routed into the caregiver record — profile matched, attendance list updated, follow-up queued for staff.</div>
+    </form>
+  </div>
+</div>
 
 {% include '_footer.html.j2' %}
 

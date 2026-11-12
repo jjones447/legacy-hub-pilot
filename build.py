@@ -34,7 +34,7 @@ PAGE_METADATA = {
     },
     "resources.html": {
         "title": "Resource Hub — Legacy Home & Respite Care Foundation",
-        "description": "Everything in one place — crisis lines, education, caregiver tools, local organizations, and practical support for dementia caregivers.",
+        "description": "Caregiving comes with questions, challenges, and decisions that aren’t always easy to navigate. Our Resource Hub brings together helpful information, tools, and support to guide you along the way.",
     },
     "events.html": {
         "title": "Events — Legacy Home & Respite Care Foundation",
@@ -66,11 +66,11 @@ PAGE_METADATA = {
     },
     "community-series.html": {
         "title": "Caregiver Sanctuary Community Series — Legacy Home & Respite Care Foundation",
-        "description": "A rotating series of caregiver gatherings across Greater Milwaukee libraries, parks, and partner spaces.",
+        "description": "Connection. Community. Time for You. Gatherings and experiences for dementia family caregivers, hosted with local businesses and community spaces.",
     },
     "drop-in-respite.html": {
         "title": "Drop-In Respite — Legacy Home & Respite Care Foundation",
-        "description": "Drop-in respite for dementia caregivers: trained staff, engaging activities, and a moment to breathe.",
+        "description": "FREE monthly Drop-In Respite at Ebenezer in Milwaukee: every third Thursday, 10 AM–2 PM. Person-centered activities for your loved one, time for you.",
     },
     "coming-soon.html": {
         "title": "Caregiver Sanctuary &mdash; Legacy Home &amp; Respite Care Foundation",
@@ -98,7 +98,8 @@ PAGE_METADATA = {
     },
     "wellness-passport.html": {
         "title": "Caregiver Wellness Passport — Legacy Home & Respite Care Foundation",
-        "description": "A way for caregivers to engage in wellness activities, track restorative moments, and earn community rewards.",
+        "description": "The Caregiver Wellness Passport was created to encourage family caregivers to make their own well-being a priority.",
+        "stylesheets": ("wellness-passport.css",),
     },
     "faq.html": {
         "title": "Frequently Asked Questions — Legacy Home & Respite Care Foundation",
@@ -110,7 +111,7 @@ PAGE_METADATA = {
     },
     "portal.html": {
         "title": "Caregiver Portal — Legacy Home & Respite Care Foundation",
-        "description": "Your events, your grant and your resources, in one place.",
+        "description": "Your events, your wellness and your resources, in one place.",
     },
     "programs-events.html": {
         "title": "Programs & Events — Legacy Home & Respite Care Foundation",
@@ -119,6 +120,11 @@ PAGE_METADATA = {
     "sanctuary.html": {
         "title": "Caregiver Sanctuary — Legacy Home & Respite Care Foundation",
         "description": "Building communities where caregivers don't have to navigate dementia alone.",
+    },
+    "unsubscribe.html": {
+        "title": "Unsubscribe — Legacy Home & Respite Care Foundation",
+        "description": "Leave the Legacy Home & Respite Care Foundation email list.",
+        "robots": "noindex",
     },
 }
 
@@ -142,6 +148,7 @@ PAGES = {
     "community-wellness-partners.html": "community-wellness-partners.html.j2",
     "dementia-friendly-training.html": "dementia-friendly-training.html.j2",
     "wellness-passport.html": "wellness-passport.html.j2",
+    "unsubscribe.html": "unsubscribe.html.j2",
 }
 
 # Hand-authored pages that are NOT template-rendered but DO share the public chrome.
@@ -248,6 +255,8 @@ def render_head_for_page(env: Environment, page: str) -> str:
         "og_url": og_url,
         "og_type": meta.get("og_type", "website"),
         "og_site_name": meta.get("og_site_name", "Legacy Home & Respite Care Foundation, Inc."),
+        "robots": meta.get("robots"),
+        "page_stylesheets": meta.get("stylesheets", ()),
         "default_share_image": DEFAULT_SHARE_IMAGE,
         "site_url": SITE_URL,
     }
@@ -275,6 +284,7 @@ def asset_versions() -> dict:
         "styles.css": hashlib.sha256((ROOT / "styles.css").read_bytes()).hexdigest()[:12],
         "app.js": hashlib.sha256((ROOT / "app.js").read_bytes()).hexdigest()[:12],
         "staff.js": hashlib.sha256((ROOT / "staff.js").read_bytes()).hexdigest()[:12],
+        "wellness-passport.css": hashlib.sha256((ROOT / "wellness-passport.css").read_bytes()).hexdigest()[:12],
     }
 
 
