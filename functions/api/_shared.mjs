@@ -90,9 +90,11 @@ export async function handleIntake(db, body) {
 
   // Membership/support business mutations and their original audit commit together.
   // Keep the existing event/grant workflow and request-limit accounting unchanged.
-  const atomic = body.kind === 'membership' || body.kind === 'support_request';
+  // A held (disputed-identity) submission of any kind commits with its review task and audit.
+  const atomic = disputed || body.kind === 'membership' || body.kind === 'support_request';
   const writes = atomic ? [caregiverWrite] : null;
   if (!atomic) await caregiverWrite.run();
+  const write = async statement => { if (atomic) writes.push(statement); else await statement.run(); };
 
   // Kind-specific workflow row.
   if (body.kind === 'event_registration') {
@@ -110,14 +112,12 @@ export async function handleIntake(db, body) {
         return { status: 409, body: { ok: false, error: 'event_full' } };
       }
     }
-    await db
+    await write(db
       .prepare(`INSERT INTO registration (caregiver_id, event_id, source, external_ref) VALUES (?, ?, ?, ?)`)
-      .bind(caregiverId, body.event_id, source, body.external_ref)
-      .run();
-    await db
+      .bind(caregiverId, body.event_id, source, body.external_ref));
+    await write(db
       .prepare(`INSERT INTO followup (caregiver_id, kind, detail, source, external_ref) VALUES (?, 'event_confirmation', ?, ?, ?)`)
-      .bind(caregiverId, `Confirm registration for ${body.event_id}`, source, body.external_ref + ':fu')
-      .run();
+      .bind(caregiverId, `Confirm registration for ${body.event_id}`, source, body.external_ref + ':fu'));
   } else if (body.kind === 'membership') {
     // A disputed identity is not made a member here; staff apply it after reconciling.
     if (!disputed) writes.push(db
@@ -129,17 +129,15 @@ export async function handleIntake(db, body) {
       .prepare(`INSERT INTO followup (caregiver_id, kind, detail, source, external_ref) VALUES (?, 'membership_welcome', ?, ?, ?)`)
       .bind(caregiverId, detail, source, body.external_ref));
   } else if (body.kind === 'grant_application') {
-    await db
+    await write(db
       .prepare(
         `INSERT INTO grant_application (caregiver_id, status, requested_for, source, external_ref)
          VALUES (?, 'submitted', ?, ?, ?)`
       )
-      .bind(caregiverId, body.requested_for || null, source, body.external_ref)
-      .run();
-    await db
+      .bind(caregiverId, body.requested_for || null, source, body.external_ref));
+    await write(db
       .prepare(`INSERT INTO followup (caregiver_id, kind, detail, source, external_ref) VALUES (?, 'grant_review', ?, ?, ?)`)
-      .bind(caregiverId, 'New wellness-grant application', source, body.external_ref + ':fu')
-      .run();
+      .bind(caregiverId, 'New wellness-grant application', source, body.external_ref + ':fu'));
   } else {
     // support_request
     writes.push(db
@@ -211,7 +209,11 @@ export async function resolveCaregiverByContact(db, email, phone) {
 // Staff-only text for a disputed-identity review task: who submitted what, and the candidates.
 export function possibleDuplicateDetail(channel, contact, ambiguousIds) {
   const name = [contact.first_name, contact.last_name].filter(v => typeof v === 'string' && v.trim()).join(' ') || '(no name)';
-  return `${channel} from ${name} <${contact.email}>${contact.phone ? ' / ' + contact.phone : ''} was kept here because several records share this email: ` +
+  const extra = [['caring for', contact.caring_for], ['relationship', contact.relationship]]
+    .filter(([, value]) => typeof value === 'string' && value.trim())
+    .map(([label, value]) => `${label}: ${value.trim()}`);
+  return `${channel} from ${name} <${contact.email}>${contact.phone ? ' / ' + contact.phone : ''}` +
+    `${extra.length ? ' (' + extra.join('; ') + ')' : ''} was kept here because several records share this email: ` +
     `${ambiguousIds.join(', ')}. Decide which person it belongs to (merge the duplicates if they are the same person), then move it there.`;
 }
 

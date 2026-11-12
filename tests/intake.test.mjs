@@ -461,3 +461,34 @@ test('several existing records sharing an email: the sign-up is held for staff, 
   await handleIntake(db, { kind: 'membership', first_name: 'Jane', email: 'jane.doe@example.org', external_ref: 'amb-2' });
   assert.equal(raw.prepare(`SELECT COUNT(*) AS n FROM followup WHERE kind = 'possible_duplicate'`).get().n, 3);
 });
+
+for (const kind of ['event_registration', 'grant_application']) {
+  test(`${kind}: a held (disputed-email) submission commits with its review task, and a failed review write rolls back so the retry completes (41 re-review of #356)`, async () => {
+    raw.prepare(`INSERT INTO caregiver (id, first_name, email, source) VALUES ('cg_x1', 'Kai', 'Kai@Example.org', 'staff')`).run();
+    raw.prepare(`INSERT INTO caregiver (id, first_name, email, source) VALUES ('cg_x2', 'Kai', 'kai@example.org', 'staff')`).run();
+    const eventId = raw.prepare(`SELECT id FROM event WHERE publish_state = 'published' AND (capacity IS NULL OR capacity > 0) LIMIT 1`).get()?.id;
+    const payload = { kind, first_name: 'Kai', last_name: 'Lee', email: 'KAI@example.org', caring_for: 'Mother', relationship: 'Daughter',
+      external_ref: `held-${kind}`, ...(kind === 'event_registration' ? { event_id: eventId } : { requested_for: 'Respite' }) };
+    const table = kind === 'event_registration' ? 'registration' : 'grant_application';
+    const count = sql => raw.prepare(sql).get().n;
+
+    raw.exec(`CREATE TEMP TRIGGER fail_review BEFORE INSERT ON followup WHEN NEW.kind = 'possible_duplicate' BEGIN SELECT RAISE(ABORT, 'FICTIONAL_REVIEW_FAILURE'); END;`);
+    await assert.rejects(handleIntake(db, payload), /FICTIONAL_REVIEW_FAILURE/);
+    raw.exec('DROP TRIGGER fail_review');
+    assert.equal(count(`SELECT COUNT(*) AS n FROM ${table} WHERE external_ref = 'held-${kind}'`), 0, 'held activity must not commit without its review');
+    assert.equal(count(`SELECT COUNT(*) AS n FROM caregiver WHERE id = 'cg_unmatched_intake'`), 0);
+
+    const retry = await handleIntake(db, payload);
+    assert.equal(retry.status, 201);
+    assert.equal(retry.body.caregiver_id, 'cg_unmatched_intake');
+    assert.equal(count(`SELECT COUNT(*) AS n FROM ${table} WHERE external_ref = 'held-${kind}' AND caregiver_id = 'cg_unmatched_intake'`), 1);
+    const review = raw.prepare(`SELECT detail FROM followup WHERE kind = 'possible_duplicate'`).all();
+    assert.equal(review.length, 1);
+    assert.match(review[0].detail, /Kai Lee <KAI@example\.org> \(caring for: Mother; relationship: Daughter\)/);
+    assert.match(review[0].detail, /cg_x1, cg_x2/);
+    assert.equal(count(`SELECT COUNT(*) AS n FROM audit_log WHERE action = 'intake.${kind}' AND entity_id = 'cg_unmatched_intake'`), 1);
+    // A replay is a no-op.
+    assert.equal((await handleIntake(db, payload)).body.duplicate, true);
+    assert.equal(count(`SELECT COUNT(*) AS n FROM followup WHERE kind = 'possible_duplicate'`), 1);
+  });
+}
