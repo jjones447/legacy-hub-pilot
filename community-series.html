@@ -7,7 +7,7 @@
 <meta name="description" content="Connection. Community. Time for You. Gatherings and experiences for dementia family caregivers, hosted with local businesses and community spaces.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=59c62db34f30">
+<link rel="stylesheet" href="styles.css?v=7ab2b13b4963">
 <link rel="icon" href="favicon.ico" sizes="32x32">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -87,7 +87,7 @@
       <a href="get-involved.html">Get Involved</a><button class="drop-toggle" aria-expanded="false" aria-label="Get Involved menu">&#9662;</button>
       <div class="drop">
         <a href="get-involved.html">Overview</a>
-        <a href="get-involved.html#partner">Become a Community Wellness Partner</a>
+        <a href="get-involved.html#partner">Become a Caregiver Sanctuary Partner</a>
         <a href="get-involved.html#corporate">Corporate Partnerships</a>
         <a href="get-involved.html#volunteer">Volunteer</a>
         <a href="get-involved.html#sponsorship">Sponsorship</a>
@@ -147,6 +147,12 @@
   <div class="container">
     <div class="section-head"><h2>Join an Upcoming Gathering</h2></div>
     <p class="muted measure-640">Take some time for yourself and connect with us at an upcoming Community Series gathering.</p>
+    
+    <div class="card-grid grid-autofit-240 mt-24" id="liveEventsGrid" data-event-time-zone="America/Chicago"
+         data-event-title-prefix="Community Series" data-event-badge="Community Series"
+         data-empty-text="No Community Series gatherings are scheduled right now. Check back soon, or see all upcoming events." aria-live="polite">
+      <p class="small muted">Loading upcoming Community Series gatherings…</p>
+    </div>
     <p class="mt-24"><a class="btn btn-coral" href="events.html">View Upcoming Events</a></p>
   </div>
 </section>
@@ -156,9 +162,43 @@
     <div class="section-head"><h2>Partner With Us</h2></div>
     <p class="muted measure-640 mb-16">We believe supporting caregivers is a community effort. Through partnerships with local businesses and organizations, we&rsquo;re creating more opportunities for caregivers to connect, explore new experiences, and feel supported.</p>
     <p class="muted measure-640">Interested in hosting a gathering or partnering with us?</p>
-    <p class="mt-24"><a class="btn btn-coral" href="get-involved.html#partner">Become a Community Partner</a></p>
+    <p class="mt-24"><a class="btn btn-coral" href="get-involved.html#partner">Become a Caregiver Sanctuary Partner</a></p>
   </div>
 </section>
+
+
+<!-- Registration modal -->
+<div class="modal-overlay" id="registerModal">
+  <div class="modal">
+    <button class="modal-close" data-action="close-register">✕</button>
+    <h3 id="regTitle">Register</h3>
+    <p class="sub">One quick form — no re-typing your details every time.</p>
+    <form id="regForm" data-action="submit-register">
+      <div class="field">
+        <label for="regName">Your name</label>
+        <input id="regName" type="text" placeholder="e.g., Maria Gonzalez" required>
+      </div>
+      <div class="field">
+        <label for="regEmail">Email</label>
+        <input id="regEmail" type="email" placeholder="you@example.com" required>
+      </div>
+      <div class="field">
+        <label for="regRole">I am a…</label>
+        <select id="regRole">
+          <option>Family caregiver</option>
+          <option>Professional caregiver</option>
+          <option>Volunteer</option>
+          <option>Community member</option>
+        </select>
+      </div>
+      <p class="privacy-line">By registering, you consent to Legacy using these details to create or update your caregiver record, manage attendance, and send event follow-up. Please do not include medical record numbers or emergency details.</p>
+      <button type="submit" class="btn btn-coral w-100">Complete registration</button>
+      <div class="success-note" id="regSuccess" data-intake-success role="status" aria-live="polite">✓ Registration received — thank you.</div>
+      <div class="error-note" data-intake-error role="alert" aria-live="assertive"></div>
+      <div class="routing-note" id="regRouting" data-intake-routing>Behind the scenes: this registration routed into the caregiver record — profile matched, attendance list updated, follow-up queued for staff.</div>
+    </form>
+  </div>
+</div>
 
 </main>
 <footer>
@@ -184,7 +224,7 @@
 </footer>
 
 
-<script src="app.js?v=c1bd0b71286b"></script>
+<script src="app.js?v=3c26a192e03f"></script>
 <script src="nav-v2.js"></script>
 </body>
 </html>

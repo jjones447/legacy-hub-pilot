@@ -1243,7 +1243,8 @@ footer a:hover { color: #fff; }
 }
 .hero.has-media.resources-hero .hero-media {
   object-fit: cover;
-  object-position: 50% 4%;
+  /* Requester photo, Nov 12: keep the two faces at the table in view. */
+  object-position: 50% 34%;
 }
 .client-founder-layout { grid-template-columns: minmax(0, 1fr) minmax(240px, 360px); }
 .client-founder-photo { margin: 0; }
