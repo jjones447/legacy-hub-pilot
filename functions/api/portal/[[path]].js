@@ -84,6 +84,29 @@ const CLEARED_SESSION_COOKIE = 'portal_session=; HttpOnly; Secure; SameSite=Lax;
 const CONFIRM_COOKIE = '__Host-portal_confirm';
 const OPAQUE_TOKEN = /^[A-Za-z0-9_-]{1,128}$/;
 const CONFIRM_NONCE = /^[A-Za-z0-9_-]{43}$/;
+const SAMPLE_EMAIL_RE = /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/;
+const SAMPLE_CAREGIVER_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
+
+// Deliberate, single-identity production sample preview policy reader.
+// Defaults OFF until the explicit production environment and caregiver identity
+// tuple are configured; never infers from staging/preview QA variables.
+export function productionSampleCaregiver(env) {
+  if (env?.ENVIRONMENT !== 'production') return null;
+  const flag = String(env.PORTAL_PRODUCTION_SAMPLES_ENABLED ?? '').trim().toLowerCase();
+  if (flag !== '1' && flag !== 'true') return null;
+  if (typeof env.PORTAL_PRODUCTION_SAMPLE_CAREGIVER_ID !== 'string'
+      || typeof env.PORTAL_PRODUCTION_SAMPLE_EMAIL !== 'string') return null;
+  const id = env.PORTAL_PRODUCTION_SAMPLE_CAREGIVER_ID.trim();
+  const email = env.PORTAL_PRODUCTION_SAMPLE_EMAIL.trim().toLowerCase();
+  if (!SAMPLE_CAREGIVER_ID_RE.test(id) || email.length > 254 || !SAMPLE_EMAIL_RE.test(email)) return null;
+  return { id, email };
+}
+
+export function matchesProductionSampleCaregiver(env, id, email) {
+  const sample = productionSampleCaregiver(env);
+  return !!sample && id === sample.id && typeof email === 'string'
+    && email.trim().toLowerCase() === sample.email;
+}
 
 function confirmationCookieNonce(request) {
   const values = (request.headers.get('Cookie') || '').split(';')
@@ -293,11 +316,14 @@ export async function onRequestGet({ request, env }) {
         .bind(caregiverId)
         .all();
 
+      const qaSamples = matchesProductionSampleCaregiver(env, profile.id, profile.email);
+
       return json({
         ok: true,
         profile,
         grants,
-        events
+        events,
+        ...(qaSamples ? { qa_samples: true } : {})
       });
     }
 

@@ -4,16 +4,16 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Caregiver Portal — Legacy Home & Respite Care Foundation</title>
-<meta name="description" content="Your events, your grant and your resources, in one place.">
+<meta name="description" content="Your events, your wellness and your resources, in one place.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=5a365152da35">
+<link rel="stylesheet" href="styles.css?v=26af70bf3d9d">
 <link rel="icon" href="favicon.ico" sizes="32x32">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="site.webmanifest">
 <meta property="og:title" content="Caregiver Portal — Legacy Home & Respite Care Foundation">
-<meta property="og:description" content="Your events, your grant and your resources, in one place.">
+<meta property="og:description" content="Your events, your wellness and your resources, in one place.">
 <meta property="og:image" content="https://caregiversanctuary.org/media/share-default.jpg">
 <meta property="og:url" content="https://caregiversanctuary.org/portal.html">
 <meta property="og:type" content="website">
@@ -51,7 +51,6 @@
       <div class="drop">
         <a href="about.html">Overview</a>
         <a href="about.html#story">Our Story</a>
-        <a href="about.html#mission">Mission &amp; Vision</a>
         <a href="about.html#team">Meet Our Team</a>
         <a href="about.html#shanelle">Meet Shanelle</a>
         <a href="about.html#board">Board of Directors</a>
@@ -76,7 +75,6 @@
         <a href="programs-events.html#event-respite">Event Respite</a>
         <a href="programs-events.html#family-ed">Family Education</a>
         <a href="events.html">Upcoming Events</a>
-        <a href="programs-events.html#calendar">Calendar</a>
         <a href="gallery.html">Photo Gallery</a>
         <div class="nav-drop-group" role="group" aria-label="Caregiver Sanctuary Network">
           <a href="sanctuary.html#network">Caregiver Sanctuary Network</a>
@@ -89,7 +87,7 @@
       <a href="get-involved.html">Get Involved</a><button class="drop-toggle" aria-expanded="false" aria-label="Get Involved menu">&#9662;</button>
       <div class="drop">
         <a href="get-involved.html">Overview</a>
-        <a href="get-involved.html#partner">Become a Community Wellness Partner</a>
+        <a href="get-involved.html#partner">Become a Caregiver Sanctuary Partner</a>
         <a href="get-involved.html#corporate">Corporate Partnerships</a>
         <a href="get-involved.html#volunteer">Volunteer</a>
         <a href="get-involved.html#sponsorship">Sponsorship</a>
@@ -121,7 +119,7 @@
   <div class="hero-scrim" aria-hidden="true"></div>
   <div class="container hero-content">
     <h1 class="hero-title-clamp" data-cs="portal.hero.title">Caregiver Portal</h1>
-    <p class="lede" data-cs="portal.hero.lede">Your events, your grant and your resources, in one private place.</p>
+    <p class="lede" data-cs="portal.hero.lede">Your events, your wellness and your resources, in one private place.</p>
   </div>
 </section>
 
@@ -130,7 +128,7 @@
     <div class="login-wrap">
       <div class="login-card">
         <h2>Caregiver Portal</h2>
-        <p class="sub">Your Sanctuary membership — wellness check-ins, grants, events, and resources in one secure place.</p>
+        <p class="sub">Your Sanctuary membership — wellness check-ins, events, and resources in one secure place.</p>
         <p id="membershipWelcome" class="portal-handoff-note" role="status" aria-live="polite" hidden></p>
         <div class="field">
           <label for="loginEmail">Email</label>
@@ -148,9 +146,10 @@
 <section class="d-none-py-44" id="dashView">
   <div class="container">
     <div class="portal-head-row">
-      <div>
+      <div class="portal-welcome">
         <span class="eyebrow">Caregiver Portal</span>
         <h2 class="fs-30" id="portalWelcome">Welcome back</h2>
+        <p class="portal-welcome-sub" id="portalWelcomeSub" hidden>Your space to stay connected, find support, and make time for your well-being.</p>
       </div>
       <button class="btn btn-outline btn-sm" id="portalLogoutBtn" data-action="portal-logout">Sign out</button>
     </div>
@@ -191,18 +190,73 @@
       <button type="button" class="btn btn-outline btn-sm mt-16" id="portalPreviewReturn">Return to my records</button>
     </details>
 
+    <section class="portal-highlights" id="portalHighlights" aria-labelledby="portalHighlightsTitle" hidden>
+      <h3 id="portalHighlightsTitle">For you right now</h3>
+      <ul id="portalHighlightsList"></ul>
+    </section>
+
+    <p class="portal-qa-sample-banner" id="portalQaSampleBanner" role="status" hidden><strong>SAMPLE DATA — QA / TEST PREVIEW INCLUDED:</strong> Fictional sample items (<span class="badge badge-amber">SAMPLE / TEST</span>) appear directly in your normal dashboard sections and filters below alongside your real records so you can evaluate layout, ordering, placement and filtering. Sample items are read-only illustrations and never create registrations, support requests, wellness history, notifications or payments.</p>
+
     <div class="portal-summary-grid" id="portalAccountSummary">
 
-      <div class="panel m-0 portal-events-panel">
-        <h4>📅 My Events</h4>
-        <p class="small muted">Your registrations are listed here. Browse all events opens the public calendar.</p>
+      <div class="panel m-0 portal-card" id="portalProfileCard" hidden>
+        <h4><span class="portal-card-icon" aria-hidden="true">👤</span> My Profile &amp; Intake</h4>
+        <div class="kv-row"><span class="k">Name</span><span class="v" id="portalProfileName">—</span></div>
+        <div class="kv-row"><span class="k">Email</span><span class="v" id="portalProfileEmail">—</span></div>
+        <div class="kv-row"><span class="k">Phone</span><span class="v" id="portalProfilePhone">—</span></div>
+        <div class="kv-row"><span class="k">Membership</span><span class="v" id="portalProfileMembershipStatus"><span class="badge badge-gray">—</span></span></div>
+        <p class="portal-qa-sample-note small mt-12 m-0" id="portalProfileSampleNote" data-portal-sample="profile" hidden><span class="badge badge-amber">SAMPLE / TEST</span> <strong>Fictional intake placement preview:</strong> Primary caregiver for a parent living with dementia · Preferred respite window: Tuesday &amp; Thursday afternoons. Read-only illustration; your real profile fields above remain unchanged.</p>
+        <p class="small muted mt-8 m-0"><span class="badge badge-gray">Coming soon</span> Updating your details and completing intake forms here. To change something now, contact Legacy.</p>
+        <a href="request-support.html" class="btn btn-outline btn-sm mt-16 d-inline-block">Contact Legacy</a>
+      </div>
+
+      <div class="panel m-0 portal-card" id="portalSupportCard" hidden>
+        <h4><span class="portal-card-icon" aria-hidden="true">🤝</span> My Support</h4>
+        <p class="small muted m-0" id="portalSupportSummary">Need help with caregiving, respite or resources? Send a request and the Legacy team will follow up with you.</p>
+        <a href="request-support.html" class="btn btn-plum btn-sm mt-16 d-inline-block">Request support</a>
+        <details class="mt-16" id="portalSupportHistory" hidden>
+          <summary>View my support requests</summary>
+          <p class="small muted">Your past requests, current status (Received, In Progress, Completed), and last status update.</p>
+          <div class="portal-section-toolbar mt-8 mb-8" id="portalSupportFilterRow" hidden>
+            <label class="small" for="portalSupportFilter"><strong>Filter support requests:</strong></label>
+            <select id="portalSupportFilter" class="staff-filter-select-sm" aria-label="Filter support requests">
+              <option value="all">All requests</option>
+              <option value="received">Received</option>
+              <option value="in_progress">In Progress</option>
+              <option value="completed">Completed</option>
+            </select>
+          </div>
+          <div id="portalSupportHistoryRows">Your support requests are not available right now.</div>
+        </details>
+      </div>
+
+      <div class="panel m-0 portal-events-panel" id="portalEventsCard">
+        <h4 id="portalEventsHeading">📅 My Events</h4>
+        <p class="small muted" id="portalEventsIntro">Your registrations are listed here. Browse all events opens the public calendar.</p>
+        <div class="portal-section-toolbar mt-8 mb-8" id="portalEventsFilterRow" hidden>
+          <label class="small" for="portalEventsFilter"><strong>Filter events:</strong></label>
+          <select id="portalEventsFilter" class="staff-filter-select-sm" aria-label="Filter events">
+            <option value="all">All events</option>
+            <option value="upcoming">Upcoming</option>
+            <option value="past">Past &amp; attended</option>
+            <option value="memory_social">Memory Socials</option>
+            <option value="support_group">Support Groups</option>
+            <option value="caregiver_event">Workshops &amp; Caregiver Events</option>
+            <option value="wellness">Wellness Sessions</option>
+          </select>
+        </div>
         <div id="portalEventsList">
           <p class="small muted m-0">No registered events yet.</p>
+        </div>
+        <div class="mt-16" id="portalEventsSocialsSummary" hidden>
+          <div class="kv-row"><span class="k">Memory Socials attended (all time)</span><span class="v" id="portalQaSocialsCount">0 socials</span></div>
+          <div class="kv-row"><span class="k">Last social visit</span><span class="v" id="portalQaSocialsLastVisit">—</span></div>
+          <div class="kv-row"><span class="k">Next Memory Social</span><span class="v" id="portalQaSocialsNext">—</span></div>
         </div>
         <a href="events.html" class="btn btn-outline btn-sm mt-16 d-inline-block">Browse all events</a>
       </div>
 
-      <div class="panel m-0">
+      <div class="panel m-0" id="portalGrantCard">
         <h4>🌱 My Wellness Grant</h4>
         <div class="kv-row"><span class="k">Membership</span><span class="v" id="portalMembershipStatus"><span class="badge badge-green">Sanctuary member</span></span></div>
         <div class="kv-row"><span class="k">Application</span><span class="v" id="portalGrantStatus"><span class="badge badge-gray">No application</span></span></div>
@@ -211,23 +265,49 @@
         <a href="request-support.html" class="btn btn-outline btn-sm mt-16 d-inline-block">Questions? Contact us</a>
       </div>
 
-      <div class="panel m-0">
+      <div class="panel m-0" id="portalSocialsCard">
         <h4>🏡 My Memory Socials</h4>
         <div class="kv-row"><span class="k">Attended (all time)</span><span class="v" id="portalSocialsCount">0 socials</span></div>
         <div class="kv-row"><span class="k">Last visit</span><span class="v" id="portalSocialsLastVisit">—</span></div>
         <div class="kv-row"><span class="k">Next up</span><span class="v" id="portalSocialsNext">—</span></div>
       </div>
 
-      <div class="panel m-0">
-        <h4>📚 Resource library</h4>
-        <p class="small muted m-0">Shared guides, tools and trusted local help for caregivers. This library is public, not a personalized saved list.</p>
+      <div class="panel m-0" id="portalResourcesCard">
+        <h4 id="portalResourcesHeading">📚 Resource library</h4>
+        <p class="small muted m-0" id="portalResourcesIntro">Shared guides, tools and trusted local help for caregivers. This library is public, not a personalized saved list.</p>
+        <div class="portal-qa-sample-note small mt-12" id="portalResourcesSampleNote" data-portal-sample="resources" hidden>
+          <p class="small m-0"><span class="badge badge-amber">SAMPLE / TEST</span> <strong>Fictional saved-resource placement preview:</strong></p>
+          <ul class="portal-sample-list small muted mt-8 m-0">
+            <li><strong>[SAMPLE] Fictional Caregiver Navigation &amp; Referral Handbook</strong> · Local help &amp; referrals (fictional bookmark illustration)</li>
+            <li><strong>[SAMPLE] Home Safety &amp; Daily Routine Checklist</strong> · Caregiver tool (fictional bookmark illustration)</li>
+          </ul>
+        </div>
         <a href="resources.html" class="btn btn-outline btn-sm mt-16 d-inline-block">Open Resource Hub</a>
+        <p class="small muted mt-16 m-0" id="portalResourcesComingSoon" hidden><span class="badge badge-gray">Coming soon</span> Saving your favorite resources here.</p>
+      </div>
+
+      <div class="panel m-0 portal-card" id="portalUpdatesCard" hidden>
+        <h4><span class="portal-card-icon" aria-hidden="true">✨</span> Sanctuary Updates &amp; Perks</h4>
+        <p class="small muted m-0"><span class="badge badge-gray">Coming soon</span> Announcements, upcoming opportunities and member benefits will appear here.</p>
+        <div class="mt-12" id="portalUpdatesGrantSummary">
+          <div class="kv-row"><span class="k">Wellness Grant application</span><span class="v" id="portalQaGrantStatus"><span class="badge badge-gray">No application</span></span></div>
+          <div class="kv-row"><span class="k">Requested for</span><span class="v" id="portalQaGrantRequestedFor">—</span></div>
+          <div class="kv-row"><span class="k">Award &amp; care package</span><span class="v" id="portalQaGrantAward">—</span></div>
+        </div>
+        <div class="portal-qa-sample-note small mt-12" id="portalUpdatesSampleNote" data-portal-sample="updates" hidden>
+          <p class="small m-0"><span class="badge badge-amber">SAMPLE / TEST</span> <strong>Fictional community update placement preview:</strong></p>
+          <ul class="portal-sample-list small muted mt-8 m-0">
+            <li><strong>[SAMPLE] Caregiver Sanctuary Autumn Tea &amp; Respite Partner Spotlight</strong> · Community update preview (no action or payment)</li>
+            <li><strong>[SAMPLE] Priority Registration Window — Winter Wellness Series</strong> · Member benefit preview (fictional illustration)</li>
+          </ul>
+        </div>
+        <a href="request-support.html" class="btn btn-outline btn-sm mt-16 d-inline-block">Questions? Contact us</a>
       </div>
 
     </div>
 
       <div class="panel portal-wellness-section" id="portalWellnessTile">
-        <h4>💛 My Wellness</h4>
+        <h4 id="portalWellnessHeading">💛 My Wellness</h4>
         <p class="small muted m-0" id="portalWellnessSummary">Loading…</p>
         <p class="small muted mt-8" id="portalWellnessExplanation">Your four answers carry equal weight in a 0–100 score. Less stress raises the score; higher ratings for sleep, support and time for yourself raise it too. The optional note does not affect this score. This is a personal check-in, not a clinical assessment.</p>
         <p class="small mt-16 mb-8"><strong>Recent check-in scores</strong></p>
@@ -243,8 +323,6 @@
         <p class="small mt-8 m-0" id="portalWellnessMsg" role="status"></p>
       </div>
 
-
-
   </div>
 </section>
 
@@ -257,7 +335,7 @@
       <p>Home &amp; Respite Care Foundation, Inc. — supporting caregivers of loved ones with dementia through wellness, respite, and community.</p>
     </div>
     <div class="footer-sitemap">
-      <div><h4>About</h4><a href="about.html#story">Our Story</a><a href="about.html#mission">Mission &amp; Vision</a><a href="about.html#team">Meet Our Team</a><a href="about.html#shanelle">Meet Shanelle</a><a href="about.html#board">Board of Directors</a><a href="about.html#reports">Reports &amp; Financials</a><a href="about.html#careers">Careers</a><a href="blog.html">Blog &amp; Stories</a><a href="about.html#contact">Contact</a></div>
+      <div><h4>About</h4><a href="about.html#story">Our Story</a><a href="about.html#team">Meet Our Team</a><a href="about.html#shanelle">Meet Shanelle</a><a href="about.html#board">Board of Directors</a><a href="about.html#reports">Reports &amp; Financials</a><a href="about.html#careers">Careers</a><a href="blog.html">Blog &amp; Stories</a><a href="about.html#contact">Contact</a></div>
       <div><h4>The Sanctuary</h4><a href="sanctuary.html">Overview</a><a href="programs.html">Join Caregiver Sanctuary</a><a href="request-support.html">Contact / Request Support</a><a href="programs-events.html#support-group">Virtual Support Group</a><a href="programs-events.html#community-series">Community Series</a><a href="programs-events.html#drop-in">Drop-In Respite</a><a href="wellness-passport.html">Caregiver Wellness Passport</a><a href="programs-events.html#event-respite">Event Respite</a><a href="programs-events.html#family-ed">Family Education</a><a href="events.html">Upcoming Events</a></div>
       <div><h4>Caregiver Sanctuary Network</h4><a href="sanctuary.html#network">Explore the network</a><a href="community-wellness-partners.html">Community Wellness Partners</a><a href="dementia-friendly-training.html">Dementia-Friendly Training</a></div>
       
@@ -273,7 +351,7 @@
 </footer>
 <!-- SHARED:footer:end -->
 
-<script src="app.js?v=b6d1a39f0a32"></script>
+<script src="app.js?v=1fea75bcaab4"></script>
 <script src="nav-v2.js"></script>
 </body>
 </html>
