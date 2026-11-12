@@ -49,6 +49,15 @@
   <div class="container">
     <div class="section-head"><h2>Join an Upcoming Gathering</h2></div>
     <p class="muted measure-640">Take some time for yourself and connect with us at an upcoming Community Series gathering.</p>
+    {#
+      Published Staff-console events whose title starts with "Community Series" are listed here
+      with their own Register button (requester, Nov 12: title convention to start).
+    #}
+    <div class="card-grid grid-autofit-240 mt-24" id="liveEventsGrid" data-event-time-zone="America/Chicago"
+         data-event-title-prefix="Community Series" data-event-badge="Community Series"
+         data-empty-text="No Community Series gatherings are scheduled right now. Check back soon, or see all upcoming events." aria-live="polite">
+      <p class="small muted">Loading upcoming Community Series gatherings…</p>
+    </div>
     <p class="mt-24"><a class="btn btn-coral" href="events.html">View Upcoming Events</a></p>
   </div>
 </section>
@@ -61,6 +70,40 @@
     <p class="mt-24"><a class="btn btn-coral" href="get-involved.html#partner">Become a Community Partner</a></p>
   </div>
 </section>
+
+{# Same registration modal as the Events page; tests keep the two identical. #}
+<!-- Registration modal -->
+<div class="modal-overlay" id="registerModal">
+  <div class="modal">
+    <button class="modal-close" data-action="close-register">✕</button>
+    <h3 id="regTitle">Register</h3>
+    <p class="sub">One quick form — no re-typing your details every time.</p>
+    <form id="regForm" data-action="submit-register">
+      <div class="field">
+        <label for="regName">Your name</label>
+        <input id="regName" type="text" placeholder="e.g., Maria Gonzalez" required>
+      </div>
+      <div class="field">
+        <label for="regEmail">Email</label>
+        <input id="regEmail" type="email" placeholder="you@example.com" required>
+      </div>
+      <div class="field">
+        <label for="regRole">I am a…</label>
+        <select id="regRole">
+          <option>Family caregiver</option>
+          <option>Professional caregiver</option>
+          <option>Volunteer</option>
+          <option>Community member</option>
+        </select>
+      </div>
+      <p class="privacy-line">By registering, you consent to Legacy using these details to create or update your caregiver record, manage attendance, and send event follow-up. Please do not include medical record numbers or emergency details.</p>
+      <button type="submit" class="btn btn-coral w-100">Complete registration</button>
+      <div class="success-note" id="regSuccess" data-intake-success role="status" aria-live="polite">✓ Registration received — thank you.</div>
+      <div class="error-note" data-intake-error role="alert" aria-live="assertive"></div>
+      <div class="routing-note" id="regRouting" data-intake-routing>Behind the scenes: this registration routed into the caregiver record — profile matched, attendance list updated, follow-up queued for staff.</div>
+    </form>
+  </div>
+</div>
 
 {% include '_footer.html.j2' %}
 
