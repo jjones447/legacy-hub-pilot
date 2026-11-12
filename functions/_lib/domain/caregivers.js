@@ -15,6 +15,11 @@ export const ALLOWED_CAREGIVER_UPDATE_FIELDS = [
   'outcome_notes'
 ];
 
+// Staff-console-only fields (not offered to the assistant mapper): the People search
+// "Caregiver?" marker (requester, Nov 12; schema/candidates/0021_caregiver_identity.sql).
+export const STAFF_ONLY_CAREGIVER_UPDATE_FIELDS = ['is_caregiver'];
+const CAREGIVER_UPDATE_FIELDS = [...ALLOWED_CAREGIVER_UPDATE_FIELDS, ...STAFF_ONLY_CAREGIVER_UPDATE_FIELDS];
+
 export const INTERNAL_TEST_SEGMENT_TAGS = Object.freeze(['qa_test', 'exclude_reporting']);
 export const INTERNAL_TEST_QUERY_SEGMENTS = Object.freeze(['qa_test', 'exclude_reporting', 'qa_staging', 'qa_prod']);
 export const DO_NOT_CONTACT_SEGMENT_TAGS = Object.freeze(['qa_test', 'exclude_reporting', 'do_not_contact']);
@@ -73,7 +78,7 @@ export async function validate(db, { id, operation, payload = {} }) {
   }
 
   for (const key of bodyKeys) {
-    if (!ALLOWED_CAREGIVER_UPDATE_FIELDS.includes(key)) {
+    if (!CAREGIVER_UPDATE_FIELDS.includes(key)) {
       return { ok: false, status: 400, error: `unknown or forbidden field: ${key}` };
     }
   }
@@ -91,6 +96,14 @@ export async function validate(db, { id, operation, payload = {} }) {
     const validOutcomes = ['improving', 'stable', 'needs_support', 'disengaged'];
     if (!validOutcomes.includes(payload.outcome_status)) {
       return { ok: false, status: 400, error: `outcome_status must be one of: ${validOutcomes.join(', ')}` };
+    }
+  }
+
+  if ('is_caregiver' in payload) {
+    // People search: 'yes', 'no', or null for not yet identified (requester, Nov 12).
+    if (payload.is_caregiver === '' || payload.is_caregiver === undefined) normalizedPayload.is_caregiver = null;
+    else if (!['yes', 'no', null].includes(payload.is_caregiver)) {
+      return { ok: false, status: 400, error: 'is_caregiver must be yes, no or null' };
     }
   }
 
@@ -113,7 +126,7 @@ export async function validate(db, { id, operation, payload = {} }) {
   const afterChanges = {};
   const projected = { ...existing };
 
-  for (const field of ALLOWED_CAREGIVER_UPDATE_FIELDS) {
+  for (const field of CAREGIVER_UPDATE_FIELDS) {
     if (field in normalizedPayload) {
       beforeChanges[field] = existing[field];
       afterChanges[field] = normalizedPayload[field];
@@ -142,7 +155,7 @@ export async function apply(db, { id, operation, payload = {} }, actor, addition
   const setClauses = [];
   const setParams = [];
 
-  for (const field of ALLOWED_CAREGIVER_UPDATE_FIELDS) {
+  for (const field of CAREGIVER_UPDATE_FIELDS) {
     if (field in v.payload) {
       setClauses.push(`${field} = ?`);
       setParams.push(v.payload[field]);
