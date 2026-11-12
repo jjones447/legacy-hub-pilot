@@ -38,6 +38,7 @@ export const UNIT_TEST_FILES = Object.freeze([
   'content-schema-seed-d7-s0a.test.mjs',
   'cr1-home-copy.test.mjs',
   'community-series-copy.test.mjs',
+  'resource-hub-hero-copy.test.mjs',
   'sanctuary-partner-wording.test.mjs',
   'meet-our-team.test.mjs',
   'board-of-directors.test.mjs',

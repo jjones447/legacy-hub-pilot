@@ -34,7 +34,7 @@ PAGE_METADATA = {
     },
     "resources.html": {
         "title": "Resource Hub — Legacy Home & Respite Care Foundation",
-        "description": "Everything in one place — crisis lines, education, caregiver tools, local organizations, and practical support for dementia caregivers.",
+        "description": "Caregiving comes with questions, challenges, and decisions that aren’t always easy to navigate. Our Resource Hub brings together helpful information, tools, and support to guide you along the way.",
     },
     "events.html": {
         "title": "Events — Legacy Home & Respite Care Foundation",
