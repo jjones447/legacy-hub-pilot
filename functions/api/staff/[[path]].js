@@ -932,7 +932,8 @@ export async function onRequestPatch({ request, env }) {
       }
 
       const actor = getActor(request, env);
-      const result = await caregiversDomain.apply(env.LEGACY_DB, { id: caregiverId, operation: 'update', payload: body }, actor);
+      // Only this authenticated Staff Console route may set the People search Caregiver? marker.
+      const result = await caregiversDomain.apply(env.LEGACY_DB, { id: caregiverId, operation: 'update', payload: body, staffConsole: true }, actor);
       if (!result.ok) {
         return json({ ok: false, error: result.error }, result.status);
       }
