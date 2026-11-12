@@ -485,6 +485,47 @@ function showGrantError(target, msg) {
   }
 }
 
+// Merge duplicate records (requester, Nov 12): find candidates, confirm, then merge into the open record.
+async function findMergeDuplicates(form) {
+  const keepId = document.getElementById('caregiverRecordPanel')?.dataset?.caregiverId;
+  const box = document.getElementById('mergeCandidates');
+  const q = form.querySelector('[name="q"]')?.value?.trim() || '';
+  if (!keepId || !box) return;
+  if (!q) { box.textContent = 'Enter a name, email or phone to search.'; return; }
+  box.textContent = 'Searching…';
+  try {
+    const res = await fetch(`/api/staff/caregivers?${new URLSearchParams({ q, limit: '10' })}`);
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || 'Search failed');
+    const others = (data.caregivers || []).filter(cg => cg.id !== keepId && cg.status !== 'archived' && !String(cg.id).startsWith('cg_unmatched_'));
+    if (!others.length) { box.textContent = 'No other active record matches. Try another name, email or phone.'; return; }
+    box.innerHTML = others.map(cg => {
+      const label = `${[cg.first_name, cg.last_name].filter(Boolean).join(' ') || 'Anonymous'} · ${[cg.email, cg.phone].filter(Boolean).join(' · ') || 'no contact'}`;
+      return `<div class="flex-center-gap-12 mb-8"><span class="small">${escapeHtml(label)}</span>
+        <button type="button" class="btn btn-sm btn-plum" data-action="merge-duplicate" data-from-id="${escapeHtml(cg.id)}" data-from-label="${escapeHtml(label)}">Merge into this record</button></div>`;
+    }).join('');
+  } catch (err) {
+    box.textContent = `Could not search: ${err.message}`;
+  }
+}
+
+async function mergeDuplicate(fromId, fromLabel) {
+  const keepId = document.getElementById('caregiverRecordPanel')?.dataset?.caregiverId;
+  const box = document.getElementById('mergeCandidates');
+  if (!keepId || !fromId) return;
+  if (!confirm(`Merge ${fromLabel} into this record? Their sign-ups, notes and history move here and the duplicate is archived. This cannot be undone from the console.`)) return;
+  try {
+    const res = await fetch(`/api/staff/caregiver/${encodeURIComponent(keepId)}/merge`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ from_id: fromId })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.error || 'The merge could not be confirmed.');
+    await viewCaregiver(keepId);
+  } catch (err) {
+    if (box) box.textContent = err.message;
+  }
+}
+
 async function submitEditCaregiver(form) {
   const panel = document.getElementById('caregiverRecordPanel');
   const caregiverId = panel?.dataset?.caregiverId;
@@ -1103,6 +1144,19 @@ async function viewCaregiver(id) {
           </div>
           <div class="form-error-msg alert-inline-banner form-error-banner d-none"></div>
           <button type="submit" class="btn btn-sm btn-plum">Save Changes</button>
+        </form>
+      </details>
+
+      <details class="mt-16" id="caregiverMergeDetails">
+        <summary class="cursor-pointer note-section-summary"><strong>🔗 Merge a duplicate into this record</strong></summary>
+        <form data-action="find-merge-duplicates" class="record-form-panel">
+          <p class="small muted mb-8">Find the other record for this same person by name, email or phone. Merging moves its sign-ups, notes and history here, keeps this record's details (filling only empty ones), and archives the duplicate. Nothing is deleted, and it cannot be undone from the console.</p>
+          <div class="field mb-8">
+            <label class="form-label-small" for="mergeSearchQuery">Find the duplicate:</label>
+            <input type="search" id="mergeSearchQuery" name="q" class="form-input-compact" value="${escapeHtml(p.email || p.phone || [p.first_name, p.last_name].filter(Boolean).join(' '))}">
+          </div>
+          <button type="submit" class="btn btn-sm btn-outline">Find</button>
+          <div id="mergeCandidates" class="mt-8" role="status" aria-live="polite"></div>
         </form>
       </details>
     `;
@@ -1828,6 +1882,9 @@ document.addEventListener('submit', function (e) {
   if (action === 'submit-edit-caregiver') {
     e.preventDefault();
     submitEditCaregiver(form);
+  } else if (action === 'find-merge-duplicates') {
+    e.preventDefault();
+    findMergeDuplicates(form);
   } else if (action === 'submit-add-contact') {
     e.preventDefault();
     submitAddContact(form);
@@ -2027,6 +2084,9 @@ document.addEventListener('click', function (e) {
   } else if (action === 'view-caregiver') {
     const id = target.getAttribute('data-caregiver-id');
     viewCaregiver(id);
+  } else if (action === 'merge-duplicate') {
+    e.stopPropagation();
+    mergeDuplicate(target.getAttribute('data-from-id'), target.getAttribute('data-from-label'));
   } else if (action === 'select-event') {
     const id = target.getAttribute('data-event-id');
     const title = target.getAttribute('data-event-title');

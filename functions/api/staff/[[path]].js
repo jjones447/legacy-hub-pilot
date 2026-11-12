@@ -255,6 +255,7 @@ export async function onRequestGet({ request, env }) {
         'event.photo.updated',
         'caregiver.contact_added',
         'caregiver.note_added',
+        'caregiver.merge',
         'undo'
       ];
 
@@ -454,6 +455,81 @@ export async function onRequestPost({ request, env }) {
       ]);
 
       return json({ ok: true });
+    }
+
+    // POST /api/staff/caregiver/:keepId/merge { from_id }: merge a duplicate person record
+    // (requester, Nov 12). Moves registrations, grant applications, follow-ups, notes, contact
+    // history and wellness check-ins to the kept record, fills only its empty fields, archives
+    // the duplicate (never deleted) and records one audit row and a staff note. One atomic
+    // batch; every write re-checks that both records are still unarchived.
+    if (pathSegments.length === 5 && pathSegments[2] === 'caregiver' && pathSegments[4] === 'merge') {
+      const keepId = pathSegments[3];
+      let body;
+      try { body = await request.json(); } catch { return json({ ok: false, error: 'invalid JSON body' }, 400); }
+      if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(k => k !== 'from_id')) {
+        return json({ ok: false, error: 'body must be { "from_id": "<duplicate record id>" }' }, 400);
+      }
+      const fromId = typeof body.from_id === 'string' ? body.from_id.trim() : '';
+      if (!keepId || !fromId || keepId === fromId) return json({ ok: false, error: 'choose two different records' }, 400);
+      if ([keepId, fromId].some(id => id.startsWith('cg_unmatched_'))) {
+        return json({ ok: false, error: 'holding records cannot be merged; move each held item to the right person instead' }, 400);
+      }
+      const actor = getActor(request, env);
+      const member = await env.LEGACY_DB.prepare(`SELECT role, status FROM staff_member WHERE email = ?`).bind(String(actor || '').trim().toLowerCase()).first();
+      if (!member || member.status !== 'active' || !['staff', 'admin'].includes(member.role)) {
+        return json({ ok: false, error: 'An active staff account is required to merge records.' }, 403);
+      }
+      const keep = await env.LEGACY_DB.prepare(`SELECT * FROM caregiver WHERE id = ?`).bind(keepId).first();
+      const from = await env.LEGACY_DB.prepare(`SELECT * FROM caregiver WHERE id = ?`).bind(fromId).first();
+      if (!keep || !from) return json({ ok: false, error: 'caregiver not found' }, 404);
+      if (keep.status === 'archived' || from.status === 'archived') return json({ ok: false, error: 'archived records cannot be merged' }, 409);
+
+      const MOVED = ['registration', 'grant_application', 'followup', 'note', 'contact_history', 'wellness_checkin'];
+      const counts = {};
+      for (const table of MOVED) {
+        const row = await env.LEGACY_DB.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE caregiver_id = ?`).bind(fromId).first();
+        counts[table] = Number(row?.n || 0);
+      }
+      const bothOpen = `EXISTS (SELECT 1 FROM caregiver WHERE id = ? AND status != 'archived')
+        AND EXISTS (SELECT 1 FROM caregiver WHERE id = ? AND status != 'archived')`;
+      const tags = [];
+      for (const raw of [keep.segment_tags, from.segment_tags]) {
+        try { for (const t of JSON.parse(raw || '[]')) if (typeof t === 'string' && !tags.includes(t)) tags.push(t); } catch {}
+      }
+      const fromLabel = `${[from.first_name, from.last_name].filter(Boolean).join(' ') || '(no name)'}${from.email ? ' <' + from.email + '>' : ''}${from.phone ? ' / ' + from.phone : ''}`;
+      const movedText = MOVED.filter(t => counts[t]).map(t => `${counts[t]} ${t.replace(/_/g, ' ')}`).join(', ') || 'no linked items';
+      const statements = [
+        env.LEGACY_DB.prepare(`INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
+          SELECT ?, 'caregiver.merge', 'caregiver', ?, ?, ? WHERE ${bothOpen}`)
+          .bind(actor, keepId, JSON.stringify({ keep, from }), JSON.stringify({ from_id: fromId, moved: counts }), keepId, fromId),
+        ...MOVED.map(table => env.LEGACY_DB.prepare(`UPDATE ${table} SET caregiver_id = ? WHERE caregiver_id = ? AND ${bothOpen}`)
+          .bind(keepId, fromId, keepId, fromId)),
+        // Outstanding sign-in links for the duplicate stop working; its history now lives on the kept record.
+        env.LEGACY_DB.prepare(`UPDATE portal_token SET used = 1 WHERE caregiver_id = ? AND used = 0 AND ${bothOpen}`).bind(fromId, keepId, fromId),
+        env.LEGACY_DB.prepare(`UPDATE caregiver SET
+            last_name = COALESCE(NULLIF(TRIM(COALESCE(last_name, '')), ''), ?),
+            phone = COALESCE(NULLIF(TRIM(COALESCE(phone, '')), ''), ?),
+            caring_for = COALESCE(NULLIF(TRIM(COALESCE(caring_for, '')), ''), ?),
+            relationship = COALESCE(NULLIF(TRIM(COALESCE(relationship, '')), ''), ?),
+            sanctuary_member = MAX(sanctuary_member, ?),
+            member_since = CASE WHEN member_since IS NULL THEN ? WHEN ? IS NULL THEN member_since ELSE MIN(member_since, ?) END,
+            donor = MAX(donor, ?), volunteer = MAX(volunteer, ?), segment_tags = ?, updated_at = datetime('now')
+          WHERE id = ? AND ${bothOpen}`)
+          .bind(from.last_name || null, from.phone || null, from.caring_for || null, from.relationship || null,
+            from.sanctuary_member || 0, from.member_since || null, from.member_since || null, from.member_since || null,
+            from.donor || 0, from.volunteer || 0, JSON.stringify(tags), keepId, keepId, fromId),
+        env.LEGACY_DB.prepare(`INSERT INTO note (caregiver_id, author, body) SELECT ?, ?, ? WHERE ${bothOpen}`)
+          .bind(keepId, actor, `Merged duplicate record ${fromId} (${fromLabel}) into this record. Moved: ${movedText}. The duplicate is archived, not deleted.`, keepId, fromId),
+        // Last: archive the duplicate. Zero changes means a concurrent change won and nothing above applied.
+        env.LEGACY_DB.prepare(`UPDATE caregiver SET status = 'archived', updated_at = datetime('now')
+          WHERE id = ? AND status != 'archived' AND EXISTS (SELECT 1 FROM caregiver WHERE id = ? AND status != 'archived')`).bind(fromId, keepId),
+      ];
+      const results = await env.LEGACY_DB.batch(statements);
+      const archived = Array.isArray(results) && results.length === statements.length ? results[results.length - 1]?.meta?.changes : null;
+      if (archived !== 1) {
+        return json({ ok: false, error: 'One of these records changed while merging. Nothing was merged; reopen both and try again.' }, 409);
+      }
+      return json({ ok: true, kept_id: keepId, merged_id: fromId, moved: counts });
     }
 
     // 2. POST /api/staff/caregiver/:id/contact
@@ -686,6 +762,7 @@ export async function onRequestPost({ request, env }) {
         'event.photo.updated',
         'caregiver.contact_added',
         'caregiver.note_added',
+        'caregiver.merge',
         'undo'
       ];
       if (
