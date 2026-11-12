@@ -43,14 +43,17 @@ test('home support preserves client copy with sentence-case presentation and use
   assert.deepEqual(routes, ['wellness-passport.html', 'drop-in-respite.html', 'community-series.html']);
   for (const route of routes) assert.match(file(route), /<!DOCTYPE html>/i);
 
-  // Descriptions are reused verbatim from existing program pages, not new service claims.
+  // Descriptions are reused verbatim from existing program pages, not new service claims. Two
+  // came from the old Drop-In Respite "Related support" cards, which the requester's Nov 3
+  // rebuild of that page removed; they stay on the home page unchanged.
   for (const [description, source] of [
-    ['Connect with wellness activities, partner experiences, and grant benefits.', 'drop-in-respite.html'],
-    ['Time to breathe while your loved one is somewhere safe, engaged and cared for.', 'community-series.html'],
-    ['Gatherings and wellness sessions for caregivers across the community.', 'drop-in-respite.html'],
+    ['Connect with wellness activities, partner experiences, and grant benefits.', null],
+    // Came from the old Community Series page, rewritten by the requester on Nov 12; stays on home.
+    ['Time to breathe while your loved one is somewhere safe, engaged and cared for.', null],
+    ['Gatherings and wellness sessions for caregivers across the community.', null],
   ]) {
     assert.ok(support.includes(description));
-    assert.ok(file(source).includes(description));
+    if (source) assert.ok(file(source).includes(description));
   }
   const css = file('styles.css');
   assert.match(css, /\.home-support-heading\s*\{[^}]*text-transform:\s*lowercase/);
