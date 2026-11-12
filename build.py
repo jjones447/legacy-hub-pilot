@@ -98,7 +98,8 @@ PAGE_METADATA = {
     },
     "wellness-passport.html": {
         "title": "Caregiver Wellness Passport — Legacy Home & Respite Care Foundation",
-        "description": "A way for caregivers to engage in wellness activities, track restorative moments, and earn community rewards.",
+        "description": "The Caregiver Wellness Passport was created to encourage family caregivers to make their own well-being a priority.",
+        "stylesheets": ("wellness-passport.css",),
     },
     "faq.html": {
         "title": "Frequently Asked Questions — Legacy Home & Respite Care Foundation",
@@ -255,6 +256,7 @@ def render_head_for_page(env: Environment, page: str) -> str:
         "og_type": meta.get("og_type", "website"),
         "og_site_name": meta.get("og_site_name", "Legacy Home & Respite Care Foundation, Inc."),
         "robots": meta.get("robots"),
+        "page_stylesheets": meta.get("stylesheets", ()),
         "default_share_image": DEFAULT_SHARE_IMAGE,
         "site_url": SITE_URL,
     }
@@ -282,6 +284,7 @@ def asset_versions() -> dict:
         "styles.css": hashlib.sha256((ROOT / "styles.css").read_bytes()).hexdigest()[:12],
         "app.js": hashlib.sha256((ROOT / "app.js").read_bytes()).hexdigest()[:12],
         "staff.js": hashlib.sha256((ROOT / "staff.js").read_bytes()).hexdigest()[:12],
+        "wellness-passport.css": hashlib.sha256((ROOT / "wellness-passport.css").read_bytes()).hexdigest()[:12],
     }
 
 
