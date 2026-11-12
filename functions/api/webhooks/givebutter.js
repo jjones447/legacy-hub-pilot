@@ -134,7 +134,8 @@ export async function onRequestPost({ request, env }) {
     }
 
     // Extract contact details
-    const email = body.data?.contact?.email || body.data?.email || null;
+    const rawEmail = body.data?.contact?.email || body.data?.email || null;
+    const email = typeof rawEmail === 'string' && rawEmail.trim() ? rawEmail.trim().toLowerCase() : null;
     const phone = body.data?.contact?.phone || body.data?.phone || null;
     const firstName = body.data?.contact?.first_name || body.data?.first_name || 'Givebutter';
     const lastName = body.data?.contact?.last_name || body.data?.last_name || 'Donor';
@@ -144,10 +145,10 @@ export async function onRequestPost({ request, env }) {
     }
 
     // Upsert caregiver by email (fallback phone)
-    const matchField = email ? 'email' : 'phone';
+    const matchColumn = email ? 'LOWER(TRIM(email))' : 'phone';
     const matchValue = email || phone;
     let caregiver = await env.LEGACY_DB
-      .prepare(`SELECT id FROM caregiver WHERE ${matchField} = ? AND status != 'archived'`)
+      .prepare(`SELECT id FROM caregiver WHERE ${matchColumn} = ? AND status != 'archived' ORDER BY created_at, id LIMIT 1`)
       .bind(matchValue)
       .first();
 

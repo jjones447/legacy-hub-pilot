@@ -33,6 +33,10 @@ export async function handleIntake(db, body) {
   // Email-list sign-ups keep the intake conventions (validation, IP limit, idempotency on
   // (source, external_ref)) but never touch caregiver, followup or any email sender.
   if (body && typeof body === 'object' && body.kind === 'newsletter') return handleNewsletter(db, body);
+  // One person, one record (requester, Nov 12): "Jane@Example.org " and "jane@example.org"
+  // are the same caregiver. Store new emails trimmed and lower-case, and match existing
+  // records case- and space-insensitively, as the portal and staff console already do.
+  if (body && typeof body === 'object' && typeof body.email === 'string') body.email = body.email.trim().toLowerCase();
   const err = validateIntake(body);
   if (err) return { status: 400, body: { ok: false, error: err } };
 
@@ -47,10 +51,10 @@ export async function handleIntake(db, body) {
   if (dup) return { status: 200, body: { ok: true, duplicate: true } };
 
   // Upsert caregiver by email (fallback phone).
-  const matchField = body.email ? 'email' : 'phone';
+  const matchColumn = body.email ? 'LOWER(TRIM(email))' : 'phone';
   const matchValue = body.email || body.phone;
   let caregiver = await db
-    .prepare(`SELECT id, sanctuary_member FROM caregiver WHERE ${matchField} = ? AND status != 'archived'`)
+    .prepare(`SELECT id, sanctuary_member FROM caregiver WHERE ${matchColumn} = ? AND status != 'archived' ORDER BY created_at, id LIMIT 1`)
     .bind(matchValue)
     .first();
 

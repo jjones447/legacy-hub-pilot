@@ -415,3 +415,17 @@ test('unqualified batch acknowledgement fails without a sequential-write fallbac
     assert.deepEqual(intakeSnapshot(),before);
   }
 });
+
+test('the same email in different capitals or with spaces reuses one caregiver record (requester, Nov 12)', async () => {
+  raw.prepare(`INSERT INTO caregiver (id, first_name, email, source) VALUES ('cg_existing_mixed', 'Jane', 'Jane.Doe@Example.org', 'staff')`).run();
+  const res = await handleIntake(db, {
+    kind: 'support_request', first_name: 'Jane', email: '  jane.doe@EXAMPLE.org ', external_ref: 'case-1',
+  });
+  assert.equal(res.status, 201);
+  assert.equal(raw.prepare(`SELECT COUNT(*) AS n FROM caregiver`).get().n, 1);
+  assert.equal(raw.prepare(`SELECT caregiver_id FROM followup WHERE external_ref = 'case-1'`).get().caregiver_id, 'cg_existing_mixed');
+  await handleIntake(db, { kind: 'support_request', first_name: 'Ana', email: ' Ana@Example.ORG ', external_ref: 'case-2' });
+  assert.equal(raw.prepare(`SELECT email FROM caregiver WHERE first_name = 'Ana'`).get().email, 'ana@example.org');
+  await handleIntake(db, { kind: 'support_request', first_name: 'Ana', email: 'ana@example.org', external_ref: 'case-3' });
+  assert.equal(raw.prepare(`SELECT COUNT(*) AS n FROM caregiver WHERE first_name = 'Ana'`).get().n, 1);
+});
