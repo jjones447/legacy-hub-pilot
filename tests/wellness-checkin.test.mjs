@@ -13,10 +13,17 @@ import {
 import { onRequestGet as getPortal, onRequestPost as postPortal } from '../functions/api/portal/[[path]].js';
 import { confirmPortal } from './helpers/confirmed-portal.mjs';
 import { onRequestGet as getStaff } from '../functions/api/staff/[[path]].js';
+import { onRequestGet as getFollowups } from '../functions/api/followups.js';
+import { onRequestGet as getEvents } from '../functions/api/events.js';
+import { onRequestGet as getRegistrations } from '../functions/api/registrations.js';
+import { onRequestGet as getGrants } from '../functions/api/grants/[[path]].js';
 
 const SCHEMA_1 = readFileSync(new URL('../schema/0001_init.sql', import.meta.url), 'utf8');
 const SCHEMA_5 = readFileSync(new URL('../schema/0005_portal_login.sql', import.meta.url), 'utf8');
+const SCHEMA_6 = readFileSync(new URL('../schema/0006_caregiver_contact_history_outcomes.sql', import.meta.url), 'utf8');
 const SCHEMA_12 = readFileSync(new URL('../schema/0012_wellness_checkin.sql', import.meta.url), 'utf8');
+const SCHEMA_17 = readFileSync(new URL('../schema/0017_event_details.sql', import.meta.url), 'utf8');
+const SCHEMA_18 = readFileSync(new URL('../schema/0018_event_photos.sql', import.meta.url), 'utf8');
 const PORTAL_HTML = readFileSync(new URL('../portal.html', import.meta.url), 'utf8');
 const APP_JS = readFileSync(new URL('../app.js', import.meta.url), 'utf8');
 const STAFF_HTML = readFileSync(new URL('../staff.html', import.meta.url), 'utf8');
@@ -235,4 +242,129 @@ test('UI clarity: portal explains the four-answer nonclinical score without prom
   assert.ok(intro);
   assert.doesNotMatch(intro, /profile/i);
   assert.match(intro, /wellness check-ins/);
+});
+
+test('internal QA test accounts use normal portal sign-in but are excluded from customer counts, lists, queues, events, grants, wellness reports, and recent-changes while preserving xcentric-test sample rows', async () => {
+  raw.exec(`
+    CREATE TABLE IF NOT EXISTS award (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      grant_application_id INTEGER NOT NULL REFERENCES grant_application(id),
+      amount TEXT,
+      care_package TEXT,
+      outcome TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE (grant_application_id)
+    );
+  `);
+  raw.exec(SCHEMA_6);
+  raw.exec(SCHEMA_17);
+  raw.exec(SCHEMA_18);
+  raw.exec(`
+    INSERT INTO caregiver (id, first_name, last_name, email, source, status, segment_tags)
+    VALUES
+      ('cg_qa_prod', 'TEST - Legacy - PROD', 'Caregiver - Portal QA', 'qa.prod@example.test', 'qa_account_prod', 'inactive', '["qa_test","do_not_contact","exclude_reporting","qa_prod","purpose_portal","owner_legacy_delivery"]'),
+      ('cg_qa_source_only', 'TEST - Legacy - SourceOnly', 'Caregiver - Portal QA', 'qa.source@example.test', 'qa_account_staging', 'inactive', '[]'),
+      ('cg_qa_tag', 'Tagged QA', 'Account', 'qa.tag@example.test', 'staff', 'active', '["qa_test","exclude_reporting"]'),
+      ('cg_qatar', 'Noor', 'Al-Thani', 'noor@example.org', 'qatar_referral', 'active', '[]'),
+      ('cg_sample', 'Sample', 'Owner', 'sample.owner@example.test', 'pc2-codex-13-admin-test', 'active', '["xcentric-test"]');
+    INSERT INTO event (id, title, type, starts_at, publish_state)
+    VALUES ('ev_qa_check', 'Support Group', 'support_group', '2026-11-15T18:00:00Z', 'published');
+    INSERT INTO registration (caregiver_id, event_id, status, source, external_ref)
+    VALUES
+      ('cg1', 'ev_qa_check', 'registered', 'site_form', 'reg_cg1'),
+      ('cg_qatar', 'ev_qa_check', 'registered', 'site_form', 'reg_qatar'),
+      ('cg_qa_prod', 'ev_qa_check', 'registered', 'portal', 'reg_qa_prod'),
+      ('cg_qa_source_only', 'ev_qa_check', 'registered', 'portal', 'reg_qa_source'),
+      ('cg_qa_tag', 'ev_qa_check', 'attended', 'staff', 'reg_qa_tag');
+    INSERT INTO followup (caregiver_id, kind, detail, status, source, external_ref)
+    VALUES
+      ('cg1', 'support_request', 'Real caregiver follow-up', 'open', 'site_form', 'fu_cg1'),
+      ('cg_qatar', 'support_request', 'Qatar referral follow-up', 'open', 'site_form', 'fu_qatar'),
+      ('cg_qa_prod', 'support_request', 'QA follow-up', 'open', 'portal', 'fu_qa_prod'),
+      ('cg_qa_source_only', 'support_request', 'QA source follow-up', 'open', 'portal', 'fu_qa_source'),
+      ('cg_qa_tag', 'support_request', 'Tagged QA follow-up', 'open', 'portal', 'fu_qa_tag');
+    INSERT INTO grant_application (caregiver_id, requested_for, status, source, external_ref)
+    VALUES
+      ('cg1', 'Respite care', 'submitted', 'site_form', 'gr_cg1'),
+      ('cg_qatar', 'Respite care', 'submitted', 'site_form', 'gr_qatar'),
+      ('cg_qa_prod', 'QA respite test', 'submitted', 'portal', 'gr_qa_prod'),
+      ('cg_qa_source_only', 'QA source respite test', 'submitted', 'portal', 'gr_qa_source'),
+      ('cg_qa_tag', 'Tagged QA respite test', 'submitted', 'portal', 'gr_qa_tag');
+    INSERT INTO wellness_checkin (caregiver_id, answers_json, score, created_at)
+    VALUES
+      ('cg1', '{}', 75, datetime('now', '-5 days')),
+      ('cg_qatar', '{}', 82, datetime('now', '-4 days')),
+      ('cg_qa_prod', '{}', 90, datetime('now', '-3 days')),
+      ('cg_qa_source_only', '{}', 88, datetime('now', '-2 days')),
+      ('cg_qa_tag', '{}', 85, datetime('now', '-2 days')),
+      ('cg_sample', '{}', 80, datetime('now', '-1 days'));
+    INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
+    VALUES
+      ('staff@example.com', 'caregiver.update', 'caregiver', 'cg1', '{"status":"inactive"}', '{"status":"active"}'),
+      ('staff@example.com', 'caregiver.update', 'caregiver', 'cg_qatar', '{"status":"inactive"}', '{"status":"active"}'),
+      ('staff@example.com', 'caregiver.update', 'caregiver', 'cg_qa_prod', '{"status":"inactive"}', '{"status":"active"}'),
+      ('staff@example.com', 'caregiver.update', 'caregiver', 'cg_qa_source_only', '{"status":"inactive"}', '{"status":"active"}'),
+      ('staff@example.com', 'caregiver.update', 'caregiver', 'cg_qa_tag', '{"status":"inactive"}', '{"status":"active"}');
+  `);
+
+  // 1. Normal portal sign-in & check-in works for the internal QA account
+  const qaCookie = await signIn('qa.prod@example.test');
+  const meRes = await getPortal({ request: request('http://localhost/api/portal/me', { headers: { Cookie: qaCookie } }), env });
+  assert.equal(meRes.status, 200);
+  const meData = await meRes.json();
+  assert.equal(meData.profile.id, 'cg_qa_prod');
+
+  // 2. Default staff caregiver search & customer counts exclude internal QA rows but preserve cg1, cg2, cg_qatar ('qatar_referral'), and cg_sample
+  const defaultList = await (await getStaff({ request: request('http://localhost/api/staff/caregivers'), env })).json();
+  assert.equal(defaultList.total, 4);
+  assert.deepEqual(defaultList.caregivers.map((c) => c.id).sort(), ['cg1', 'cg2', 'cg_qatar', 'cg_sample']);
+
+  const nameSearch = await (await getStaff({ request: request('http://localhost/api/staff/caregivers?q=Portal%20QA'), env })).json();
+  assert.equal(nameSearch.total, 0);
+  assert.equal(nameSearch.caregivers.length, 0);
+
+  // Explicit internal QA segment filter in Staff UI and API allows operators to inspect all internal QA test accounts intentionally
+  assert.match(STAFF_HTML, /<select id="caregiverSearchSegment"[\s\S]*?<option value="qa_test">Internal QA<\/option>/);
+  const qaSegmentList = await (await getStaff({ request: request('http://localhost/api/staff/caregivers?segment=qa_test'), env })).json();
+  assert.equal(qaSegmentList.total, 3);
+  assert.deepEqual(qaSegmentList.caregivers.map((c) => c.id).sort(), ['cg_qa_prod', 'cg_qa_source_only', 'cg_qa_tag']);
+
+  // Direct caregiver profile lookup by id still works for targeted inspection
+  const directProfile = await (await getStaff({ request: request('http://localhost/api/staff/caregiver/cg_qa_prod'), env })).json();
+  assert.equal(directProfile.ok, true);
+  assert.equal(directProfile.profile.id, 'cg_qa_prod');
+
+  // 3. Wellness selector and series exclude internal QA rows while preserving cg1, cg_qatar, and cg_sample
+  const wellnessPeople = await caregiversWithCheckins(db);
+  assert.deepEqual(wellnessPeople.map((p) => p.id).sort(), ['cg1', 'cg_qatar', 'cg_sample']);
+  const series = await staffSeries(db, ['cg1', 'cg_qatar', 'cg_qa_prod', 'cg_qa_source_only', 'cg_qa_tag', 'cg_sample']);
+  assert.deepEqual(series.series.map((s) => s.caregiver_id).sort(), ['cg1', 'cg_qatar', 'cg_sample']);
+
+  // 4. Staff queue and /api/followups exclude internal QA rows while preserving cg1 and cg_qatar
+  const queueData = await (await getStaff({ request: request('http://localhost/api/staff/queue'), env })).json();
+  assert.deepEqual(queueData.queue.map((f) => f.caregiver_id).sort(), ['cg1', 'cg_qatar']);
+  const followupsData = await (await getFollowups({ env })).json();
+  assert.deepEqual(followupsData.followups.map((f) => f.first_name).sort(), ['Jane', 'Noor']);
+
+  // 5. Public events, staff events, and event registrations exclude internal QA registrations while preserving cg1 and cg_qatar
+  const pubEvents = await (await getEvents({ env })).json();
+  assert.equal(pubEvents.events.find((e) => e.id === 'ev_qa_check').registered_count, 2);
+  const staffEvents = await (await getStaff({ request: request('http://localhost/api/staff/events'), env })).json();
+  assert.equal(staffEvents.events.find((e) => e.id === 'ev_qa_check').registered_count, 2);
+  const regData = await (await getRegistrations({ request: request('http://localhost/api/registrations?event_id=ev_qa_check'), env })).json();
+  assert.deepEqual(regData.registrations.map((r) => r.caregiver_id).sort(), ['cg1', 'cg_qatar']);
+
+  // 6. Staff grants list excludes internal QA rows (both unfiltered and status-filtered) while preserving cg1 and cg_qatar
+  const allGrants = await (await getGrants({ request: request('http://localhost/api/grants'), env })).json();
+  assert.deepEqual(allGrants.grants.map((g) => g.caregiver_id).sort(), ['cg1', 'cg_qatar']);
+  const submittedGrants = await (await getGrants({ request: request('http://localhost/api/grants?status=submitted'), env })).json();
+  assert.deepEqual(submittedGrants.grants.map((g) => g.caregiver_id).sort(), ['cg1', 'cg_qatar']);
+
+  // 7. Staff recent-changes excludes caregiver audit entries for internal QA rows while preserving cg1 and cg_qatar
+  const recentChanges = await (await getStaff({ request: request('http://localhost/api/staff/recent-changes'), env })).json();
+  assert.deepEqual(
+    recentChanges.changes.filter((c) => c.entity === 'caregiver').map((c) => c.entity_id).sort(),
+    ['cg1', 'cg_qatar']
+  );
 });
