@@ -1766,7 +1766,7 @@ function renderPublicEvents(events, grid, now) {
     if (unknown || keepWhenEmpty) return false;
     const empty = document.createElement('p');
     empty.className = 'small muted';
-    empty.textContent = 'No upcoming published events. Please check back for confirmed dates and registration.';
+    empty.textContent = grid.dataset.emptyText || 'No upcoming published events. Please check back for confirmed dates and registration.';
     cards.push(empty);
   }
   grid.replaceChildren.apply(grid, cards);

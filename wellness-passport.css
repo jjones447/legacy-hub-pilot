@@ -5,7 +5,7 @@
 .wp-hero-sub { font-family: var(--font-display); font-style: italic; font-size: clamp(20px, 2.4vw, 26px); color: var(--coral-dark); margin-bottom: 22px; }
 .wp-hero-text > p:not(.wp-hero-sub) { color: var(--ink-soft); margin-bottom: 14px; }
 .wp-hero-text .wp-hero-close { color: var(--plum); font-weight: 600; margin-bottom: 26px; }
-.wp-hero-media img { width: 100%; height: 580px; object-fit: cover; object-position: 50% 62%; border-radius: 24px; box-shadow: var(--shadow-lg); }
+.wp-hero-media img { width: 100%; height: 580px; object-fit: cover; object-position: 50% 40%; border-radius: 24px; box-shadow: var(--shadow-lg); }
 .wp-section { padding: 72px 0; }
 .wp-section-tint { background: var(--white); }
 .wp-head { max-width: 760px; margin: 0 auto 40px; text-align: center; }
@@ -57,7 +57,7 @@
 @media (max-width: 860px) {
   .wp-hero { padding: 40px 0 56px; }
   .wp-hero-grid { grid-template-columns: 1fr; gap: 32px; }
-  .wp-hero-media img { height: 380px; object-position: 50% 66%; }
+  .wp-hero-media img { height: 380px; object-position: 50% 40%; }
   .wp-steps { grid-template-columns: 1fr; }
 }
 @media (max-width: 600px) {
