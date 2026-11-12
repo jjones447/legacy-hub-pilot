@@ -37,6 +37,7 @@ export const UNIT_TEST_FILES = Object.freeze([
   'console-route-coverage.test.mjs',
   'content-schema-seed-d7-s0a.test.mjs',
   'cr1-home-copy.test.mjs',
+  'community-series-copy.test.mjs',
   'cr3-resource-hub-ia.test.mjs',
   'cr4-sanctuary-programs.test.mjs',
   'hero-motion.test.mjs',

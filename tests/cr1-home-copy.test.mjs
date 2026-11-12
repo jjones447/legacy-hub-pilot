@@ -48,7 +48,8 @@ test('home support preserves client copy with sentence-case presentation and use
   // rebuild of that page removed; they stay on the home page unchanged.
   for (const [description, source] of [
     ['Connect with wellness activities, partner experiences, and grant benefits.', null],
-    ['Time to breathe while your loved one is somewhere safe, engaged and cared for.', 'community-series.html'],
+    // Came from the old Community Series page, rewritten by the requester on Nov 12; stays on home.
+    ['Time to breathe while your loved one is somewhere safe, engaged and cared for.', null],
     ['Gatherings and wellness sessions for caregivers across the community.', null],
   ]) {
     assert.ok(support.includes(description));

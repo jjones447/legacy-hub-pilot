@@ -66,7 +66,7 @@ PAGE_METADATA = {
     },
     "community-series.html": {
         "title": "Caregiver Sanctuary Community Series — Legacy Home & Respite Care Foundation",
-        "description": "A rotating series of caregiver gatherings across Greater Milwaukee libraries, parks, and partner spaces.",
+        "description": "Connection. Community. Time for You. Gatherings and experiences for dementia family caregivers, hosted with local businesses and community spaces.",
     },
     "drop-in-respite.html": {
         "title": "Drop-In Respite — Legacy Home & Respite Care Foundation",
