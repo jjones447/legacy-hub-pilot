@@ -360,3 +360,25 @@ test('GiveButter webhook is idempotent on event replay', async () => {
   const count = raw.prepare(`SELECT COUNT(*) AS n FROM followup WHERE source = 'givebutter' AND external_ref = 'evt_idempotency_test'`).get();
   assert.equal(count.n, 1);
 });
+
+test('Givebutter uses the same email rule: a single case variant is reused, several variants are flagged, none picked by age (41 review of #356)', async () => {
+  raw.prepare(`INSERT INTO caregiver (id, first_name, email, source) VALUES ('cg_one', 'Synthetic', 'Fixture@Example.invalid', 'staff')`).run();
+  const single = await postProvider(providerPayload('transaction.succeeded', 'synthetic_case_1'));
+  assert.equal(single.status, 200);
+  assert.equal((await single.json()).caregiver_id, 'cg_one');
+
+  raw.prepare(`INSERT INTO caregiver (id, first_name, email, source) VALUES ('cg_two', 'Synthetic', 'fixture@example.invalid ', 'staff')`).run();
+  const before = raw.prepare(`SELECT * FROM caregiver ORDER BY id`).all();
+  const payload = providerPayload('transaction.succeeded', 'synthetic_case_2');
+  payload.data.email = 'FIXTURE@example.INVALID';
+  const res = await postProvider(payload);
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.ok(!['cg_one', 'cg_two'].includes(body.caregiver_id));
+  assert.deepEqual(raw.prepare(`SELECT * FROM caregiver WHERE id IN ('cg_one','cg_two') ORDER BY id`).all(), before);
+  const review = raw.prepare(`SELECT caregiver_id, detail, source FROM followup WHERE kind = 'possible_duplicate'`).all();
+  assert.equal(review.length, 1);
+  assert.equal(review[0].caregiver_id, body.caregiver_id);
+  assert.equal(review[0].source, 'duplicate_check');
+  assert.equal(raw.prepare(`SELECT caregiver_id FROM followup WHERE kind = 'donation' AND external_ref = 'transaction.succeeded:synthetic_case_2'`).get().caregiver_id, body.caregiver_id);
+});

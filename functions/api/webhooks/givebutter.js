@@ -1,5 +1,6 @@
 // POST /api/webhooks/givebutter — GiveButter donations/registrations webhook ingestion (slice 08).
 import { internalError } from '../../_lib/errors.js';
+import { resolveCaregiverByContact } from '../_shared.mjs';
 
 async function getHmacSha256(message, secret) {
   const enc = new TextEncoder();
@@ -63,10 +64,12 @@ function json(obj, status = 200) {
 }
 
 function batchEntityId(results) {
-  if (!Array.isArray(results) || results.length !== 4 || [0, 1, 2, 3].some(index => results[index]?.success !== true)) {
+  // Four statements, or five when a possible-duplicate review is queued; the identity
+  // SELECT is always last.
+  if (!Array.isArray(results) || (results.length !== 4 && results.length !== 5) || Array.from({ length: results.length }, (_, index) => results[index]).some(result => result?.success !== true)) {
     throw new Error('invalid payment batch result');
   }
-  const rows = results[3].results;
+  const rows = results[results.length - 1].results;
   if (!Array.isArray(rows) || rows.length !== 1 || !Number.isSafeInteger(rows[0]?.id) || rows[0].id <= 0) {
     throw new Error('missing payment result identity');
   }
@@ -135,7 +138,7 @@ export async function onRequestPost({ request, env }) {
 
     // Extract contact details
     const rawEmail = body.data?.contact?.email || body.data?.email || null;
-    const email = typeof rawEmail === 'string' && rawEmail.trim() ? rawEmail.trim().toLowerCase() : null;
+    const email = typeof rawEmail === 'string' && rawEmail.trim() ? rawEmail.trim() : null;
     const phone = body.data?.contact?.phone || body.data?.phone || null;
     const firstName = body.data?.contact?.first_name || body.data?.first_name || 'Givebutter';
     const lastName = body.data?.contact?.last_name || body.data?.last_name || 'Donor';
@@ -144,13 +147,9 @@ export async function onRequestPost({ request, env }) {
       return json({ ok: false, error: 'missing contact email or phone' }, 400);
     }
 
-    // Upsert caregiver by email (fallback phone)
-    const matchColumn = email ? 'LOWER(TRIM(email))' : 'phone';
-    const matchValue = email || phone;
-    let caregiver = await env.LEGACY_DB
-      .prepare(`SELECT id FROM caregiver WHERE ${matchColumn} = ? AND status != 'archived' ORDER BY created_at, id LIMIT 1`)
-      .bind(matchValue)
-      .first();
+    // Upsert caregiver by email (fallback phone); same matching rule as public intake.
+    const resolved = await resolveCaregiverByContact(env.LEGACY_DB, email, phone);
+    const caregiver = resolved.caregiver;
 
     let caregiverId;
     let caregiverWrite;
@@ -168,7 +167,7 @@ export async function onRequestPost({ request, env }) {
           INSERT INTO caregiver (id, first_name, last_name, email, phone, source)
           VALUES (?, ?, ?, ?, ?, 'givebutter')
         `)
-        .bind(caregiverId, firstName, lastName, email, phone);
+        .bind(caregiverId, firstName, lastName, resolved.newEmail, phone);
     }
 
     // Check if it maps to an event in our event table
@@ -225,6 +224,11 @@ export async function onRequestPost({ request, env }) {
         JSON.stringify({ caregiver_id: caregiverId, external_ref: externalRef }),
         externalRef, caregiverId
       ),
+      ...(resolved.ambiguousIds ? [env.LEGACY_DB
+        .prepare(`INSERT OR IGNORE INTO followup (caregiver_id, kind, detail, source, external_ref) VALUES (?, 'possible_duplicate', ?, 'duplicate_check', ?)`)
+        .bind(caregiverId,
+          'Possible duplicate records for the same email: ' + [...new Set([...resolved.ambiguousIds, caregiverId])].sort().join(', ') + '. Review and merge if they are the same person.',
+          'givebutter:' + externalRef)] : []),
       env.LEGACY_DB.prepare(`SELECT id FROM ${entity}
         WHERE source = 'givebutter' AND external_ref = ? AND caregiver_id = ?`)
         .bind(externalRef, caregiverId),

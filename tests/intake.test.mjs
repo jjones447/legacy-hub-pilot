@@ -429,3 +429,33 @@ test('the same email in different capitals or with spaces reuses one caregiver r
   await handleIntake(db, { kind: 'support_request', first_name: 'Ana', email: 'ana@example.org', external_ref: 'case-3' });
   assert.equal(raw.prepare(`SELECT COUNT(*) AS n FROM caregiver WHERE first_name = 'Ana'`).get().n, 1);
 });
+
+test('several existing records sharing an email: reuse only an exact match, never pick by age, and flag for staff review (41 review of #356)', async () => {
+  raw.prepare(`INSERT INTO caregiver (id, first_name, email, source, created_at, updated_at) VALUES ('cg_old', 'Jane', 'Jane.Doe@Example.org', 'staff', '2026-01-01 00:00:00', '2026-01-01 00:00:00')`).run();
+  raw.prepare(`INSERT INTO caregiver (id, first_name, email, source, created_at, updated_at) VALUES ('cg_new', 'Jane', 'jane.doe@example.org ', 'staff', '2026-02-01 00:00:00', '2026-02-01 00:00:00')`).run();
+  const before = raw.prepare(`SELECT * FROM caregiver ORDER BY id`).all();
+
+  // No record matches what was typed exactly: the sign-up is kept on a new record, nothing is assigned by age.
+  const res = await handleIntake(db, { kind: 'support_request', first_name: 'Jane', email: ' JANE.DOE@example.ORG ', external_ref: 'amb-1' });
+  assert.equal(res.status, 201);
+  const created = res.body.caregiver_id;
+  assert.ok(!['cg_old', 'cg_new'].includes(created));
+  assert.equal(raw.prepare(`SELECT email FROM caregiver WHERE id = ?`).get(created).email, 'JANE.DOE@example.ORG');
+  assert.deepEqual(raw.prepare(`SELECT * FROM caregiver WHERE id IN ('cg_old','cg_new') ORDER BY id`).all(), before);
+  const review = raw.prepare(`SELECT caregiver_id, kind, detail, source, external_ref FROM followup WHERE kind = 'possible_duplicate'`).all();
+  assert.equal(review.length, 1);
+  assert.equal(review[0].caregiver_id, created);
+  assert.equal(review[0].source, 'duplicate_check');
+  for (const id of ['cg_old', 'cg_new', created]) assert.match(review[0].detail, new RegExp(id));
+  assert.equal(raw.prepare(`SELECT caregiver_id FROM followup WHERE external_ref = 'amb-1'`).get().caregiver_id, created);
+
+  // An exact match on what was typed is reused (today's behaviour), still flagged for review.
+  const exact = await handleIntake(db, { kind: 'membership', first_name: 'Jane', email: 'Jane.Doe@Example.org', external_ref: 'amb-2' });
+  assert.equal(exact.status, 201);
+  assert.equal(exact.body.caregiver_id, 'cg_old');
+  assert.equal(raw.prepare(`SELECT COUNT(*) AS n FROM followup WHERE kind = 'possible_duplicate'`).get().n, 2);
+  assert.equal(raw.prepare(`SELECT COUNT(*) AS n FROM caregiver`).get().n, 3);
+  // Replaying the same sign-up does not add another review task.
+  await handleIntake(db, { kind: 'membership', first_name: 'Jane', email: 'Jane.Doe@Example.org', external_ref: 'amb-2' });
+  assert.equal(raw.prepare(`SELECT COUNT(*) AS n FROM followup WHERE kind = 'possible_duplicate'`).get().n, 2);
+});

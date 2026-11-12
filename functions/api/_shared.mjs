@@ -34,9 +34,9 @@ export async function handleIntake(db, body) {
   // (source, external_ref)) but never touch caregiver, followup or any email sender.
   if (body && typeof body === 'object' && body.kind === 'newsletter') return handleNewsletter(db, body);
   // One person, one record (requester, Nov 12): "Jane@Example.org " and "jane@example.org"
-  // are the same caregiver. Store new emails trimmed and lower-case, and match existing
-  // records case- and space-insensitively, as the portal and staff console already do.
-  if (body && typeof body === 'object' && typeof body.email === 'string') body.email = body.email.trim().toLowerCase();
+  // are the same caregiver. Match existing records case- and space-insensitively, as the
+  // portal does, and store new emails trimmed and lower-case.
+  if (body && typeof body === 'object' && typeof body.email === 'string') body.email = body.email.trim();
   const err = validateIntake(body);
   if (err) return { status: 400, body: { ok: false, error: err } };
 
@@ -51,12 +51,9 @@ export async function handleIntake(db, body) {
   if (dup) return { status: 200, body: { ok: true, duplicate: true } };
 
   // Upsert caregiver by email (fallback phone).
-  const matchColumn = body.email ? 'LOWER(TRIM(email))' : 'phone';
-  const matchValue = body.email || body.phone;
-  let caregiver = await db
-    .prepare(`SELECT id, sanctuary_member FROM caregiver WHERE ${matchColumn} = ? AND status != 'archived' ORDER BY created_at, id LIMIT 1`)
-    .bind(matchValue)
-    .first();
+  const resolved = await resolveCaregiverByContact(db, body.email, body.phone);
+  const caregiver = resolved.caregiver;
+  const newEmail = resolved.newEmail;
 
   let caregiverId;
   let caregiverWrite;
@@ -76,7 +73,7 @@ export async function handleIntake(db, body) {
         caregiverId,
         body.first_name,
         body.last_name || null,
-        body.email || null,
+        newEmail,
         body.phone || null,
         body.caring_for || null,
         body.relationship || null,
@@ -152,17 +149,61 @@ export async function handleIntake(db, body) {
       JSON.stringify({ kind: body.kind, external_ref: body.external_ref, event_id: body.event_id || null })
     );
 
+  // Several existing records share this email in different capitals or spacing: keep the
+  // sign-up (on the record matching exactly what was typed, or a new one) and ask staff to
+  // review the possible duplicates. Existing records are never changed or chosen by age.
+  const duplicateReview = resolved.ambiguousIds ? db
+    .prepare(`INSERT OR IGNORE INTO followup (caregiver_id, kind, detail, source, external_ref) VALUES (?, 'possible_duplicate', ?, 'duplicate_check', ?)`)
+    .bind(
+      caregiverId,
+      'Possible duplicate records for the same email: ' + [...new Set([...resolved.ambiguousIds, caregiverId])].sort().join(', ') + '. Review and merge if they are the same person.',
+      source + ':' + body.external_ref
+    ) : null;
+
   if (atomic) {
+    if (duplicateReview) writes.push(duplicateReview);
     writes.push(auditWrite);
     const results = await db.batch(writes);
     if (!Array.isArray(results) || results.length !== writes.length || results.some(result => result?.success !== true)) {
       throw new Error('intake batch did not confirm all mutations');
     }
   } else {
+    if (duplicateReview) await duplicateReview.run();
     await auditWrite.run();
   }
 
   return { status: 201, body: { ok: true, caregiver_id: caregiverId } };
+}
+
+// Find the one active caregiver for this contact. Email matches ignore capitals and
+// surrounding spaces. If several records match that way, reuse only an exact match on what
+// was typed (or on its lower-case form) and report the ambiguity; otherwise a new record is
+// stored as typed, so no existing row is picked by age and none is modified.
+export async function resolveCaregiverByContact(db, email, phone) {
+  if (!email) {
+    const caregiver = await db
+      .prepare(`SELECT id, sanctuary_member FROM caregiver WHERE phone = ? AND status != 'archived'`)
+      .bind(phone)
+      .first();
+    return { caregiver: caregiver || null, newEmail: null, ambiguousIds: null };
+  }
+  const typed = String(email).trim();
+  const key = typed.toLowerCase();
+  // One aggregate row (caregiver_email_uq allows at most one exact match per spelling).
+  const found = await db
+    .prepare(`SELECT COUNT(*) AS n, MIN(id) AS first_id, group_concat(id, ',') AS ids,
+        MAX(CASE WHEN email = ? THEN id END) AS typed_id, MAX(CASE WHEN email = ? THEN id END) AS key_id
+      FROM caregiver WHERE LOWER(TRIM(email)) = ? AND status != 'archived'`)
+    .bind(typed, key, key)
+    .first();
+  const n = Number(found?.n || 0);
+  if (n === 0) return { caregiver: null, newEmail: key, ambiguousIds: null };
+  const chosenId = n === 1 ? found.first_id : (found.typed_id || found.key_id || null);
+  const caregiver = chosenId
+    ? await db.prepare(`SELECT id, sanctuary_member FROM caregiver WHERE id = ?`).bind(chosenId).first()
+    : null;
+  if (n === 1) return { caregiver, newEmail: key, ambiguousIds: null };
+  return { caregiver, newEmail: typed, ambiguousIds: String(found.ids || '').split(',').filter(Boolean) };
 }
 
 // Per-IP request limits, counted in audit_log (no new binding or table).
