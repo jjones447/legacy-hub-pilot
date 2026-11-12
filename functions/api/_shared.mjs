@@ -54,10 +54,17 @@ export async function handleIntake(db, body) {
   const resolved = await resolveCaregiverByContact(db, body.email, body.phone);
   const caregiver = resolved.caregiver;
   const newEmail = resolved.newEmail;
+  const disputed = Boolean(resolved.ambiguousIds);
 
   let caregiverId;
   let caregiverWrite;
-  if (caregiver) {
+  if (disputed) {
+    caregiverId = 'cg_unmatched_intake';
+    caregiverWrite = db.prepare(
+      `INSERT OR IGNORE INTO caregiver (id, first_name, last_name, source, status)
+       VALUES ('cg_unmatched_intake', 'Unmatched', 'Website sign-up', 'site_form', 'inactive')`
+    ).bind();
+  } else if (caregiver) {
     caregiverId = caregiver.id;
     caregiverWrite = db
       .prepare(`UPDATE caregiver SET updated_at = ? WHERE id = ?`)
@@ -112,7 +119,8 @@ export async function handleIntake(db, body) {
       .bind(caregiverId, `Confirm registration for ${body.event_id}`, source, body.external_ref + ':fu')
       .run();
   } else if (body.kind === 'membership') {
-    writes.push(db
+    // A disputed identity is not made a member here; staff apply it after reconciling.
+    if (!disputed) writes.push(db
       .prepare(`UPDATE caregiver SET sanctuary_member = 1, member_since = COALESCE(member_since, ?), updated_at = ? WHERE id = ?`)
       .bind(nowIso(), nowIso(), caregiverId));
     const note = typeof body.message === 'string' ? body.message : '';
@@ -149,14 +157,12 @@ export async function handleIntake(db, body) {
       JSON.stringify({ kind: body.kind, external_ref: body.external_ref, event_id: body.event_id || null })
     );
 
-  // Several existing records share this email in different capitals or spacing: keep the
-  // sign-up (on the record matching exactly what was typed, or a new one) and ask staff to
-  // review the possible duplicates. Existing records are never changed or chosen by age.
-  const duplicateReview = resolved.ambiguousIds ? db
+  // Disputed identity: an actionable staff task with the submitted contact and the candidates.
+  const duplicateReview = disputed ? db
     .prepare(`INSERT OR IGNORE INTO followup (caregiver_id, kind, detail, source, external_ref) VALUES (?, 'possible_duplicate', ?, 'duplicate_check', ?)`)
     .bind(
       caregiverId,
-      'Possible duplicate records for the same email: ' + [...new Set([...resolved.ambiguousIds, caregiverId])].sort().join(', ') + '. Review and merge if they are the same person.',
+      possibleDuplicateDetail(`Website ${body.kind.replace(/_/g, ' ')} (${body.external_ref})`, body, resolved.ambiguousIds),
       source + ':' + body.external_ref
     ) : null;
 
@@ -176,9 +182,9 @@ export async function handleIntake(db, body) {
 }
 
 // Find the one active caregiver for this contact. Email matches ignore capitals and
-// surrounding spaces. If several records match that way, reuse only an exact match on what
-// was typed (or on its lower-case form) and report the ambiguity; otherwise a new record is
-// stored as typed, so no existing row is picked by age and none is modified.
+// surrounding spaces. When several records match that way the identity is disputed: the
+// caller keeps the activity on a no-email holding record for staff reconciliation (as Square
+// does for unmatched payments), so no existing row is chosen and no new sign-in identity is made.
 export async function resolveCaregiverByContact(db, email, phone) {
   if (!email) {
     const caregiver = await db
@@ -187,23 +193,26 @@ export async function resolveCaregiverByContact(db, email, phone) {
       .first();
     return { caregiver: caregiver || null, newEmail: null, ambiguousIds: null };
   }
-  const typed = String(email).trim();
-  const key = typed.toLowerCase();
-  // One aggregate row (caregiver_email_uq allows at most one exact match per spelling).
+  const key = String(email).trim().toLowerCase();
   const found = await db
-    .prepare(`SELECT COUNT(*) AS n, MIN(id) AS first_id, group_concat(id, ',') AS ids,
-        MAX(CASE WHEN email = ? THEN id END) AS typed_id, MAX(CASE WHEN email = ? THEN id END) AS key_id
+    .prepare(`SELECT COUNT(*) AS n, MIN(id) AS first_id, group_concat(id, ',') AS ids
       FROM caregiver WHERE LOWER(TRIM(email)) = ? AND status != 'archived'`)
-    .bind(typed, key, key)
+    .bind(key)
     .first();
   const n = Number(found?.n || 0);
   if (n === 0) return { caregiver: null, newEmail: key, ambiguousIds: null };
-  const chosenId = n === 1 ? found.first_id : (found.typed_id || found.key_id || null);
-  const caregiver = chosenId
-    ? await db.prepare(`SELECT id, sanctuary_member FROM caregiver WHERE id = ?`).bind(chosenId).first()
-    : null;
-  if (n === 1) return { caregiver, newEmail: key, ambiguousIds: null };
-  return { caregiver, newEmail: typed, ambiguousIds: String(found.ids || '').split(',').filter(Boolean) };
+  if (n === 1) {
+    const caregiver = await db.prepare(`SELECT id, sanctuary_member FROM caregiver WHERE id = ?`).bind(found.first_id).first();
+    return { caregiver, newEmail: key, ambiguousIds: null };
+  }
+  return { caregiver: null, newEmail: null, ambiguousIds: String(found.ids || '').split(',').filter(Boolean).sort() };
+}
+
+// Staff-only text for a disputed-identity review task: who submitted what, and the candidates.
+export function possibleDuplicateDetail(channel, contact, ambiguousIds) {
+  const name = [contact.first_name, contact.last_name].filter(v => typeof v === 'string' && v.trim()).join(' ') || '(no name)';
+  return `${channel} from ${name} <${contact.email}>${contact.phone ? ' / ' + contact.phone : ''} was kept here because several records share this email: ` +
+    `${ambiguousIds.join(', ')}. Decide which person it belongs to (merge the duplicates if they are the same person), then move it there.`;
 }
 
 // Per-IP request limits, counted in audit_log (no new binding or table).

@@ -1,6 +1,6 @@
 // POST /api/webhooks/givebutter — GiveButter donations/registrations webhook ingestion (slice 08).
 import { internalError } from '../../_lib/errors.js';
-import { resolveCaregiverByContact } from '../_shared.mjs';
+import { resolveCaregiverByContact, possibleDuplicateDetail } from '../_shared.mjs';
 
 async function getHmacSha256(message, secret) {
   const enc = new TextEncoder();
@@ -63,10 +63,10 @@ function json(obj, status = 200) {
   });
 }
 
-function batchEntityId(results) {
-  // Four statements, or five when a possible-duplicate review is queued; the identity
-  // SELECT is always last.
-  if (!Array.isArray(results) || (results.length !== 4 && results.length !== 5) || Array.from({ length: results.length }, (_, index) => results[index]).some(result => result?.success !== true)) {
+function batchEntityId(results, expected) {
+  // Every statement sent must be acknowledged (four, or five with a possible-duplicate
+  // review); the identity SELECT is always last.
+  if (!Array.isArray(results) || results.length !== expected || Array.from({ length: expected }, (_, index) => results[index]).some(result => result?.success !== true)) {
     throw new Error('invalid payment batch result');
   }
   const rows = results[results.length - 1].results;
@@ -150,12 +150,21 @@ export async function onRequestPost({ request, env }) {
     // Upsert caregiver by email (fallback phone); same matching rule as public intake.
     const resolved = await resolveCaregiverByContact(env.LEGACY_DB, email, phone);
     const caregiver = resolved.caregiver;
+    const disputed = Boolean(resolved.ambiguousIds);
 
     let caregiverId;
     let caregiverWrite;
     const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
 
-    if (caregiver) {
+    if (disputed) {
+      // Several records share this email: keep the activity on a no-email holding record for
+      // staff reconciliation, like Square's unmatched payments.
+      caregiverId = 'cg_unmatched_givebutter';
+      caregiverWrite = env.LEGACY_DB.prepare(`
+          INSERT OR IGNORE INTO caregiver (id, first_name, last_name, source, status)
+          VALUES ('cg_unmatched_givebutter', 'Unmatched', 'Givebutter', 'givebutter', 'inactive')
+        `);
+    } else if (caregiver) {
       caregiverId = caregiver.id;
       caregiverWrite = env.LEGACY_DB
         .prepare(`UPDATE caregiver SET updated_at = ? WHERE id = ?`)
@@ -209,8 +218,8 @@ export async function onRequestPost({ request, env }) {
         .bind(caregiverId, kind, detail, externalRef);
     }
 
-    // All three mutations share one transaction. entity is a fixed branch value.
-    const results = await env.LEGACY_DB.batch([
+    // All mutations share one transaction. entity is a fixed branch value.
+    const statements = [
       caregiverWrite,
       resultWrite,
       env.LEGACY_DB.prepare(`
@@ -224,16 +233,18 @@ export async function onRequestPost({ request, env }) {
         JSON.stringify({ caregiver_id: caregiverId, external_ref: externalRef }),
         externalRef, caregiverId
       ),
-      ...(resolved.ambiguousIds ? [env.LEGACY_DB
+      ...(disputed ? [env.LEGACY_DB
         .prepare(`INSERT OR IGNORE INTO followup (caregiver_id, kind, detail, source, external_ref) VALUES (?, 'possible_duplicate', ?, 'duplicate_check', ?)`)
         .bind(caregiverId,
-          'Possible duplicate records for the same email: ' + [...new Set([...resolved.ambiguousIds, caregiverId])].sort().join(', ') + '. Review and merge if they are the same person.',
+          possibleDuplicateDetail(`Givebutter ${body.event || 'activity'} (${externalRef})`,
+            { first_name: firstName, last_name: lastName, email, phone }, resolved.ambiguousIds),
           'givebutter:' + externalRef)] : []),
       env.LEGACY_DB.prepare(`SELECT id FROM ${entity}
         WHERE source = 'givebutter' AND external_ref = ? AND caregiver_id = ?`)
         .bind(externalRef, caregiverId),
-    ]);
-    const entityId = batchEntityId(results);
+    ];
+    const results = await env.LEGACY_DB.batch(statements);
+    const entityId = batchEntityId(results, statements.length);
 
     return json({ ok: true, caregiver_id: caregiverId, entity, entity_id: entityId });
   } catch (e) {

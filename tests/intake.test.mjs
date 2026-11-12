@@ -430,32 +430,34 @@ test('the same email in different capitals or with spaces reuses one caregiver r
   assert.equal(raw.prepare(`SELECT COUNT(*) AS n FROM caregiver WHERE first_name = 'Ana'`).get().n, 1);
 });
 
-test('several existing records sharing an email: reuse only an exact match, never pick by age, and flag for staff review (41 review of #356)', async () => {
+test('several existing records sharing an email: the sign-up is held for staff, never assigned to a disputed record (41 review of #356)', async () => {
   raw.prepare(`INSERT INTO caregiver (id, first_name, email, source, created_at, updated_at) VALUES ('cg_old', 'Jane', 'Jane.Doe@Example.org', 'staff', '2026-01-01 00:00:00', '2026-01-01 00:00:00')`).run();
-  raw.prepare(`INSERT INTO caregiver (id, first_name, email, source, created_at, updated_at) VALUES ('cg_new', 'Jane', 'jane.doe@example.org ', 'staff', '2026-02-01 00:00:00', '2026-02-01 00:00:00')`).run();
+  raw.prepare(`INSERT INTO caregiver (id, first_name, email, source, created_at, updated_at) VALUES ('cg_low', 'Jane', 'jane.doe@example.org', 'staff', '2026-02-01 00:00:00', '2026-02-01 00:00:00')`).run();
   const before = raw.prepare(`SELECT * FROM caregiver ORDER BY id`).all();
+  const signInIdentities = () => raw.prepare(`SELECT COUNT(*) AS n FROM caregiver WHERE LOWER(TRIM(email)) = 'jane.doe@example.org' AND status != 'archived'`).get().n;
 
-  // No record matches what was typed exactly: the sign-up is kept on a new record, nothing is assigned by age.
-  const res = await handleIntake(db, { kind: 'support_request', first_name: 'Jane', email: ' JANE.DOE@example.ORG ', external_ref: 'amb-1' });
-  assert.equal(res.status, 201);
-  const created = res.body.caregiver_id;
-  assert.ok(!['cg_old', 'cg_new'].includes(created));
-  assert.equal(raw.prepare(`SELECT email FROM caregiver WHERE id = ?`).get(created).email, 'JANE.DOE@example.ORG');
-  assert.deepEqual(raw.prepare(`SELECT * FROM caregiver WHERE id IN ('cg_old','cg_new') ORDER BY id`).all(), before);
-  const review = raw.prepare(`SELECT caregiver_id, kind, detail, source, external_ref FROM followup WHERE kind = 'possible_duplicate'`).all();
-  assert.equal(review.length, 1);
-  assert.equal(review[0].caregiver_id, created);
-  assert.equal(review[0].source, 'duplicate_check');
-  for (const id of ['cg_old', 'cg_new', created]) assert.match(review[0].detail, new RegExp(id));
-  assert.equal(raw.prepare(`SELECT caregiver_id FROM followup WHERE external_ref = 'amb-1'`).get().caregiver_id, created);
-
-  // An exact match on what was typed is reused (today's behaviour), still flagged for review.
-  const exact = await handleIntake(db, { kind: 'membership', first_name: 'Jane', email: 'Jane.Doe@Example.org', external_ref: 'amb-2' });
-  assert.equal(exact.status, 201);
-  assert.equal(exact.body.caregiver_id, 'cg_old');
-  assert.equal(raw.prepare(`SELECT COUNT(*) AS n FROM followup WHERE kind = 'possible_duplicate'`).get().n, 2);
-  assert.equal(raw.prepare(`SELECT COUNT(*) AS n FROM caregiver`).get().n, 3);
-  // Replaying the same sign-up does not add another review task.
-  await handleIntake(db, { kind: 'membership', first_name: 'Jane', email: 'Jane.Doe@Example.org', external_ref: 'amb-2' });
-  assert.equal(raw.prepare(`SELECT COUNT(*) AS n FROM followup WHERE kind = 'possible_duplicate'`).get().n, 2);
+  // Even an exact match on the typed spelling, or on the lower-case form, is not assumed.
+  for (const [ref, email, kind] of [['amb-1', 'Jane.Doe@Example.org', 'support_request'], ['amb-2', 'jane.doe@example.org', 'membership'], ['amb-3', ' JANE.DOE@example.ORG ', 'support_request']]) {
+    const res = await handleIntake(db, { kind, first_name: 'Jane', last_name: 'Doe', email, external_ref: ref });
+    assert.equal(res.status, 201, ref);
+    assert.equal(res.body.caregiver_id, 'cg_unmatched_intake', ref);
+  }
+  assert.deepEqual(raw.prepare(`SELECT * FROM caregiver WHERE id IN ('cg_old','cg_low') ORDER BY id`).all(), before);
+  // Login boundary: no new record can sign in with this address; the holding record has no email.
+  assert.equal(signInIdentities(), 2);
+  const holding = raw.prepare(`SELECT email, status, sanctuary_member FROM caregiver WHERE id = 'cg_unmatched_intake'`).get();
+  assert.deepEqual({ ...holding }, { email: null, status: 'inactive', sanctuary_member: 0 });
+  // The activity is kept, and each one has an actionable staff task naming the person and candidates.
+  assert.equal(raw.prepare(`SELECT COUNT(*) AS n FROM followup WHERE caregiver_id = 'cg_unmatched_intake' AND kind IN ('support_request','membership_welcome')`).get().n, 3);
+  const reviews = raw.prepare(`SELECT detail, source, status FROM followup WHERE kind = 'possible_duplicate' ORDER BY id`).all();
+  assert.equal(reviews.length, 3);
+  for (const review of reviews) {
+    assert.equal(review.source, 'duplicate_check');
+    assert.equal(review.status, 'open');
+    assert.match(review.detail, /Jane Doe/);
+    assert.match(review.detail, /cg_low, cg_old/);
+  }
+  // A replay adds neither activity nor another review.
+  await handleIntake(db, { kind: 'membership', first_name: 'Jane', email: 'jane.doe@example.org', external_ref: 'amb-2' });
+  assert.equal(raw.prepare(`SELECT COUNT(*) AS n FROM followup WHERE kind = 'possible_duplicate'`).get().n, 3);
 });
