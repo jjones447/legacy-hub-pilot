@@ -282,26 +282,19 @@ test('other keys and outside clicks preserve existing dismissal behavior without
   assert.ok(items.every(it => it.button.focusCalls === 0));
 });
 
-test('(e) the Passport page contains all five structure points and names the Wellness Grant as a benefit', () => {
+test('(e) the Passport page shows the seven pillars and four milestones, with grant eligibility at Flourishing (requester redesign, Nov 12)', () => {
   const html = loadFile('wellness-passport.html');
 
-  // Verify all 5 structure points
-  assert.match(html, /Wellness Activities/i, 'Passport missing point: Wellness Activities');
-  assert.match(html, /Caregiver Sanctuary Program Participation/i, 'Passport missing point: Caregiver Sanctuary Program Participation');
-  assert.match(html, /Community Wellness Partner Experiences/i, 'Passport missing point: Community Wellness Partner Experiences');
-  assert.match(html, /Engagement Tracking/i, 'Passport missing point: Engagement Tracking');
-  assert.match(html, /Wellness Grant Eligibility/i, 'Passport missing point: Wellness Grant Eligibility');
+  // The five-category outline was removed from the public page at the requester's direction.
+  assert.doesNotMatch(html, /Engagement Tracking|five key areas/i);
+  for (const pillar of ['CONNECT', 'RESTORE', 'MOVE', 'NOURISH', 'EXPLORE', 'LEARN', 'PREPARE']) {
+    assert.match(html, new RegExp(`<h3>${pillar}</h3>`), `Passport missing pillar: ${pillar}`);
+  }
+  assert.match(html, /Eligibility to apply for a Wellness Grant/, 'grant eligibility is communicated through the Flourishing milestone');
 
-  // Names the Wellness Grant as a benefit of participation
-  assert.match(
-    html,
-    /Wellness Grant eligibility as a benefit of participation/i,
-    'Passport must describe the Wellness Grant as a benefit of participation'
-  );
-
-  // Verifies the grant apply button is reachable from the page
-  assert.match(html, /data-action="open-grant-apply"/, 'Passport must provide data-action="open-grant-apply"');
-  assert.match(html, /id="grantApplyModal"/, 'Passport must include grant application modal machinery');
+  // The grant application stays available (programs.html features it), but is not a primary action here.
+  assert.doesNotMatch(html, /data-action="open-grant-apply"/);
+  assert.match(html, /id="grantApplyModal"/, 'Passport keeps the grant application modal machinery');
 });
 
 test('O26-02/03/04: Sanctuary, About, and Get Involved place hero text over supplied media without wordmark overlay or side-by-side hero layout', () => {
