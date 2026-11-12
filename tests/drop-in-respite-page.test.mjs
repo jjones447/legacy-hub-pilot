@@ -120,3 +120,12 @@ test('malformed or past data never removes a future planned date; the Events pag
   context.renderPublicEvents([], grid, now);
   assert.match(text(grid), /No upcoming published events/);
 });
+
+test('an offset start that rolls over midnight UTC replaces the planned card for the day it shows (41 review of #355)', () => {
+  const { grid, context } = setup();
+  // 2026-12-18T02:00:00Z is Thursday, December 17 at 8 PM in Chicago.
+  const late = session('2026-12-17', { id: 'ev_respite_offset', starts_at: '2026-12-18T02:00:00Z', ends_at: '2026-12-18T03:00:00Z' });
+  assert.equal(context.renderPublicEvents([late], grid, now), true);
+  assert.deepEqual(slots(grid), ['planned 2026-11-19', 'ev_respite_offset', 'planned 2027-01-21', 'planned 2027-02-18']);
+  assert.match(text(grid), /Thursday, December 17, 2026 · 8:00 PM – 9:00 PM/);
+});

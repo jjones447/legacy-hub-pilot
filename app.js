@@ -1671,6 +1671,20 @@ function publicEventTime(value, now, timeZone) {
   return { display: value, future: instant.getTime() > now.getTime(), instant: instant.getTime() };
 }
 
+// Requester, Nov 12: show events as a bold, plain date and time
+// ("Saturday, December 12, 2026 · 11:00 AM – 3:00 PM"), not raw timestamps and zone names.
+function friendlyEventWhen(start, end, timeZone) {
+  const day = new Intl.DateTimeFormat('en-US', { timeZone: timeZone, weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  const clock = new Intl.DateTimeFormat('en-US', { timeZone: timeZone, hour: 'numeric', minute: '2-digit' });
+  const startDay = day.format(new Date(start.instant));
+  let text = startDay + ' · ' + clock.format(new Date(start.instant));
+  if (end) {
+    const endDay = day.format(new Date(end.instant));
+    text += ' – ' + (endDay === startDay ? '' : endDay + ' · ') + clock.format(new Date(end.instant));
+  }
+  return text;
+}
+
 function safeEventRegistrationUrl(value) {
   if (typeof value !== 'string' || !value || value.length > 2048 || /[\u0000-\u0020\u007f]/.test(value)) return null;
   try {
@@ -1721,9 +1735,14 @@ function renderPublicEvents(events, grid, now) {
     const title = document.createElement('h3');
     title.className = 'fs-19-m-8-0-4';
     title.textContent = event.title;
+    const when = document.createElement('p');
+    when.className = 'event-when';
+    const whenText = document.createElement('strong');
+    whenText.textContent = friendlyEventWhen(start, end, timeZone);
+    when.appendChild(whenText);
     const meta = document.createElement('p');
     meta.className = 'event-meta';
-    meta.textContent = start.display + (end ? ' – ' + end.display : '') + (typeof event.location === 'string' && event.location ? ' · ' + event.location : ' · Location pending');
+    meta.textContent = typeof event.location === 'string' && event.location ? event.location : '';
     const description = document.createElement('p');
     description.className = 'event-description';
     description.textContent = typeof event.description === 'string' ? event.description : '';
@@ -1754,12 +1773,14 @@ function renderPublicEvents(events, grid, now) {
     row.appendChild(note);
     body.appendChild(badge);
     body.appendChild(title);
-    body.appendChild(meta);
+    body.appendChild(when);
+    if (meta.textContent) body.appendChild(meta);
     if (description.textContent) body.appendChild(description);
     body.appendChild(row);
     card.appendChild(body);
     cards.push(card);
-    cardDates.push(start.display.slice(0, 10));
+    // Match planned cards by the same grid-zone day the card shows (an offset start can roll over).
+    cardDates.push(new Intl.DateTimeFormat('en-CA', { timeZone: timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(start.instant)));
   });
   if (keepWhenEmpty) return mergePlannedEvents(grid, cards, cardDates, now, timeZone);
   if (!cards.length) {
