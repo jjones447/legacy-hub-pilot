@@ -6,7 +6,7 @@
 <title>Legacy Hub · Staff console</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=5a365152da35">
+<link rel="stylesheet" href="styles.css?v=973ca45e978f">
 <link rel="icon" href="favicon.ico" sizes="32x32">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -82,12 +82,36 @@
           <div class="staff-search-controls">
             <input type="search" id="caregiverSearchQuery" placeholder="Search names, email or phone" class="staff-search-input" aria-label="Search people">
             <select id="peopleRoleFilter" class="staff-search-select" aria-label="Filter people by role">
-              <option value="caregiver">Caregivers</option>
+              <option value="caregiver">People</option>
               <option value="team">Staff &amp; admins</option>
               <option value="staff">Staff</option>
               <option value="admin">Admins</option>
             </select>
             <button type="button" class="btn btn-sm btn-plum" data-action="search-caregivers">Search people</button>
+            <button type="button" class="btn btn-sm btn-outline" data-action="open-people-add" aria-controls="peopleAddPanel" aria-expanded="false">Add person</button>
+          </div>
+          <div id="peopleAddPanel" class="d-none mt-16" role="region" aria-label="Add a person">
+            <p class="small muted">Search first to avoid creating another record for the same person. Caregiver records and staff access remain separate.</p>
+            <div class="staff-btn-group">
+              <button type="button" class="btn btn-sm btn-plum" data-action="open-caregiver-create">Add caregiver record</button>
+              <button type="button" id="addStaffFromPeopleBtn" class="btn btn-sm btn-outline d-none" data-action="open-staff-create">Add staff member (admin)</button>
+              <button type="button" class="btn btn-sm btn-outline" data-action="close-people-add">Close</button>
+            </div>
+            <p id="peopleAddMessage" class="small muted" role="status" aria-live="polite"></p>
+            <form id="addCaregiverForm" data-action="submit-add-caregiver" class="d-none mt-16">
+              <p class="small muted">This saves a caregiver record only. It does not enroll them in the Sanctuary, record consent, grant staff access, send an invitation or create follow-up work.</p>
+              <div class="form-row-compact">
+                <label>First name <input name="first_name" maxlength="120" class="form-input-compact" required></label>
+                <label>Last name <input name="last_name" maxlength="120" class="form-input-compact"></label>
+              </div>
+              <div class="form-row-compact">
+                <label>Email <input name="email" type="email" maxlength="254" class="form-input-compact"></label>
+                <label>Phone <input name="phone" type="tel" maxlength="40" class="form-input-compact"></label>
+              </div>
+              <p class="small muted">At least one email address or phone number is required. Matching contacts, including archived records, are shown for review instead of being overwritten.</p>
+              <button type="submit" class="btn btn-sm btn-plum">Check and add caregiver</button>
+              <div data-add-caregiver-message role="status" aria-live="polite" class="small mt-8"></div>
+            </form>
           </div>
         <div role="region" id="staffTeamPanel" class="d-none" aria-labelledby="staffListHeading">
           <div class="flex-between-center mb-12">
@@ -102,8 +126,8 @@
           </div>
         </div>
         <div role="region" id="caregiverSearchPanel" aria-labelledby="caregiverListHeading">
-          <h4 id="caregiverListHeading">Caregivers</h4>
-          <p class="small muted mb-12" id="caregiverSearchHelp">Search caregiver records by name, contact, status, or segment. Choose Open/Edit to open a focused caregiver view. Back keeps your search and results. Archived records cannot use the caregiver portal; inactive records can still sign in.</p>
+          <h4 id="caregiverListHeading">People</h4>
+          <p class="small muted mb-12" id="caregiverSearchHelp">Everyone who has signed up for anything (events, the support group, membership, support requests or donations) has a record here. Use Type to see caregivers, people who are not caregivers, or people not yet identified, and set "Caregiver?" on their record. Choose Open/Edit to open a focused view. Back keeps your search and results. Archived records cannot use the caregiver portal; inactive records can still sign in.</p>
           <div class="staff-search-controls">
             <select id="caregiverSearchSegment" class="staff-search-select" aria-label="Caregiver segment">
               <option value="">All segments</option>
@@ -113,6 +137,13 @@
               <option value="stroke">Stroke</option>
               <option value="elder_care">Elder Care</option>
               <option value="general">General</option>
+              <option value="qa_test">Internal QA</option>
+            </select>
+            <select id="caregiverSearchType" class="staff-search-select" aria-label="Type of person">
+              <option value="">All people</option>
+              <option value="yes">Caregivers</option>
+              <option value="no">Not caregivers</option>
+              <option value="unknown">Not yet identified</option>
             </select>
             <select id="caregiverSearchStatus" class="staff-search-select" aria-label="Caregiver record status">
               <option value="">All statuses</option>
@@ -122,16 +153,16 @@
             </select>
           </div>
           <div id="caregiverSearchResultsContainer">
-            <div class="people-results-scroll" tabindex="0" role="region" aria-label="Caregiver search results">
+            <div class="people-results-scroll" tabindex="0" role="region" aria-label="People search results">
             <table class="data">
-              <thead><tr><th>Caregiver</th><th>Contact</th><th>Status</th><th>Segments</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Person</th><th>Contact</th><th>Caregiver?</th><th>Status</th><th>Segments</th><th>Actions</th></tr></thead>
               <tbody id="caregiverSearchResultsBody">
-                <tr><td colspan="5" class="text-center muted small">Use the search box above to find caregivers.</td></tr>
+                <tr><td colspan="6" class="text-center muted small">Use the search box above to find people.</td></tr>
               </tbody>
             </table>
             </div>
             <div class="staff-paging-bar" id="caregiverSearchPaginationRow">
-              <span id="caregiverSearchPagingInfo" class="small muted">0 caregivers</span>
+              <span id="caregiverSearchPagingInfo" class="small muted">0 people</span>
               <div class="staff-btn-group">
                 <button class="btn btn-sm btn-outline" data-action="search-prev" id="caregiverSearchPrevBtn" disabled>Previous</button>
                 <button class="btn btn-sm btn-outline" data-action="search-next" id="caregiverSearchNextBtn" disabled>Next</button>
@@ -141,8 +172,8 @@
         </div>
         </details>
 
-        <div class="panel">
-          <h4>📥 Needs attention</h4>
+        <details class="panel staff-section" id="needsAttentionPanel" open>
+          <summary><h4 class="staff-section-heading">📥 Alerts</h4> <span class="staff-section-count small muted" id="needsAttentionCount">(loading…)</span></summary>
           <p class="small muted mb-12">Open follow-ups and action items requiring staff review.</p>
           <table class="data">
             <thead><tr><th>Caregiver</th><th>Item</th><th>Status</th></tr></thead>
@@ -150,11 +181,11 @@
               <tr><td colspan="3" class="text-center muted small">Loading follow-ups...</td></tr>
             </tbody>
           </table>
-        </div>
+        </details>
 
-        <div class="panel" id="eventsPanel">
-          <div class="flex-between-center mb-12">
-            <h4 class="m-0">📅 Upcoming events</h4>
+        <details class="panel staff-section" id="eventsPanel" open>
+          <summary><h4 class="staff-section-heading">📅 Events</h4> <span class="staff-section-count small muted" id="eventsCount">(loading…)</span></summary>
+          <div class="staff-section-tools">
             <button class="btn btn-sm btn-plum" id="newEventToggleBtn">+ New Event</button>
           </div>
           <p class="small muted mb-12">Schedule, manage, and take attendance for community events and respite sessions.</p>
@@ -166,17 +197,17 @@
             </tbody>
           </table>
           <div id="editEventContainer" class="d-none mt-16"></div>
-        </div>
+        </details>
 
-        <div class="panel d-none-mt-24" id="attendancePanel">
-          <h4>👥 Event Attendance</h4>
+        <details class="panel staff-section d-none-mt-24" id="attendancePanel" open>
+          <summary><h4 class="staff-section-heading">👥 Event Attendance</h4></summary>
           <p class="small muted mb-12">Capture attendance for registered caregivers.</p>
           <div id="attendanceContent"></div>
-        </div>
+        </details>
 
-        <div class="panel" id="grantsPanel">
-          <div class="staff-panel-header-bar">
-            <h4 class="mb-0">🎁 Wellness Grants</h4>
+        <details class="panel staff-section" id="grantsPanel" open>
+          <summary><h4 class="staff-section-heading">🎁 Wellness Grants</h4></summary>
+          <div class="staff-section-tools">
             <select id="grantsStatusFilter" class="staff-filter-select-sm">
               <option value="">All statuses</option>
               <option value="submitted">Submitted</option>
@@ -194,11 +225,11 @@
               <tr><td colspan="4" class="text-center muted small">Loading grants...</td></tr>
             </tbody>
           </table>
-        </div>
+        </details>
 
-        <div class="panel" id="wellnessPanel">
-          <div class="flex-between-center mb-12">
-            <h4 class="m-0">Caregiver wellness</h4>
+        <details class="panel staff-section" id="wellnessPanel" open>
+          <summary><h4 class="staff-section-heading">Caregiver wellness</h4></summary>
+          <div class="staff-section-tools">
             <button class="btn btn-sm btn-outline" id="refreshWellnessBtn">Refresh</button>
           </div>
           <p class="small muted mb-12">Caregivers submit wellness check-ins through their own portal accounts. Only caregivers with recorded check-ins appear in this list; adding a staff account does not add a caregiver here. This chart summarizes those check-ins, not a diagnosis or a measure of improvement. Choose a caregiver to show their chart.</p>
@@ -220,6 +251,32 @@
           </div>
           <div id="wellnessChart" class="wellness-chart">
             <p class="muted small text-center my-20">No check-ins yet.</p>
+          </div>
+        </details>
+
+        <div class="panel" id="subscribersPanel" role="region" aria-labelledby="subscribersHeading">
+          <div class="flex-between-center mb-12">
+            <h4 class="m-0" id="subscribersHeading">Subscribers</h4>
+            <a class="btn btn-sm btn-outline" id="subscribersCsvLink" href="/api/staff/subscribers.csv" download>Download CSV</a>
+          </div>
+          <p class="small muted mb-12">People who joined the email list from the home page. This list is read-only: joining does not create a caregiver record, and nothing here sends email. Download CSV exports every currently subscribed address; each download is recorded in the audit log.</p>
+          <p class="small" id="subscribersCounts" role="status" aria-live="polite">Loading subscribers…</p>
+          <div class="staff-search-controls">
+            <input type="search" id="subscribersSearchQuery" class="staff-search-input" placeholder="Search email or first name" aria-label="Search subscribers">
+            <select id="subscribersStatusFilter" class="staff-search-select" aria-label="Filter subscribers by status">
+              <option value="">All statuses</option>
+              <option value="subscribed">Subscribed</option>
+              <option value="unsubscribed">Unsubscribed</option>
+            </select>
+            <button type="button" class="btn btn-sm btn-plum" id="subscribersSearchBtn">Search subscribers</button>
+          </div>
+          <div class="people-results-scroll" tabindex="0" role="region" aria-label="Subscriber list">
+            <table class="data">
+              <thead><tr><th>Email</th><th>First name</th><th>Status</th><th>Joined</th></tr></thead>
+              <tbody id="subscribersTableBody">
+                <tr><td colspan="4" class="text-center muted small">Loading subscribers...</td></tr>
+              </tbody>
+            </table>
           </div>
         </div>
 
@@ -267,9 +324,9 @@
   </div>
 </footer>
 
-<script src="app.js?v=b6d1a39f0a32"></script>
+<script src="app.js?v=1fea75bcaab4"></script>
 <script src="nav-v2.js"></script>
-<script src="staff.js?v=1d47fe2bec6c"></script>
+<script src="staff.js?v=37815d342834"></script>
 </body>
 </html>
 
