@@ -26,3 +26,14 @@ test('Community Series uses the requested headings, copy and buttons in order', 
   assert.deepEqual([...positions].sort((a, b) => a - b), positions);
   assert.doesNotMatch(page, /Schedule coming|Registration links coming|What the series is/);
 });
+
+test('the duplicate Community Calendar is gone everywhere (requester, Nov 12 thread 1794493560.124909)', async () => {
+  const { readdirSync } = await import('node:fs');
+  const root = new URL('../', import.meta.url);
+  for (const name of readdirSync(root).filter(n => n.endsWith('.html'))) {
+    const html = readFileSync(new URL(name, root), 'utf8');
+    assert.doesNotMatch(html, /Community Calendar|programs-events\.html#calendar|href="#calendar"|id="calendar"/, name);
+  }
+  const sanctuary = readFileSync(new URL('sanctuary.html', root), 'utf8');
+  assert.match(sanctuary, /<h4 class="fs-18-mb-14">Upcoming Events<\/h4>/, 'Upcoming Events stays');
+});

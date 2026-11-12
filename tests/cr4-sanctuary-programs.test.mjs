@@ -17,7 +17,7 @@ function loadFile(relPath) {
 const programDestinations = [
   'programs-events.html#support-group', 'community-series.html', 'drop-in-respite.html',
   'wellness-passport.html', 'programs-events.html#event-respite',
-  'programs-events.html#family-ed', 'events.html', 'programs-events.html#calendar', 'gallery.html',
+  'programs-events.html#family-ed', 'events.html', 'gallery.html',
 ];
 
 function sanctuaryDrop(header) {
