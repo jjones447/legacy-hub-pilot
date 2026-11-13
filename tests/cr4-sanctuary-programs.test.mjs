@@ -17,7 +17,7 @@ function loadFile(relPath) {
 const programDestinations = [
   'programs-events.html#support-group', 'community-series.html', 'drop-in-respite.html',
   'wellness-passport.html', 'programs-events.html#event-respite',
-  'programs-events.html#family-ed', 'events.html', 'programs-events.html#calendar', 'gallery.html',
+  'programs-events.html#family-ed', 'events.html', 'gallery.html',
 ];
 
 function sanctuaryDrop(header) {
@@ -162,7 +162,7 @@ test('every generated public header shares the new hierarchy, first-focus skip l
     assert.equal(html.indexOf('<a ', html.indexOf('<body>')), html.indexOf('<a class="skip-link"'), file);
     assert.match(html, /<main id="main">/);
   }
-  assert.equal(checked, 23, 'all current public headers must be checked');
+  assert.equal(checked, 25, 'all current public headers must be checked'); // + caregiver-stories.html (Nov 12)
 });
 
 test('Sanctuary merges the overview and exposes join/contact before the program and Network sections', () => {
@@ -282,26 +282,19 @@ test('other keys and outside clicks preserve existing dismissal behavior without
   assert.ok(items.every(it => it.button.focusCalls === 0));
 });
 
-test('(e) the Passport page contains all five structure points and names the Wellness Grant as a benefit', () => {
+test('(e) the Passport page shows the seven pillars and four milestones, with grant eligibility at Flourishing (requester redesign, Nov 12)', () => {
   const html = loadFile('wellness-passport.html');
 
-  // Verify all 5 structure points
-  assert.match(html, /Wellness Activities/i, 'Passport missing point: Wellness Activities');
-  assert.match(html, /Caregiver Sanctuary Program Participation/i, 'Passport missing point: Caregiver Sanctuary Program Participation');
-  assert.match(html, /Community Wellness Partner Experiences/i, 'Passport missing point: Community Wellness Partner Experiences');
-  assert.match(html, /Engagement Tracking/i, 'Passport missing point: Engagement Tracking');
-  assert.match(html, /Wellness Grant Eligibility/i, 'Passport missing point: Wellness Grant Eligibility');
+  // The five-category outline was removed from the public page at the requester's direction.
+  assert.doesNotMatch(html, /Engagement Tracking|five key areas/i);
+  for (const pillar of ['CONNECT', 'RESTORE', 'MOVE', 'NOURISH', 'EXPLORE', 'LEARN', 'PREPARE']) {
+    assert.match(html, new RegExp(`<h3>${pillar}</h3>`), `Passport missing pillar: ${pillar}`);
+  }
+  assert.match(html, /Eligibility to apply for a Wellness Grant/, 'grant eligibility is communicated through the Flourishing milestone');
 
-  // Names the Wellness Grant as a benefit of participation
-  assert.match(
-    html,
-    /Wellness Grant eligibility as a benefit of participation/i,
-    'Passport must describe the Wellness Grant as a benefit of participation'
-  );
-
-  // Verifies the grant apply button is reachable from the page
-  assert.match(html, /data-action="open-grant-apply"/, 'Passport must provide data-action="open-grant-apply"');
-  assert.match(html, /id="grantApplyModal"/, 'Passport must include grant application modal machinery');
+  // The grant application stays available (programs.html features it), but is not a primary action here.
+  assert.doesNotMatch(html, /data-action="open-grant-apply"/);
+  assert.match(html, /id="grantApplyModal"/, 'Passport keeps the grant application modal machinery');
 });
 
 test('O26-02/03/04: Sanctuary, About, and Get Involved place hero text over supplied media without wordmark overlay or side-by-side hero layout', () => {
@@ -309,7 +302,7 @@ test('O26-02/03/04: Sanctuary, About, and Get Involved place hero text over supp
   const sanctuaryHero = sanctuaryHtml.match(/<section class="hero has-media client-video-hero[^"]*">([\s\S]*?)<\/section>/)?.[1];
   assert.ok(sanctuaryHero, 'Sanctuary hero section must exist');
   assert.doesNotMatch(sanctuaryHero, /caregiver-sanctuary-logo\.png|client-sanctuary-wordmark|client-video-layout|client-video-panel/);
-  assert.match(sanctuaryHero, /<video class="hero-media" muted loop playsinline data-motion-autoplay preload="metadata" width="720" height="1280" tabindex="0" aria-label="Caregiver Sanctuary community video \(select to pause or play\)">/);
+  assert.match(sanctuaryHero, /<video class="hero-media" muted loop playsinline data-motion-autoplay data-playback-rate="0\.75" preload="metadata" width="720" height="1280" tabindex="0" aria-label="Caregiver Sanctuary community video \(select to pause or play\)">/);
   assert.doesNotMatch(sanctuaryHero, /\sautoplay(?:\s|>)/, 'motion preference is checked before playback');
   assert.match(sanctuaryHero, /<source src="media\/client-oct16\/sanctuary-video-1-trimmed\.mp4\?v=[0-9a-f]{12}#t=0\.1" type="video\/mp4">/);
   assert.match(sanctuaryHero, /<div class="hero-scrim" aria-hidden="true"><\/div>\s*<div class="container hero-content">/);
@@ -319,11 +312,22 @@ test('O26-02/03/04: Sanctuary, About, and Get Involved place hero text over supp
 
   for (const rel of ['about.html', 'templates/about.html.j2']) {
     const aboutHtml = loadFile(rel);
-    const aboutHero = aboutHtml.match(/<section class="hero has-media about-hero[^"]*">([\s\S]*?)<\/section>/)?.[1];
+    // Nov 1 request: the family photo was cropped in the hero; it now sits uncropped beside
+    // "From One Family's Journey to a Community's Sanctuary" and the hero is text only.
+    const aboutHero = aboutHtml.match(/<section class="hero about-hero[^"]*">([\s\S]*?)<\/section>/)?.[1];
     assert.ok(aboutHero, `${rel}: About hero section must exist`);
-    assert.doesNotMatch(aboutHero, /client-photo-hero|client-hero-layout/);
-    assert.match(aboutHero, /<img class="hero-media" src="media\/client-oct16\/about-family-img-1846\.jpg" alt="" aria-hidden="true" width="2058" height="1474" decoding="async">/);
-    assert.match(aboutHero, /<div class="hero-scrim" aria-hidden="true"><\/div>\s*<div class="container hero-content">/);
+    assert.doesNotMatch(aboutHero, /client-photo-hero|client-hero-layout|hero-media|about-family-img-1846/);
+    const story = aboutHtml.match(/<section id="story">([\s\S]*?)<\/section>/)?.[1];
+    assert.ok(story, `${rel}: About story section must exist`);
+    assert.match(story, /<figure class="about-story-photo">\s*<img src="media\/client-oct16\/about-family-img-1846\.jpg" alt="[^"]+" width="2058" height="1474"/);
+    // Nov 3 request: the "What guides us" values block, its Mission & Vision card and the
+    // Mission & Vision menu/footer links are removed.
+    assert.doesNotMatch(aboutHtml, /about-values-row|What guides us|Real rest, not lip service|id="mission"|Mission &amp; Vision/);
+    // Nov 3 request: About's Supporters section shows the same supporters as the home page.
+    const logos = html => html.match(/<ul class="client-partner-logos" aria-label="[^"]+">([\s\S]*?)<\/ul>/)?.[1];
+    const home = loadFile(rel.replace('about', 'index'));
+    assert.ok(logos(aboutHtml) && logos(aboutHtml) === logos(home), `${rel}: About supporters match the home page`);
+    assert.doesNotMatch(aboutHtml.slice(aboutHtml.indexOf('id="supporters"'), aboutHtml.indexOf('id="contact"')), /Content coming|will be recognized here/);
     assert.match(aboutHtml, /<figure class="client-founder-photo">\s*<img src="media\/client-oct16\/founder-img-7045\.jpg"/);
   }
 

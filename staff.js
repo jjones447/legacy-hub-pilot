@@ -246,12 +246,67 @@ async function loadStaffConsole() {
     loadSiteContent(),
     loadRecentChanges(),
     loadStaffTeam(),
-    loadWellnessCaregivers()
+    loadWellnessCaregivers(),
+    loadSubscribers()
   ]);
   if (currentEventId) {
     await loadRegistrations(currentEventId, currentEventTitle);
   }
   updateStatusLine();
+}
+
+// Email list subscribers (schema/0020): read-only list, search and counts.
+// The API never returns unsubscribe tokens; CSV download is a plain link to the staff route.
+let subscribersEpoch = 0;
+
+function formatSubscriberCounts(counts, matching, shown, filtered) {
+  const subscribed = Number(counts?.subscribed || 0);
+  const unsubscribed = Number(counts?.unsubscribed || 0);
+  let text = `${subscribed} subscribed · ${unsubscribed} unsubscribed`;
+  if (filtered) text += ` · ${matching} matching`;
+  if (shown < matching) text += ` (showing the newest ${shown})`;
+  return text;
+}
+
+async function loadSubscribers() {
+  const epoch = ++subscribersEpoch;
+  const body = document.getElementById('subscribersTableBody');
+  const countsLine = document.getElementById('subscribersCounts');
+  const q = String(document.getElementById('subscribersSearchQuery')?.value || '').trim();
+  const status = document.getElementById('subscribersStatusFilter')?.value || '';
+  const params = new URLSearchParams();
+  if (q) params.set('q', q);
+  if (status) params.set('status', status);
+  const query = params.toString();
+  try {
+    const res = await fetch('/api/staff/subscribers' + (query ? `?${query}` : ''));
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to load subscribers');
+    if (epoch !== subscribersEpoch) return;
+    const rows = Array.isArray(data.subscribers) ? data.subscribers : [];
+    if (countsLine) countsLine.textContent = formatSubscriberCounts(data.counts, Number(data.matching || 0), rows.length, !!(q || status));
+    if (!body) return;
+    if (rows.length === 0) {
+      body.innerHTML = `<tr><td colspan="4" class="text-center muted small">${q || status ? 'No subscribers match this search.' : 'No one has joined the email list yet.'}</td></tr>`;
+      return;
+    }
+    body.innerHTML = rows.map(sub => {
+      const badge = sub.status === 'subscribed' ? 'badge-green' : 'badge-outline';
+      const joined = sub.created_at ? escapeHtml(String(sub.created_at).split(' ')[0]) : '';
+      return `
+        <tr>
+          <td data-label="Email">${escapeHtml(sub.email)}</td>
+          <td data-label="First name">${escapeHtml(sub.first_name || '')}</td>
+          <td data-label="Status"><span class="badge ${badge}">${escapeHtml(sub.status)}</span></td>
+          <td data-label="Joined"><span class="small">${joined}</span></td>
+        </tr>
+      `;
+    }).join('');
+  } catch (e) {
+    if (epoch !== subscribersEpoch) return;
+    if (countsLine) countsLine.textContent = 'Subscribers are unavailable right now.';
+    if (body) body.innerHTML = `<tr><td colspan="4" role="alert">Could not load subscribers: ${escapeHtml(e.message)}. Use Search subscribers to try again.</td></tr>`;
+  }
 }
 
 async function loadGrants() {
@@ -427,6 +482,47 @@ function showGrantError(target, msg) {
     banner.style.display = 'block';
   } else {
     alert(msg);
+  }
+}
+
+// Merge duplicate records (requester, Nov 12): find candidates, confirm, then merge into the open record.
+async function findMergeDuplicates(form) {
+  const keepId = document.getElementById('caregiverRecordPanel')?.dataset?.caregiverId;
+  const box = document.getElementById('mergeCandidates');
+  const q = form.querySelector('[name="q"]')?.value?.trim() || '';
+  if (!keepId || !box) return;
+  if (!q) { box.textContent = 'Enter a name, email or phone to search.'; return; }
+  box.textContent = 'Searching…';
+  try {
+    const res = await fetch(`/api/staff/caregivers?${new URLSearchParams({ q, limit: '10' })}`);
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || 'Search failed');
+    const others = (data.caregivers || []).filter(cg => cg.id !== keepId && cg.status !== 'archived' && !String(cg.id).startsWith('cg_unmatched_'));
+    if (!others.length) { box.textContent = 'No other active record matches. Try another name, email or phone.'; return; }
+    box.innerHTML = others.map(cg => {
+      const label = `${[cg.first_name, cg.last_name].filter(Boolean).join(' ') || 'Anonymous'} · ${[cg.email, cg.phone].filter(Boolean).join(' · ') || 'no contact'}`;
+      return `<div class="flex-center-gap-12 mb-8"><span class="small">${escapeHtml(label)}</span>
+        <button type="button" class="btn btn-sm btn-plum" data-action="merge-duplicate" data-from-id="${escapeHtml(cg.id)}" data-from-label="${escapeHtml(label)}">Merge into this record</button></div>`;
+    }).join('');
+  } catch (err) {
+    box.textContent = `Could not search: ${err.message}`;
+  }
+}
+
+async function mergeDuplicate(fromId, fromLabel) {
+  const keepId = document.getElementById('caregiverRecordPanel')?.dataset?.caregiverId;
+  const box = document.getElementById('mergeCandidates');
+  if (!keepId || !fromId) return;
+  if (!confirm(`Merge ${fromLabel} into this record? Their sign-ups, notes and history move here and the duplicate is archived. This cannot be undone from the console.`)) return;
+  try {
+    const res = await fetch(`/api/staff/caregiver/${encodeURIComponent(keepId)}/merge`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ from_id: fromId })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.error || 'The merge could not be confirmed.');
+    await viewCaregiver(keepId);
+  } catch (err) {
+    if (box) box.textContent = err.message;
   }
 }
 
@@ -634,11 +730,15 @@ async function archiveNote(id, target) {
 
 
 async function loadFollowups() {
+  const count = document.getElementById('needsAttentionCount');
   try {
     const res = await fetch('/api/staff/queue');
     const data = await res.json();
     if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to fetch queue');
     
+    const openCount = Array.isArray(data.queue) ? data.queue.length : 0;
+    if (count) count.textContent = openCount ? `(${openCount} open)` : '(nothing open)';
+    noteNeedsAttentionActionable(openCount > 0);
     const body = document.getElementById('needsAttentionBody');
     if (!body) return;
     if (!data.queue || data.queue.length === 0) {
@@ -671,6 +771,9 @@ async function loadFollowups() {
       `;
     }).join('');
   } catch (e) {
+    if (count) count.textContent = '(could not load)';
+    const body = document.getElementById('needsAttentionBody');
+    if (body) body.innerHTML = '<tr><td colspan="3" role="alert">Could not load alerts. Reload the page to try again.</td></tr>';
     console.error(e);
   }
 }
@@ -1043,6 +1146,19 @@ async function viewCaregiver(id) {
           <button type="submit" class="btn btn-sm btn-plum">Save Changes</button>
         </form>
       </details>
+
+      <details class="mt-16" id="caregiverMergeDetails">
+        <summary class="cursor-pointer note-section-summary"><strong>🔗 Merge a duplicate into this record</strong></summary>
+        <form data-action="find-merge-duplicates" class="record-form-panel">
+          <p class="small muted mb-8">Find the other record for this same person by name, email or phone. Merging moves its sign-ups, notes and history here, keeps this record's details (filling only empty ones), and archives the duplicate. Nothing is deleted, and it cannot be undone from the console.</p>
+          <div class="field mb-8">
+            <label class="form-label-small" for="mergeSearchQuery">Find the duplicate:</label>
+            <input type="search" id="mergeSearchQuery" name="q" class="form-input-compact" value="${escapeHtml(p.email || p.phone || [p.first_name, p.last_name].filter(Boolean).join(' '))}">
+          </div>
+          <button type="submit" class="btn btn-sm btn-outline">Find</button>
+          <div id="mergeCandidates" class="mt-8" role="status" aria-live="polite"></div>
+        </form>
+      </details>
     `;
     const heading = document.getElementById('caregiverDetailHeading');
     heading?.focus();
@@ -1053,7 +1169,20 @@ async function viewCaregiver(id) {
   }
 }
 
+function eventsCountText(events) {
+  const list = Array.isArray(events) ? events : [];
+  const total = list.length === 1 ? '1 event' : `${list.length} events`;
+  const byState = {};
+  for (const ev of list) {
+    const state = ev.publish_state || 'published';
+    byState[state] = (byState[state] || 0) + 1;
+  }
+  const parts = ['published', 'draft', 'archived'].filter(state => byState[state]).map(state => `${byState[state]} ${state}`);
+  return parts.length ? `(${total}: ${parts.join(', ')})` : `(${total})`;
+}
+
 async function loadEvents() {
+  const count = document.getElementById('eventsCount');
   try {
     let res = await fetch('/api/staff/events');
     let data;
@@ -1066,6 +1195,7 @@ async function loadEvents() {
     if (!data || !data.ok) throw new Error(data?.error || 'Failed to fetch events');
 
     staffEvents = data.events || [];
+    if (count) count.textContent = eventsCountText(staffEvents);
     const body = document.getElementById('upcomingEventsBody');
     if (!body) return;
     if (staffEvents.length === 0) {
@@ -1108,6 +1238,9 @@ async function loadEvents() {
       `;
     }).join('');
   } catch (e) {
+    if (count) count.textContent = '(could not load)';
+    const body = document.getElementById('upcomingEventsBody');
+    if (body) body.innerHTML = '<tr><td colspan="5" role="alert">Could not load events. Reload the page to try again.</td></tr>';
     console.error(e);
   }
 }
@@ -1594,6 +1727,7 @@ async function loadRegistrations(eventId, eventTitle) {
     if (!panel || !content) return;
     
     panel.style.display = 'block';
+    panel.open = true;
     
     if (data.registrations.length === 0) {
       content.innerHTML = '<p class="small muted text-center">No caregivers registered for this event yet.</p>';
@@ -1663,6 +1797,7 @@ async function updateAttendance(id, status, event) {
 }
 
 document.addEventListener('DOMContentLoaded', function () {
+  initStaffPanels();
   initStaffAssistantDisclosure();
   void initWebJobFeature();
   initStaffChatTargets();
@@ -1711,6 +1846,15 @@ document.addEventListener('DOMContentLoaded', function () {
       loadWellnessCaregivers();
     });
   }
+  document.getElementById('subscribersSearchBtn')?.addEventListener('click', function () {
+    loadSubscribers();
+  });
+  document.getElementById('subscribersStatusFilter')?.addEventListener('change', function () {
+    loadSubscribers();
+  });
+  document.getElementById('subscribersSearchQuery')?.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') loadSubscribers();
+  });
   const refreshStaffBtn = document.getElementById('refreshStaffTeamBtn');
   if (refreshStaffBtn) {
     refreshStaffBtn.addEventListener('click', function () {
@@ -1734,29 +1878,35 @@ document.addEventListener('DOMContentLoaded', function () {
 document.addEventListener('submit', function (e) {
   const form = e.target;
   if (!form) return;
-  const formAction = form.getAttribute('data-action');
-  if (formAction === 'submit-edit-caregiver') {
+  const action = form.getAttribute('data-action');
+  if (action === 'submit-edit-caregiver') {
     e.preventDefault();
     submitEditCaregiver(form);
-  } else if (formAction === 'submit-add-contact') {
+  } else if (action === 'find-merge-duplicates') {
+    e.preventDefault();
+    findMergeDuplicates(form);
+  } else if (action === 'submit-add-contact') {
     e.preventDefault();
     submitAddContact(form);
-  } else if (formAction === 'submit-add-note') {
+  } else if (action === 'submit-add-note') {
     e.preventDefault();
     submitAddNote(form);
-  } else if (formAction === 'submit-direct-content') {
+  } else if (action === 'submit-direct-content') {
     e.preventDefault();
     submitDirectContent(form);
-  } else if (formAction === 'submit-create-event') {
+  } else if (action === 'submit-create-event') {
     e.preventDefault();
     submitCreateEvent(form);
-  } else if (formAction === 'submit-edit-event') {
+  } else if (action === 'submit-edit-event') {
     e.preventDefault();
     submitEditEvent(form);
-  } else if (formAction === 'submit-event-photo') {
+  } else if (action === 'submit-event-photo') {
     e.preventDefault();
     submitEventPhoto(form, e.submitter?.value === 'remove');
-  } else if (formAction === 'submit-add-staff') {
+  } else if (action === 'submit-add-caregiver') {
+    e.preventDefault();
+    void submitAddCaregiver(form);
+  } else if (action === 'submit-add-staff') {
     e.preventDefault();
     submitAddStaff(form);
   }
@@ -1934,10 +2084,21 @@ document.addEventListener('click', function (e) {
   } else if (action === 'view-caregiver') {
     const id = target.getAttribute('data-caregiver-id');
     viewCaregiver(id);
+  } else if (action === 'merge-duplicate') {
+    e.stopPropagation();
+    mergeDuplicate(target.getAttribute('data-from-id'), target.getAttribute('data-from-label'));
   } else if (action === 'select-event') {
     const id = target.getAttribute('data-event-id');
     const title = target.getAttribute('data-event-title');
     selectEvent(id, title);
+  } else if (action === 'open-people-add') {
+    void openPeopleAdd();
+  } else if (action === 'close-people-add') {
+    closePeopleAdd();
+  } else if (action === 'open-caregiver-create') {
+    openCaregiverCreate();
+  } else if (action === 'open-staff-create') {
+    void openStaffCreate();
   } else if (action === 'search-caregivers') {
     searchCaregivers(0);
   } else if (action === 'search-prev') {
@@ -2034,6 +2195,145 @@ document.addEventListener('click', function (e) {
     archiveEvent(id);
   }
 });
+
+// Staff section disclosures: reused from306/310; native <details> summaries are
+// keyboard operable and collapsing never fetches or changes records. Only open/closed
+// booleans are remembered, under a key for this origin and a hash of the signed-in staff
+// email; nothing is remembered until /api/staff/me names a person. The Legacy Assistant
+// is deliberately not part of this list.
+const STAFF_PANEL_IDS = Object.freeze(['needsAttentionPanel', 'eventsPanel', 'grantsPanel', 'wellnessPanel', 'peopleManagementPanel', 'recentChangesPanel', 'siteContentPanel']);
+const STAFF_PANEL_STORAGE_PREFIX = 'staff-console-panels-v1';
+const staffPanelDefaults = {};
+const staffPanelTouched = new Set();
+const staffPanelActivations = new Map();
+let staffPanelStorageKey = null;
+let staffPanelSaved = null;
+let staffPanelKeyEpoch = 0;
+let needsAttentionActionable = null;
+
+function staffPanelStorage() {
+  try { return window.localStorage || null; } catch { return null; }
+}
+
+async function staffPanelKeyFor(me, origin) {
+  const email = String(me?.email || '').trim().toLowerCase();
+  if (!['staff', 'admin'].includes(me?.role) || !/^[^@\s]+@[^@\s]+$/.test(email) || !origin) return null;
+  const subtle = window.crypto?.subtle;
+  if (!subtle || typeof TextEncoder !== 'function') return null;
+  const digest = await subtle.digest('SHA-256', new TextEncoder().encode(email));
+  const hex = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
+  return `${STAFF_PANEL_STORAGE_PREFIX}:${origin}:${hex.slice(0, 32)}`;
+}
+
+function readStaffPanelChoices(key) {
+  try {
+    const parsed = JSON.parse(staffPanelStorage()?.getItem(key) || '{}');
+    const choices = {};
+    for (const id of STAFF_PANEL_IDS) {
+      if (typeof parsed?.[id] === 'boolean') choices[id] = parsed[id];
+    }
+    return choices;
+  } catch {
+    return {};
+  }
+}
+
+function saveStaffPanelChoice(id, open) {
+  if (!staffPanelStorageKey || !staffPanelSaved) return;
+  staffPanelSaved = { ...staffPanelSaved, [id]: open };
+  try {
+    staffPanelStorage()?.setItem(staffPanelStorageKey, JSON.stringify(staffPanelSaved));
+  } catch {
+    // Storage full, blocked or private: the choice still applies for this page.
+  }
+}
+
+function setStaffPanelOpen(id, open) {
+  const panel = document.getElementById(id);
+  if (!panel || panel.open === open) return;
+  panel.open = open;
+}
+
+// A person's saved choice wins; otherwise Alerts opens only when something is
+// open, and every other section keeps its markup default.
+function applyStaffPanelDefaults() {
+  for (const id of STAFF_PANEL_IDS) {
+    if (staffPanelTouched.has(id) || staffPanelActivations.has(id) || !(id in staffPanelDefaults)) continue;
+    if (staffPanelSaved && typeof staffPanelSaved[id] === 'boolean') setStaffPanelOpen(id, staffPanelSaved[id]);
+    else if (id === 'needsAttentionPanel' && needsAttentionActionable !== null) setStaffPanelOpen(id, needsAttentionActionable);
+    else setStaffPanelOpen(id, staffPanelDefaults[id]);
+  }
+}
+
+function initStaffPanels() {
+  for (const id of STAFF_PANEL_IDS) {
+    const panel = document.getElementById(id);
+    if (!panel) continue;
+    staffPanelDefaults[id] = Boolean(panel.open);
+    const summary = panel.querySelector(':scope > summary');
+    // The browser emits toggle for parsed [open] markup and programmatic changes too.
+    // Persist only an actual summary activation (pointer or native keyboard click).
+    summary?.addEventListener('click', event => {
+      const activation = { event, expectedOpen: !panel.open };
+      const pending = staffPanelActivations.get(id) || new Set();
+      pending.add(activation);
+      staffPanelActivations.set(id, pending);
+      // A microtask checkpoint can precede native activation in user event dispatch.
+      // A task observes final uncanceled activation; pending intent also fences defaults.
+      setTimeout(() => {
+        const current = staffPanelActivations.get(id);
+        if (!current?.delete(activation)) return; // identity was revoked while pending
+        if (!current.size) staffPanelActivations.delete(id);
+        if (!event.defaultPrevented && panel.open === activation.expectedOpen) {
+          staffPanelTouched.add(id);
+          saveStaffPanelChoice(id, Boolean(panel.open));
+        } else if (!current.size) {
+          applyStaffPanelDefaults();
+        }
+      }, 0);
+    });
+  }
+}
+
+// Only the first successful load decides the Alerts default; later list refreshes
+// never reopen or close the section.
+function noteNeedsAttentionActionable(actionable) {
+  if (needsAttentionActionable !== null) return;
+  needsAttentionActionable = Boolean(actionable);
+  applyStaffPanelDefaults();
+}
+
+// The current person can't be established (#306 review): stop writing anyone's choices.
+// Cancels a pending identity hash; stored choices are kept, never deleted.
+function forgetStaffPanelIdentity() {
+  staffPanelKeyEpoch++;
+  staffPanelStorageKey = null;
+  staffPanelSaved = null;
+  staffPanelTouched.clear();
+  staffPanelActivations.clear();
+}
+
+async function rememberStaffPanelsFor(me) {
+  const epoch = ++staffPanelKeyEpoch;
+  let key = null;
+  try {
+    key = await staffPanelKeyFor(me, window.location?.origin);
+  } catch {
+    key = null;
+  }
+  if (epoch !== staffPanelKeyEpoch || key === staffPanelStorageKey) return;
+  if (staffPanelStorageKey) { staffPanelTouched.clear(); staffPanelActivations.clear(); }
+  staffPanelStorageKey = key;
+  staffPanelSaved = key ? readStaffPanelChoices(key) : null;
+  if (key) {
+    for (const id of staffPanelTouched) {
+      const panel = document.getElementById(id);
+      if (panel) saveStaffPanelChoice(id, Boolean(panel.open));
+    }
+  }
+  applyStaffPanelDefaults();
+}
+// End staff section disclosures.
 
 // Presentation only: hiding the panel never resets drafts, selection or HOLD.
 function setStaffAssistantExpanded(expanded, moveFocus = true) {
@@ -3122,20 +3422,27 @@ let staffTeamError = null;
 
 async function loadStaffTeam() {
   const list = document.getElementById('staffTeamList');
+  let identityKnown = false;
   try {
     const [meRes, teamRes] = await Promise.all([fetch('/api/staff/me'), fetch('/api/staff/team')]);
     const meData = await meRes.json();
     const teamData = await teamRes.json();
     if (!meRes.ok || !meData.ok) throw new Error(meData.error || 'Failed to load your staff record');
+    identityKnown = true;
+    // Section open/closed choices belong to this signed-in person (see staff section disclosures).
+    if (typeof rememberStaffPanelsFor === 'function') void rememberStaffPanelsFor(meData.me);
     if (!teamRes.ok || !teamData.ok) throw new Error(teamData.error || 'Failed to load staff');
     staffMe = meData.me;
+    updatePeopleAddActions();
     staffTeam = teamData.team || [];
     staffTeamError = null;
     renderStaffTeam();
     return true;
   } catch (e) {
     staffTeamError = e.message;
+    if (!identityKnown && typeof forgetStaffPanelIdentity === 'function') forgetStaffPanelIdentity();
     staffMe = null;
+    updatePeopleAddActions();
     staffTeam = [];
     if (list) list.innerHTML = `<p class="muted small text-center my-20">Error loading staff: ${escapeHtml(e.message)}</p>`;
     return false;
@@ -3207,6 +3514,84 @@ function renderStaffTeam() {
     </table></div>`;
 }
 
+// People creation reuses the existing staff writer; caregiver creation is record-only.
+function closePeopleAdd() {
+  document.getElementById('peopleAddPanel')?.classList.add('d-none');
+  document.querySelector('[data-action="open-people-add"]')?.setAttribute('aria-expanded', 'false');
+}
+
+function openCaregiverCreate() {
+  document.getElementById('addCaregiverForm')?.classList.remove('d-none');
+  document.querySelector('#addCaregiverForm [name="first_name"]')?.focus();
+}
+
+function updatePeopleAddActions() {
+  const admin = staffMe?.role === 'admin' && staffMe?.status === 'active';
+  document.getElementById('addStaffFromPeopleBtn')?.classList?.toggle('d-none', !admin);
+}
+
+async function openPeopleAdd() {
+  const panel = document.getElementById('peopleAddPanel');
+  panel?.classList.remove('d-none');
+  document.querySelector('[data-action="open-people-add"]')?.setAttribute('aria-expanded', 'true');
+  await loadStaffTeam();
+  updatePeopleAddActions();
+}
+
+async function openStaffCreate() {
+  if (staffMe?.role !== 'admin' || staffMe?.status !== 'active') {
+    const message = document.getElementById('peopleAddMessage');
+    if (message) message.textContent = 'Only an active admin can add staff. Caregiver records do not grant staff access.';
+    return;
+  }
+  document.getElementById('peopleRoleFilter').value = 'team';
+  document.getElementById('caregiverSearchQuery').value = '';
+  document.getElementById('addCaregiverForm')?.classList.add('d-none');
+  filterPeopleByRole();
+  const form = document.querySelector('form[data-action="submit-add-staff"]');
+  if (form) {
+    form.closest('details').open = true;
+    form.querySelector('[name="display_name"]').focus();
+  }
+}
+
+async function submitAddCaregiver(form) {
+  const button = form.querySelector('button[type="submit"]');
+  const message = form.querySelector('[data-add-caregiver-message]');
+  if (button.disabled) return;
+  const fields = new FormData(form);
+  const payload = Object.fromEntries(['first_name', 'last_name', 'email', 'phone'].map(key => [key, String(fields.get(key) || '').trim()]));
+  if (!payload.email && !payload.phone) { message.textContent = 'Enter at least one email address or phone number.'; return; }
+  button.disabled = true;
+  message.textContent = 'Checking for an existing caregiver and saving…';
+  try {
+    const res = await fetch('/api/staff/caregivers', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload)
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 409 && Array.isArray(data.matches) && data.matches.length) {
+      message.innerHTML = `<p>${escapeHtml(data.error || 'Open an existing caregiver record.')}</p>` + data.matches.map(person =>
+        `<button type="button" class="btn btn-sm btn-outline" data-action="view-caregiver" data-caregiver-id="${escapeHtml(person.id)}">Open ${escapeHtml([person.first_name, person.last_name].filter(Boolean).join(' '))} (${escapeHtml(person.status)})</button>`).join(' ');
+      return;
+    }
+    if (!res.ok || data.ok !== true || !data.profile?.id) throw new Error(data.error || 'The save could not be confirmed. Search for this contact before trying again.');
+    // Explicit acknowledgement only: keep entered values on any refusal or uncertain result.
+    document.getElementById('peopleRoleFilter').value = 'caregiver';
+    document.getElementById('caregiverSearchQuery').value = data.profile.email || data.profile.phone || '';
+    for (const id of ['caregiverSearchSegment', 'caregiverSearchStatus']) document.getElementById(id).value = '';
+    document.getElementById('staffTeamPanel')?.classList.add('d-none');
+    document.getElementById('caregiverSearchPanel')?.classList.remove('d-none');
+    await searchCaregivers(0);
+    await viewCaregiver(data.profile.id);
+    form.reset(); form.classList.add('d-none'); message.textContent = '';
+    const saved = document.getElementById('peopleAddMessage');
+    if (saved) saved.textContent = 'Caregiver record saved. No enrollment, invitation or follow-up was created.';
+    void loadRecentChanges();
+  } catch (e) {
+    message.textContent = `Could not add caregiver: ${e.message}`;
+  } finally { button.disabled = false; }
+}
+
 async function submitAddStaff(form) {
   const button = form.querySelector('button[type="submit"]');
   const message = form.querySelector('[data-add-staff-message]');
@@ -3222,6 +3607,10 @@ async function submitAddStaff(form) {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.ok) throw new Error(data.error || 'Could not add staff. Try again.');
+    const filter = document.getElementById('peopleRoleFilter');
+    if (filter) filter.value = 'team';
+    const query = document.getElementById('caregiverSearchQuery');
+    if (query) query.value = String(data.member?.email || fields.get('email') || '');
     await loadStaffTeam();
     const after = document.getElementById('staffTeamMessage');
     if (after) after.textContent = 'Staff member added. They can sign in with their approved email address. No invitation was sent.';
