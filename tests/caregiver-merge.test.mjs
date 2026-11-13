@@ -164,3 +164,26 @@ test('an incomplete batch receipt is reported as unconfirmed, not as "nothing wa
   assert.match(body.error, /could not be confirmed/);
   assert.doesNotMatch(body.error, /Nothing was merged/);
 });
+
+test('a stale snapshot is a full no-op even when a matching merge note already exists (41 re-review of #361)', async () => {
+  const text = 'Merged duplicate record cg_dup (Jane Doe <Jane.Doe@Work.example> / 555-0100) into this record. Moved: 1 registration, 1 grant application, 1 followup, 1 note, 1 contact history, 1 wellness checkin. The duplicate is archived, not deleted.';
+  raw.prepare(`INSERT INTO note (caregiver_id, author, body) VALUES ('cg_keep', ?, ?)`).run(STAFF, text);
+  beforeBatch = () => raw.prepare(`UPDATE caregiver SET segment_tags = '["stroke"]' WHERE id = 'cg_keep'`).run();
+  const res = await merge('cg_keep', { from_id: 'cg_dup' });
+  assert.equal(res.status, 409);
+  assert.equal(raw.prepare(`SELECT status FROM caregiver WHERE id = 'cg_dup'`).get().status, 'active');
+  for (const t of ['registration', 'grant_application', 'followup', 'contact_history', 'wellness_checkin']) {
+    assert.equal(n(`SELECT COUNT(*) AS n FROM ${t} WHERE caregiver_id = 'cg_dup'`), 1, t);
+  }
+  assert.equal(raw.prepare(`SELECT used FROM portal_token WHERE token_hash = 't1'`).get().used, 0);
+  assert.equal(n(`SELECT COUNT(*) AS n FROM audit_log WHERE action = 'caregiver.merge'`), 0);
+});
+
+test('the merge audit records only the verified fields and the operation id', async () => {
+  assert.equal((await merge('cg_keep', { from_id: 'cg_dup' })).status, 200);
+  const audit = raw.prepare(`SELECT before_json, after_json FROM audit_log WHERE action = 'caregiver.merge'`).get();
+  const before = JSON.parse(audit.before_json);
+  assert.deepEqual(Object.keys(before.from).sort(), ['caring_for', 'donor', 'email', 'first_name', 'id', 'last_name', 'member_since', 'phone',
+    'relationship', 'sanctuary_member', 'segment_tags', 'source', 'status', 'updated_at', 'volunteer'].sort());
+  assert.match(JSON.parse(audit.after_json).op, /^merge_[0-9a-f-]{36}$/);
+});

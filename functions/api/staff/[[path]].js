@@ -502,14 +502,20 @@ export async function onRequestPost({ request, env }) {
       // Every write applies only if both records and the duplicate's linked items are exactly as
       // read above, so the merged values, the note and the audit describe the same snapshot. A
       // concurrent edit, new sign-up or archive makes the whole batch a confirmed no-op.
-      const SNAP = ['status', 'updated_at', 'source', 'last_name', 'phone', 'caring_for', 'relationship', 'sanctuary_member',
-        'member_since', 'donor', 'volunteer', 'segment_tags'];
+      const SNAP = ['status', 'updated_at', 'source', 'first_name', 'last_name', 'email', 'phone', 'caring_for', 'relationship',
+        'sanctuary_member', 'member_since', 'donor', 'volunteer', 'segment_tags'];
       const freshSql = `(EXISTS (SELECT 1 FROM caregiver k, caregiver f WHERE k.id = ? AND f.id = ?
           AND k.status != 'archived' AND f.status != 'archived'
           AND (${caregiversDomain.isInternalTestCaregiverSql('k')}) = (${caregiversDomain.isInternalTestCaregiverSql('f')})
           AND ${SNAP.map(c => `k.${c} IS ? AND f.${c} IS ?`).join(' AND ')})
         AND ${MOVED.map(t => `(SELECT COUNT(*) FROM ${t} WHERE caregiver_id = ?) = ?`).join(' AND ')})`;
       const freshParams = [keepId, fromId, ...SNAP.flatMap(c => [keep[c] ?? null, from[c] ?? null]), ...MOVED.flatMap(t => [fromId, counts[t]])];
+      // A fresh operation id: only the audit row written by THIS batch (under the snapshot guard)
+      // can enable the remaining writes, so a stale snapshot makes every write a no-op.
+      const opId = 'merge_' + crypto.randomUUID();
+      const opSql = `EXISTS (SELECT 1 FROM audit_log WHERE action = 'caregiver.merge' AND entity_id = ? AND json_extract(after_json, '$.op') = ?)`;
+      const opParams = [keepId, opId];
+      const verified = row => Object.fromEntries(['id', ...SNAP].map(c => [c, row[c] ?? null]));
       const tags = [];
       for (const raw of [keep.segment_tags, from.segment_tags]) {
         try { for (const t of JSON.parse(raw || '[]')) if (typeof t === 'string' && !tags.includes(t)) tags.push(t); } catch {}
@@ -517,13 +523,17 @@ export async function onRequestPost({ request, env }) {
       const fromLabel = `${[from.first_name, from.last_name].filter(Boolean).join(' ') || '(no name)'}${from.email ? ' <' + from.email + '>' : ''}${from.phone ? ' / ' + from.phone : ''}`;
       const movedText = MOVED.filter(t => counts[t]).map(t => `${counts[t]} ${t.replace(/_/g, ' ')}`).join(', ') || 'no linked items';
       const statements = [
+        // 0: the guarded audit (verified fields only) carries the operation id.
         env.LEGACY_DB.prepare(`INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
           SELECT ?, 'caregiver.merge', 'caregiver', ?, ?, ? WHERE ${freshSql}`)
-          .bind(actor, keepId, JSON.stringify({ keep, from }), JSON.stringify({ from_id: fromId, moved: counts }), ...freshParams),
-        env.LEGACY_DB.prepare(`INSERT INTO note (caregiver_id, author, body) SELECT ?, ?, ? WHERE ${freshSql}`)
-          .bind(keepId, actor, `Merged duplicate record ${fromId} (${fromLabel}) into this record. Moved: ${movedText}. The duplicate is archived, not deleted.`, ...freshParams),
-        // Outstanding sign-in links for the duplicate stop working; its history now lives on the kept record.
-        env.LEGACY_DB.prepare(`UPDATE portal_token SET used = 1 WHERE caregiver_id = ? AND used = 0 AND ${freshSql}`).bind(fromId, ...freshParams),
+          .bind(actor, keepId, JSON.stringify({ keep: verified(keep), from: verified(from) }),
+            JSON.stringify({ op: opId, from_id: fromId, moved: counts }), ...freshParams),
+        // 1: staff note.
+        env.LEGACY_DB.prepare(`INSERT INTO note (caregiver_id, author, body) SELECT ?, ?, ? WHERE ${opSql}`)
+          .bind(keepId, actor, `Merged duplicate record ${fromId} (${fromLabel}) into this record. Moved: ${movedText}. The duplicate is archived, not deleted.`, ...opParams),
+        // 2: outstanding sign-in links for the duplicate stop working.
+        env.LEGACY_DB.prepare(`UPDATE portal_token SET used = 1 WHERE caregiver_id = ? AND used = 0 AND ${opSql}`).bind(fromId, ...opParams),
+        // 3: the kept record (fills only empty fields).
         env.LEGACY_DB.prepare(`UPDATE caregiver SET
             last_name = COALESCE(NULLIF(TRIM(COALESCE(last_name, '')), ''), ?),
             phone = COALESCE(NULLIF(TRIM(COALESCE(phone, '')), ''), ?),
@@ -532,20 +542,16 @@ export async function onRequestPost({ request, env }) {
             sanctuary_member = MAX(sanctuary_member, ?),
             member_since = CASE WHEN member_since IS NULL THEN ? WHEN ? IS NULL THEN member_since ELSE MIN(member_since, ?) END,
             donor = MAX(donor, ?), volunteer = MAX(volunteer, ?), segment_tags = ?, updated_at = datetime('now')
-          WHERE id = ? AND ${freshSql}`)
+          WHERE id = ? AND ${opSql}`)
           .bind(from.last_name || null, from.phone || null, from.caring_for || null, from.relationship || null,
             from.sanctuary_member || 0, from.member_since || null, from.member_since || null, from.member_since || null,
-            from.donor || 0, from.volunteer || 0, JSON.stringify(tags), keepId, ...freshParams),
-        // The kept record's own update (above) changes its snapshot, so the guard now rides on the
-        // duplicate still being unarchived with the counts read; re-derive from those.
-        ...MOVED.map(table => env.LEGACY_DB.prepare(`UPDATE ${table} SET caregiver_id = ? WHERE caregiver_id = ?
-            AND EXISTS (SELECT 1 FROM note WHERE caregiver_id = ? AND author = ? AND body = ?)`)
-          .bind(keepId, fromId, keepId, actor, `Merged duplicate record ${fromId} (${fromLabel}) into this record. Moved: ${movedText}. The duplicate is archived, not deleted.`)),
-        // Last: archive the duplicate, again only if this batch wrote its merge note.
+            from.donor || 0, from.volunteer || 0, JSON.stringify(tags), keepId, ...opParams),
+        // 4..9: linked items move.
+        ...MOVED.map(table => env.LEGACY_DB.prepare(`UPDATE ${table} SET caregiver_id = ? WHERE caregiver_id = ? AND ${opSql}`)
+          .bind(keepId, fromId, ...opParams)),
+        // Last: archive the duplicate.
         env.LEGACY_DB.prepare(`UPDATE caregiver SET status = 'archived', updated_at = datetime('now')
-          WHERE id = ? AND status != 'archived'
-            AND EXISTS (SELECT 1 FROM note WHERE caregiver_id = ? AND author = ? AND body = ?)`)
-          .bind(fromId, keepId, actor, `Merged duplicate record ${fromId} (${fromLabel}) into this record. Moved: ${movedText}. The duplicate is archived, not deleted.`),
+          WHERE id = ? AND status != 'archived' AND ${opSql}`).bind(fromId, ...opParams),
       ];
       let results;
       try { results = await env.LEGACY_DB.batch(statements); } catch (e) {
@@ -554,13 +560,18 @@ export async function onRequestPost({ request, env }) {
         }
         throw e;
       }
-      const complete = Array.isArray(results) && results.length === statements.length &&
-        Array.from({ length: statements.length }, (_, i) => results[i]).every(r => r?.success === true && Number.isInteger(r?.meta?.changes));
-      if (!complete) {
+      const changes = Array.isArray(results) && results.length === statements.length
+        ? Array.from({ length: statements.length }, (_, i) => results[i]).map(r => r?.success === true && Number.isInteger(r?.meta?.changes) ? r.meta.changes : null)
+        : null;
+      if (!changes || changes.includes(null)) {
         return json({ ok: false, error: 'The merge result could not be confirmed. Open this record and check its merge note and history before trying again.' }, 502);
       }
-      if (results[results.length - 1].meta.changes !== 1) {
+      if (changes.every(c => c === 0)) {
         return json({ ok: false, error: 'One of these records changed while merging. Nothing was merged; reopen both and try again.' }, 409);
+      }
+      const expected = [1, 1, null, 1, ...MOVED.map(t => counts[t]), 1];
+      if (expected.some((want, i) => want !== null && changes[i] !== want)) {
+        return json({ ok: false, error: 'The merge result could not be confirmed. Open this record and check its merge note and history before trying again.' }, 502);
       }
       return json({ ok: true, kept_id: keepId, merged_id: fromId, moved: counts });
     }
