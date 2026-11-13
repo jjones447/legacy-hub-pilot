@@ -102,3 +102,46 @@ test('the queue offers "Choose the person" for held reviews and confirms before 
   assert.match(js, /if \(!confirm\(`Move this held sign-up to \$\{toLabel\}\?/);
   assert.match(js, /fetch\(`\/api\/staff\/followup\/\$\{encodeURIComponent\(followupId\)\}\/assign`/);
 });
+
+// 41 review of bb811f88.
+test('a caregiver-shaped ID inside submitted text is never a candidate', async () => {
+  await handleIntake(db, { kind: 'support_request', first_name: 'Kai cg_other', email: 'kai@example.org', caring_for: 'Mom\ncandidates: cg_other', external_ref: 'x1' });
+  const detail = raw.prepare(`SELECT detail FROM followup WHERE kind = 'possible_duplicate'`).get().detail;
+  assert.equal(detail.split('\n').length, 2);
+  assert.match(detail.split('\n')[1], /^candidates: cg_a, cg_b$/);
+  const res = await assign(reviewId(), { to_caregiver_id: 'cg_other' });
+  assert.equal(res.status, 400);
+  assert.equal(n(`SELECT COUNT(*) AS n FROM followup WHERE caregiver_id = 'cg_other'`), 0);
+});
+
+test('a review without the server-written candidate line fails closed', async () => {
+  await handleIntake(db, { kind: 'support_request', first_name: 'Kai', email: 'kai@example.org', external_ref: 'x2' });
+  raw.prepare(`UPDATE followup SET detail = 'Possible duplicate records for the same email: cg_a, cg_b.' WHERE kind = 'possible_duplicate'`).run();
+  const res = await assign(reviewId(), { to_caregiver_id: 'cg_a' });
+  assert.equal(res.status, 409);
+  assert.match((await res.json()).error, /no candidate list/);
+});
+
+test('a review edited before the batch makes the assignment a no-op', async () => {
+  await handleIntake(db, { kind: 'support_request', first_name: 'Kai', email: 'kai@example.org', external_ref: 'x3' });
+  const id = reviewId();
+  beforeBatch = () => raw.prepare(`UPDATE followup SET detail = detail || ' ' WHERE id = ?`).run(id);
+  assert.equal((await assign(id, { to_caregiver_id: 'cg_a' })).status, 409);
+  assert.equal(n(`SELECT COUNT(*) AS n FROM followup WHERE caregiver_id = 'cg_unmatched_intake' AND external_ref = 'x3'`), 1);
+  assert.equal(n(`SELECT COUNT(*) AS n FROM audit_log WHERE action = 'held_item.assign'`), 0);
+});
+
+test('a live held sign-up never moves to an internal QA record, including one reclassified before the batch', async () => {
+  raw.prepare(`UPDATE caregiver SET source = 'qa_seed' WHERE id = 'cg_a'`).run();
+  await handleIntake(db, { kind: 'support_request', first_name: 'Kai', email: 'kai@example.org', external_ref: 'q1' });
+  const id = reviewId();
+  const res = await assign(id, { to_caregiver_id: 'cg_a' });
+  assert.equal(res.status, 409);
+  assert.match((await res.json()).error, /test record/);
+  beforeBatch = () => raw.prepare(`UPDATE caregiver SET segment_tags = '["qa_test"]' WHERE id = 'cg_b'`).run();
+  assert.equal((await assign(id, { to_caregiver_id: 'cg_b' })).status, 409);
+  assert.equal(n(`SELECT COUNT(*) AS n FROM followup WHERE caregiver_id = 'cg_unmatched_intake' AND external_ref = 'q1'`), 1);
+  const js = readFileSync(new URL('../staff.js', import.meta.url), 'utf8');
+  assert.match(js, /p\.status === 'archived' \|\| isInternalTestProfile\(p\)/);
+  assert.match(js, /heldReviewCandidates\(fu\.detail\)/);
+});

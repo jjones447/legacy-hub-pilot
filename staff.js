@@ -718,7 +718,7 @@ async function loadFollowups() {
         actionHtml = `<button class="btn btn-sm btn-coral btn-compact-ml" data-action="resolve-followup" data-followup-id="${escapeHtml(fu.id)}">Resolve</button>`;
         // Held sign-up (#356): pick which listed person it belongs to.
         const candidates = fu.kind === 'possible_duplicate' && String(fu.caregiver_id || '').startsWith('cg_unmatched_')
-          ? [...new Set((String(fu.detail || '').match(/cg_[A-Za-z0-9_-]+/g) || []).filter(id => !id.startsWith('cg_unmatched_')))] : [];
+          ? heldReviewCandidates(fu.detail) : [];
         if (candidates.length) {
           actionHtml += ` <button class="btn btn-sm btn-plum btn-compact-ml" data-action="show-assign-candidates" data-followup-id="${escapeHtml(fu.id)}" data-candidates="${escapeHtml(candidates.join(','))}">Choose the person</button><span class="assign-candidates" data-assign-for="${escapeHtml(fu.id)}"></span>`;
         }
@@ -743,6 +743,22 @@ async function loadFollowups() {
   }
 }
 
+// Same rule as the server: candidates only from the final "candidates: cg_a, cg_b" line.
+function heldReviewCandidates(detail) {
+  const lines = String(detail || '').split('\n');
+  const m = lines.length === 2 ? /^candidates: (.+)$/.exec(lines[1]) : null;
+  if (!m) return [];
+  const ids = m[1].split(', ');
+  return ids.every(id => /^cg_[A-Za-z0-9_-]+$/.test(id) && !id.startsWith('cg_unmatched_')) ? [...new Set(ids)] : [];
+}
+
+function isInternalTestProfile(p) {
+  let tags = [];
+  try { tags = JSON.parse(p.segment_tags || '[]'); } catch {}
+  return String(p.source || '').trim().toLowerCase().startsWith('qa_') ||
+    (Array.isArray(tags) && tags.some(t => t === 'qa_test' || t === 'exclude_reporting'));
+}
+
 async function showAssignCandidates(followupId, ids) {
   const slot = document.querySelector(`[data-assign-for="${CSS.escape(String(followupId))}"]`);
   if (!slot) return;
@@ -753,7 +769,7 @@ async function showAssignCandidates(followupId, ids) {
       const res = await fetch(`/api/staff/caregiver/${encodeURIComponent(id)}`);
       const data = await res.json();
       const p = data.profile || {};
-      if (!res.ok || !data.ok || p.status === 'archived') continue;
+      if (!res.ok || !data.ok || p.status === 'archived' || isInternalTestProfile(p)) continue;
       const label = `${[p.first_name, p.last_name].filter(Boolean).join(' ') || 'Anonymous'}${p.email ? ' (' + p.email + ')' : ''}`;
       buttons.push(`<button class="btn btn-sm btn-outline btn-compact-ml" data-action="assign-held" data-followup-id="${escapeHtml(followupId)}" data-to-id="${escapeHtml(id)}" data-to-label="${escapeHtml(label)}">Belongs to ${escapeHtml(label)}</button>`);
     } catch { /* skip unreadable candidates */ }

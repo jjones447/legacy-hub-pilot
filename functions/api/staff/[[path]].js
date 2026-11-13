@@ -2,6 +2,7 @@
 import { getActor } from '../../_lib/actor.js';
 import { internalError } from '../../_lib/errors.js';
 import * as caregiversDomain from '../../_lib/domain/caregivers.js';
+import { reviewCandidates } from '../_shared.mjs';
 import * as eventsDomain from '../../_lib/domain/events.js';
 import { getStaffMember, listStaff, updateStaffMember, createStaffMember } from '../../_lib/staff.js';
 import { staffSeries, caregiversWithCheckins } from '../../_lib/wellness.js';
@@ -431,10 +432,14 @@ export async function onRequestPost({ request, env }) {
       if (!review || review.kind !== 'possible_duplicate') return json({ ok: false, error: 'not a possible-duplicate review' }, 404);
       if (review.status !== 'open') return json({ ok: false, error: 'this review is already resolved' }, 409);
       if (!String(review.caregiver_id).startsWith('cg_unmatched_')) return json({ ok: false, error: 'this review has no held sign-up to move' }, 409);
-      const candidates = [...new Set((String(review.detail || '').match(/cg_[A-Za-z0-9_-]+/g) || []).filter(id => !id.startsWith('cg_unmatched_')))];
+      // Candidates come only from the server-written final line; any other shape fails closed.
+      const candidates = reviewCandidates(review.detail);
+      if (!candidates) return json({ ok: false, error: 'this review has no candidate list; resolve it by hand' }, 409);
       if (!candidates.includes(toId)) return json({ ok: false, error: 'choose one of the records listed in this review' }, 400);
-      const target = await env.LEGACY_DB.prepare(`SELECT id, status FROM caregiver WHERE id = ?`).bind(toId).first();
+      const target = await env.LEGACY_DB.prepare(`SELECT c.id, c.status, (${caregiversDomain.isInternalTestCaregiverSql('c')}) AS qa
+        FROM caregiver c WHERE c.id = ?`).bind(toId).first();
       if (!target || target.status === 'archived') return json({ ok: false, error: 'that record is archived or missing; merge or reopen it first' }, 409);
+      if (Number(target.qa)) return json({ ok: false, error: 'a live sign-up cannot be moved to a test record' }, 409);
       const ref = String(review.external_ref || '');
       const cut = ref.indexOf(':');
       if (cut < 1) return json({ ok: false, error: 'review reference is malformed' }, 409);
@@ -455,14 +460,16 @@ export async function onRequestPost({ request, env }) {
         // 0: guarded audit: the review is still open on this holding record, the target is unarchived and the held rows are as counted.
         env.LEGACY_DB.prepare(`INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
           SELECT ?, 'held_item.assign', 'followup', ?, ?, ?
-          WHERE EXISTS (SELECT 1 FROM followup WHERE id = ? AND status = 'open' AND caregiver_id = ?)
-            AND EXISTS (SELECT 1 FROM caregiver WHERE id = ? AND status != 'archived')
+          WHERE EXISTS (SELECT 1 FROM followup WHERE id = ? AND status = 'open' AND caregiver_id = ?
+              AND kind = 'possible_duplicate' AND source = 'duplicate_check' AND external_ref IS ? AND detail IS ?)
+            AND EXISTS (SELECT 1 FROM caregiver c WHERE c.id = ? AND c.status != 'archived'
+              AND NOT (${caregiversDomain.isInternalTestCaregiverSql('c')}))
             AND (SELECT COUNT(*) FROM registration WHERE caregiver_id = ? AND source = ? AND external_ref = ?) = ?
             AND (SELECT COUNT(*) FROM grant_application WHERE caregiver_id = ? AND source = ? AND external_ref = ?) = ?
             AND (SELECT COUNT(*) FROM followup WHERE caregiver_id = ? AND source = ? AND external_ref IN (?, ?)) = ?`)
           .bind(actor, String(reviewId), JSON.stringify({ holding, source: src, external_ref: ext, counts }),
             JSON.stringify({ op: opId, to_caregiver_id: toId, membership: membership > 0 }),
-            reviewId, holding, toId, holding, src, ext, counts.registration, holding, src, ext, counts.grant_application,
+            reviewId, holding, review.external_ref, review.detail, toId, holding, src, ext, counts.registration, holding, src, ext, counts.grant_application,
             holding, src, ext, ext + ':fu', counts.followup),
         // 1-3: move the held activity.
         env.LEGACY_DB.prepare(`UPDATE registration SET caregiver_id = ? WHERE caregiver_id = ? AND source = ? AND external_ref = ? AND ${opSql}`)

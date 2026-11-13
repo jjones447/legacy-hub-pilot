@@ -207,14 +207,32 @@ export async function resolveCaregiverByContact(db, email, phone) {
 }
 
 // Staff-only text for a disputed-identity review task: who submitted what, and the candidates.
+export const CANDIDATE_ID = /^cg_[A-Za-z0-9_-]+$/;
+const oneLine = value => String(value ?? '').replace(/\s+/g, ' ').trim();
+
+// The submitted text is flattened to one line; the server writes the candidate list alone on the
+// final line ("candidates: cg_a, cg_b"), so staff tools never read IDs out of submitted text.
 export function possibleDuplicateDetail(channel, contact, ambiguousIds) {
-  const name = [contact.first_name, contact.last_name].filter(v => typeof v === 'string' && v.trim()).join(' ') || '(no name)';
+  const name = oneLine([contact.first_name, contact.last_name].filter(v => typeof v === 'string' && v.trim()).join(' ')) || '(no name)';
   const extra = [['caring for', contact.caring_for], ['relationship', contact.relationship]]
     .filter(([, value]) => typeof value === 'string' && value.trim())
-    .map(([label, value]) => `${label}: ${value.trim()}`);
-  return `${channel} from ${name} <${contact.email}>${contact.phone ? ' / ' + contact.phone : ''}` +
-    `${extra.length ? ' (' + extra.join('; ') + ')' : ''} was kept here because several records share this email: ` +
-    `${ambiguousIds.join(', ')}. Decide which person it belongs to (merge the duplicates if they are the same person), then move it there.`;
+    .map(([label, value]) => `${label}: ${oneLine(value)}`);
+  const ids = ambiguousIds.filter(id => CANDIDATE_ID.test(id));
+  return `${oneLine(channel)} from ${name} <${oneLine(contact.email)}>${contact.phone ? ' / ' + oneLine(contact.phone) : ''}` +
+    `${extra.length ? ' (' + extra.join('; ') + ')' : ''} was kept here because several records share this email. ` +
+    `Decide which person it belongs to (merge the duplicates if they are the same person), then move it there.\n` +
+    `candidates: ${ids.join(', ')}`;
+}
+
+// Candidate IDs from a review written by possibleDuplicateDetail; null (fail closed) for any other shape.
+export function reviewCandidates(detail) {
+  const lines = String(detail ?? '').split('\n');
+  if (lines.length !== 2) return null;
+  const m = /^candidates: (.+)$/.exec(lines[1]);
+  if (!m) return null;
+  const ids = m[1].split(', ');
+  if (!ids.length || ids.some(id => !CANDIDATE_ID.test(id) || id.startsWith('cg_unmatched_')) || new Set(ids).size !== ids.length) return null;
+  return ids;
 }
 
 // Per-IP request limits, counted in audit_log (no new binding or table).
