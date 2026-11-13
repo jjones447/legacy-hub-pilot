@@ -5,6 +5,7 @@
 // at go-live, because the email links to the portal on the public address.
 
 import { canSendEmail, sendEmail } from '../../../functions/_lib/email.js';
+import { notDoNotContactCaregiverSql } from '../../../functions/_lib/domain/caregivers.js';
 import { CHECKIN_EVERY_DAYS } from '../../../functions/_lib/wellness.js';
 
 const BATCH_LIMIT = 200;
@@ -40,6 +41,7 @@ export async function dueCaregivers(db, days = CHECKIN_EVERY_DAYS) {
          ON w.caregiver_id = c.id
        WHERE c.status = 'active'
          AND c.email IS NOT NULL AND TRIM(c.email) != ''
+         AND ${notDoNotContactCaregiverSql('c')}
          AND w.latest <= datetime('now', ?)
          AND NOT EXISTS (
            SELECT 1 FROM audit_log a
