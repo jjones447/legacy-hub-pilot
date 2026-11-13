@@ -40,6 +40,7 @@ export const UNIT_TEST_FILES = Object.freeze([
   'community-series-copy.test.mjs',
   'resource-hub-hero-copy.test.mjs',
   'wellness-passport-redesign.test.mjs',
+  'held-item-assign.test.mjs',
   'sanctuary-partner-wording.test.mjs',
   'meet-our-team.test.mjs',
   'board-of-directors.test.mjs',

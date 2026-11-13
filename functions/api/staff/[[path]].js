@@ -409,6 +409,92 @@ export async function onRequestPost({ request, env }) {
       return json({ ok: true, member: result.member }, result.status);
     }
 
+    // POST /api/staff/followup/:id/assign { to_caregiver_id }: resolve a possible-duplicate review
+    // (#356) by moving the held submission from its holding record to one of the candidate people.
+    // Only listed candidates are accepted; a held membership is applied to that person. One batch
+    // keyed to a fresh audit operation id; write counts are verified.
+    if (pathSegments.length === 5 && pathSegments[2] === 'followup' && pathSegments[4] === 'assign') {
+      const reviewId = parseInt(pathSegments[3], 10);
+      if (isNaN(reviewId)) return json({ ok: false, error: 'invalid followup id' }, 400);
+      let body;
+      try { body = await request.json(); } catch { return json({ ok: false, error: 'invalid JSON body' }, 400); }
+      if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(k => k !== 'to_caregiver_id')) {
+        return json({ ok: false, error: 'body must be { "to_caregiver_id": "<person record id>" }' }, 400);
+      }
+      const toId = typeof body.to_caregiver_id === 'string' ? body.to_caregiver_id.trim() : '';
+      const actor = getActor(request, env);
+      const member = await env.LEGACY_DB.prepare(`SELECT role, status FROM staff_member WHERE email = ?`).bind(String(actor || '').trim().toLowerCase()).first();
+      if (!member || member.status !== 'active' || !['staff', 'admin'].includes(member.role)) {
+        return json({ ok: false, error: 'An active staff account is required.' }, 403);
+      }
+      const review = await env.LEGACY_DB.prepare(`SELECT * FROM followup WHERE id = ?`).bind(reviewId).first();
+      if (!review || review.kind !== 'possible_duplicate') return json({ ok: false, error: 'not a possible-duplicate review' }, 404);
+      if (review.status !== 'open') return json({ ok: false, error: 'this review is already resolved' }, 409);
+      if (!String(review.caregiver_id).startsWith('cg_unmatched_')) return json({ ok: false, error: 'this review has no held sign-up to move' }, 409);
+      const candidates = [...new Set((String(review.detail || '').match(/cg_[A-Za-z0-9_-]+/g) || []).filter(id => !id.startsWith('cg_unmatched_')))];
+      if (!candidates.includes(toId)) return json({ ok: false, error: 'choose one of the records listed in this review' }, 400);
+      const target = await env.LEGACY_DB.prepare(`SELECT id, status FROM caregiver WHERE id = ?`).bind(toId).first();
+      if (!target || target.status === 'archived') return json({ ok: false, error: 'that record is archived or missing; merge or reopen it first' }, 409);
+      const ref = String(review.external_ref || '');
+      const cut = ref.indexOf(':');
+      if (cut < 1) return json({ ok: false, error: 'review reference is malformed' }, 409);
+      const src = ref.slice(0, cut);
+      const ext = ref.slice(cut + 1);
+      const holding = review.caregiver_id;
+      const count = async (sql, ...p) => Number((await env.LEGACY_DB.prepare(sql).bind(...p).first())?.n || 0);
+      const counts = {
+        registration: await count(`SELECT COUNT(*) AS n FROM registration WHERE caregiver_id = ? AND source = ? AND external_ref = ?`, holding, src, ext),
+        grant_application: await count(`SELECT COUNT(*) AS n FROM grant_application WHERE caregiver_id = ? AND source = ? AND external_ref = ?`, holding, src, ext),
+        followup: await count(`SELECT COUNT(*) AS n FROM followup WHERE caregiver_id = ? AND source = ? AND external_ref IN (?, ?)`, holding, src, ext, ext + ':fu'),
+      };
+      const membership = await count(`SELECT COUNT(*) AS n FROM followup WHERE caregiver_id = ? AND source = ? AND external_ref = ? AND kind = 'membership_welcome'`, holding, src, ext);
+      const opId = 'assign_' + crypto.randomUUID();
+      const opSql = `EXISTS (SELECT 1 FROM audit_log WHERE action = 'held_item.assign' AND entity_id = ? AND json_extract(after_json, '$.op') = ?)`;
+      const opParams = [String(reviewId), opId];
+      const statements = [
+        // 0: guarded audit: the review is still open on this holding record, the target is unarchived and the held rows are as counted.
+        env.LEGACY_DB.prepare(`INSERT INTO audit_log (actor, action, entity, entity_id, before_json, after_json)
+          SELECT ?, 'held_item.assign', 'followup', ?, ?, ?
+          WHERE EXISTS (SELECT 1 FROM followup WHERE id = ? AND status = 'open' AND caregiver_id = ?)
+            AND EXISTS (SELECT 1 FROM caregiver WHERE id = ? AND status != 'archived')
+            AND (SELECT COUNT(*) FROM registration WHERE caregiver_id = ? AND source = ? AND external_ref = ?) = ?
+            AND (SELECT COUNT(*) FROM grant_application WHERE caregiver_id = ? AND source = ? AND external_ref = ?) = ?
+            AND (SELECT COUNT(*) FROM followup WHERE caregiver_id = ? AND source = ? AND external_ref IN (?, ?)) = ?`)
+          .bind(actor, String(reviewId), JSON.stringify({ holding, source: src, external_ref: ext, counts }),
+            JSON.stringify({ op: opId, to_caregiver_id: toId, membership: membership > 0 }),
+            reviewId, holding, toId, holding, src, ext, counts.registration, holding, src, ext, counts.grant_application,
+            holding, src, ext, ext + ':fu', counts.followup),
+        // 1-3: move the held activity.
+        env.LEGACY_DB.prepare(`UPDATE registration SET caregiver_id = ? WHERE caregiver_id = ? AND source = ? AND external_ref = ? AND ${opSql}`)
+          .bind(toId, holding, src, ext, ...opParams),
+        env.LEGACY_DB.prepare(`UPDATE grant_application SET caregiver_id = ? WHERE caregiver_id = ? AND source = ? AND external_ref = ? AND ${opSql}`)
+          .bind(toId, holding, src, ext, ...opParams),
+        env.LEGACY_DB.prepare(`UPDATE followup SET caregiver_id = ? WHERE caregiver_id = ? AND source = ? AND external_ref IN (?, ?) AND ${opSql}`)
+          .bind(toId, holding, src, ext, ext + ':fu', ...opParams),
+        // 4: a held membership now applies to the chosen person.
+        env.LEGACY_DB.prepare(`UPDATE caregiver SET sanctuary_member = 1, member_since = COALESCE(member_since, datetime('now')), updated_at = datetime('now')
+          WHERE id = ? AND ? = 1 AND ${opSql}`).bind(toId, membership > 0 ? 1 : 0, ...opParams),
+        // 5: the review is done and now sits on that person's record.
+        env.LEGACY_DB.prepare(`UPDATE followup SET status = 'done', caregiver_id = ? WHERE id = ? AND status = 'open' AND ${opSql}`)
+          .bind(toId, reviewId, ...opParams),
+      ];
+      const results = await env.LEGACY_DB.batch(statements);
+      const changes = Array.isArray(results) && results.length === statements.length
+        ? Array.from({ length: statements.length }, (_, i) => results[i]).map(r => r?.success === true && Number.isInteger(r?.meta?.changes) ? r.meta.changes : null)
+        : null;
+      if (!changes || changes.includes(null)) {
+        return json({ ok: false, error: 'The result could not be confirmed. Open both records and check the review before trying again.' }, 502);
+      }
+      if (changes.every(c => c === 0)) {
+        return json({ ok: false, error: 'This review or record changed meanwhile. Nothing was moved; reopen it and try again.' }, 409);
+      }
+      const expected = [1, counts.registration, counts.grant_application, counts.followup, membership > 0 ? 1 : 0, 1];
+      if (expected.some((want, i) => changes[i] !== want)) {
+        return json({ ok: false, error: 'The result could not be confirmed. Open both records and check the review before trying again.' }, 502);
+      }
+      return json({ ok: true, review_id: reviewId, to_caregiver_id: toId, moved: counts, membership: membership > 0 });
+    }
+
     // 1. POST /api/staff/followup/:id/resolve
     if (pathSegments.length === 5 && pathSegments[2] === 'followup' && pathSegments[4] === 'resolve') {
       const id = parseInt(pathSegments[3], 10);

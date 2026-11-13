@@ -716,6 +716,12 @@ async function loadFollowups() {
       let actionHtml = '';
       if (fu.status === 'open') {
         actionHtml = `<button class="btn btn-sm btn-coral btn-compact-ml" data-action="resolve-followup" data-followup-id="${escapeHtml(fu.id)}">Resolve</button>`;
+        // Held sign-up (#356): pick which listed person it belongs to.
+        const candidates = fu.kind === 'possible_duplicate' && String(fu.caregiver_id || '').startsWith('cg_unmatched_')
+          ? [...new Set((String(fu.detail || '').match(/cg_[A-Za-z0-9_-]+/g) || []).filter(id => !id.startsWith('cg_unmatched_')))] : [];
+        if (candidates.length) {
+          actionHtml += ` <button class="btn btn-sm btn-plum btn-compact-ml" data-action="show-assign-candidates" data-followup-id="${escapeHtml(fu.id)}" data-candidates="${escapeHtml(candidates.join(','))}">Choose the person</button><span class="assign-candidates" data-assign-for="${escapeHtml(fu.id)}"></span>`;
+        }
       }
       
       return `
@@ -734,6 +740,39 @@ async function loadFollowups() {
     const body = document.getElementById('needsAttentionBody');
     if (body) body.innerHTML = '<tr><td colspan="3" role="alert">Could not load alerts. Reload the page to try again.</td></tr>';
     console.error(e);
+  }
+}
+
+async function showAssignCandidates(followupId, ids) {
+  const slot = document.querySelector(`[data-assign-for="${CSS.escape(String(followupId))}"]`);
+  if (!slot) return;
+  slot.textContent = ' Loading…';
+  const buttons = [];
+  for (const id of ids) {
+    try {
+      const res = await fetch(`/api/staff/caregiver/${encodeURIComponent(id)}`);
+      const data = await res.json();
+      const p = data.profile || {};
+      if (!res.ok || !data.ok || p.status === 'archived') continue;
+      const label = `${[p.first_name, p.last_name].filter(Boolean).join(' ') || 'Anonymous'}${p.email ? ' (' + p.email + ')' : ''}`;
+      buttons.push(`<button class="btn btn-sm btn-outline btn-compact-ml" data-action="assign-held" data-followup-id="${escapeHtml(followupId)}" data-to-id="${escapeHtml(id)}" data-to-label="${escapeHtml(label)}">Belongs to ${escapeHtml(label)}</button>`);
+    } catch { /* skip unreadable candidates */ }
+  }
+  slot.innerHTML = buttons.length ? ' ' + buttons.join(' ') : ' No open candidate records. Merge or reopen them first.';
+}
+
+async function assignHeld(followupId, toId, toLabel) {
+  if (!confirm(`Move this held sign-up to ${toLabel}? It will appear on their record and this review will be marked done.`)) return;
+  const slot = document.querySelector(`[data-assign-for="${CSS.escape(String(followupId))}"]`);
+  try {
+    const res = await fetch(`/api/staff/followup/${encodeURIComponent(followupId)}/assign`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to_caregiver_id: toId })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.error || 'The move could not be confirmed.');
+    await loadFollowups();
+  } catch (err) {
+    if (slot) slot.textContent = ' ' + err.message;
   }
 }
 
@@ -2013,6 +2052,12 @@ document.addEventListener('click', function (e) {
     e.stopPropagation();
     const id = Number(target.getAttribute('data-followup-id'));
     resolveFollowup(id, e);
+  } else if (action === 'show-assign-candidates') {
+    e.stopPropagation();
+    showAssignCandidates(target.getAttribute('data-followup-id'), (target.getAttribute('data-candidates') || '').split(',').filter(Boolean));
+  } else if (action === 'assign-held') {
+    e.stopPropagation();
+    assignHeld(target.getAttribute('data-followup-id'), target.getAttribute('data-to-id'), target.getAttribute('data-to-label'));
   } else if (action === 'update-attendance') {
     e.stopPropagation();
     const id = Number(target.getAttribute('data-registration-id'));
