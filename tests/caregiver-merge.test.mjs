@@ -121,3 +121,46 @@ test('the person record offers Find + confirm-before-merge, never for holding or
   assert.match(js, /if \(!confirm\(`Merge \$\{fromLabel\} into this record\?/);
   assert.match(js, /fetch\(`\/api\/staff\/caregiver\/\$\{encodeURIComponent\(keepId\)\}\/merge`/);
 });
+
+// 41 review of #361.
+test('a live record and an internal-QA record never merge, in either direction', async () => {
+  raw.prepare(`INSERT INTO caregiver (id, first_name, email, source) VALUES ('cg_qa_src', 'QA', 'qa1@example.invalid', 'qa_seed')`).run();
+  raw.prepare(`INSERT INTO caregiver (id, first_name, email, segment_tags) VALUES ('cg_qa_tag', 'QA', 'qa2@example.invalid', '["qa_test"]')`).run();
+  for (const [keep, from] of [['cg_keep', 'cg_qa_src'], ['cg_qa_tag', 'cg_dup'], ['cg_qa_src', 'cg_keep']]) {
+    const res = await merge(keep, { from_id: from });
+    assert.equal(res.status, 409, `${keep} <- ${from}`);
+    assert.match((await res.json()).error, /test record and a live record/);
+  }
+  assert.equal(n(`SELECT COUNT(*) AS n FROM audit_log WHERE action = 'caregiver.merge'`), 0);
+  // Two QA records may merge with each other.
+  assert.equal((await merge('cg_qa_src', { from_id: 'cg_qa_tag' })).status, 200);
+});
+
+test('a concurrent tag edit on the kept record makes the merge a confirmed no-op (no overwrite)', async () => {
+  beforeBatch = () => raw.prepare(`UPDATE caregiver SET segment_tags = '["stroke"]' WHERE id = 'cg_keep'`).run();
+  const res = await merge('cg_keep', { from_id: 'cg_dup' });
+  assert.equal(res.status, 409);
+  assert.match((await res.json()).error, /Nothing was merged/);
+  assert.equal(raw.prepare(`SELECT segment_tags FROM caregiver WHERE id = 'cg_keep'`).get().segment_tags, '["stroke"]');
+  assert.equal(n(`SELECT COUNT(*) AS n FROM followup WHERE caregiver_id = 'cg_dup'`), 1);
+  assert.equal(n(`SELECT COUNT(*) AS n FROM audit_log WHERE action = 'caregiver.merge'`), 0);
+});
+
+test('a new linked item on the duplicate between read and write makes the merge a confirmed no-op', async () => {
+  beforeBatch = () => raw.prepare(`INSERT INTO followup (caregiver_id, kind, source, external_ref) VALUES ('cg_dup', 'support_request', 'site_form', 'f2')`).run();
+  const res = await merge('cg_keep', { from_id: 'cg_dup' });
+  assert.equal(res.status, 409);
+  assert.equal(n(`SELECT COUNT(*) AS n FROM followup WHERE caregiver_id = 'cg_dup'`), 2);
+  assert.equal(n(`SELECT COUNT(*) AS n FROM note WHERE body LIKE 'Merged duplicate%'`), 0);
+  assert.equal(raw.prepare(`SELECT status FROM caregiver WHERE id = 'cg_dup'`).get().status, 'active');
+});
+
+test('an incomplete batch receipt is reported as unconfirmed, not as "nothing was merged"', async () => {
+  const realBatch = env.LEGACY_DB.batch.bind(env.LEGACY_DB);
+  env.LEGACY_DB.batch = async statements => (await realBatch(statements)).slice(0, -1);
+  const res = await merge('cg_keep', { from_id: 'cg_dup' });
+  assert.equal(res.status, 502);
+  const body = await res.json();
+  assert.match(body.error, /could not be confirmed/);
+  assert.doesNotMatch(body.error, /Nothing was merged/);
+});
