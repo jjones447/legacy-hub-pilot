@@ -145,3 +145,36 @@ test('a live held sign-up never moves to an internal QA record, including one re
   assert.match(js, /p\.status === 'archived' \|\| isInternalTestProfile\(p\)/);
   assert.match(js, /heldReviewCandidates\(fu\.detail\)/);
 });
+
+// 41 integration review of 488ac3c5: sources can contain ':'.
+test('a disputed support-group sign-up (source site_form:support_group) moves with its original source', async () => {
+  const res = await handleIntake(db, { kind: 'support_request', source: 'site_form:support_group', first_name: 'Kai', email: 'kai@example.org',
+    message: 'Support group sign-up', external_ref: 'sg-1' });
+  assert.equal(res.body.caregiver_id, 'cg_unmatched_intake');
+  const review = raw.prepare(`SELECT id, external_ref FROM followup WHERE kind = 'possible_duplicate'`).get();
+  assert.equal(review.external_ref, 'held:v1:23:site_form:support_group:sg-1');
+  const moved = await assign(review.id, { to_caregiver_id: 'cg_a' });
+  assert.equal(moved.status, 200, JSON.stringify(await moved.clone().json()));
+  const row = raw.prepare(`SELECT caregiver_id, source FROM followup WHERE external_ref = 'sg-1'`).get();
+  assert.deepEqual({ ...row }, { caregiver_id: 'cg_a', source: 'site_form:support_group' });
+  assert.equal(n(`SELECT COUNT(*) AS n FROM followup WHERE caregiver_id = 'cg_unmatched_intake'`), 0);
+});
+
+test('a review whose held activity is gone is refused and left open', async () => {
+  await handleIntake(db, { kind: 'support_request', first_name: 'Kai', email: 'kai@example.org', external_ref: 'gone-1' });
+  raw.prepare(`UPDATE followup SET caregiver_id = 'cg_other' WHERE external_ref = 'gone-1'`).run();
+  const id = reviewId();
+  const res = await assign(id, { to_caregiver_id: 'cg_a' });
+  assert.equal(res.status, 409);
+  assert.match((await res.json()).error, /can no longer be found/);
+  assert.equal(raw.prepare(`SELECT status FROM followup WHERE id = ?`).get(id).status, 'open');
+  assert.equal(n(`SELECT COUNT(*) AS n FROM audit_log WHERE action = 'held_item.assign'`), 0);
+});
+
+test('held-review references round-trip for sources with and without ":" and reject other shapes', async () => {
+  const { heldReviewRef, parseHeldReviewRef } = await import('../functions/api/_shared.mjs');
+  for (const [src, ext] of [['site_form', 'a:b'], ['site_form:support_group', 'x'], ['givebutter', 'transaction.succeeded:t_1']]) {
+    assert.deepEqual(parseHeldReviewRef(heldReviewRef(src, ext)), { source: src, external_ref: ext });
+  }
+  for (const bad of ['site_form:x', 'held:v1:99:short:x', 'held:v1:3:abcx', 'held:v1:0::x', '']) assert.equal(parseHeldReviewRef(bad), null, bad);
+});

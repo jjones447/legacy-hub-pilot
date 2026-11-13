@@ -1,6 +1,6 @@
 // POST /api/webhooks/givebutter — GiveButter donations/registrations webhook ingestion (slice 08).
 import { internalError } from '../../_lib/errors.js';
-import { resolveCaregiverByContact, possibleDuplicateDetail } from '../_shared.mjs';
+import { resolveCaregiverByContact, possibleDuplicateDetail, heldReviewRef } from '../_shared.mjs';
 
 async function getHmacSha256(message, secret) {
   const enc = new TextEncoder();
@@ -238,7 +238,7 @@ export async function onRequestPost({ request, env }) {
         .bind(caregiverId,
           possibleDuplicateDetail(`Givebutter ${body.event || 'activity'} (${externalRef})`,
             { first_name: firstName, last_name: lastName, email, phone }, resolved.ambiguousIds),
-          'givebutter:' + externalRef)] : []),
+          heldReviewRef('givebutter', externalRef))] : []),
       env.LEGACY_DB.prepare(`SELECT id FROM ${entity}
         WHERE source = 'givebutter' AND external_ref = ? AND caregiver_id = ?`)
         .bind(externalRef, caregiverId),

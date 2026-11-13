@@ -2,7 +2,7 @@
 import { getActor } from '../../_lib/actor.js';
 import { internalError } from '../../_lib/errors.js';
 import * as caregiversDomain from '../../_lib/domain/caregivers.js';
-import { reviewCandidates } from '../_shared.mjs';
+import { reviewCandidates, parseHeldReviewRef } from '../_shared.mjs';
 import * as eventsDomain from '../../_lib/domain/events.js';
 import { getStaffMember, listStaff, updateStaffMember, createStaffMember } from '../../_lib/staff.js';
 import { staffSeries, caregiversWithCheckins } from '../../_lib/wellness.js';
@@ -440,11 +440,10 @@ export async function onRequestPost({ request, env }) {
         FROM caregiver c WHERE c.id = ?`).bind(toId).first();
       if (!target || target.status === 'archived') return json({ ok: false, error: 'that record is archived or missing; merge or reopen it first' }, 409);
       if (Number(target.qa)) return json({ ok: false, error: 'a live sign-up cannot be moved to a test record' }, 409);
-      const ref = String(review.external_ref || '');
-      const cut = ref.indexOf(':');
-      if (cut < 1) return json({ ok: false, error: 'review reference is malformed' }, 409);
-      const src = ref.slice(0, cut);
-      const ext = ref.slice(cut + 1);
+      const held = parseHeldReviewRef(review.external_ref);
+      if (!held) return json({ ok: false, error: 'this review has no held-sign-up reference; resolve it by hand' }, 409);
+      const src = held.source;
+      const ext = held.external_ref;
       const holding = review.caregiver_id;
       const count = async (sql, ...p) => Number((await env.LEGACY_DB.prepare(sql).bind(...p).first())?.n || 0);
       const counts = {
@@ -452,6 +451,9 @@ export async function onRequestPost({ request, env }) {
         grant_application: await count(`SELECT COUNT(*) AS n FROM grant_application WHERE caregiver_id = ? AND source = ? AND external_ref = ?`, holding, src, ext),
         followup: await count(`SELECT COUNT(*) AS n FROM followup WHERE caregiver_id = ? AND source = ? AND external_ref IN (?, ?)`, holding, src, ext, ext + ':fu'),
       };
+      if (counts.registration + counts.grant_application + counts.followup === 0) {
+        return json({ ok: false, error: 'The held sign-up for this review can no longer be found on the holding record. Nothing was changed; resolve the review by hand.' }, 409);
+      }
       const membership = await count(`SELECT COUNT(*) AS n FROM followup WHERE caregiver_id = ? AND source = ? AND external_ref = ? AND kind = 'membership_welcome'`, holding, src, ext);
       const opId = 'assign_' + crypto.randomUUID();
       const opSql = `EXISTS (SELECT 1 FROM audit_log WHERE action = 'held_item.assign' AND entity_id = ? AND json_extract(after_json, '$.op') = ?)`;

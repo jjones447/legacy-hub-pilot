@@ -161,7 +161,7 @@ export async function handleIntake(db, body) {
     .bind(
       caregiverId,
       possibleDuplicateDetail(`Website ${body.kind.replace(/_/g, ' ')} (${body.external_ref})`, body, resolved.ambiguousIds),
-      source + ':' + body.external_ref
+      heldReviewRef(source, body.external_ref)
     ) : null;
 
   if (atomic) {
@@ -207,6 +207,23 @@ export async function resolveCaregiverByContact(db, email, phone) {
 }
 
 // Staff-only text for a disputed-identity review task: who submitted what, and the candidates.
+// Held-review reference: the held activity's (source, external_ref) in an unambiguous,
+// length-prefixed form, since sources may contain ':' (e.g. 'site_form:support_group').
+export function heldReviewRef(source, externalRef) {
+  const src = String(source);
+  return `held:v1:${src.length}:${src}:${String(externalRef)}`;
+}
+export function parseHeldReviewRef(ref) {
+  const m = /^held:v1:(\d{1,4}):/.exec(String(ref ?? ''));
+  if (!m) return null;
+  const start = m[0].length;
+  const len = Number(m[1]);
+  const src = String(ref).slice(start, start + len);
+  if (src.length !== len || String(ref)[start + len] !== ':') return null;
+  const ext = String(ref).slice(start + len + 1);
+  return src && ext ? { source: src, external_ref: ext } : null;
+}
+
 export const CANDIDATE_ID = /^cg_[A-Za-z0-9_-]+$/;
 const oneLine = value => String(value ?? '').replace(/\s+/g, ' ').trim();
 
