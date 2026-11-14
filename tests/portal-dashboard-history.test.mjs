@@ -161,6 +161,7 @@ test('tile copy distinguishes account registrations, public calendar/library and
   assert.match(html, /Attended \(all time\)/);
   assert.doesNotMatch(html, /Attended \(2026\)/);
   assert.match(html, /library is public, not a personalized saved list/);
+  assert.match(html, /View my support requests/);
 });
 
 test('portal events lead the real summary cards and wellness is a separate full-width section below', () => {
@@ -200,11 +201,13 @@ test('whole-portal examples remain opt-in, fictional, outside actual records and
 });
 
 test('in-section QA sample previews and normal-section redesign cards are hidden by default for ordinary caregivers, fictional, and have no write controls', () => {
-  for (const id of ['portalWelcomeSub', 'portalQaSampleBanner', 'portalProfileCard', 'portalProfileSampleNote', 'portalSupportCard', 'portalEventsFilterRow', 'portalResourcesSampleNote', 'portalResourcesComingSoon', 'portalUpdatesCard', 'portalUpdatesSampleNote']) {
+  for (const id of ['portalWelcomeSub', 'portalQaSampleBanner', 'portalProfileCard', 'portalProfileSampleNote', 'portalEventsFilterRow', 'portalResourcesSampleNote', 'portalResourcesComingSoon', 'portalUpdatesCard', 'portalUpdatesSampleNote']) {
     const tag = html.match(new RegExp(`<(?:p|div)[^>]+id="${id}"[^>]*>`));
     assert.ok(tag, id);
     assert.match(tag[0], /\bhidden(?:\s|>|$)/, `${id} hidden by default`);
   }
+  assert.match(html, /<div class="panel m-0 portal-card" id="portalSupportCard">/);
+  assert.match(html, /id="portalSupportForm"/);
   for (const id of ['portalProfileSampleNote', 'portalResourcesSampleNote', 'portalUpdatesSampleNote']) {
     const block = html.match(new RegExp(`<(p|div)[^>]+id="${id}"[^>]*>([\\s\\S]*?)<\\/\\1>`));
     assert.ok(block, id);
