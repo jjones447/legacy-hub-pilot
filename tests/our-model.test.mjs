@@ -33,8 +33,8 @@ test('About menu lists Our Model right after Overview; home and Sanctuary link t
   const model = home.indexOf('Caregiver Support Rooted in Community');
   assert.ok(model > 0 && model < home.indexOf('home-support-heading'), 'model section comes before How We Support Caregivers');
   assert.match(home, /<a href="our-model\.html" class="btn btn-coral">Explore Our Model<\/a>/);
-  // Requester, Nov 15 (ts 1794763015.645709): hold all Sanctuary page changes for her separate update.
-  assert.doesNotMatch(read('sanctuary.html'), /Learn About Our Model|Caregiver Sanctuary Model/);
+  // Requester's separate Sanctuary update (Nov 15, ts 1794763820.351269) links Our Model from Our Approach.
+  assert.match(read('sanctuary.html'), /<a class="btn btn-coral" href="our-model\.html">Learn About Our Model<\/a>/);
 });
 
 test('Get Involved no longer says every partner completes the training (requester, Nov 15, ts 1794763015.645709)', () => {

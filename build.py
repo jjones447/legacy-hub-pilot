@@ -125,10 +125,12 @@ PAGE_METADATA = {
     "programs-events.html": {
         "title": "Programs & Events — Legacy Home & Respite Care Foundation",
         "description": "Supporting caregivers in every stage of the journey with respite, support groups, and wellness.",
+        "stylesheets": ("programs-events.css",),
     },
     "sanctuary.html": {
         "title": "Caregiver Sanctuary — Legacy Home & Respite Care Foundation",
         "description": "Building communities where caregivers don't have to navigate dementia alone.",
+        "stylesheets": ("sanctuary.css",),
     },
     "unsubscribe.html": {
         "title": "Unsubscribe — Legacy Home & Respite Care Foundation",
@@ -297,6 +299,8 @@ def asset_versions() -> dict:
         "staff.js": hashlib.sha256((ROOT / "staff.js").read_bytes()).hexdigest()[:12],
         "wellness-passport.css": hashlib.sha256((ROOT / "wellness-passport.css").read_bytes()).hexdigest()[:12],
         "our-model.css": hashlib.sha256((ROOT / "our-model.css").read_bytes()).hexdigest()[:12],
+        "sanctuary.css": hashlib.sha256((ROOT / "sanctuary.css").read_bytes()).hexdigest()[:12],
+        "programs-events.css": hashlib.sha256((ROOT / "programs-events.css").read_bytes()).hexdigest()[:12],
     }
 
 
