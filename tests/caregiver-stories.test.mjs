@@ -43,9 +43,13 @@ test('stories intro, real excerpts with names and links on Home, About and Sanct
   assert.ok(about.indexOf('More Than Services. It’s About Relationships.') > about.indexOf('id="story"'));
   assert.ok(about.indexOf('More Than Services. It’s About Relationships.') < about.indexOf('id="shanelle"'));
   assert.match(about, /href="caregiver-stories\.html" class="btn btn-outline">Read More Caregiver Stories<\/a>/);
+  // Requester, Nov 15 (ts 1794771760.493899): "Trust Makes a Difference" moved from Sanctuary to Drop-In Respite.
   const sanctuary = read('sanctuary.html');
-  assert.ok(sanctuary.indexOf('Trust Makes a Difference') < sanctuary.indexOf('id="become"'));
-  assert.match(sanctuary, /<figcaption class="voice-by">— Shamiah Tanner<\/figcaption>/);
-  assert.match(sanctuary, /href="caregiver-stories\.html">Read Caregiver Stories<\/a>/);
+  assert.doesNotMatch(sanctuary, /Trust Makes a Difference/);
   assert.match(sanctuary, /7828 W Appleton Avenue, Milwaukee, WI/);
+  const respite = read('drop-in-respite.html');
+  assert.ok(respite.indexOf('Trust Makes a Difference') > respite.indexOf('id="how-it-works"'));
+  assert.ok(respite.indexOf('Trust Makes a Difference') < respite.indexOf('id="faith-community"'));
+  assert.match(respite, /<blockquote>“It is a great feeling to know that they are safe, and not have to worry\.”<\/blockquote>\s*<figcaption class="voice-by">— Shamiah Tanner<\/figcaption>/);
+  assert.match(respite, /href="caregiver-stories\.html">Read Caregiver Stories<\/a>/);
 });
