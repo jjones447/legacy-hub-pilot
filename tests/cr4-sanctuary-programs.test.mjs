@@ -174,7 +174,9 @@ test('Sanctuary merges the overview and exposes join/contact before the program 
     assert.ok(main.indexOf(`href="${href}"`) < programsAt, `early entry required for ${href}`);
   }
   assert.match(main, /<h2>Caregiver Sanctuary Programs &amp; Resources<\/h2>/);
-  for (const href of programDestinations) assert.ok(main.includes(`href="${href}"`), href);
+  // Requester, Nov 15 (ts 1794763820.351269): the respite card links the Programs & Events respite section and
+  // Event Respite goes to the partnership inquiry.
+  for (const href of programDestinations.map(h => ({ 'drop-in-respite.html': 'programs-events.html#drop-in', 'programs-events.html#event-respite': 'get-involved.html#partner' })[h] || h)) assert.ok(main.includes(`href="${href}"`), href);
   const network = main.slice(main.indexOf('<section id="components">'));
   assert.match(network, /<h2 id="network">Caregiver Sanctuary Network<\/h2>/);
   assert.match(network, /href="community-wellness-partners.html"/);
@@ -224,7 +226,7 @@ test('hero secondary CTA has an opaque high-contrast surface in default, hover a
   const focus = declarations('.btn:focus-visible');
   assert.match(focus.outline, /solid/);
   assert.equal(focus['outline-offset'], '2px');
-  assert.match(loadFile('sanctuary.html'), /class="btn btn-outline" href="request-support.html">Contact \/ Request Support/);
+  assert.match(loadFile('sanctuary.html'), /class="btn btn-outline" href="request-support.html">Request Support</);
 });
 
 test('existing click/touch expansion, one-open-menu rule and Escape dismissal still work with the combined menu', () => {
@@ -307,8 +309,9 @@ test('O26-02/03/04: Sanctuary, About, and Get Involved place hero text over supp
   assert.match(sanctuaryHero, /<source src="media\/client-oct16\/sanctuary-video-1-trimmed\.mp4\?v=[0-9a-f]{12}#t=0\.1" type="video\/mp4">/);
   assert.match(sanctuaryHero, /<div class="hero-scrim" aria-hidden="true"><\/div>\s*<div class="container hero-content">/);
   assert.match(sanctuaryHero, /<h1 class="hero-title-clamp">Caregiver Sanctuary<\/h1>/);
-  assert.match(sanctuaryHero, /<a class="btn btn-coral" href="programs\.html">Join Caregiver Sanctuary<\/a>/);
-  assert.match(sanctuaryHero, /<a class="btn btn-outline" href="request-support\.html">Contact \/ Request Support<\/a>/);
+  // Requester, Nov 15 (ts 1794763820.351269): new hero buttons; membership stays visible in the card strip below.
+  assert.match(sanctuaryHero, /<a class="btn btn-coral" href="programs-events\.html">Explore Programs &amp; Events<\/a>/);
+  assert.match(sanctuaryHero, /<a class="btn btn-outline" href="request-support\.html">Request Support<\/a>/);
 
   for (const rel of ['about.html', 'templates/about.html.j2']) {
     const aboutHtml = loadFile(rel);

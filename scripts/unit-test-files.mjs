@@ -44,6 +44,7 @@ export const UNIT_TEST_FILES = Object.freeze([
   'meet-our-team.test.mjs',
   'caregiver-stories.test.mjs',
   'our-model.test.mjs',
+  'sanctuary-page-update.test.mjs',
   'board-of-directors.test.mjs',
   'cr3-resource-hub-ia.test.mjs',
   'cr4-sanctuary-programs.test.mjs',
