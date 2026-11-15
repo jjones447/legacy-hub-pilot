@@ -504,6 +504,12 @@ section { padding: 64px 0; }
 .story-title { font-family: var(--font-display); font-style: italic; color: var(--coral-dark); margin-bottom: 10px; }
 .story-more summary { margin-top: 12px; cursor: pointer; color: var(--plum); font-weight: 600; }
 .story-by { margin-top: 16px; font-weight: 600; color: var(--plum-dark); }
+.voice-card { margin: 0; }
+.voice-card .voice-by { margin-top: 12px; font-weight: 600; color: var(--plum-dark); }
+.voice-card .more { display: inline-block; margin-top: 8px; }
+#trust .voice-card { max-width: 660px; }
+#trust { border-top: 1px solid #efe3d6; }
+.hero .stories-intro { color: #eeddd2; max-width: 640px; margin-top: 10px; }
 .band-teal {
   background: var(--plum-dark); color: #fff; text-align: center;
 }
