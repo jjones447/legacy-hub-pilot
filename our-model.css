@@ -1,0 +1,39 @@
+/* Our Model (requester, Nov 15 2026): the Caregiver Sanctuary Model page. */
+.om-hero .om-hero-sub { font-family: var(--font-display); font-style: italic; color: #fff; margin-bottom: 18px; }
+.om-hero .om-hero-text { color: #eeddd2; max-width: 680px; margin-bottom: 12px; }
+.om-hero .om-hero-close { color: #fff; margin-top: 18px; font-size: 19px; }
+.om-section { padding: 64px 0; }
+.om-tint { background: var(--sand); }
+.om-head { max-width: 760px; margin: 0 auto 36px; text-align: center; }
+.om-head h2, .om-narrow h2, .om-cta h2 { font-family: var(--font-display); font-size: clamp(26px, 3.4vw, 36px); color: var(--plum-dark); margin-bottom: 14px; }
+.om-head p, .om-narrow p, .om-cta p { color: var(--ink-soft); }
+.om-head p + p, .om-narrow p + p, .om-cta p + p { margin-top: 10px; }
+.om-narrow { max-width: 760px; }
+.om-emphasis { color: var(--plum-dark) !important; margin-top: 16px !important; }
+.om-note { max-width: 760px; margin: 28px auto 0; text-align: center; color: var(--ink-soft); font-style: italic; }
+.om-icon-wrap { display: inline-flex; align-items: center; justify-content: center; width: 52px; height: 52px; border-radius: 50%; background: var(--sand); color: var(--plum); margin-bottom: 12px; }
+/* Caregiver-centred diagram: five areas around the family caregiver on a faint ring. */
+.om-model { position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-areas: ". a1 ." "a5 c a2" "a4 . a3"; gap: 20px 28px; align-items: center; max-width: 1040px; margin: 0 auto; }
+.om-model::before { content: ""; position: absolute; left: 50%; top: 50%; width: min(78%, 640px); aspect-ratio: 1; transform: translate(-50%, -50%); border: 2px dashed #e3cdb8; border-radius: 50%; pointer-events: none; }
+.om-center { grid-area: c; position: relative; justify-self: center; width: 190px; height: 190px; border-radius: 50%; background: var(--plum); color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; font-family: var(--font-display); font-size: 21px; box-shadow: var(--shadow-lg); }
+.om-center-icon { color: #f6d9c8; margin-bottom: 6px; }
+.om-area { position: relative; background: var(--white); border-radius: var(--radius); box-shadow: var(--shadow); padding: 22px 20px; text-align: center; }
+.om-area h3 { font-size: 18px; color: var(--plum-dark); margin-bottom: 6px; }
+.om-area p { font-size: 15.5px; color: var(--ink-soft); }
+.om-area-1 { grid-area: a1; } .om-area-2 { grid-area: a2; } .om-area-3 { grid-area: a3; } .om-area-4 { grid-area: a4; } .om-area-5 { grid-area: a5; }
+.om-timeline { list-style: none; padding: 0; margin: 0 auto; max-width: 820px; position: relative; }
+.om-timeline::before { content: ""; position: absolute; left: 27px; top: 8px; bottom: 8px; width: 2px; background: #e3cdb8; }
+.om-step { position: relative; display: flex; gap: 18px; align-items: flex-start; padding: 12px 0; }
+.om-step-num { flex: 0 0 56px; height: 56px; border-radius: 50%; background: var(--white); border: 2px solid var(--coral); color: var(--coral-dark); font-family: var(--font-display); font-size: 20px; display: flex; align-items: center; justify-content: center; position: relative; }
+.om-step h3 { font-size: 19px; color: var(--plum-dark); margin: 6px 0 4px; }
+.om-step p { color: var(--ink-soft); }
+.om-partners { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px; }
+.om-partner h3 { color: var(--plum-dark); margin-bottom: 8px; font-size: 19px; }
+.om-partner p { color: var(--ink-soft); }
+.om-cta { background: linear-gradient(135deg, var(--sand) 0%, var(--amber-soft) 100%); padding: 72px 0; }
+.om-cta-buttons { justify-content: center; margin-top: 22px; }
+@media (max-width: 900px) {
+  .om-model { grid-template-columns: 1fr; grid-template-areas: "c" "a1" "a2" "a3" "a4" "a5"; }
+  .om-model::before { display: none; }
+  .om-partners { grid-template-columns: 1fr; }
+}

@@ -162,7 +162,7 @@ test('every generated public header shares the new hierarchy, first-focus skip l
     assert.equal(html.indexOf('<a ', html.indexOf('<body>')), html.indexOf('<a class="skip-link"'), file);
     assert.match(html, /<main id="main">/);
   }
-  assert.equal(checked, 25, 'all current public headers must be checked'); // + caregiver-stories.html (Nov 12)
+  assert.equal(checked, 26, 'all current public headers must be checked'); // + caregiver-stories.html (Nov 12), our-model.html (Nov 15)
 });
 
 test('Sanctuary merges the overview and exposes join/contact before the program and Network sections', () => {
