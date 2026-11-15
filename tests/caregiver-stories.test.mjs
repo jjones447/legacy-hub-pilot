@@ -6,9 +6,9 @@ import { readFileSync } from 'node:fs';
 const page = readFileSync(new URL('../caregiver-stories.html', import.meta.url), 'utf8');
 const home = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 
-test('Read More Stories on the home page opens the Caregiver Stories page, not Programs', () => {
-  assert.match(home, /<a href="caregiver-stories\.html" class="btn btn-outline">Read More Stories<\/a>/);
-  assert.doesNotMatch(home, /href="programs\.html" class="btn btn-outline">Read More Stories/);
+test('the home voices section links to the Caregiver Stories page (requester, Nov 15: "Read Their Stories")', () => {
+  assert.match(home, /<a href="caregiver-stories\.html" class="btn btn-outline">Read Their Stories<\/a>/);
+  assert.doesNotMatch(home, /href="programs\.html" class="btn btn-outline">Read/);
 });
 
 test('the page shows all five requester stories with names, in order', () => {
@@ -20,4 +20,32 @@ test('the page shows all five requester stories with names, in order', () => {
     assert.ok(page.includes(phrase), phrase);
   }
   assert.equal((page.match(/<details class="story-more">/g) || []).length, 2);
+});
+
+// Requester, Nov 15 2026 (ts 1794771193.465119): relationships update.
+test('stories intro, real excerpts with names and links on Home, About and Sanctuary', () => {
+  const read = rel => readFileSync(new URL(`../${rel}`, import.meta.url), 'utf8');
+  assert.match(page, /<p class="lede">Real Experiences\. Real Connections\.<\/p>/);
+  assert.match(page, /Every caregiver has a story, and we’re grateful when families choose to share theirs with us\./);
+  for (const id of ['story-lena-c-taylor', 'story-montez-ashley', 'story-lisa-smith', 'story-joan-snowden', 'story-shamiah-tanner']) assert.match(page, new RegExp(`id="${id}"`), id);
+  // Excerpts must be verbatim from the published stories.
+  assert.ok(page.includes('The bonds we build are strong.'));
+  assert.ok(page.includes('I felt so supported by Legacy’s founder'));
+  assert.ok(page.includes('It is a great feeling to know that they are safe, and not have to worry.'));
+  const home = read('index.html');
+  assert.match(home, /<h2>The People Behind the Stories<\/h2>/);
+  assert.doesNotMatch(home, /Legacy reminded me that I mattered too/);
+  for (const html of [home, read('about.html')]) {
+    assert.match(html, /<blockquote>“The bonds we build are strong\.”<\/blockquote>\s*<figcaption class="voice-by">— Lisa Smith<\/figcaption>\s*<a class="more" href="caregiver-stories\.html#story-lisa-smith">/);
+    assert.match(html, /<blockquote>“I felt so supported by Legacy’s founder”<\/blockquote>\s*<figcaption class="voice-by">— Lena C\. Taylor<\/figcaption>\s*<a class="more" href="caregiver-stories\.html#story-lena-c-taylor">/);
+  }
+  const about = read('about.html');
+  assert.ok(about.indexOf('More Than Services. It’s About Relationships.') > about.indexOf('id="story"'));
+  assert.ok(about.indexOf('More Than Services. It’s About Relationships.') < about.indexOf('id="shanelle"'));
+  assert.match(about, /href="caregiver-stories\.html" class="btn btn-outline">Read More Caregiver Stories<\/a>/);
+  const sanctuary = read('sanctuary.html');
+  assert.ok(sanctuary.indexOf('Trust Makes a Difference') < sanctuary.indexOf('id="become"'));
+  assert.match(sanctuary, /<figcaption class="voice-by">— Shamiah Tanner<\/figcaption>/);
+  assert.match(sanctuary, /href="caregiver-stories\.html">Read Caregiver Stories<\/a>/);
+  assert.match(sanctuary, /7828 W Appleton Avenue, Milwaukee, WI/);
 });
