@@ -35,8 +35,10 @@ test('unconfirmed sample dates and registration counts are not presented as curr
   for (const page of ['index.html', 'events.html']) {
     const html = read(page);
     assert.doesNotMatch(html, /class="month">Jul|class="month">Aug|18 registered|8 registered|9 registered|6 registered/);
-    assert.match(html, /Schedule pending/);
   }
+  assert.match(read('events.html'), /Schedule pending/);
+  // Requester, Nov 12 (ts 1794513519.403519): the home page no longer shows the pending note.
+  assert.doesNotMatch(read('index.html'), /Schedule pending/);
   assert.doesNotMatch(read('events.html'), /data-action="open-register"/);
 });
 

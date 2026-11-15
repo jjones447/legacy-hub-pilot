@@ -91,6 +91,17 @@ const FIXTURE_MANIFEST = {
         }
       }
     },
+    'get-involved': {
+      folder: 'Get Involved',
+      folder_id: 'get-involved-folder-id',
+      banner: {
+        kind: 'photo',
+        key: 'banners/get-involved.jpg',
+        source_id: 'src-get-involved-banner',
+        caption: null
+      },
+      groups: {}
+    },
     about: {
       folder: 'About Us',
       folder_id: 'about-folder-id',
@@ -381,11 +392,12 @@ test('(e) video banner swap and photo banner update', async () => {
     assert.ok(!html.includes('src="media/headers/programs-events.jpg"'));
   }
 
-  // 2. Photo banner update on about.html
+  // 2. Photo banner update. The About hero is text-only since Nov 1 (its photo moved beside
+  // the story), so Get Involved, which still has a photo hero, exercises the photo swap.
   {
     _resetManifestCache();
-    const committedHtml = loadHtml('about.html');
-    const request = new Request('https://legacy-hub.pages.dev/about.html', { method: 'GET' });
+    const committedHtml = loadHtml('get-involved.html');
+    const request = new Request('https://legacy-hub.pages.dev/get-involved.html', { method: 'GET' });
     const next = async () => new Response(committedHtml, {
       status: 200,
       headers: { 'content-type': 'text/html; charset=utf-8' },
@@ -396,8 +408,24 @@ test('(e) video banner swap and photo banner update', async () => {
     const html = await resp.text();
 
     assert.ok(html.includes('<img class="hero-media"'));
-    assert.ok(html.includes('src="/media/r2/banners/about.jpg"'));
-    assert.ok(!html.includes('src="media/headers/about.jpg"'));
+    assert.ok(html.includes('src="/media/r2/banners/get-involved.jpg"'));
+    assert.ok(!html.includes('src="media/client-oct16/get-involved-header-photo-1.jpg"'));
+  }
+
+  // 3. A text-only hero (About) has no hero image to swap: an About banner leaves the page's
+  // own story photo untouched.
+  {
+    _resetManifestCache();
+    const committedHtml = loadHtml('about.html');
+    const request = new Request('https://legacy-hub.pages.dev/about.html', { method: 'GET' });
+    const next = async () => new Response(committedHtml, {
+      status: 200,
+      headers: { 'content-type': 'text/html; charset=utf-8' },
+    });
+    const resp = await onRequest({ request, next, env: { MEDIA: media } });
+    const html = await resp.text();
+    assert.ok(!html.includes('class="hero-media"'));
+    assert.ok(html.includes('class="about-story-photo"'));
   }
 });
 

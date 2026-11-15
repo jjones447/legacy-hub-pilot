@@ -1,6 +1,7 @@
 // GET/POST /api/grants — staff endpoints for managing grant applications (slice 06).
 import { getActor } from '../../_lib/actor.js';
 import { internalError } from '../../_lib/errors.js';
+import { notInternalTestCaregiverSql } from '../../_lib/domain/caregivers.js';
 import * as grantsDomain from '../../_lib/domain/grants.js';
 
 export async function onRequestGet({ request, env }) {
@@ -19,10 +20,10 @@ export async function onRequestGet({ request, env }) {
 
     let stmt;
     if (status) {
-      query += ` WHERE g.status = ? ORDER BY g.created_at DESC`;
+      query += ` WHERE g.status = ? AND (c.id IS NULL OR ${notInternalTestCaregiverSql('c')}) ORDER BY g.created_at DESC`;
       stmt = env.LEGACY_DB.prepare(query).bind(status);
     } else {
-      query += ` ORDER BY g.created_at DESC`;
+      query += ` WHERE (c.id IS NULL OR ${notInternalTestCaregiverSql('c')}) ORDER BY g.created_at DESC`;
       stmt = env.LEGACY_DB.prepare(query);
     }
 

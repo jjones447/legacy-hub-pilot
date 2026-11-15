@@ -28,7 +28,7 @@ function text(grid) { return descendants(grid).map(item => item.textContent).joi
 test('current published API data builds real registration controls using its exact identity', () => {
   const { grid, context } = setup();
   assert.equal(context.renderPublicEvents([event({ id: 'ev_actual_api_identity' })], grid, now), true);
-  assert.match(text(grid), /Synthetic event.*2026-10-06 10:00 \(America\/Chicago\).*Synthetic room/s);
+  assert.match(text(grid), /Synthetic event.*Tuesday, October 6, 2026 · 10:00 AM – 11:00 AM.*Synthetic room/s);
   assert.match(text(grid), /3 registered · capacity 12/);
   assert.equal(button(grid).dataset.eventId, 'ev_actual_api_identity');
   assert.equal(button(grid).dataset.action, 'open-register');
@@ -222,4 +222,21 @@ test('existing published-events endpoint feeds the renderer and registration-mod
   context.openRegister(action.dataset.eventTitle, action.dataset.eventId);
   assert.equal(form.dataset.eventId, published.id);
   assert.equal(title.textContent, 'Register — ' + published.title);
+});
+
+test('event cards show a bold, plain date and time, then the location (requester, Nov 12, ts 1794499018.372269)', () => {
+  const { grid, context } = setup();
+  const now = new Date('2026-11-12T16:00:00Z');
+  const holiday = { id: 'ev_holiday', title: 'A Caregiver Sanctuary Holiday', starts_at: '2026-12-12 11:00', ends_at: '2026-12-12 15:00',
+    location: 'Renaissance Milwaukee West Hotel', description: 'Celebrate together.', registered_count: 0, capacity: null };
+  assert.equal(context.renderPublicEvents([holiday], grid, now), true);
+  const nodes = descendants(grid);
+  const strong = nodes.find(n => n.tagName === 'strong');
+  assert.equal(strong.textContent, 'Saturday, December 12, 2026 · 11:00 AM – 3:00 PM');
+  assert.equal(nodes.find(n => n.className === 'event-meta').textContent, 'Renaissance Milwaukee West Hotel');
+  assert.doesNotMatch(text(grid), /America\/Chicago|2026-12-12 11:00/);
+  const order = nodes.map(n => n.className || n.tagName);
+  assert.ok(order.indexOf('event-when') < order.indexOf('event-meta') && order.indexOf('event-meta') < order.indexOf('event-description'));
+  assert.equal(context.friendlyEventWhen({ instant: Date.parse('2026-12-12T17:00:00Z') }, null, 'America/Chicago'), 'Saturday, December 12, 2026 · 11:00 AM');
+  assert.equal(context.friendlyEventWhen({ instant: Date.parse('2026-12-12T17:00:00Z') }, { instant: Date.parse('2026-12-13T08:00:00Z') }, 'America/Chicago'), 'Saturday, December 12, 2026 · 11:00 AM – Sunday, December 13, 2026 · 2:00 AM');
 });

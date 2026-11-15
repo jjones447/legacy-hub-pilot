@@ -10,6 +10,7 @@
     "test:runtime": "node scripts/run-tests.mjs runtime"
   },
   "devDependencies": {
+    "jsdom": "30.1.3",
     "wrangler": "4.139.0"
   }
 }

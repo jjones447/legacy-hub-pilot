@@ -43,14 +43,17 @@ test('home support preserves client copy with sentence-case presentation and use
   assert.deepEqual(routes, ['wellness-passport.html', 'drop-in-respite.html', 'community-series.html']);
   for (const route of routes) assert.match(file(route), /<!DOCTYPE html>/i);
 
-  // Descriptions are reused verbatim from existing program pages, not new service claims.
+  // Descriptions are reused verbatim from existing program pages, not new service claims. Two
+  // came from the old Drop-In Respite "Related support" cards, which the requester's Nov 3
+  // rebuild of that page removed; they stay on the home page unchanged.
   for (const [description, source] of [
-    ['Connect with wellness activities, partner experiences, and grant benefits.', 'drop-in-respite.html'],
-    ['Time to breathe while your loved one is somewhere safe, engaged and cared for.', 'community-series.html'],
-    ['Gatherings and wellness sessions for caregivers across the community.', 'drop-in-respite.html'],
+    ['Connect with wellness activities, partner experiences, and grant benefits.', null],
+    // Came from the old Community Series page, rewritten by the requester on Nov 12; stays on home.
+    ['Time to breathe while your loved one is somewhere safe, engaged and cared for.', null],
+    ['Gatherings and wellness sessions for caregivers across the community.', null],
   ]) {
     assert.ok(support.includes(description));
-    assert.ok(file(source).includes(description));
+    if (source) assert.ok(file(source).includes(description));
   }
   const css = file('styles.css');
   assert.match(css, /\.home-support-heading\s*\{[^}]*text-transform:\s*lowercase/);
@@ -97,12 +100,18 @@ test('homepage partner logos link to official pages with preserved assets and ke
     ['https://www.greatermilwaukeefoundation.org/', 'greater-milwaukee-foundation.webp', 'Greater Milwaukee Foundation', '2478', '739'],
     ['https://bader.org/', 'bader-philanthropies.png', 'Bader Philanthropies', '11433', '3985'],
     ['https://veridianhomes.com/about/veridian-foundation/', 'veridian-foundation.png', 'Veridian Foundation', '3199', '778'],
+    // Added at the requester's request, Nov 12 2026 (ts 1794497218.358349).
+    ['https://www.aarp.org/states/wisconsin/', 'aarp-milwaukee.png', 'AARP Milwaukee', '890', '301'],
+    ['https://www.alz.org/wi', 'alzheimers-association-wisconsin-chapter.png', "Alzheimer's Association Wisconsin Chapter", '218', '109'],
+    ['https://wai.wisc.edu/', 'wisconsin-alzheimers-institute.png', "Wisconsin Alzheimer's Institute, University of Wisconsin School of Medicine and Public Health, Regional Milwaukee Office", '230', '126'],
+    ['https://county.milwaukee.gov/EN/DHHS', 'milwaukee-county-dhhs.webp', 'Milwaukee County Department of Health &amp; Human Services', '276', '123'],
+    ['https://archwellhealth.com/', 'archwell-health.png', 'ArchWell Health', '123', '46'],
   ];
   for (const path of ['index.html', 'templates/index.html.j2']) {
     const list = file(path).match(/<ul class="client-partner-logos"[^>]*>([\s\S]*?)<\/ul>/)?.[1];
     assert.ok(list, `${path}: existing partner list remains`);
     const items = [...list.matchAll(/<li>([\s\S]*?)<\/li>/g)].map(match => match[1]);
-    assert.equal(items.length, expected.length, `${path}: all nine supplied logos remain`);
+    assert.equal(items.length, expected.length, `${path}: every supplied logo remains`);
     for (const [index, [href, asset, alt, width, height]] of expected.entries()) {
       const link = items[index].match(/^<a href="([^"]+)">(<img [^>]+>)<\/a>$/);
       assert.ok(link, `${path}: logo ${index + 1} is a native same-tab anchor`);
@@ -118,4 +127,11 @@ test('homepage partner logos link to official pages with preserved assets and ke
   assert.match(css, /\.client-partner-logos a\s*\{[^}]*display:\s*block;[^}]*width:\s*100%/);
   assert.match(css, /\.client-partner-logos a:focus-visible\s*\{[^}]*outline:\s*3px solid var\(--plum\);[^}]*outline-offset:\s*6px/);
   assert.match(css, /\.client-partner-logos img\s*\{[^}]*width:\s*100%;[^}]*height:\s*100px;[^}]*object-fit:\s*contain/);
+});
+
+test('the five logos added Nov 12 are real files on disk', async () => {
+  const { statSync } = await import('node:fs');
+  for (const asset of ['aarp-milwaukee.png', 'alzheimers-association-wisconsin-chapter.png', 'wisconsin-alzheimers-institute.png', 'milwaukee-county-dhhs.webp', 'archwell-health.png']) {
+    assert.ok(statSync(new URL(`../media/client-oct16/partners/${asset}`, import.meta.url)).size > 1000, asset);
+  }
 });

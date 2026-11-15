@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unsubscribe &mdash; Legacy Home &amp; Respite Care Foundation</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+{# Email list unsubscribe (issue #301 phase 1). The link in a subscriber's email carries
+   ?token=<32 hex>. app.js reads it, removes it from the address bar, and posts it to
+   /api/unsubscribe only when the person presses the button, so a link scanner that merely
+   opens the page unsubscribes no one. Known and unknown links get the same message. #}
+{% set active_page = '' %}
+{% include '_header.html.j2' %}
+
+<section class="py-44">
+  <div class="container">
+    <div class="email-list-card">
+      <span class="eyebrow">Email list</span>
+      <h1 id="unsubscribeHeading" class="mb-12">Unsubscribe</h1>
+      <form id="unsubscribeForm" data-action="submit-unsubscribe">
+        <p data-unsubscribe-ready>Press the button to stop receiving emails from Legacy at the address this link was sent to.</p>
+        <p data-unsubscribe-missing hidden>This unsubscribe link is incomplete. Please use the full link from the email, or contact Legacy and we'll remove you.</p>
+        <button type="submit" class="btn btn-coral w-100">Unsubscribe</button>
+        <p data-unsubscribe-pending role="status" aria-live="polite" hidden>Unsubscribing. Please wait.</p>
+        <div class="success-note" data-intake-success role="status" aria-live="polite" tabindex="-1">If this link matches a subscription, it is now unsubscribed. You won't receive Legacy emails at that address. If you change your mind later, please <a href="about.html#contact">contact Legacy</a>.</div>
+        <div class="error-note" data-intake-error role="alert" aria-live="assertive" tabindex="-1"></div>
+      </form>
+      <p class="small muted mt-24"><a href="index.html">Return to the home page</a></p>
+    </div>
+  </div>
+</section>
+
+{% include '_footer.html.j2' %}
+
+<script src="app.js"></script>
+<script src="nav-v2.js"></script>
+</body>
+</html>

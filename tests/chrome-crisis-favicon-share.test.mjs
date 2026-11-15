@@ -20,6 +20,8 @@ const PUBLIC_PAGES = [
   'follow-and-learn.html',
   'caregiver-tools.html',
   'community-series.html',
+  'caregiver-stories.html',
+  'our-model.html',
   'drop-in-respite.html',
   'blog.html',
   'donate.html',
