@@ -1,0 +1,12 @@
+/* Programs & Events: Drop-In Respite, Event Respite and Family Education sections (requester, Nov 15 2026). */
+.pe-program .section-head { margin-bottom: 16px; }
+.pe-program p + p, .pe-program p + ul, .pe-program ul + p { margin-top: 12px; }
+.pe-offerings { padding-left: 1.2em; }
+.pe-offerings li + li { margin-top: 10px; }
+.pe-program .pe-program-cta { margin-top: 20px; }
+.pe-program .pe-program-cta .btn { min-width: 240px; text-align: center; }
+@media (max-width: 600px) {
+  .pe-program { padding-top: 40px; padding-bottom: 40px; }
+  .pe-program .section-head { margin-bottom: 10px; }
+  .pe-program .pe-program-cta .btn { width: 100%; min-width: 0; }
+}
