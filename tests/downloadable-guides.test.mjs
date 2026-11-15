@@ -18,7 +18,8 @@ test('each PDF is listed by its document name and links to a real PDF that deplo
   ]);
   const deployed = new Set(selectSiteFiles(new URL('.', root).pathname));
   for (const d of downloads) {
-    assert.match(section, new RegExp(`<h3>${d.title}</h3>`));
+    assert.ok(section.includes(`<h3>${d.title}</h3>\n        <p>${d.description}</p>`), d.title);
+    assert.ok(d.description.length > 40, d.title);
     const href = `media/downloads/${d.file}`;
     assert.ok(section.includes(`href="${href}" target="_blank" rel="noopener">Download PDF &rarr;</a>`), href);
     assert.ok(deployed.has(href), `${href} is in the deploy allowlist`);

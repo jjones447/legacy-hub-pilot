@@ -69,6 +69,7 @@
       <div class="card download-item">
         <span class="resource-tag">PDF &middot; {{ d.pages }} pages</span>
         <h3>{{ d.title | e }}</h3>
+        <p>{{ d.description | e }}</p>
         <a class="more" href="media/downloads/{{ d.file }}" target="_blank" rel="noopener">Download PDF &rarr;</a>
       </div>
 {%- endfor %}
