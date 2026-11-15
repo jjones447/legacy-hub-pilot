@@ -68,6 +68,11 @@ PAGE_METADATA = {
         "title": "Caregiver Stories — Legacy Home & Respite Care Foundation",
         "description": "Caregivers share, in their own words, what Legacy Home & Respite Care Foundation and the Caregiver Sanctuary have meant to them.",
     },
+    "our-model.html": {
+        "title": "Our Model — Legacy Home & Respite Care Foundation",
+        "description": "The Caregiver Sanctuary Model: caregiver wellness, rooted in community. How Legacy brings together respite, education, wellness, peer support, and community partnerships.",
+        "stylesheets": ("our-model.css",),
+    },
     "community-series.html": {
         "title": "Caregiver Sanctuary Community Series — Legacy Home & Respite Care Foundation",
         "description": "Connection. Community. Time for You. Gatherings and experiences for dementia family caregivers, hosted with local businesses and community spaces.",
@@ -120,10 +125,12 @@ PAGE_METADATA = {
     "programs-events.html": {
         "title": "Programs & Events — Legacy Home & Respite Care Foundation",
         "description": "Supporting caregivers in every stage of the journey with respite, support groups, and wellness.",
+        "stylesheets": ("programs-events.css",),
     },
     "sanctuary.html": {
         "title": "Caregiver Sanctuary — Legacy Home & Respite Care Foundation",
         "description": "Building communities where caregivers don't have to navigate dementia alone.",
+        "stylesheets": ("sanctuary.css",),
     },
     "unsubscribe.html": {
         "title": "Unsubscribe — Legacy Home & Respite Care Foundation",
@@ -144,6 +151,7 @@ PAGES = {
     "follow-and-learn.html": "follow-and-learn.html.j2",
     "caregiver-tools.html": "caregiver-tools.html.j2",
     "community-series.html": "community-series.html.j2",
+    "our-model.html": "our-model.html.j2",
     "caregiver-stories.html": "caregiver-stories.html.j2",
     "drop-in-respite.html": "drop-in-respite.html.j2",
     "coming-soon.html": "coming-soon.html.j2",
@@ -290,6 +298,9 @@ def asset_versions() -> dict:
         "app.js": hashlib.sha256((ROOT / "app.js").read_bytes()).hexdigest()[:12],
         "staff.js": hashlib.sha256((ROOT / "staff.js").read_bytes()).hexdigest()[:12],
         "wellness-passport.css": hashlib.sha256((ROOT / "wellness-passport.css").read_bytes()).hexdigest()[:12],
+        "our-model.css": hashlib.sha256((ROOT / "our-model.css").read_bytes()).hexdigest()[:12],
+        "sanctuary.css": hashlib.sha256((ROOT / "sanctuary.css").read_bytes()).hexdigest()[:12],
+        "programs-events.css": hashlib.sha256((ROOT / "programs-events.css").read_bytes()).hexdigest()[:12],
     }
 
 

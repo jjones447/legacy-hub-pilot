@@ -8,12 +8,14 @@ const section = page.slice(page.indexOf('<section id="what">'), page.indexOf('</
 
 test('the Sanctuary "what" section uses the requester\'s Our Approach copy verbatim', () => {
   assert.match(section, /<span class="eyebrow">Our Approach<\/span><h2>What Is Caregiver Sanctuary\?<\/h2>/);
+  // Requester, Nov 15 (ts 1794763820.351269): new Our Approach copy and a Learn About Our Model button.
   for (const line of [
-    "Caregiving doesn't happen in isolation, and neither should support.",
-    "Caregiver Sanctuary is Legacy's approach to creating a community where caregivers feel supported, connected, and valued. Through respite services, caregiver education, wellness experiences, and partnerships with local businesses and community organizations, we're making support more accessible in the places where caregivers live, work, and connect.",
-    'Our goal is simple: to create more opportunities for caregivers to care for themselves while caring for someone they love.',
-    'Because caregivers deserve care, too.',
+    'Caring for a loved one with dementia can bring a lot of changes, questions, and responsibilities. And somewhere in the middle of all that, it’s easy to forget about yourself.',
+    'Caregiver Sanctuary was created with caregivers in mind.',
+    'We bring together respite, education, wellness opportunities, and people who understand what you’re experiencing.',
+    'Whatever brings you here, we want you to feel welcome and know you don’t have to figure everything out alone.',
   ]) assert.ok(section.includes(line), line);
+  assert.match(section, /<a class="btn btn-coral" href="our-model\.html">Learn About Our Model<\/a>/);
   assert.doesNotMatch(section, /The idea|Join free as a caregiver member|approach to caregiver support: by partnering/);
   // Requester, Nov 12 (ts 1794514035.669429): no buttons that only scroll the same page.
   assert.doesNotMatch(section, /Explore today's Sanctuary programs/);
