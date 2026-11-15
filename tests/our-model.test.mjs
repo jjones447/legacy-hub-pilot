@@ -33,7 +33,12 @@ test('About menu lists Our Model right after Overview; home and Sanctuary link t
   const model = home.indexOf('Caregiver Support Rooted in Community');
   assert.ok(model > 0 && model < home.indexOf('home-support-heading'), 'model section comes before How We Support Caregivers');
   assert.match(home, /<a href="our-model\.html" class="btn btn-coral">Explore Our Model<\/a>/);
-  const sanctuary = read('sanctuary.html');
-  assert.match(sanctuary, /Our services are connected through the Caregiver Sanctuary Model, bringing together respite, education, wellness, peer support, and community relationships to care for the caregiver\./);
-  assert.match(sanctuary, /<a class="more" href="our-model\.html">Learn About Our Model &rarr;<\/a>/);
+  // Requester, Nov 15 (ts 1794763015.645709): hold all Sanctuary page changes for her separate update.
+  assert.doesNotMatch(read('sanctuary.html'), /Learn About Our Model|Caregiver Sanctuary Model/);
+});
+
+test('Get Involved no longer says every partner completes the training (requester, Nov 15, ts 1794763015.645709)', () => {
+  const page = read('get-involved.html');
+  assert.doesNotMatch(page, /All partners complete Legacy/);
+  assert.equal((page.match(/Partners may display our Caregiver Sanctuary decal, share Legacy resources, or help connect caregivers with Legacy, and can also take Legacy's caregiver-friendly and dementia-informed training/g) || []).length, 2);
 });
