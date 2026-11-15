@@ -41,5 +41,27 @@
       "link_label": "Open guide →",
       "link": "#demo"
     }
+  ],
+  "downloads": [
+    {
+      "title": "Fostering Communication With Your Loved One",
+      "file": "fostering-communication-with-your-loved-one.pdf",
+      "pages": 3
+    },
+    {
+      "title": "Caregiver Stress Meter Worksheet",
+      "file": "caregiver-stress-meter-worksheet.pdf",
+      "pages": 2
+    },
+    {
+      "title": "Caregiver Weekly Wellness Checklist",
+      "file": "caregiver-weekly-wellness-checklist.pdf",
+      "pages": 3
+    },
+    {
+      "title": "Caregiver Wellness Weekly Care Plan",
+      "file": "caregiver-wellness-weekly-care-plan.pdf",
+      "pages": 3
+    }
   ]
 }

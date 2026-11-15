@@ -191,7 +191,8 @@ def load_content() -> dict:
     sections = json.loads((ROOT / "content" / "page-sections.json").read_text(encoding="utf-8"))
     gallery = json.loads((ROOT / "content" / "gallery.json").read_text(encoding="utf-8"))
     links = json.loads((ROOT / "content" / "resource-links.json").read_text(encoding="utf-8"))
-    return {"resources": resources["items"], "events": events["items"],
+    return {"resources": resources["items"], "downloads": resources.get("downloads", []),
+            "events": events["items"],
             "sections": sections["items"], "gallery": gallery["items"],
             "trusted_organizations": links["trusted_organizations"],
             "caregiver_recommended": links["caregiver_recommended"],
