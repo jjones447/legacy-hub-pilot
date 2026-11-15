@@ -62,10 +62,18 @@
       dementia caregivers. Previously its own section on the Resource Hub; it lives here now, alongside the guides.</p>
     <span class="badge-phase2">Content coming</span>
 
-    <div class="section-head mt-48"><h2>Downloadable guides</h2></div>
-    <p class="muted measure-640">Printable guides on caregiving topics &mdash; from first steps after a diagnosis
-      to planning respite.</p>
-    <span class="badge-phase2">Content coming</span>
+    <div class="section-head mt-48" id="downloads"><h2>Downloadable guides</h2></div>
+    <p class="muted measure-640">Printable guides and worksheets from Legacy. Open any of them to read, print, or save.</p>
+    <div class="card-grid mt-24">
+{%- for d in downloads %}
+      <div class="card download-item">
+        <span class="resource-tag">PDF &middot; {{ d.pages }} pages</span>
+        <h3>{{ d.title | e }}</h3>
+        <p>{{ d.description | e }}</p>
+        <a class="more" href="media/downloads/{{ d.file }}" target="_blank" rel="noopener">Download PDF &rarr;</a>
+      </div>
+{%- endfor %}
+    </div>
   </div>
 </section>
 

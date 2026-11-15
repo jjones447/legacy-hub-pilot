@@ -114,4 +114,5 @@ export const UNIT_TEST_FILES = Object.freeze([
   'wellness-questionnaires.test.mjs',
   'wellness-reminders.test.mjs',
   'wrangler-preview-bindings.test.mjs',
+  'downloadable-guides.test.mjs',
 ]);
