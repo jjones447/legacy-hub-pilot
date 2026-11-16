@@ -67,3 +67,28 @@ CREATE TRIGGER respite_registration_no_revive BEFORE UPDATE OF status ON registr
 WHEN NEW.status IN ('registered','attended') AND EXISTS(SELECT 1 FROM respite_request a WHERE a.registration_id=OLD.id)
  AND NOT EXISTS(SELECT 1 FROM respite_request a WHERE a.registration_id=OLD.id AND a.caregiver_id=NEW.caregiver_id AND a.event_id=NEW.event_id AND a.status='confirmed' AND a.needs_review=0 AND a.reviewed_revision=a.revision AND a.removed_at IS NULL)
 BEGIN SELECT RAISE(ABORT,'fresh respite review required'); END;
+-- Every request write advances its CAS revision; no writer-only exemption.
+CREATE TRIGGER respite_request_revision BEFORE UPDATE ON respite_request
+WHEN NEW.revision!=OLD.revision+1
+BEGIN SELECT RAISE(ABORT,'request revision required'); END;
+-- An issued receipt/consent cannot be rewritten. New consent needs a new request.
+CREATE TRIGGER respite_request_receipt BEFORE UPDATE ON respite_request
+WHEN NEW.payload_digest IS NOT OLD.payload_digest OR NEW.privacy_version IS NOT OLD.privacy_version OR NEW.nonmedical_version IS NOT OLD.nonmedical_version OR NEW.acknowledged_at IS NOT OLD.acknowledged_at
+BEGIN SELECT RAISE(ABORT,'request receipt locked'); END;
+CREATE TRIGGER respite_request_review_invalidation BEFORE UPDATE ON respite_request
+WHEN (NEW.participant_id IS NOT OLD.participant_id OR (OLD.status='confirmed' AND NEW.status!='confirmed'))
+ AND (NEW.needs_review!=1 OR NEW.status='confirmed' OR NEW.reviewed_by IS NOT NULL OR NEW.reviewed_at IS NOT NULL OR NEW.reviewed_revision IS NOT NULL)
+BEGIN SELECT RAISE(ABORT,'fresh review required after transition'); END;
+CREATE TRIGGER respite_request_registration_lock BEFORE UPDATE ON respite_request
+WHEN OLD.registration_id IS NOT NULL AND NEW.registration_id IS NOT OLD.registration_id
+BEGIN SELECT RAISE(ABORT,'registration link locked'); END;
+CREATE TRIGGER respite_request_registration_insert BEFORE INSERT ON respite_request
+WHEN NEW.registration_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM registration r WHERE r.id=NEW.registration_id AND r.caregiver_id=NEW.caregiver_id AND r.event_id=NEW.event_id)
+BEGIN SELECT RAISE(ABORT,'registration identity mismatch'); END;
+CREATE TRIGGER respite_request_registration_update BEFORE UPDATE ON respite_request
+WHEN NEW.registration_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM registration r WHERE r.id=NEW.registration_id AND r.caregiver_id=NEW.caregiver_id AND r.event_id=NEW.event_id)
+BEGIN SELECT RAISE(ABORT,'registration identity mismatch'); END;
+CREATE TRIGGER respite_registration_identity BEFORE UPDATE ON registration
+WHEN EXISTS(SELECT 1 FROM respite_request a WHERE a.registration_id=OLD.id)
+ AND (NEW.id IS NOT OLD.id OR NEW.caregiver_id IS NOT OLD.caregiver_id OR NEW.event_id IS NOT OLD.event_id)
+BEGIN SELECT RAISE(ABORT,'linked registration identity locked'); END;
