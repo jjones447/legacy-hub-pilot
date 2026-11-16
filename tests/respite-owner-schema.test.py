@@ -113,5 +113,20 @@ class OwnerSchema(unittest.TestCase):
         self.db.execute("UPDATE respite_request SET updated_at='later',revision=2 WHERE id='a'")
         self.assertEqual(self.db.execute("SELECT revision FROM respite_request").fetchone()[0],2)
 
+    def test_delete_requires_explicit_revision_unlink_of_every_pending_request(self):
+        self.db.execute("INSERT INTO respite_request(id,caregiver_id,participant_id,event_id,request_key,payload_digest,details_json,participant_revision,first_time,privacy_version,nonmedical_version,acknowledged_at) VALUES('b','owner','p','session','key-b','digest','{}',1,0,'draft','draft','now')")
+        self.db.commit()
+        with self.assertRaises(sqlite3.IntegrityError):
+            with self.db:
+                self.db.execute("UPDATE respite_request SET participant_id=NULL,revision=revision+1 WHERE id='a'")
+                self.db.execute("DELETE FROM respite_participant WHERE id='p'")
+        self.assertEqual(self.db.execute("SELECT count(*) FROM respite_request WHERE participant_id='p'").fetchone()[0],2)
+        with self.db:
+            for request in ('a','b'):
+                self.db.execute("UPDATE respite_request SET participant_id=NULL,revision=revision+1 WHERE id=? AND revision=1", (request,))
+            self.db.execute("DELETE FROM respite_participant WHERE id='p'")
+        self.assertEqual(self.db.execute("SELECT count(*) FROM respite_participant").fetchone()[0],0)
+        self.assertEqual(self.db.execute("SELECT count(*) FROM respite_request WHERE revision=2 AND participant_id IS NULL").fetchone()[0],2)
+
 if __name__ == '__main__':
     unittest.main()
