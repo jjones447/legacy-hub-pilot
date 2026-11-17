@@ -38,7 +38,11 @@
   <div class="container">
     <div class="section-head">
       <h2 data-cs="home.journey.heading">{{ sections["home.journey"].heading }}</h2>
-      <p data-cs="home.journey.paragraph">{{ sections["home.journey"].paragraph }}</p>
+      <div data-cs-list="home.journey.paragraph">
+{% for paragraph in sections["home.journey"].paragraph.split('\n\n') %}
+        <p>{{ paragraph }}</p>
+{% endfor %}
+      </div>
     </div>
   </div>
 </section>
@@ -63,9 +67,9 @@
       <h2 class="home-support-heading" data-cs="home.support.heading">{{ sections["home.support"].heading }}</h2>
     </div>
 {% set support_navigation = {
-      "Wellness": {"href": "wellness-passport.html", "description": "Connect with wellness activities, partner experiences, and grant benefits.", "label": "About the passport"},
-      "Respite": {"href": "drop-in-respite.html", "description": "Time to breathe while your loved one is somewhere safe, engaged and cared for.", "label": "About Drop-In Respite"},
-      "Community": {"href": "community-series.html", "description": "Gatherings and wellness sessions for caregivers across the community.", "label": "About the series"}
+      "Wellness": {"href": "wellness-passport.html", "description": "Activities and experiences that support caregivers' mental, emotional, and physical well-being.", "label": "About the passport"},
+      "Respite": {"href": "drop-in-respite.html", "description": "Time to rest, recharge, and focus on yourself while your loved one is safely cared for.", "label": "About Drop-In Respite"},
+      "Community": {"href": "community-series.html", "description": "Supportive spaces to connect with others, share experiences, and feel less alone.", "label": "About the series"}
 } %}
     <div class="card-grid">
 {%- for tile in sections["home.support"].tiles %}

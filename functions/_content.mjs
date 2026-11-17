@@ -432,7 +432,8 @@ export async function rewriteContent(response, sections) {
       const section = sections[sectionKey];
       if (!section || typeof section !== 'object') return;
 
-      const val = section[fieldKey];
+      const raw = section[fieldKey];
+      const val = attr === 'home.journey.paragraph' && typeof raw === 'string' ? raw.split(/\n\s*\n/).filter(Boolean) : raw;
       if (!Array.isArray(val)) return;
       for (const item of val) {
         if (typeof item !== 'string') return;
