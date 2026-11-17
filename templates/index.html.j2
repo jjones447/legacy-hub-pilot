@@ -39,10 +39,10 @@
     <div class="section-head">
       <h2 data-cs="home.journey.heading">{{ sections["home.journey"].heading }}</h2>
       <div data-cs-list="home.journey.paragraph">
-{% for paragraph in sections["home.journey"].paragraph.split('\n\n') %}
+{%- for paragraph in sections["home.journey"].paragraph.split('\n\n') %}
         <p>{{ paragraph }}</p>
-{% endfor %}
-      </div>
+{%- endfor %}
+        </div>
     </div>
   </div>
 </section>
