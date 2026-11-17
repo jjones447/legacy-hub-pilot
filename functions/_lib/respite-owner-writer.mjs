@@ -1,5 +1,6 @@
 // Unwired source slice. Actor must come from verified portal auth, NOT request data.
 // No routes import this module; no collection enablement or D1 deployment.
+import { validateOwnerDetails } from './respite-owner-validation.mjs';
 const ID = /^[A-Za-z0-9_-]{1,128}$/;
 const requestColumns = ['id','caregiver_id','participant_id','event_id','request_key','payload_digest','details_json','participant_revision','revision','status','needs_review','first_time','followup_by','followup_at','reviewed_by','reviewed_at','reviewed_revision','privacy_version','nonmedical_version','acknowledged_at','registration_id','removed_at','created_at','updated_at'];
 const participantColumns = ['id','caregiver_id','revision','details_json','created_at','updated_at'];
@@ -16,14 +17,11 @@ export async function writeOwnerChange(db, actor, command) {
   const removing = command.action === 'remove_participant';
   const editing = command.action === 'update_request';
   if (!editing && ('details' in command || 'first_time' in command)) return denied('invalid_command');
-  // Typed clinical/program field validation remains a separate required caller layer.
-  // This slice refuses arbitrary JSON and accepts only the already reviewed field set.
   let details;
   if (editing) {
-    const allowed = ['caregiver_name','contact_email','contact_phone','participant_name','age','relationship','mobility','communication','personal_care_detail','safety','allergies_diet','activities','comfort','emergency_name','emergency_relationship','emergency_phone'];
-    if (!command.details || Array.isArray(command.details) || typeof command.details !== 'object' ||
-        !Object.keys(command.details).length || Object.entries(command.details).some(([k,v]) => !allowed.includes(k) || typeof v !== 'string' || v.length > 600) || typeof command.first_time !== 'boolean') return denied('invalid_details');
-    details = JSON.stringify(command.details);
+    const validated = validateOwnerDetails(command.details,command.first_time);
+    if (!validated) return denied('invalid_details');
+    details = JSON.stringify(validated);
     if (new TextEncoder().encode(details).length > 12000) return denied('invalid_details');
   }
   let rows, participant;
