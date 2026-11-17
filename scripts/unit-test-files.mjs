@@ -4,6 +4,7 @@
 export const UNIT_TEST_FILES = Object.freeze([
   'respite-b1.test.mjs',
   'respite-b1-ui.test.mjs',
+  'respite-owner-writer.test.mjs',
   'customer-activity.test.mjs',
   'people-add.test.mjs',
   'email-list.test.mjs',
