@@ -116,6 +116,7 @@ PAGE_METADATA = {
     },
     "get-involved.html": {
         "title": "Get Involved — Legacy Home & Respite Care Foundation",
+        "stylesheets": ("get-involved.css",),
         "description": "Partner, volunteer, sponsor, or invite us to speak to help support dementia caregivers.",
     },
     "portal.html": {
@@ -301,6 +302,7 @@ def asset_versions() -> dict:
         "wellness-passport.css": hashlib.sha256((ROOT / "wellness-passport.css").read_bytes()).hexdigest()[:12],
         "our-model.css": hashlib.sha256((ROOT / "our-model.css").read_bytes()).hexdigest()[:12],
         "sanctuary.css": hashlib.sha256((ROOT / "sanctuary.css").read_bytes()).hexdigest()[:12],
+        "get-involved.css": hashlib.sha256((ROOT / "get-involved.css").read_bytes()).hexdigest()[:12],
         "programs-events.css": hashlib.sha256((ROOT / "programs-events.css").read_bytes()).hexdigest()[:12],
     }
 
