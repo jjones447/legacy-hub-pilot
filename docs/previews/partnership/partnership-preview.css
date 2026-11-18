@@ -1,0 +1,9 @@
+.preview-content { max-width: 760px; }
+.preview-warning { padding: 18px; border: 2px solid var(--coral); border-radius: var(--radius); background: var(--sand); }
+.preview-content fieldset { min-width: 0; padding: 20px; border: 1px solid var(--plum-light); border-radius: var(--radius); }
+.preview-content label { display: block; margin: 18px 0 6px; font-weight: 600; }
+.preview-content label span { font-weight: 400; }
+.preview-content input, .preview-content textarea, .preview-content select { display: block; width: 100%; max-width: 100%; min-height: 48px; padding: 12px; font: inherit; border: 1px solid var(--plum-light); border-radius: 6px; }
+.preview-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 20px; }
+.preview-actions button { min-height: 48px; white-space: normal; }
+@media(max-width:600px) { .preview-content fieldset { padding: 12px; } .preview-actions { flex-direction: column; } .preview-actions button { width: 100%; } }
