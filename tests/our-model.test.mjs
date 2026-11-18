@@ -21,7 +21,7 @@ test('Our Model carries the requested sections in order', () => {
   assert.deepEqual([...at].sort((a, b) => a - b), at);
   assert.equal((page.match(/class="om-area om-area-\d"/g) || []).length, 5);
   assert.equal((page.match(/class="om-step"/g) || []).length, 5);
-  assert.match(page, /<a href="sanctuary\.html#membership" class="btn btn-coral">Find Caregiver Support<\/a>/);
+  assert.match(page, /<a href="membership\.html" class="btn btn-coral">Find Caregiver Support<\/a>/);
   assert.equal((page.match(/href="get-involved\.html#partner"/g) || []).length >= 2, true);
   assert.doesNotMatch(text, /evidence-based|scientifically validated/i);
   assert.match(page, /<link rel="stylesheet" href="our-model\.css\?v=[0-9a-f]{12}">/);
@@ -41,10 +41,10 @@ test('Get Involved no longer says every partner completes the training (requeste
   const page = read('get-involved.html');
   assert.doesNotMatch(page, /All partners complete Legacy/);
   assert.equal((page.match(/Partners can also take Legacy's training\./g) || []).length, 1);
-  for (const id of ['partner','corporate','sponsorship','volunteer','speaking','training']) assert.equal((page.match(new RegExp('id="'+id+'"','g'))||[]).length,1);
+  for (const id of ['partner','corporate','sponsorship','volunteer','speaking','training','faith-community']) assert.equal((page.match(new RegExp('id="'+id+'"','g'))||[]).length,1);
   const main=page.split('<main id="main">')[1].split('</main>')[0];
-  assert.equal((main.match(/<article class="card"/g)||[]).length,7);
-  assert.equal((main.match(/href="about.html#contact"/g)||[]).length,6);
+  assert.equal((main.match(/<article class="card"/g)||[]).length,8);
+  assert.equal((main.match(/href="about.html#contact"/g)||[]).length,7);
   assert.ok(main.includes('href="donate.html"'));
   assert.ok(main.includes('Explore Partnership Opportunities'));
   assert.doesNotMatch(main,/href="#(?:partner|corporate|sponsorship|volunteer|speaking|training)"/);

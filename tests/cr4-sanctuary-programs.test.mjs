@@ -96,7 +96,7 @@ test('(b) one Sanctuary overview retains every program/event destination and obv
   const drop = sanctuaryDrop(header);
   assert.equal([...drop.matchAll(/>Overview<\/a>/g)].length, 1);
   assert.match(drop, /href="sanctuary.html">Overview/);
-  assert.match(drop, /href="sanctuary.html#membership">Join Caregiver Sanctuary/);
+  assert.match(drop, /href="membership.html">Join Caregiver Sanctuary/);
   assert.match(drop, /href="request-support.html">Contact \/ Request Support/);
   assert.doesNotMatch(header, /aria-label="Programs &amp; Events menu"/);
   assert.equal([...header.matchAll(/aria-label="The Sanctuary menu"/g)].length, 1);
@@ -104,9 +104,9 @@ test('(b) one Sanctuary overview retains every program/event destination and obv
     assert.ok(drop.includes(`href="${href}"`), `lost program/event link ${href}`);
     assertDestination(href);
   }
-  assertDestination('sanctuary.html#membership');
-  assert.match(loadFile('sanctuary.html'), /data-action="open-membership"/);
-  assert.match(loadFile('sanctuary.html'), /id="membershipForm"/);
+  assertDestination('membership.html');
+  assert.match(loadFile('membership.html'), /data-action="open-membership"/);
+  assert.match(loadFile('membership.html'), /id="membershipForm"/);
   assertDestination('request-support.html');
 });
 
@@ -162,7 +162,7 @@ test('every generated public header shares the new hierarchy, first-focus skip l
     assert.equal(html.indexOf('<a ', html.indexOf('<body>')), html.indexOf('<a class="skip-link"'), file);
     assert.match(html, /<main id="main">/);
   }
-  assert.equal(checked, 25, 'all current public headers must be checked'); // + caregiver-stories.html (Nov 12), our-model.html (Nov 15)
+  assert.equal(checked, 26, 'all current public headers must be checked'); // + caregiver-stories.html (Nov 12), our-model.html (Nov 15)
 });
 
 test('Sanctuary merges the overview and exposes join/contact before the program and Network sections', () => {
@@ -170,7 +170,7 @@ test('Sanctuary merges the overview and exposes join/contact before the program 
   const main = html.match(/<main id="main">([\s\S]*?)<\/main>/)[1];
   const programsAt = main.indexOf('id="programs-events"');
   assert.ok(programsAt > 0);
-  for (const href of ['sanctuary.html#membership', 'request-support.html']) {
+  for (const href of ['membership.html', 'request-support.html']) {
     assert.ok(main.indexOf(`href="${href}"`) < programsAt, `early entry required for ${href}`);
   }
   assert.match(main, /<h2>Caregiver Sanctuary Programs &amp; Resources<\/h2>/);
