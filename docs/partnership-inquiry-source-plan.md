@@ -1,6 +1,6 @@
 # Partnership inquiry: synthetic preview and proposed live source
 
-This candidate delivers a local demonstration, not a real inquiry service. Customer scope is the seven Get Involved interests and name, optional organization, email, optional phone, interest, and message. Staff dashboard plus email is requested if possible. The confirmed recipient is held in the private request ledger and must be configurable; no real recipient or provider key is embedded in source/fixtures.
+This candidate delivers a local demonstration, not a real inquiry service. Customer scope is the eight confirmed Get Involved interests and name, optional organization, email, optional phone, interest, and message. Staff dashboard plus email is requested if possible. The confirmed recipient is held in the private request ledger and must be configurable; no real recipient or provider key is embedded in source/fixtures.
 
 ## Delivered preview
 
@@ -29,3 +29,9 @@ Proposed outbox row keyed uniquely to inquiry + notification kind. Track pending
 ## Ordered gates and candid state
 
 Delivered: isolated working static demo, tests and this source plan. Not built: real handler/entity/migration, Staff queue/projection, outbox/sender and operational evidence. New D1 writes need the existing exact staging target/additive-migration authorization, reviewed source and backup/restore readiness. Production schema/collection and real email have their own existing Jacob/requester/authority gates; custody or the confirmed address does not grant them. Requester tries this synthetic preview first; independent exact-head review and requester approval do not themselves activate collection. No live date is promised. The existing Get Involved contact fallback remains until a real qualified form is published.
+
+## Faith Community Respite successor (confirmed scope)
+
+Exact eighth interest: **Faith Community Respite**, value `faith-community`. Preserve the other seven labels/values and all fields. Synthetic preview supports `?interest=faith-community`; event preselection stays `?interest=event-respite`. At most one interest parameter, maximum query512 characters and interest32 characters; duplicate, oversized, unknown and missing interests leave the select at its empty default. No query contact/message data is read. Fictional example preserves a valid selection or chooses the original Community & Corporate default; Clear and completed local feedback reset the select.
+
+Future real-form mapping, only AFTER real service approval/qualification: both the Get Involved `#faith-community` card button and Drop-In Respite `#faith-community` button should target the actual live inquiry route with `interest=faith-community`. Server must validate the same allowlist independently. Until that service is live, keep both existing interim contact/partner destinations; never link production traffic to this static synthetic demo. No public-button edit or real collection occurs in this candidate. Form backend, Staff queue, migration, notification provider and authority gaps above remain unchanged.

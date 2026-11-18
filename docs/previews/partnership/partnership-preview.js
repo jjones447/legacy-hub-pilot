@@ -3,11 +3,13 @@
  'use strict';
  const get=id=>document.getElementById('preview-'+id);
  const fields=['name','organization','email','phone','interest','message'];
- const interests=['community-corporate','sanctuary-partner','sponsorship','event-respite','speaking','training','other'];
+ const interests=['community-corporate','sanctuary-partner','sponsorship','event-respite','speaking','training','other','faith-community'];
  const result=get('result');
  const clear=()=>{for(const name of fields)get(name).value='';};
  // Untrusted URL can select a known interest only, never copy contact or message data.
- const selected=new URLSearchParams(location.search).get('interest');
+ const params=location.search.length<=512?new URLSearchParams(location.search):new URLSearchParams();
+ const choices=params.getAll('interest');
+ const selected=choices.length===1&&choices[0].length<=32?choices[0]:null;
  if(interests.includes(selected))get('interest').value=selected;
  get('example').addEventListener('click',()=>{
   get('name').value='Fictional Partner';get('organization').value='Example Organization';
