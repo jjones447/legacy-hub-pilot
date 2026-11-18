@@ -41,12 +41,13 @@ test('revised support section stacks exact intro before sessions without duplica
 });
 test('dedicated Membership has five supplied sections, four benefit cards, authentic gallery and approved future-tense profile copy',()=>{
  assert.equal((membership.match(/<section class="(?:hero )?membership-section/g)||[]).length,5);
- for(const text of ['More than a membership. A community that feels like family.','More than support. A sense of family.',"What You'll Find Inside the Sanctuary","Your Story Matters. You Shouldn't Have to Keep Repeating It.","There's a Place for You Here."])assert.ok(membership.includes(text));
+ for(const text of ['More than a membership. A community that feels like family.','More than support. A sense of family.',"What You'll Find Inside the Sanctuary","Support That Grows With You","There's a Place for You Here."])assert.ok(membership.includes(text));
  assert.equal((membership.match(/<article class="card">/g)||[]).length,4);
  assert.doesNotMatch(membership,/awaiting-confirmation|Preview wording awaiting confirmation/);
- assert.ok(membership.includes('When you become a member, you&#x27;ll be able to create a personal profile that helps our team better understand your caregiving needs'));
- assert.ok(membership.includes('Your profile will help us provide more personalized support as your needs change.'));
- assert.match(membership,/href="portal.html">Create Your Free Account/);assert.equal((membership.match(/data-action="open-membership"/g)||[]).length,2);
+ assert.ok(membership.includes("Every caregiving journey is different, and what you need today may not be what you need six months from now.\nYour Caregiver Sanctuary portal gives you a personal space to stay connected with Legacy, explore resources, register for events, and request support as your needs change.\nIt's one more way for us to stay connected and make sure you know what's available when you need it."));
+ assert.ok(membership.includes("Joining is free. You'll create a personal profile where you can stay connected with Legacy, access resources, register for events, and request support."));
+ assert.doesNotMatch(membership,/Create Your Free Account|Join the Sanctuary for Free|Join the Caregiver Sanctuary<\/button>/);
+ assert.equal((membership.match(/>Join the Sanctuary<\/button>/g)||[]).length,2);assert.equal((membership.match(/data-action="open-membership"/g)||[]).length,2);
  assert.match(membership,/media\/gallery\/shoot-238.jpg/);assert.ok(read('content/gallery.json').includes('media/gallery/shoot-238.jpg'));
  assert.match(membership,/Opportunities depend on program availability and caregiver needs/);
  assert.doesNotMatch(membership,/<table|Membership includes/);

@@ -26,4 +26,8 @@ Support section now stacks uppercase eyebrow, exact headline/paragraph, facts an
 
 Customer decision resolves the preview warning: use exactly “When you become a member, you'll be able to create a personal profile that helps our team better understand your caregiving needs” and “Your profile will help us provide more personalized support as your needs change.” All other Section 4 copy stays unchanged. Awaiting-confirmation treatment is removed; the static preview's fictional/no-send banner and CSP remain. This supersedes the unresolved-copy disposition above, not the runtime limits.
 
-Profile-release follow-up: ONLY after the Caregiver Profile actually ships and is verified, restore the original requester sentences: “When you become a member, you'll create a personal profile that helps our team better understand your caregiving needs.” and “Your profile helps us provide more personalized support as your needs change.” This is a future release dependency, not a claim that profile exists or permission to implement it now.
+Profile-release restoration follow-up is MOOT and withdrawn: the customer's later “Support That Grows With You” copy supersedes both original and softened profile sentences. Do not restore either old wording on a future profile release.
+
+## Membership final-look successor
+
+Section4 now uses the exact three-sentence portal paragraph and retains the existing feature list. Exactly two primary registration buttons (top/bottom) both say Join the Sanctuary and use the same existing flow; the Section4 account CTA is removed. The top small line is the exact joining explanation; bottom Membership is always free remains. No design, form, handler or portal implementation changed. Prior unresolved-copy/future-tense history above is superseded, not a pending release instruction.
