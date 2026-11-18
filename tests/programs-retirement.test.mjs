@@ -39,11 +39,13 @@ test('revised support section stacks exact intro before sessions without duplica
  const parts=['VIRTUAL SUPPORT GROUP','Virtual Caregiver Support Group','Connect with other caregivers who understand the journey. Our weekly virtual support group offers a welcoming space to share experiences, find encouragement, and receive support from others navigating caregiving.','id="supportGroupSessions"'];
  const positions=parts.map(s=>section.indexOf(s));assert.ok(positions.every(n=>n>=0));assert.deepEqual(positions,[...positions].sort((a,b)=>a-b));assert.doesNotMatch(section,/class="split"|<h3[^>]*>Virtual Support Group/);
 });
-test('dedicated Membership has five supplied sections, four benefit cards, authentic gallery and candid profile hold',()=>{
+test('dedicated Membership has five supplied sections, four benefit cards, authentic gallery and approved future-tense profile copy',()=>{
  assert.equal((membership.match(/<section class="(?:hero )?membership-section/g)||[]).length,5);
  for(const text of ['More than a membership. A community that feels like family.','More than support. A sense of family.',"What You'll Find Inside the Sanctuary","Your Story Matters. You Shouldn't Have to Keep Repeating It.","There's a Place for You Here."])assert.ok(membership.includes(text));
  assert.equal((membership.match(/<article class="card">/g)||[]).length,4);
- assert.match(membership,/data-copy-status="awaiting-confirmation"/);assert.match(membership,/personal caregiver profile is not available yet/);
+ assert.doesNotMatch(membership,/awaiting-confirmation|Preview wording awaiting confirmation/);
+ assert.ok(membership.includes('When you become a member, you&#x27;ll be able to create a personal profile that helps our team better understand your caregiving needs'));
+ assert.ok(membership.includes('Your profile will help us provide more personalized support as your needs change.'));
  assert.match(membership,/href="portal.html">Create Your Free Account/);assert.equal((membership.match(/data-action="open-membership"/g)||[]).length,2);
  assert.match(membership,/media\/gallery\/shoot-238.jpg/);assert.ok(read('content/gallery.json').includes('media/gallery/shoot-238.jpg'));
  assert.match(membership,/Opportunities depend on program availability and caregiver needs/);
