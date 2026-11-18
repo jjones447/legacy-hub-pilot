@@ -1,0 +1,6 @@
+/* Page-only layout; existing typography, colors and button design are shared. */
+.involved-opportunities { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; }
+.involved-opportunities .card { display: flex; flex-direction: column; min-width: 0; scroll-margin-top: 7rem; }
+.involved-opportunities .card p { overflow-wrap: anywhere; }
+.involved-opportunities .card .btn { margin-top: auto; align-self: flex-start; white-space: normal; text-align: left; max-width: 100%; min-height: 48px; }
+@media (max-width: 700px) { .involved-opportunities { grid-template-columns: minmax(0, 1fr); } .involved-opportunities .card .btn { width: 100%; } }

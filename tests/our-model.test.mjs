@@ -40,5 +40,13 @@ test('About menu lists Our Model right after Overview; home and Sanctuary link t
 test('Get Involved no longer says every partner completes the training (requester, Nov 15, ts 1794763015.645709)', () => {
   const page = read('get-involved.html');
   assert.doesNotMatch(page, /All partners complete Legacy/);
-  assert.equal((page.match(/Partners may display our Caregiver Sanctuary decal, share Legacy resources, or help connect caregivers with Legacy, and can also take Legacy's caregiver-friendly and dementia-informed training/g) || []).length, 2);
+  assert.equal((page.match(/Partners can also take Legacy's training\./g) || []).length, 1);
+  for (const id of ['partner','corporate','sponsorship','volunteer','speaking','training']) assert.equal((page.match(new RegExp('id="'+id+'"','g'))||[]).length,1);
+  const main=page.split('<main id="main">')[1].split('</main>')[0];
+  assert.equal((main.match(/<article class="card"/g)||[]).length,7);
+  assert.equal((main.match(/href="about.html#contact"/g)||[]).length,6);
+  assert.ok(main.includes('href="donate.html"'));
+  assert.ok(main.includes('Explore Partnership Opportunities'));
+  assert.doesNotMatch(main,/href="#(?:partner|corporate|sponsorship|volunteer|speaking|training)"/);
+
 });
