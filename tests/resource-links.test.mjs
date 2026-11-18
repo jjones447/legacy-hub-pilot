@@ -167,14 +167,14 @@ test('(f) Programs schedule copy comes from canonical sections without unconfirm
   assert.doesNotMatch(copy, /reminders.*come to you/i);
   assert.equal(sections['programs.support_group'].rows[0].v, 'Every Wednesday, 5–6 PM');
   assert.equal(sections['programs.support_group'].panel_cta_label, 'View Events');
-  const html = loadHtml('programs.html');
+  const html = loadHtml('programs-events.html');
   assert.match(html, /<span class="k">When<\/span><span class="v">Every Wednesday, 5–6 PM<\/span>/);
   assert.match(html, /Our weekly virtual support group offers a welcoming space to share experiences/);
   assert.match(html, />View upcoming sessions<\/button>/);
   assert.deepEqual(sections['programs.support_group'].sessions.map(s => s.date),
     ['2026-11-04', '2026-11-11', '2026-11-18', '2026-12-02', '2026-12-09', '2026-12-16', '2026-12-30']);
   assert.doesNotMatch(html, /reminders.*come to you/);
-  assert.match(loadHtml('templates/programs.html.j2'), /sections\["programs\.support_group"\]\.paragraphs/);
+  assert.match(html, /id="supportGroupInterestForm"/);
 });
 
 test('(g) Events registration receipt and canonical description do not promise unsent email or reminders', () => {

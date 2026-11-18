@@ -110,25 +110,11 @@ test('event registration uses published API identities and the live intake form'
   assert.match(page, /consent to Legacy using these details/);
 });
 
-test('programs grant and coaching CTAs open live intake modals instead of alert stubs', () => {
-  const page = file('programs.html');
-  const tmpl = file('templates/programs.html.j2');
-  const app = file('app.js');
-  assert.match(page, /data-action="open-grant-apply"/);
-  assert.match(app, /action === 'open-grant-apply'[\s\S]*openGrantApply/);
-  assert.match(page, /id="grantApplyForm" data-action="submit-grant-apply"/);
-  assert.match(app, /action === 'submit-grant-apply'[\s\S]*submitGrantApply/);
-  assert.match(page, /data-action="open-coaching-interest"/);
-  assert.match(app, /action === 'open-coaching-interest'[\s\S]*openCoachingInterest/);
-  assert.match(page, /id="coachingInterestForm" data-action="submit-coaching-interest"/);
-  assert.match(app, /action === 'submit-coaching-interest'[\s\S]*submitCoachingInterest/);
-  assert.match(tmpl, /data-action="open-grant-apply"/);
-  assert.match(tmpl, /data-action="open-coaching-interest"/);
-  assert.match(app, /kind: 'grant_application'/);
-  assert.match(app, /source: 'site_form:coaching'/);
-  assert.match(app, /kind: 'support_request'/);
-  assert.doesNotMatch(page, /Apply for a Wellness Grant[\s\S]*alert\(/);
-  assert.doesNotMatch(page, /Join the interest list[\s\S]{0,80}alert\(/);
+test('retired public grant/coaching forms are absent while backend handlers remain', () => {
+  for (const name of ['sanctuary.html','programs-events.html','wellness-passport.html']) {
+    assert.doesNotMatch(file(name), /id="(?:grantApplyForm|coachingInterestForm)"|data-action="open-(?:grant-apply|coaching-interest)"/);
+  }
+  assert.match(file('app.js'), /kind: 'grant_application'/);
 });
 
 test('seeded public events are accepted by the intake core', async () => {
@@ -215,7 +201,7 @@ test('delegated intake submits keep status, event identity and retry keys on the
 
 
 test('support-group sign-up is a named native dialog with only name/email, then goes to Google Meet', () => {
-  const page = file('programs.html');
+  const page = file('programs-events.html');
   const dialog = page.match(/<dialog id="supportGroupInterestModal"[\s\S]*?<\/dialog>/)?.[0];
   assert.ok(dialog);
   assert.match(dialog, /aria-labelledby="supportGroupInterestTitle" aria-describedby="supportGroupInterestDescription"/);
@@ -236,7 +222,7 @@ test('support-group sign-up is a named native dialog with only name/email, then 
   assert.match(joiningRegion, /href="https:\/\/meet\.google\.com\/dmc-orwi-afk" target="_blank" rel="noopener noreferrer"/);
   assert.match(joiningRegion, /If Google Meet doesn't open/);
   assert.equal((dialog.match(/meet\.google\.com/g) || []).length, 1);
-  assert.match(file('programs-events.html'), /<a href="programs\.html#support-group">View upcoming sessions<\/a>/);
+  assert.match(file('programs-events.html'), /id="supportGroupSessions"/);
   assert.doesNotMatch(file('programs-events.html'), /Join an upcoming session/);
   const panel = page.match(/<section class="section-sand" id="support-group">[\s\S]*?<\/section>/)?.[0];
   assert.equal((panel.match(/class="btn /g) || []).length, 0, 'the dates are the way to join; no separate join button');
@@ -246,7 +232,7 @@ test('support-group sign-up is a named native dialog with only name/email, then 
     ['2026-12-02', 'December 2'], ['2026-12-09', 'December 9'], ['2026-12-16', 'December 16'], ['2026-12-30', 'December 30']];
   for (const [iso, day] of expected) {
     const date = `Wednesday, ${day} · 5–6 PM`;
-    assert.ok(panel.includes(`<li data-date="${iso}"><button type="button" class="session-link" data-action="open-support-group-interest" data-session="${date}" data-session-date="${iso}" aria-haspopup="dialog" aria-controls="supportGroupInterestModal">${date}</button></li>`), date);
+    assert.ok(panel.includes(`<li data-date="${iso}"><button type="button" class="session-link" data-action="open-support-group-interest" data-session="${date}" data-session-date="${iso}" aria-haspopup="dialog" aria-controls="supportGroupInterestModal">${date}</button>`), date);
   }
   assert.doesNotMatch(panel, /December 23|2026-12-23/);
   assert.match(dialog, /<p class="session-note" id="supportGroupSession" hidden><\/p>/);

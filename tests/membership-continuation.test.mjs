@@ -143,7 +143,7 @@ test('a stalled membership request becomes visibly uncertain without cancellatio
 });
 
 test('all generated membership forms offer a same-origin continuation without email/token transfer or automatic login', () => {
-  for (const path of ['templates/_membership-modal.html.j2', 'index.html', 'programs.html', 'donate.html', 'wellness-passport.html']) {
+  for (const path of ['templates/_membership-modal.html.j2', 'index.html', 'sanctuary.html', 'donate.html', 'wellness-passport.html']) {
     const html = read(path);
     const form = html.match(/<form id="membershipForm"[\s\S]*?<\/form>/)?.[0];
     assert.ok(form);

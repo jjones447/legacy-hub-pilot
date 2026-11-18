@@ -21,7 +21,7 @@ test('Our Model carries the requested sections in order', () => {
   assert.deepEqual([...at].sort((a, b) => a - b), at);
   assert.equal((page.match(/class="om-area om-area-\d"/g) || []).length, 5);
   assert.equal((page.match(/class="om-step"/g) || []).length, 5);
-  assert.match(page, /<a href="programs\.html" class="btn btn-coral">Find Caregiver Support<\/a>/);
+  assert.match(page, /<a href="sanctuary\.html#membership" class="btn btn-coral">Find Caregiver Support<\/a>/);
   assert.equal((page.match(/href="get-involved\.html#partner"/g) || []).length >= 2, true);
   assert.doesNotMatch(text, /evidence-based|scientifically validated/i);
   assert.match(page, /<link rel="stylesheet" href="our-model\.css\?v=[0-9a-f]{12}">/);

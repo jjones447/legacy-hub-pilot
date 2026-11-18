@@ -48,7 +48,7 @@ test('both Start buttons open the existing membership process and no grant butto
   ctas.forEach(a => assert.match(a, /data-action="open-membership"/));
   assert.match(page, /id="membershipModal"/);
   assert.doesNotMatch(page, /data-action="open-grant-apply"/);
-  assert.match(page, /id="grantApplyModal"/, 'grant application machinery stays on the page, unfeatured');
+  assert.doesNotMatch(page, /id="grantApplyModal"/, 'public grant application retired; backend records preserved');
 });
 
 test('the five-category outline and internal tracking language are gone', () => {

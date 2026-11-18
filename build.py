@@ -145,7 +145,6 @@ PAGES = {
     "resources.html": "resources.html.j2",
     "events.html": "events.html.j2",
     "about.html": "about.html.j2",
-    "programs.html": "programs.html.j2",
     "request-support.html": "request-support.html.j2",
     "gallery.html": "gallery.html.j2",
     "trusted-resources.html": "trusted-resources.html.j2",

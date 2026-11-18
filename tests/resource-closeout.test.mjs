@@ -112,7 +112,7 @@ test('client FAQ retains all thirty questions in six named, reachable categories
 
 test('FAQ actions reach existing destinations without inventing a request form or private join URL', () => {
   const main = faqMain();
-  const required = ['programs.html', 'events.html', 'wellness-passport.html',
+  const required = ['sanctuary.html#membership', 'events.html', 'wellness-passport.html',
     'get-involved.html#partner', 'get-involved.html#training', 'get-involved.html#volunteer', 'request-support.html'];
   for (const href of required) assert.ok(main.includes(`href="${href}"`), `missing ${href}`);
   for (const [, href] of main.matchAll(/href="([^"]+)"/g)) {

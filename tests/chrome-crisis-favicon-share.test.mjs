@@ -13,7 +13,6 @@ const PUBLIC_PAGES = [
   'about.html',
   'resources.html',
   'events.html',
-  'programs.html',
   'request-support.html',
   'gallery.html',
   'trusted-resources.html',
