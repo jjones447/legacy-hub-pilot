@@ -10,7 +10,7 @@ const snapshot = (table, columns, row, params) => {
   params.push(...columns.map(c => row[c] ?? null));
   return `EXISTS(SELECT 1 FROM ${table} WHERE ${columns.map(c => `${c} IS ?`).join(' AND ')})`;
 };
-export async function writeOwnerChange(db, actor, command) {
+export async function writeOwnerChange(db, actor, command, verifiedEmail) {
   if (!ID.test(actor || '') || !command || Object.keys(command).some(k => !['action','id','revision','details','first_time'].includes(k)) ||
       !['update_request','withdraw_request','remove_participant'].includes(command.action) || !ID.test(command.id || '') ||
       !Number.isSafeInteger(command.revision) || command.revision < 1) return denied('invalid_command');
@@ -47,6 +47,10 @@ export async function writeOwnerChange(db, actor, command) {
     }
     const params = [actor];
     const guards = ["EXISTS(SELECT 1 FROM caregiver WHERE id=? AND status!='archived')"];
+    if (verifiedEmail !== undefined) {
+      if (typeof verifiedEmail !== 'string' || !verifiedEmail) return denied('stale_or_forbidden');
+      guards.push("EXISTS(SELECT 1 FROM caregiver WHERE id=? AND email=? AND status!='archived')"); params.push(actor,verifiedEmail);
+    }
     if (participant) {
       guards.push(snapshot('respite_participant',participantColumns,participant,params));
       guards.push('(SELECT count(*) FROM respite_request WHERE participant_id=?)=?'); params.push(participant.id,rows.length);

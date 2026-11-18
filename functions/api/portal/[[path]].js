@@ -1,9 +1,32 @@
+import { handleOwnerRoute } from '../../_lib/respite-owner-route.mjs';
 // GET/POST /api/portal/[[path]] — Magic-link authentication and gated caregiver portal API endpoints (slice 09).
 import { checkIpRequestLimit, IP_LIMITS } from '../_shared.mjs';
 import { canSendEmail, isPreviewMailOptIn, sendEmail, signInEmail } from '../../_lib/email.js';
 import { previewQACaregiver, matchesPreviewQACaregiver, previewRecipient, previewRecipients } from '../../_lib/portal-preview.mjs';
 import { QUESTIONS, validateCheckin, recordCheckin, caregiverHistory, isCheckinDue, CHECKIN_EVERY_DAYS } from '../../_lib/wellness.js';
 import { handlePortalSupport, handlePortalSupportGet } from '../../_lib/portal-support.js';
+
+function isRespiteOwnerRoute(request) {
+  return new URL(request.url).pathname.startsWith('/api/portal/respite');
+}
+async function respiteOwnerBoundary({request,env}) {
+  return handleOwnerRoute(request,env,async () => {
+    if (previewPortalDisabled(env) || !env.PORTAL_TOKEN_SECRET) return null;
+    const cookie=request.headers.get('Cookie') || '';
+    const sessions=[...cookie.matchAll(/(?:^|;\s*)portal_session=([^;]*)/g)];
+    if(cookie.length>4096||sessions.length!==1)return null;
+    let actor;
+    try { actor=await parseSessionCookie('portal_session='+sessions[0][1],env.PORTAL_TOKEN_SECRET,env); } catch { return null; }
+    if (!actor || !await hasNonarchivedCaregiver(env.LEGACY_DB,actor,env)) return null;
+    const current=await env.LEGACY_DB.prepare("SELECT id,email FROM caregiver WHERE id=? AND status!='archived'").bind(actor).first();
+    if (!current || !previewRecipient(env,{id:current.id,email:current.email})) return null;
+    return {id:actor,email:current.email};
+  });
+}
+export async function onRequestPut(context) { return isRespiteOwnerRoute(context.request) ? respiteOwnerBoundary(context) : json({ok:false,error:'method_not_allowed'},405); }
+export const onRequestPatch=onRequestPut;
+export const onRequestDelete=onRequestPut;
+export const onRequestOptions=onRequestPut;
 
 async function getHmacSha256(message, secret) {
   const enc = new TextEncoder();
@@ -281,6 +304,7 @@ export async function onRequestHead(context) {
 }
 
 export async function onRequestGet({ request, env }) {
+  if (isRespiteOwnerRoute(request)) return respiteOwnerBoundary({request,env});
   try {
     const url = new URL(request.url);
     const pathSegments = url.pathname.split('/').filter(Boolean);
@@ -394,6 +418,7 @@ export async function onRequestGet({ request, env }) {
 }
 
 export async function onRequestPost({ request, env }) {
+  if (isRespiteOwnerRoute(request)) return respiteOwnerBoundary({request,env});
   try {
     const url = new URL(request.url);
     const pathSegments = url.pathname.split('/').filter(Boolean);
