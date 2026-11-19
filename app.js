@@ -454,6 +454,8 @@ function openSupportGroupInterest(opener) {
   // Structured date (YYYY-MM-DD) for the backend; null for general joining without a date.
   const sessionDate = opener && typeof opener.getAttribute === 'function' ? opener.getAttribute('data-session-date') : null;
   supportGroupSessionDate = supportGroupSession && typeof sessionDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(sessionDate) ? sessionDate : null;
+  const special = document.getElementById('supportGroupSpecialSession');
+  if (special) special.hidden = supportGroupSessionDate !== '2026-12-09';
   const note = document.getElementById('supportGroupSession');
   if (note) {
     note.textContent = supportGroupSession ? 'Session: ' + supportGroupSession : '';

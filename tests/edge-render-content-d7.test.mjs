@@ -300,7 +300,7 @@ test('fallback pass-through when D1 errors or returns no rows leaves HTML byte-i
 });
 
 test('unknown keys, missing fields, or wrong types leave committed content untouched', async () => {
-  const committedHtml = loadHtml('programs.html');
+  const committedHtml = loadHtml('tests/fixtures/retired-programs.html');
   const db = new FakeD1([
     {
       id: 'ps_programs.membership',
@@ -433,7 +433,7 @@ test('multiple sections rewrite cleanly on programs and request-support pages', 
 
   // Check programs.html
   {
-    const committedHtml = loadHtml('programs.html');
+    const committedHtml = loadHtml('tests/fixtures/retired-programs.html');
     const request = new Request('https://legacy-hub.pages.dev/programs.html', { method: 'GET' });
     const next = async () =>
       new Response(committedHtml, {
@@ -613,7 +613,7 @@ test('preview_draft query parameter overlays unconfirmed draft wording with non-
 
 test('two-isolated-DB boundary: raw production draft IDs fail closed (404) on staging DB while verified cross-environment transfer materializes an authenticated staging draft without DB cross-contamination', async () => {
   await withPreviewJwks(async () => {
-    const committedHtml = loadHtml('programs.html');
+    const committedHtml = loadHtml('tests/fixtures/retired-programs.html');
     // Production DB (3c06) has the draft, while Staging DB (42be) only has published rows
     const prodPublished = {
       id: 'ps_programs.hero',
@@ -1069,7 +1069,7 @@ test('non-page_section drafts (resource, faq, partner) return honest unsupported
 test('authorized modal form previews (ps_form.membership, ps_form.grant_apply, ps_form.coaching_interest) open the exact target modal (.open) while ordinary public renders keep modals closed', async () => {
   await withPreviewJwks(async () => {
     const committedIndexHtml = loadHtml('index.html');
-    const committedProgramsHtml = loadHtml('programs.html');
+    const committedProgramsHtml = loadHtml('tests/fixtures/retired-programs.html');
     const committedCss = loadHtml('styles.css');
     assert.match(committedCss, /\.modal-overlay\s*\{[^}]*display:\s*none/s);
     assert.match(committedCss, /\.modal-overlay\.open\s*\{\s*display:\s*flex;\s*\}/);

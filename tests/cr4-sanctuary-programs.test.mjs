@@ -16,8 +16,8 @@ function loadFile(relPath) {
 
 const programDestinations = [
   'programs-events.html#support-group', 'community-series.html', 'drop-in-respite.html',
-  'wellness-passport.html', 'programs-events.html#event-respite',
-  'programs-events.html#family-ed', 'events.html', 'gallery.html',
+  'wellness-passport.html', 'get-involved.html#partner',
+  'events.html', 'events.html', 'gallery.html',
 ];
 
 function sanctuaryDrop(header) {
@@ -96,7 +96,7 @@ test('(b) one Sanctuary overview retains every program/event destination and obv
   const drop = sanctuaryDrop(header);
   assert.equal([...drop.matchAll(/>Overview<\/a>/g)].length, 1);
   assert.match(drop, /href="sanctuary.html">Overview/);
-  assert.match(drop, /href="programs.html">Join Caregiver Sanctuary/);
+  assert.match(drop, /href="membership.html">Join Caregiver Sanctuary/);
   assert.match(drop, /href="request-support.html">Contact \/ Request Support/);
   assert.doesNotMatch(header, /aria-label="Programs &amp; Events menu"/);
   assert.equal([...header.matchAll(/aria-label="The Sanctuary menu"/g)].length, 1);
@@ -104,9 +104,9 @@ test('(b) one Sanctuary overview retains every program/event destination and obv
     assert.ok(drop.includes(`href="${href}"`), `lost program/event link ${href}`);
     assertDestination(href);
   }
-  assertDestination('programs.html');
-  assert.match(loadFile('programs.html'), /data-action="open-membership"/);
-  assert.match(loadFile('programs.html'), /id="membershipForm"/);
+  assertDestination('membership.html');
+  assert.match(loadFile('membership.html'), /data-action="open-membership"/);
+  assert.match(loadFile('membership.html'), /id="membershipForm"/);
   assertDestination('request-support.html');
 });
 
@@ -170,13 +170,13 @@ test('Sanctuary merges the overview and exposes join/contact before the program 
   const main = html.match(/<main id="main">([\s\S]*?)<\/main>/)[1];
   const programsAt = main.indexOf('id="programs-events"');
   assert.ok(programsAt > 0);
-  for (const href of ['programs.html', 'request-support.html']) {
+  for (const href of ['membership.html', 'request-support.html']) {
     assert.ok(main.indexOf(`href="${href}"`) < programsAt, `early entry required for ${href}`);
   }
   assert.match(main, /<h2>Caregiver Sanctuary Programs &amp; Resources<\/h2>/);
   // Requester, Nov 15 (ts 1794763820.351269): the respite card links the Programs & Events respite section and
   // Event Respite goes to the partnership inquiry.
-  for (const href of programDestinations.map(h => ({ 'drop-in-respite.html': 'programs-events.html#drop-in', 'programs-events.html#event-respite': 'get-involved.html#partner' })[h] || h)) assert.ok(main.includes(`href="${href}"`), href);
+  for (const href of programDestinations.map(h => ({ 'drop-in-respite.html': 'drop-in-respite.html', 'get-involved.html#partner': 'get-involved.html#partner' })[h] || h)) assert.ok(main.includes(`href="${href}"`), href);
   const network = main.slice(main.indexOf('<section id="components">'));
   assert.match(network, /<h2 id="network">Caregiver Sanctuary Network<\/h2>/);
   assert.match(network, /href="community-wellness-partners.html"/);
@@ -188,8 +188,8 @@ test('Sanctuary merges the overview and exposes join/contact before the program 
   const footer = loadFile('templates/_footer.html.j2');
   assert.match(footer, /href="staff.html">Staff Console/);
   assert.match(footer, /href="sanctuary.html#network"/);
-  assert.match(footer, /href="programs-events.html#community-series"/);
-  assert.match(footer, /href="programs-events.html#drop-in"/);
+  assert.match(footer, /href="community-series.html"/);
+  assert.match(footer, /href="drop-in-respite.html"/);
 });
 
 test('hero secondary CTA has an opaque high-contrast surface in default, hover and keyboard-focus states', () => {
@@ -296,7 +296,7 @@ test('(e) the Passport page shows the seven pillars and four milestones, with gr
 
   // The grant application stays available (programs.html features it), but is not a primary action here.
   assert.doesNotMatch(html, /data-action="open-grant-apply"/);
-  assert.match(html, /id="grantApplyModal"/, 'Passport keeps the grant application modal machinery');
+  assert.doesNotMatch(html, /id="grantApplyModal"/, 'Public grant application is retired; records remain');
 });
 
 test('O26-02/03/04: Sanctuary, About, and Get Involved place hero text over supplied media without wordmark overlay or side-by-side hero layout', () => {

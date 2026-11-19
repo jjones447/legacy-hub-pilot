@@ -119,7 +119,7 @@ test('1. the four forms render from page-sections.json with expected copy and op
   assert.ok(indexHtml.includes(mem.submit_label));
 
   // Check form.grant_apply in programs.html
-  const programsHtml = loadHtml('programs.html');
+  const programsHtml = loadHtml('tests/fixtures/retired-programs.html');
   const grant = items['form.grant_apply'];
   assert.ok(programsHtml.includes(grant.heading));
   assert.ok(programsHtml.includes(grant.sub));

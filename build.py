@@ -24,6 +24,7 @@ SITE_URL = "https://caregiversanctuary.org"
 DEFAULT_SHARE_IMAGE = f"{SITE_URL}/media/share-default.jpg"
 
 PAGE_METADATA = {
+    "membership.html": {"title": "Caregiver Sanctuary Membership — Legacy Home & Respite Care Foundation", "description": "Free membership connects caregivers with Legacy support, resources and community.", "stylesheets": ("membership.css",)},
     "index.html": {
         "title": "Legacy Home & Respite Care Foundation — Caregiver Wellness & Resource Hub",
         "description": "Supporting dementia caregivers through community, wellness, and respite.",
@@ -141,11 +142,11 @@ PAGE_METADATA = {
 }
 
 PAGES = {
+    "membership.html": "membership.html.j2",
     "index.html": "index.html.j2",
     "resources.html": "resources.html.j2",
     "events.html": "events.html.j2",
     "about.html": "about.html.j2",
-    "programs.html": "programs.html.j2",
     "request-support.html": "request-support.html.j2",
     "gallery.html": "gallery.html.j2",
     "trusted-resources.html": "trusted-resources.html.j2",
@@ -296,6 +297,7 @@ def render_coming_soon_head() -> str:
 def asset_versions() -> dict:
     """Return 12-hex-char SHA-256 prefixes for versioned root stylesheet and script assets."""
     return {
+        "membership.css": hashlib.sha256((ROOT / "membership.css").read_bytes()).hexdigest()[:12],
         "styles.css": hashlib.sha256((ROOT / "styles.css").read_bytes()).hexdigest()[:12],
         "app.js": hashlib.sha256((ROOT / "app.js").read_bytes()).hexdigest()[:12],
         "staff.js": hashlib.sha256((ROOT / "staff.js").read_bytes()).hexdigest()[:12],

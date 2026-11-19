@@ -93,7 +93,7 @@ test('(d) the CTA text is present verbatim', () => {
   );
   assert.match(
     toolsHtml,
-    /<a href="programs\.html" class="btn btn-coral">Explore Programs &amp; Support<\/a>/
+    /<a href="membership\.html" class="btn btn-coral">Explore Programs &amp; Support<\/a>/
   );
 });
 

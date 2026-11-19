@@ -39,7 +39,7 @@ test('round-trip: edge rewrite with real seeded sections matches committed build
   assert.ok(pages.length >= 6, `expected at least 6 pages with data-cs markers, found ${pages.length}: ${pages.join(', ')}`);
   assert.ok(pages.includes('index.html'), 'must include index.html');
   assert.ok(pages.includes('about.html'), 'must include about.html');
-  assert.ok(pages.includes('programs.html'), 'must include programs.html');
+  assert.ok(!pages.includes('programs.html'), 'retired page must not ship');
   assert.ok(pages.includes('request-support.html'), 'must include request-support.html');
   assert.ok(pages.includes('donate.html'), 'must include donate.html');
   assert.ok(pages.includes('wellness-passport.html'), 'must include wellness-passport.html');

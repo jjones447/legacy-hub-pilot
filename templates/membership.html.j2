@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Caregiver Sanctuary Membership — Legacy</title><link rel="stylesheet" href="styles.css"></head><body>
+{% set active_page = 'sanctuary' %}
+{% include '_header.html.j2' %}
+<section class="hero membership-section"><div class="container membership-measure"><span class="eyebrow">CAREGIVER SANCTUARY MEMBERSHIP</span><h1>More than a membership. A community that feels like family.</h1><p>Caring for someone living with dementia comes with a lot of questions, challenges, and moments when you just need someone who understands.</p>
+<p>That&#x27;s why we created the Caregiver Sanctuary.</p>
+<p>Our free membership gives you one place to connect with Legacy, find support, access helpful resources, and stay informed about programs and opportunities available to you.</p><button type="button" class="btn btn-coral" data-action="open-membership">Join the Sanctuary</button><p class="small">Joining is free. You'll create a personal profile where you can stay connected with Legacy, access resources, register for events, and request support.</p></div></section>
+<section class="membership-section section-sand"><div class="container membership-relationship"><div><h2>More than support. A sense of family.</h2><p>At Legacy, we believe support should feel personal.</p>
+<p>We&#x27;re not just here to offer programs and resources. We&#x27;re here to build real relationships with the caregivers we serve. We get to know you, your loved one, and the challenges you&#x27;re navigating because we know that no two caregiving journeys look the same.</p>
+<p>Over time, many of the caregivers we support become like family. We celebrate together, check in on one another, share difficult moments, and remind each other that we don&#x27;t have to do this alone.</p>
+<p>That&#x27;s what the Caregiver Sanctuary is all about. A place where you&#x27;re known, supported, and genuinely cared for.</p></div><figure><img src="media/gallery/shoot-238.jpg" alt="Photograph from a Legacy Home &amp; Respite Care Foundation community event" loading="lazy"><figcaption class="small">A moment from the Legacy community.</figcaption></figure></div></section>
+<section class="membership-section"><div class="container"><h2>What You'll Find Inside the Sanctuary</h2><p class="membership-measure">Whether you're looking for answers, a little breathing room, or simply someone who understands, we're here to help you find the support that makes sense for you.</p><div class="membership-benefits"><article class="card"><span aria-hidden="true">◇</span><h3>A Community That Understands</h3><p>Connect with other caregivers through our weekly virtual support group and community gatherings. Share experiences, ask questions, or simply listen. There&#x27;s no pressure to have everything figured out.</p></article><article class="card"><span aria-hidden="true">◇</span><h3>Help When You Need It</h3><p>Learn about respite opportunities, caregiver support, and ways our team can help you navigate challenges at home. We&#x27;re here to listen and help you explore your options.</p></article><article class="card"><span aria-hidden="true">◇</span><h3>Events and Opportunities</h3><p>Stay connected to caregiver workshops, wellness activities, educational sessions, and special events designed with caregivers in mind.</p></article><article class="card"><span aria-hidden="true">◇</span><h3>Resources in One Place</h3><p>Find practical information, educational materials, and helpful tools to support you throughout your caregiving journey.</p></article></div><p class="small">Opportunities depend on program availability and caregiver needs.</p></div></section>
+<section class="membership-section section-sand" id="your-story"><div class="container membership-measure"><h2>Support That Grows With You</h2><div><p>Every caregiving journey is different, and what you need today may not be what you need six months from now.
+Your Caregiver Sanctuary portal gives you a personal space to stay connected with Legacy, explore resources, register for events, and request support as your needs change.
+It's one more way for us to stay connected and make sure you know what's available when you need it.</p>
+<ul><li>View upcoming events and your registrations</li>
+<li>Request caregiver support</li>
+<li>Explore available respite opportunities</li>
+<li>Access caregiver resources</li>
+<li>Discover wellness activities and tools</li>
+<li>Stay connected with the Legacy team</li></ul>
+</div></div></section>
+<section class="membership-section"><div class="container membership-measure"><h2>There's a Place for You Here.</h2><p>Whether you&#x27;re new to caregiving, have been doing this for years, or are simply trying to figure out what comes next, you are welcome here.</p>
+<p>You don&#x27;t need to have all the answers. You don&#x27;t even need to know exactly what kind of help you need.</p>
+<p>Just know that you don&#x27;t have to navigate it all alone.</p><button type="button" class="btn btn-coral" data-action="open-membership">Join the Sanctuary</button><p class="small">Membership is always free.</p></div></section>
+<!-- Membership modal -->
+<div class="modal-overlay" id="membershipModal">
+  <div class="modal">
+    <button class="modal-close" data-action="close-membership" aria-label="Close membership form">✕</button>
+    <h3 data-cs="form.membership.heading">Join The Caregiver Sanctuary</h3>
+    <p class="sub" data-cs="form.membership.sub">One short form starts your free membership and creates your caregiver record.</p>
+    <form id="membershipForm" data-action="submit-membership">
+      <div class="field">
+        <label for="memName" data-cs="form.membership.name_label">Your name</label>
+        <input id="memName" type="text" placeholder="e.g., Maria Gonzalez" required>
+      </div>
+      <div class="field">
+        <label for="memEmail" data-cs="form.membership.email_label">Email</label>
+        <input id="memEmail" type="email" placeholder="you@example.com" required>
+      </div>
+      <div class="field">
+        <label for="memCaringFor" data-cs="form.membership.caring_for_label">I am caring for</label>
+        <select id="memCaringFor" data-cs-options="form.membership.caring_for_options">
+          <option value="A parent or older adult">A parent or older adult</option>
+          <option value="A spouse or partner">A spouse or partner</option>
+          <option value="A family member or friend">A family member or friend</option>
+          <option value="I am exploring support options">I am exploring support options</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="memNote" data-cs="form.membership.note_label">Anything you want us to know (optional)</label>
+        <textarea id="memNote" rows="3" placeholder="Questions, timing, or programs you want to hear about"></textarea>
+      </div>
+      <p class="privacy-line" data-cs="form.membership.privacy_line">By joining, you consent to Legacy using these details to create or update your caregiver record and follow up about Sanctuary programs. Please do not include medical record numbers or emergency details.</p>
+      <button type="submit" class="btn btn-coral w-100" data-cs="form.membership.submit_label">Join free</button>
+      <p data-membership-pending role="status" aria-live="polite" hidden>Saving your membership request. Please wait; don't submit it again.</p>
+      <div class="success-note" data-intake-success role="status" aria-live="polite" tabindex="-1">Your membership request is saved.</div>
+      <div class="error-note" data-intake-error role="alert" aria-live="assertive" tabindex="-1"></div>
+      <div class="routing-note" data-intake-routing>
+        <a class="btn btn-plum" href="/portal">Continue to your portal</a>
+        <p>For a new membership, this page opens the portal with your email filled in and requests one secure sign-in link for it. If the portal doesn't open, use the button and select “Send me a sign-in link”. If you're already signed in, you'll see your existing portal. Joining never signs you in by itself; your portal opens only from the emailed link.</p>
+      </div>
+    </form>
+  </div>
+</div>
+{% include '_footer.html.j2' %}
+<script src="app.js"></script><script src="nav-v2.js"></script></body></html>
