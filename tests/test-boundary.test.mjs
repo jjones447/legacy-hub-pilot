@@ -110,7 +110,10 @@ test('package and CI choose units; runtime has its own explicit command', () => 
   const workflow = read('.github/workflows/tests.yml');
   assert.match(workflow, /run: npm run test:unit/);
   assert.match(workflow, /runtime NOT RUN/);
-  assert.doesNotMatch(workflow, /tests\/\*|npm (?:install|ci)|run:.*test:runtime/);
+  // Locked DOM dependencies are installed without scripts; this never runs workerd.
+  assert.match(workflow, /run: npm ci --ignore-scripts\n/);
+  assert.equal((workflow.match(/npm ci/g) || []).length, 1);
+  assert.doesNotMatch(workflow, /tests\/\*|npm install|run:.*test:runtime/);
 });
 
 test('runtime harness has no skip, cache discovery, implicit installer or process-wide cleanup', () => {
