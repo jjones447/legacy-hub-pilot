@@ -42,3 +42,17 @@ The “More about the caregiving journey” summary label is also drafted arrang
 Static preview package only, no Functions/API/mail; fictional/no-send banner and CSP connect-src none/form-action none. Existing forms are preserved for source parity but cannot submit in this preview. No private record read, schema, profile, newsletter or journaling implementation. Screenshot/pixel desktop/mobile and full-browser navigation evidence are not supplied unless separately attributed; scoped Home CSS retains brand and changes three-step grid to one column on narrow screens. Independent source review and customer approval remain required; this is not production readiness.
 
 PR integration note: the branch is stacked on unmerged374, but the review PR targets main so the repository's required main-targeted CI can run. The full diff therefore includes374; the new-task delta is against755b99a6. Do not merge the inherited stack or treat374's customer final look as complete through this draft.
+
+## About JOIN US removal and release dependency
+Entire About JOIN US section and its about.join selectors removed; underlying content item remains unused. Published hydration reads `content_item` rows with id LIKE ps_% and status published via `getPublishedSections` in `functions/_content.mjs`, strips ps_ prefix, then replaces existing data-cs/data-cs-list targets only. `ps_about.join` has no remaining target, so a stale row cannot insert the removed section. A synthetic stale-row rewrite regression verifies this. No data mutation.
+Known #371 interaction: `ps_home.journey` / field paragraph was previously observed published with old wording; `ps_home.support` is another published override surface. The current preview keeps the heading selector home.journey.heading, but the approved journey paragraphs are static with NO home.journey.paragraph selector; the three support descriptions and OurModel addition are static too. New Beyond Resources and draft reinforcement are static. Therefore these source sentences cannot be replaced by those old paragraph/description fields through the current rewriter; other existing selectors retain hydration. This is source-level evidence, not fresh authenticated production content/revision qualification.
+Release remains separately gated: requester successor look + exact-head review, then explicit publisher/lead resolution of carrying #371 text as static source versus the existing governed content-store path. The missing verified Staff session + exact-key/version publishing path remains unresolved; no raw D1 alternative, no automatic #371 merge/closure. If release requires updating/qualifying published rows or their prior revisions/rollback, that qualified publisher dependency blocks it. This preview does not claim to repair the content store or authorize bypassing it.
+### Remaining public grant/social mentions (source inventory, not a removal request)
+- `caregiver-stories.html`: lines 178.
+- `events.html`: lines 143, 144, 157, 161, 170, 174.
+- `faq.html`: lines 174, 219, 222, 223, 226.
+- `portal.html`: lines 161, 165, 173, 180, 182, 183, 243, 253, 255, 261, 270, 294.
+- `request-support.html`: lines 150, 151.
+- `wellness-passport.html`: lines 249, 254.
+
+Portal/Request Support mentions are the next separately sequenced presentation task. Other FAQ/events/Passport/story content remains untouched pending scope decisions; historical records/Staff/backend are not removed. Inventory is source-only and may differ from published content overrides.

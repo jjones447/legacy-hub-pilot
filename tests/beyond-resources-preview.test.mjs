@@ -17,3 +17,9 @@ test('draft reinforcement is distinct, bounded and does not replace the approved
  assert.equal((partner.match(/id="corporate"/g)||[]).length,1);assert.equal((partner.match(/involved-opportunities/g)||[]).length,3);
  assert.ok(home.includes('We recognize')===false);assert.ok(read('our-model.html').includes('We recognize the emotional toll caregiving can take'));
 });
+test('retired About JOIN US cannot be hydrated back from a stale published item',async()=>{
+ const {rewriteContent}=await import('../functions/_content.mjs');const source=read('about.html');
+ for(const file of ['about.html','templates/about.html.j2'])assert.doesNotMatch(read(file),/data-cs="about\.join\.|sections\["about.join"\]/);
+ const response=await rewriteContent(new Response(source),{'about.join':{eyebrow:'RETIRED_JOIN_SENTINEL',heading:'RETIRED_HEADING_SENTINEL',body:'RETIRED_BODY_SENTINEL',cta_label:'RETIRED_BUTTON_SENTINEL'}});
+ const rendered=await response.text();assert.equal(rendered,source);assert.doesNotMatch(rendered,/RETIRED_.*_SENTINEL/);
+});
