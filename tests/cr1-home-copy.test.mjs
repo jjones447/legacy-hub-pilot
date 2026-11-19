@@ -27,10 +27,12 @@ test('home page carries client two-line headline and journey panel copy verbatim
     html,
     /<h2[^>]*>Caregiving can change every part of life\.<br>You shouldn't have to navigate it alone\.<\/h2>/
   );
-  assert.match(
-    html,
-    /<p[^>]*>Caring for someone living with dementia can change every part of life\. As needs evolve, caregivers often find themselves navigating new roles, responsibilities, and decisions while trying to care for themselves, too\. Caregiver Sanctuary provides respite, wellness, practical support, and community to help caregivers feel supported throughout the journey\.<\/p>/
-  );
+  const journey = html.match(/<div data-cs-list="home\.journey\.paragraph">([\s\S]*?)<\/div>/)?.[1];
+  assert.ok(journey, 'journey paragraph container exists');
+  assert.deepEqual([...journey.matchAll(/<p>([^<]+)<\/p>/g)].map(match => match[1]), [
+    'Caring for someone living with dementia can change every part of life. As needs evolve, caregivers often find themselves managing new responsibilities, difficult decisions, and the emotional weight of caregiving, all while trying to care for themselves, too.',
+    'Caregiver Sanctuary provides respite, wellness, education, and meaningful connections to help caregivers manage stress, feel less isolated, and find support throughout their journey.'
+  ]);
 });
 
 test('home support preserves client copy with sentence-case presentation and useful existing-route cards', () => {
@@ -43,18 +45,12 @@ test('home support preserves client copy with sentence-case presentation and use
   assert.deepEqual(routes, ['wellness-passport.html', 'drop-in-respite.html', 'community-series.html']);
   for (const route of routes) assert.match(file(route), /<!DOCTYPE html>/i);
 
-  // Descriptions are reused verbatim from existing program pages, not new service claims. Two
-  // came from the old Drop-In Respite "Related support" cards, which the requester's Nov 3
-  // rebuild of that page removed; they stay on the home page unchanged.
-  for (const [description, source] of [
-    ['Connect with wellness activities, partner experiences, and grant benefits.', null],
-    // Came from the old Community Series page, rewritten by the requester on Nov 12; stays on home.
-    ['Time to breathe while your loved one is somewhere safe, engaged and cared for.', null],
-    ['Gatherings and wellness sessions for caregivers across the community.', null],
-  ]) {
-    assert.ok(support.includes(description));
-    if (source) assert.ok(file(source).includes(description));
-  }
+  // Requester-supplied wording, Nov17: exact copy while existing destinations stay unchanged.
+  for (const description of [
+    "Activities and experiences that support caregivers&#39; mental, emotional, and physical well-being.",
+    'Time to rest, recharge, and focus on yourself while your loved one is safely cared for.',
+    'Supportive spaces to connect with others, share experiences, and feel less alone.',
+  ]) assert.ok(support.includes(description), description);
   const css = file('styles.css');
   assert.match(css, /\.home-support-heading\s*\{[^}]*text-transform:\s*lowercase/);
   assert.match(css, /\.home-support-heading::first-letter\s*\{[^}]*text-transform:\s*uppercase/);
