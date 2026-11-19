@@ -1,0 +1,32 @@
+# Beyond Resources preview: arrangement and customer approval list
+
+Based on reviewed PR374 755b99a6334fcbaeb55517ec7bbfccf5007282f4. This is a separate stacked draft preview; no merge/deploy to production or content-store change. Reconcile if374 or371 moves. Existing374 Membership/form/portal, support/Dec9/faith/routing and program information preserved.
+
+## Proposed Home arrangement for customer decision
+
+1. Existing hero/headline/lede/actions intact.
+2. Exact revised Beyond Resources heading, five paragraphs and closing line, then exact three-step wording. Reuses the journey area's place near the top; the problem comes before individual programs.
+3. Existing support tiles with all three exact371 approved descriptions.
+4. Entire existing Caregiver Support Rooted in Community model text/link, moved after the tiles rather than another introductory block before programs.
+5. Native expandable “More about the caregiving journey” panel preserves the prior journey heading and both exact371 approved paragraphs intact. Collapsing this supplementary text is a proposed arrangement, not customer-approved omission. It remains readable without JavaScript; no program is deleted.
+6. Remaining community/impact/partner/event/resource information unchanged.
+
+All371 copy remains intact, including its Our Model wellness sentence. Source-only preview uses the two approved journey paragraphs as static template text; it does not alter the governed D1 store or include371's Functions adapter. New Beyond Resources copy is static, without content selectors. Existing selectors on unrelated content remain. This avoids claiming the blocked371 Staff publishing path has been solved; actual production override behavior still needs qualification before any release.
+
+## Every drafted reinforcement sentence — approval requested
+
+About, inside the existing Story description after its original paragraphs (none removed):
+
+- We work alongside caregivers to turn a need for help into practical support, building relationships as we get to know each family's journey.
+- We already track participation in our services and are strengthening how we understand caregiver outcomes; our new portal will help us build on that work.
+
+Partnership, above the existing cards in Partner With Legacy:
+
+- Healthcare providers, community organizations, and other agencies can work with Legacy to help families move from a referral to taking part in practical caregiver support.
+- We provide many services directly, stay connected with caregivers, and track participation while strengthening how we understand outcomes.
+
+The “More about the caregiving journey” summary label is also drafted arrangement text. Homepage requested paragraphs/steps and Community & Corporate card are not paraphrased. No exclusivity, measured outcome results or guaranteed service claim. Hands-on caregiver coaching appears only in requested copy, with no removed coaching link.
+
+## Evidence boundaries
+
+Static preview package only, no Functions/API/mail; fictional/no-send banner and CSP connect-src none/form-action none. Existing forms are preserved for source parity but cannot submit in this preview. No private record read, schema, profile, newsletter or journaling implementation. Screenshot/pixel desktop/mobile and full-browser navigation evidence are not supplied unless separately attributed; scoped Home CSS retains brand and changes three-step grid to one column on narrow screens. Independent source review and customer approval remain required; this is not production readiness.

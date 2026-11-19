@@ -34,28 +34,10 @@
   </div>
 </section>
 
-<section class="home-journey">
-  <div class="container">
-    <div class="section-head">
-      <h2 data-cs="home.journey.heading">{{ sections["home.journey"].heading }}</h2>
-      <p data-cs="home.journey.paragraph">{{ sections["home.journey"].paragraph }}</p>
-    </div>
-  </div>
-</section>
+<section class="home-journey beyond-support" aria-labelledby="beyondSupportHeading"><div class="container"><div class="section-head"><h2 id="beyondSupportHeading">Beyond Resources. Real Support.</h2><p>Caregivers hear it all the time. Take a break. Ask for help. Join a support group. Make time for yourself.</p><p>But what happens when taking a break isn&#x27;t that simple? When you don&#x27;t have someone to stay with your loved one? Or when you&#x27;re already so overwhelmed that figuring out where to start feels like another responsibility?</p><p>That&#x27;s the gap we&#x27;re working to close.</p><p>At Legacy, we don&#x27;t just tell caregivers what resources are available. We help them access the support they need and provide many of those services ourselves, from respite and hands-on caregiver coaching to education, wellness opportunities, and ongoing connection.</p><p>And we believe what happens afterward matters. We stay connected, track participation, and work to understand whether that support is making a difference in caregivers&#x27; everyday lives.</p><p><strong>Because finding help is one thing. Actually receiving it is another.</strong></p></div><div class="card-grid beyond-steps"><article class="card"><span class="beyond-step-icon" aria-hidden="true">1</span><h3>Identify the Need</h3><p>We listen to caregivers and understand the challenges they&#x27;re facing.</p></article><article class="card"><span class="beyond-step-icon" aria-hidden="true">2</span><h3>Provide the Support</h3><p>We help caregivers access practical services and provide many of those services directly.</p></article><article class="card"><span class="beyond-step-icon" aria-hidden="true">3</span><h3>Measure the Difference</h3><p>We track participation, follow up, and work to understand whether the support caregivers receive is helping.</p></article></div></div></section>
 
 {# Requester, Nov 15 2026 (ts 1794761678.248889): introduces the Caregiver Sanctuary Model before "How We Support Caregivers". #}
-<section class="home-model" aria-labelledby="homeModelHeading">
-  <div class="container">
-    <div class="section-head">
-      <h2 id="homeModelHeading">Caregiver Support Rooted in Community</h2>
-      <p>Caregiving doesn’t happen in isolation, and supporting caregivers shouldn’t either.</p>
-      <p>At Legacy, we’ve learned that caregivers need different kinds of support at different times. Sometimes it’s a break. Sometimes it’s someone to talk to, information to help make a difficult decision, or simply an opportunity to do something for themselves.</p>
-      <p>That’s what the Caregiver Sanctuary Model is built around. We bring together respite, education, wellness, peer support, and community partnerships to help caregivers get the support they need.</p>
-      <p><strong>Because caring for caregivers takes a community.</strong></p>
-    </div>
-    <p><a href="our-model.html" class="btn btn-coral">Explore Our Model</a></p>
-  </div>
-</section>
+
 
 <section class="section-sand home-support">
   <div class="container">
@@ -63,9 +45,9 @@
       <h2 class="home-support-heading" data-cs="home.support.heading">{{ sections["home.support"].heading }}</h2>
     </div>
 {% set support_navigation = {
-      "Wellness": {"href": "wellness-passport.html", "description": "Connect with wellness activities, partner experiences, and grant benefits.", "label": "About the passport"},
-      "Respite": {"href": "drop-in-respite.html", "description": "Time to breathe while your loved one is somewhere safe, engaged and cared for.", "label": "About Drop-In Respite"},
-      "Community": {"href": "community-series.html", "description": "Gatherings and wellness sessions for caregivers across the community.", "label": "About the series"}
+      "Wellness": {"href": "wellness-passport.html", "description": "Activities and experiences that support caregivers' mental, emotional, and physical well-being.", "label": "About the passport"},
+      "Respite": {"href": "drop-in-respite.html", "description": "Time to rest, recharge, and focus on yourself while your loved one is safely cared for.", "label": "About Drop-In Respite"},
+      "Community": {"href": "community-series.html", "description": "Supportive spaces to connect with others, share experiences, and feel less alone.", "label": "About the series"}
 } %}
     <div class="card-grid">
 {%- for tile in sections["home.support"].tiles %}
@@ -82,6 +64,30 @@
     <p class="mt-32" data-cs="home.support.secondary">{{ sections["home.support"].secondary }}</p>
   </div>
 </section>
+
+<section class="home-model" aria-labelledby="homeModelHeading">
+  <div class="container">
+    <div class="section-head">
+      <h2 id="homeModelHeading">Caregiver Support Rooted in Community</h2>
+      <p>Caregiving doesn’t happen in isolation, and supporting caregivers shouldn’t either.</p>
+      <p>At Legacy, we’ve learned that caregivers need different kinds of support at different times. Sometimes it’s a break. Sometimes it’s someone to talk to, information to help make a difficult decision, or simply an opportunity to do something for themselves.</p>
+      <p>That’s what the Caregiver Sanctuary Model is built around. We bring together respite, education, wellness, peer support, and community partnerships to help caregivers get the support they need.</p>
+      <p><strong>Because caring for caregivers takes a community.</strong></p>
+    </div>
+    <p><a href="our-model.html" class="btn btn-coral">Explore Our Model</a></p>
+  </div>
+</section>
+<details class="container beyond-journey"><summary>More about the caregiving journey</summary>
+<section class="home-journey">
+  <div class="container">
+    <div class="section-head">
+      <h2 data-cs="home.journey.heading">{{ sections["home.journey"].heading }}</h2>
+      <p>Caring for someone living with dementia can change every part of life. As needs evolve, caregivers often find themselves managing new responsibilities, difficult decisions, and the emotional weight of caregiving, all while trying to care for themselves, too.</p>
+      <p>Caregiver Sanctuary provides respite, wellness, education, and meaningful connections to help caregivers manage stress, feel less isolated, and find support throughout their journey.</p>
+    </div>
+  </div>
+</section>
+</details>
 
 {% with carousel_id="community", carousel_title="Moments from our community",
         carousel_blurb="Caregivers, families and volunteers at Legacy events.",
