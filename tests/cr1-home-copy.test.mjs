@@ -27,10 +27,9 @@ test('home page carries client two-line headline and journey panel copy verbatim
     html,
     /<h2[^>]*>Caregiving can change every part of life\.<br>You shouldn't have to navigate it alone\.<\/h2>/
   );
-  assert.match(
-    html,
-    /<p[^>]*>Caring for someone living with dementia can change every part of life\. As needs evolve, caregivers often find themselves navigating new roles, responsibilities, and decisions while trying to care for themselves, too\. Caregiver Sanctuary provides respite, wellness, practical support, and community to help caregivers feel supported throughout the journey\.<\/p>/
-  );
+  assert.ok(html.includes('Caring for someone living with dementia can change every part of life. As needs evolve, caregivers often find themselves managing new responsibilities, difficult decisions, and the emotional weight of caregiving, all while trying to care for themselves, too.'));
+  assert.ok(html.includes('Caregiver Sanctuary provides respite, wellness, education, and meaningful connections to help caregivers manage stress, feel less isolated, and find support throughout their journey.'));
+
 });
 
 test('home support preserves client copy with sentence-case presentation and useful existing-route cards', () => {
@@ -47,10 +46,10 @@ test('home support preserves client copy with sentence-case presentation and use
   // came from the old Drop-In Respite "Related support" cards, which the requester's Nov 3
   // rebuild of that page removed; they stay on the home page unchanged.
   for (const [description, source] of [
-    ['Connect with wellness activities, partner experiences, and grant benefits.', null],
+    ['Activities and experiences that support caregivers&#39; mental, emotional, and physical well-being.', null],
     // Came from the old Community Series page, rewritten by the requester on Nov 12; stays on home.
-    ['Time to breathe while your loved one is somewhere safe, engaged and cared for.', null],
-    ['Gatherings and wellness sessions for caregivers across the community.', null],
+    ['Time to rest, recharge, and focus on yourself while your loved one is safely cared for.', null],
+    ['Supportive spaces to connect with others, share experiences, and feel less alone.', null],
   ]) {
     assert.ok(support.includes(description));
     if (source) assert.ok(file(source).includes(description));
