@@ -1,0 +1,2 @@
+// Explicit opt-in fictional layout only. No real data, network or persistence.
+(()=>{const show=document.getElementById('show-example'),clear=document.getElementById('clear-example');if(!show||!clear)return;function set(on){for(const id of ['profile-example','wellness-example'])document.getElementById(id).hidden=!on;document.getElementById('example-note').textContent=on?'Fictional example enabled — not your records.':'No example data is shown.';}show.addEventListener('click',()=>set(true));clear.addEventListener('click',()=>set(false));})();
