@@ -30,3 +30,5 @@ The “More about the caregiving journey” summary label is also drafted arrang
 ## Evidence boundaries
 
 Static preview package only, no Functions/API/mail; fictional/no-send banner and CSP connect-src none/form-action none. Existing forms are preserved for source parity but cannot submit in this preview. No private record read, schema, profile, newsletter or journaling implementation. Screenshot/pixel desktop/mobile and full-browser navigation evidence are not supplied unless separately attributed; scoped Home CSS retains brand and changes three-step grid to one column on narrow screens. Independent source review and customer approval remain required; this is not production readiness.
+
+PR integration note: the branch is stacked on unmerged374, but the review PR targets main so the repository's required main-targeted CI can run. The full diff therefore includes374; the new-task delta is against755b99a6. Do not merge the inherited stack or treat374's customer final look as complete through this draft.
