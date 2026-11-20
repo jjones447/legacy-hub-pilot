@@ -10,7 +10,7 @@ export function isPublisherPayload(payload, env) {
 }
 export function publisherRouteAllowed(request, env) {
   const url = new URL(request.url);
-  if (request.method === 'POST' && /^\/api\/agent\/publisher\/(draft|preview|confirm)$/.test(url.pathname)) return true;
+  if (request.method === 'POST' && /^\/api\/agent\/publisher\/(draft|preview|confirm|status)$/.test(url.pathname)) return true;
   // TEST acceptance reads only. No People writes, exports, assistant or workflow mutation.
   if (env.ENVIRONMENT === 'preview' && request.method === 'GET') {
     return ['/staff', '/staff/', '/staff.html', '/api/staff/caregivers'].includes(url.pathname);

@@ -20,7 +20,7 @@ workflow confirmation remain unchanged. The in-product assistant has no publishe
 tool or credential and cannot construct this symbol.
 
 Named publisher requests are fenced to POST /api/agent/publisher/draft,
-/preview and /confirm. Other service identities, human sessions and dev headers
+/preview, /confirm and read-only /status. Other service identities, human sessions and dev headers
 cannot use these operations. No workflow/direct-edit/discard/assistant transport
 is granted. In preview only, GET /staff variants and GET /api/staff/caregivers
 are allowed for People search acceptance. No People writes, exports, production
@@ -29,24 +29,55 @@ broadened. Machine calls use the token headers each time; supplied Origin must
 match. JSON is streamed with a16KiB cap; unknown actor/conversation fields refuse.
 
 A reference string alone is not evidence of customer consent. The reviewed
-server-owned publisher-approvals.mjs catalog binds each recorded approval to
-one target/type and EXACT changed values. The initial catalog records approved
-Home journey paragraph under tracker:6966964897 (#371) and tracker:7043252292
-(final #375 look carrying that wording). No arbitrary model proposal is accepted.
-New approved operands enter through normal source/review, never an HTTP request
-or assistant-generated registry edit. The publisher preserves all unrelated
-current fields, refusing missing/nonpublished/type-mismatched targets. No schema
-change, new content item or caregiver record is authorized by this route.
+server-owned publisher-approvals.mjs catalog binds each approval to one operation,
+exact environment and HTTPS origin, target/type, full target-row SHA-256 preimage,
+and EXACT changed values. The complete persisted target row (including owner and
+timestamps, not only content) is hashed with `publisherTargetVersion`. The two
+original wording references share ONE operation id, so changing the reference
+cannot create another publishing operation. No request or environment variable
+can supply or override catalog bindings. The factory seam is trusted server/test
+construction only; the deployed dispatcher uses the imported catalog.
 
-The draft stores actor+approval reference+target in existing updated_by metadata.
-Preview returns before/after and the existing full draft/target/origin digest.
-Confirmation requires the same capability, persisted owner/ref, catalog-matching
-proposal, exact preview version and unchanged target. Original conditional
-publish audit goes FIRST in the same batch as target update/draft archival.
-Prior values remain in before_json; after_json includes approval_ref. Drift or
-audit failure aborts. A lost acknowledgment is UNKNOWN: read/reconcile audit and
-status before retry; a repeated confirm cannot generate a second publish audit.
-This synthetic SQLite contract still needs native D1 qualification.
+**Current live entries are deliberately NOT ACTIVATED:** environment, origin and
+target_version are null until actual deployment/target readbacks are qualified
+and included in an exact reviewed catalog successor. Inventing a live preimage,
+accepting the current row on first use, or enabling a wildcard origin would undo
+the security fix. TEST uses a separately reviewed synthetic target/operation at
+its exact qualified preview origin. Live approval scope must cover the actual
+origin and target revision; a changed target requires a reconciled approved
+operation, not automatic rebinding of an old approval. Preserve the source
+record of that decision alongside the catalog change.
+
+The draft's primary key is a deterministic SHA-256 of the reviewed operation id.
+Draft creation uses one conditional INSERT bound to every target preimage field,
+with no upsert/REPLACE. Duplicate/concurrent requests cannot reserve two drafts.
+The draft stores the full approved binding and actor in existing updated_by
+metadata; preview/confirm check those values plus the exact request environment,
+origin, original target version and draft id. Thus an A-origin draft cannot gain
+an authorized preview at B, and a later human edit cannot be overwritten by
+reissuing an earlier approval. Unrelated target fields are preserved.
+
+Confirmation requires the exact preview version and full unchanged target/draft
+snapshots. The original conditional publish audit goes FIRST in the same batch
+as target update and draft archival. The archive is the consumed operation's
+reservation and must be retained; the append-only original audit additionally
+fences reissue even if that archive is missing. Audit after_json records the
+operation, draft id, full approved binding and approval reference; before_json
+retains rollback values. No new application table or migration is introduced.
+An audit failure or concurrent drift aborts the entire batch, leaving the original
+operation reserved. This synthetic SQLite contract still needs native D1 proof.
+
+A lost acknowledgment is UNKNOWN: POST `/api/agent/publisher/status` with the
+same approval_ref and target_id. It is read-only and returns the deterministic
+operation/draft id, `absent`, `draft`, `published` (with original audit id), or
+`conflict`. Published means that original operation has an audit, not that no
+later human edit exists. Do not invent a new operation or delete a reservation.
+A repeated draft request refuses with409 and the existing receipt; it never
+creates a successor draft. If status is draft, obtain a fresh preview for that
+same id only after reconciling the original attempt. If published, do not publish
+again. Absent/conflict or a failed read requires operator reconciliation; absence
+alone is not instruction to blindly replay an uncertain write. Archived drafts
+without matching audit fail closed as conflict.
 
 ## Provisioning and TEST qualification
 
@@ -94,7 +125,9 @@ titles/secondary/unrelated content are not overwritten. Existing371 template/
 rewriter handles the two-paragraph value. Reconcile375 layout while preserving
 that binding; its old static paragraph removal is not the release candidate.
 Obtain exact integrated source review/current checks. Snapshot current governed
-content/draft/version and prior source deployment for rollback. Draft with
+content/draft/version and prior source deployment for rollback. Qualify the exact
+production origin/environment and full target version in a retained reviewed
+catalog successor before activation; source delivery alone cannot publish. Draft with
 approval_ref tracker:7043252292, target_id ps_home.journey and exact catalog
 changes; preview; confirm SAME draft/reference/version. Read original audit and
 public rendered Home/Our Model/About/support copy. Do not claim source fallback
@@ -132,3 +165,15 @@ follows from source tests. No Cloudflare owner-only dashboard step has yet been
 proved: exact current engineering gaps are locating the existing app/account and
 qualifying Vault storage using the established ops/secret custodians. Escalate
 only a demonstrated API permission/ownership refusal, not a generic human login.
+
+## Security successor evidence (ct13)
+
+At original c72f934, two causal regressions failed as reported: a draft created
+at A obtained a fresh preview at B (200), and after publication plus a later
+human edit a new draft using the original approval was accepted (200). Successor
+coverage requires both refusals plus environment mismatch, full-preimage drift
+before draft/preview and during reservation/confirm, concurrent duplicate draft
+and confirm, alternate approval aliases, audit rollback, and lost-acknowledgment
+status reconciliation. All prior capability and mutation-denial controls remain.
+No live token, native D1, source integration371/375 or deployment evidence is
+inferred from these tests. Same Devin4 and ct12 review the exact successor.

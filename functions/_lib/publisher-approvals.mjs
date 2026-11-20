@@ -1,6 +1,12 @@
 // Reviewed recorded approvals; wire references never grant arbitrary content authority.
 export const PUBLISHER_APPROVALS = Object.freeze([
   {
+    // Activation requires exact environment/origin and full target-row SHA-256 from
+    // qualified provider readback plus retained review. No invented live preimage.
+    "operation_id": "legacy-wellbeing-20261121",
+    "environment": null,
+    "origin": null,
+    "target_version": null,
     "approval_ref": "tracker:6966964897",
     "target_id": "ps_home.journey",
     "type_id": "page_section",
@@ -9,6 +15,12 @@ export const PUBLISHER_APPROVALS = Object.freeze([
     }
   },
   {
+    // Activation requires exact environment/origin and full target-row SHA-256 from
+    // qualified provider readback plus retained review. No invented live preimage.
+    "operation_id": "legacy-wellbeing-20261121",
+    "environment": null,
+    "origin": null,
+    "target_version": null,
     "approval_ref": "tracker:7043252292",
     "target_id": "ps_home.journey",
     "type_id": "page_section",

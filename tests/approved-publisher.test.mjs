@@ -6,33 +6,40 @@ import { onRequestPost } from '../functions/api/agent/[[path]].js';
 import { setVerifiedPublisher, publisherActor, isPublisherPayload, publisherRouteAllowed } from '../functions/_lib/publisher-identity.mjs';
 import { confirmationActor } from '../functions/_lib/agent-confirmation.mjs';
 import { PUBLISHER_APPROVALS } from '../functions/_lib/publisher-approvals.mjs';
+import { createApprovedPublisher, publisherTargetVersion } from '../functions/_lib/approved-publisher.mjs';
 const entry = PUBLISHER_APPROVALS[0];
-function fixture() {
+async function fixture() {
   const raw = new DatabaseSync(':memory:');
   raw.exec(readFileSync(new URL('../schema/0001_init.sql', import.meta.url), 'utf8'));
   raw.exec('ALTER TABLE content_item ADD COLUMN draft_of TEXT');
   raw.prepare('INSERT INTO content_type VALUES (?,?)').run('page_section', '{}');
   raw.prepare('INSERT INTO content_item(id,type_id,data,status,updated_by) VALUES (?,?,?,?,?)')
     .run(entry.target_id, 'page_section', JSON.stringify({ heading: 'Keep this', paragraph: 'Old' }), 'published', 'prior');
-  let beforeBatch = () => {};
+  const reviewed = { ...structuredClone(entry), environment:'preview', origin:'https://preview.invalid',
+    target_version:await publisherTargetVersion(raw.prepare('SELECT * FROM content_item WHERE id=?').get(entry.target_id)) };
+  const handler = createApprovedPublisher([reviewed, {...reviewed,approval_ref:PUBLISHER_APPROVALS[1].approval_ref}]);
+  let beforeBatch = () => {}, beforeRun = () => {}, afterRun = () => {}, afterBatch = () => {};
   const wrap = (sql, params = []) => ({ sql, params, bind: (...p) => wrap(sql, p),
     first: async () => raw.prepare(sql).get(...params) ?? null,
-    run: async () => raw.prepare(sql).run(...params),
+    run: async () => { beforeRun(); const r=raw.prepare(sql).run(...params); afterRun(); return r; },
   });
   const db = { prepare: sql => wrap(sql), async batch(statements) {
     beforeBatch(); raw.exec('BEGIN');
     try { for (const s of statements) raw.prepare(s.sql).run(...s.params); raw.exec('COMMIT'); }
     catch(e) { raw.exec('ROLLBACK'); throw e; }
+    afterBatch();
   } };
   const data = {}; setVerifiedPublisher(data, true);
-  const call = (action, body, options = {}) => onRequestPost({
+  const call = (action, body, options = {}) => (options.defaultCatalog ? onRequestPost : handler)({
     request: new Request((options.origin || 'https://preview.invalid')+'/api/agent/publisher/'+action, {
       method: 'POST', headers: { 'content-type':'application/json', ...options.headers }, body: JSON.stringify(body),
-    }), env: { LEGACY_DB: db }, data: options.data || data,
+    }), env: { LEGACY_DB: db, ENVIRONMENT: options.environment || 'preview' }, data: options.data || data,
   });
   const draft = async () => (await (await call('draft', {approval_ref:entry.approval_ref,target_id:entry.target_id,changes:entry.changes})).json()).draft_id;
   const preview = async id => (await (await call('preview', { draft_id:id, approval_ref:entry.approval_ref })).json()).preview_version;
-  return { raw, call, draft, preview, setBeforeBatch: fn => { beforeBatch = fn; } };
+  return { raw, call, draft, preview, reviewed,
+    setBeforeBatch: fn => { beforeBatch = fn; }, setBeforeRun: fn => { beforeRun = fn; },
+    setAfterRun: fn => { afterRun = fn; }, setAfterBatch: fn => { afterBatch = fn; } };
 }
 test('publisher is a distinct server capability and only the pinned service payload qualifies', () => {
   const data = { actor:'service:legacy-publisher', publisher:true };
@@ -56,7 +63,7 @@ test('publisher transport fence denies workflow/assistant/direct/production Peop
   assert.equal(publisherRouteAllowed(new Request('https://test.invalid/api/staff/caregivers'),{ENVIRONMENT:'preview'}),true);
 });
 test('draft, explicit preview, same-version confirmation preserve unrelated fields and original rollback audit', async () => {
-  const f=fixture(), id=await f.draft(), version=await f.preview(id);
+  const f=await fixture(), id=await f.draft(), version=await f.preview(id);
   assert.equal(typeof version,'string');
   const r=await f.call('confirm',{draft_id:id,preview_version:version,approval_ref:entry.approval_ref});
   assert.equal(r.status,200);
@@ -72,7 +79,7 @@ test('draft, explicit preview, same-version confirmation preserve unrelated fiel
 });
 for(const mutation of ['missing-ref','invented-ref','wrong-target','changed-copy','actor','thread_id']) {
   test('draft refuses '+mutation+' before a write',async()=>{
-    const f=fixture(), body=structuredClone(entry); delete body.type_id;
+    const f=await fixture(), body={approval_ref:entry.approval_ref,target_id:entry.target_id,changes:structuredClone(entry.changes)};
     if(mutation==='missing-ref') delete body.approval_ref;
     if(mutation==='invented-ref') body.approval_ref='tracker:made-up';
     if(mutation==='wrong-target') body.target_id='ps_other';
@@ -84,7 +91,7 @@ for(const mutation of ['missing-ref','invented-ref','wrong-target','changed-copy
 }
 for(const mutation of ['no-proof','json-proof','wrong-ref','missing-version','wrong-version','cross-origin','target-drift','draft-drift','owner-drift','audit-failure','batch-drift']) {
   test('confirm fails closed and preserves target/audit on '+mutation,async()=>{
-    const f=fixture(), id=await f.draft(), version=await f.preview(id);
+    const f=await fixture(), id=await f.draft(), version=await f.preview(id);
     const body={draft_id:id,preview_version:version,approval_ref:entry.approval_ref}, options={};
     if(mutation==='no-proof') options.data={};
     if(mutation==='json-proof') options.data={publisher:true,actor:'service:legacy-publisher'};
@@ -103,7 +110,107 @@ for(const mutation of ['no-proof','json-proof','wrong-ref','missing-version','wr
   });
 }
 test('in-product human/service/dev proof cannot confirm publisher draft',async()=>{
-  const f=fixture(),id=await f.draft(),version=await f.preview(id);
+  const f=await fixture(),id=await f.draft(),version=await f.preview(id);
   const r=await f.call('confirm',{draft_id:id,preview_version:version,approval_ref:entry.approval_ref},{data:{actor:'human@example.invalid'}});
   assert.equal(r.status,403);
+});
+
+test('regression: draft origin cannot be changed before obtaining a fresh preview', async () => {
+  const f=await fixture(), id=await f.draft();
+  const preview=await f.call('preview',{draft_id:id,approval_ref:entry.approval_ref},{origin:'https://other.invalid'});
+  assert.equal(preview.status,403);
+});
+test('regression: consumed approval cannot overwrite a later human edit through a new draft', async () => {
+  const f=await fixture(), id=await f.draft(), version=await f.preview(id);
+  assert.equal((await f.call('confirm',{draft_id:id,preview_version:version,approval_ref:entry.approval_ref})).status,200);
+  f.raw.prepare("UPDATE content_item SET data=?,updated_by='later-human' WHERE id=?")
+    .run(JSON.stringify({heading:'Keep this',paragraph:'Later human text'}),entry.target_id);
+  const second=await f.call('draft',{approval_ref:entry.approval_ref,target_id:entry.target_id,changes:entry.changes});
+  assert.equal(second.status,409);
+  assert.equal(f.raw.prepare('SELECT COUNT(*) n FROM audit_log').get().n,1);
+});
+
+const draftBody = () => ({approval_ref:entry.approval_ref,target_id:entry.target_id,changes:entry.changes});
+const statusBody = () => ({approval_ref:entry.approval_ref,target_id:entry.target_id});
+test('unqualified live catalog and caller-supplied binding are refused without writes', async () => {
+  const f=await fixture();
+  assert.equal((await f.call('draft',draftBody(),{defaultCatalog:true})).status,403);
+  assert.equal((await f.call('draft',{...draftBody(),origin:'https://preview.invalid',target_version:f.reviewed.target_version})).status,400);
+  assert.equal(f.raw.prepare("SELECT COUNT(*) n FROM content_item WHERE status='draft'").get().n,0);
+});
+test('approved scope refuses alternate environment, origin and preimage before reservation', async () => {
+  const f=await fixture();
+  assert.equal((await f.call('draft',draftBody(),{environment:'production'})).status,403);
+  assert.equal((await f.call('draft',draftBody(),{origin:'https://other.invalid'})).status,403);
+  f.raw.prepare("UPDATE content_item SET updated_by='later-human' WHERE id=?").run(entry.target_id);
+  assert.equal((await f.call('draft',draftBody())).status,409);
+  assert.equal(f.raw.prepare("SELECT COUNT(*) n FROM content_item WHERE status='draft'").get().n,0);
+});
+test('preimage drift before atomic draft insert cannot reserve stale approval', async () => {
+  const f=await fixture();
+  f.setBeforeRun(()=>f.raw.prepare("UPDATE content_item SET updated_by='concurrent-human' WHERE id=?").run(entry.target_id));
+  assert.equal((await f.call('draft',draftBody())).status,409);
+  assert.equal(f.raw.prepare("SELECT COUNT(*) n FROM content_item WHERE status='draft'").get().n,0);
+});
+test('concurrent duplicate draft and confirm calls yield one operation and one audit', async () => {
+  const f=await fixture();
+  const drafts=await Promise.all([f.call('draft',draftBody()),f.call('draft',draftBody())]);
+  assert.deepEqual(drafts.map(r=>r.status).sort(),[200,409]);
+  const state=await (await f.call('status',statusBody())).json();
+  assert.equal(state.state,'draft');
+  const version=await f.preview(state.draft_id);
+  const body={draft_id:state.draft_id,approval_ref:entry.approval_ref,preview_version:version};
+  const confirms=await Promise.all([f.call('confirm',body),f.call('confirm',body)]);
+  assert.deepEqual(confirms.map(r=>r.status).sort(),[200,409]);
+  assert.equal(f.raw.prepare('SELECT COUNT(*) n FROM audit_log').get().n,1);
+  assert.equal(f.raw.prepare("SELECT COUNT(*) n FROM content_item WHERE draft_of=?").get(entry.target_id).n,1);
+});
+test('lost draft and confirm acknowledgments reconcile original durable operation without a new draft', async () => {
+  const f=await fixture();
+  f.setAfterRun(()=>{throw Error('lost draft acknowledgment');});
+  assert.equal((await f.call('draft',draftBody())).status,409);
+  f.setAfterRun(()=>{});
+  const state=await (await f.call('status',statusBody())).json();
+  assert.equal(state.state,'draft');
+  assert.equal((await f.call('draft',draftBody())).status,409);
+  const version=await f.preview(state.draft_id);
+  f.setAfterBatch(()=>{throw Error('lost confirm acknowledgment');});
+  assert.equal((await f.call('confirm',{draft_id:state.draft_id,approval_ref:entry.approval_ref,preview_version:version})).status,409);
+  const published=await (await f.call('status',statusBody())).json();
+  assert.equal(published.state,'published'); assert.equal(published.draft_id,state.draft_id);
+  assert.equal(typeof published.audit_id,'number');
+  assert.equal((await f.call('draft',draftBody())).status,409);
+  assert.equal(f.raw.prepare('SELECT COUNT(*) n FROM audit_log').get().n,1);
+});
+test('consumed operation audit fences reissue even if archived draft disappears', async () => {
+  const f=await fixture(),id=await f.draft(),version=await f.preview(id);
+  assert.equal((await f.call('confirm',{draft_id:id,approval_ref:entry.approval_ref,preview_version:version})).status,200);
+  // Adversarial storage damage, not a permitted runtime operation.
+  f.raw.prepare('DELETE FROM content_item WHERE id=?').run(id);
+  assert.equal((await f.call('draft',draftBody())).status,409);
+  assert.equal((await (await f.call('status',statusBody())).json()).state,'published');
+});
+test('target drift after draft but before new preview cannot gain a new confirmation version', async () => {
+  const f=await fixture(),id=await f.draft();
+  f.raw.prepare("UPDATE content_item SET updated_by='later-human' WHERE id=?").run(entry.target_id);
+  assert.equal((await f.call('preview',{draft_id:id,approval_ref:entry.approval_ref})).status,409);
+});
+
+test('alternate approval reference cannot create a second draft for the same operation', async () => {
+  const f=await fixture(),id=await f.draft(),version=await f.preview(id);
+  assert.equal((await f.call('draft',{...draftBody(),approval_ref:PUBLISHER_APPROVALS[1].approval_ref})).status,409);
+  assert.equal((await f.call('confirm',{draft_id:id,approval_ref:entry.approval_ref,preview_version:version})).status,200);
+  assert.equal((await f.call('draft',{...draftBody(),approval_ref:PUBLISHER_APPROVALS[1].approval_ref})).status,409);
+  assert.equal(f.raw.prepare('SELECT COUNT(*) n FROM audit_log').get().n,1);
+});
+test('failed atomic publication leaves original draft reserved and unconsumed', async () => {
+  const f=await fixture(),id=await f.draft(),version=await f.preview(id);
+  f.raw.exec("CREATE TRIGGER deny_audit BEFORE INSERT ON audit_log BEGIN SELECT RAISE(ABORT,'synthetic'); END");
+  const body={draft_id:id,preview_version:version,approval_ref:entry.approval_ref};
+  assert.equal((await f.call('confirm',body)).status,409);
+  assert.equal((await (await f.call('status',statusBody())).json()).state,'draft');
+  assert.equal((await f.call('draft',draftBody())).status,409);
+  f.raw.exec('DROP TRIGGER deny_audit');
+  assert.equal((await f.call('confirm',body)).status,200);
+  assert.equal(f.raw.prepare('SELECT COUNT(*) n FROM audit_log').get().n,1);
 });
