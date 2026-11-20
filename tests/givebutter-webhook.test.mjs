@@ -360,3 +360,44 @@ test('GiveButter webhook is idempotent on event replay', async () => {
   const count = raw.prepare(`SELECT COUNT(*) AS n FROM followup WHERE source = 'givebutter' AND external_ref = 'evt_idempotency_test'`).get();
   assert.equal(count.n, 1);
 });
+
+test('Givebutter uses the same email rule: one case variant is reused; several are held for staff, none assigned (41 review of #356)', async () => {
+  raw.prepare(`INSERT INTO caregiver (id, first_name, email, source) VALUES ('cg_one', 'Synthetic', 'Fixture@Example.invalid', 'staff')`).run();
+  const single = await postProvider(providerPayload('transaction.succeeded', 'synthetic_case_1'));
+  assert.equal(single.status, 200);
+  assert.equal((await single.json()).caregiver_id, 'cg_one');
+
+  raw.prepare(`INSERT INTO caregiver (id, first_name, email, source) VALUES ('cg_two', 'Synthetic', 'fixture@example.invalid', 'staff')`).run();
+  const before = raw.prepare(`SELECT * FROM caregiver ORDER BY id`).all();
+  const payload = providerPayload('transaction.succeeded', 'synthetic_case_2');
+  payload.data.email = 'fixture@example.invalid'; // exact lower-case spelling still is not assumed
+  const res = await postProvider(payload);
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.caregiver_id, 'cg_unmatched_givebutter');
+  assert.deepEqual(raw.prepare(`SELECT * FROM caregiver WHERE id IN ('cg_one','cg_two') ORDER BY id`).all(), before);
+  assert.equal(raw.prepare(`SELECT email FROM caregiver WHERE id = 'cg_unmatched_givebutter'`).get().email, null);
+  assert.equal(raw.prepare(`SELECT COUNT(*) AS n FROM caregiver WHERE LOWER(TRIM(email)) = 'fixture@example.invalid' AND status != 'archived'`).get().n, 2);
+  const review = raw.prepare(`SELECT caregiver_id, detail, source FROM followup WHERE kind = 'possible_duplicate'`).all();
+  assert.equal(review.length, 1);
+  assert.equal(review[0].caregiver_id, 'cg_unmatched_givebutter');
+  assert.match(review[0].detail, /cg_one, cg_two/);
+  assert.equal(raw.prepare(`SELECT caregiver_id FROM followup WHERE kind = 'donation' AND external_ref = 'transaction.succeeded:synthetic_case_2'`).get().caregiver_id, 'cg_unmatched_givebutter');
+});
+
+test('Givebutter requires an acknowledgement for every statement it sent, including the review write (41 review of #356)', async () => {
+  raw.prepare(`INSERT INTO caregiver (id, first_name, email, source) VALUES ('cg_a', 'Synthetic', 'Fixture@Example.invalid', 'staff')`).run();
+  raw.prepare(`INSERT INTO caregiver (id, first_name, email, source) VALUES ('cg_b', 'Synthetic', 'fixture@example.invalid', 'staff')`).run();
+  const realBatch = env.LEGACY_DB.batch;
+  env.LEGACY_DB.batch = async statements => {
+    const results = await realBatch(statements);
+    assert.equal(statements.length, 5);
+    return [results[0], results[1], results[2], results[4]]; // drops the review acknowledgement
+  };
+  try {
+    const original = console.error; console.error = () => {};
+    const res = await postProvider(providerPayload('transaction.succeeded', 'synthetic_case_3'));
+    console.error = original;
+    assert.equal(res.status, 500);
+  } finally { env.LEGACY_DB.batch = realBatch; }
+});

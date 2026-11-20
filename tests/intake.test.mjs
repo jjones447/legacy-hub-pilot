@@ -415,3 +415,80 @@ test('unqualified batch acknowledgement fails without a sequential-write fallbac
     assert.deepEqual(intakeSnapshot(),before);
   }
 });
+
+test('the same email in different capitals or with spaces reuses one caregiver record (requester, Nov 12)', async () => {
+  raw.prepare(`INSERT INTO caregiver (id, first_name, email, source) VALUES ('cg_existing_mixed', 'Jane', 'Jane.Doe@Example.org', 'staff')`).run();
+  const res = await handleIntake(db, {
+    kind: 'support_request', first_name: 'Jane', email: '  jane.doe@EXAMPLE.org ', external_ref: 'case-1',
+  });
+  assert.equal(res.status, 201);
+  assert.equal(raw.prepare(`SELECT COUNT(*) AS n FROM caregiver`).get().n, 1);
+  assert.equal(raw.prepare(`SELECT caregiver_id FROM followup WHERE external_ref = 'case-1'`).get().caregiver_id, 'cg_existing_mixed');
+  await handleIntake(db, { kind: 'support_request', first_name: 'Ana', email: ' Ana@Example.ORG ', external_ref: 'case-2' });
+  assert.equal(raw.prepare(`SELECT email FROM caregiver WHERE first_name = 'Ana'`).get().email, 'ana@example.org');
+  await handleIntake(db, { kind: 'support_request', first_name: 'Ana', email: 'ana@example.org', external_ref: 'case-3' });
+  assert.equal(raw.prepare(`SELECT COUNT(*) AS n FROM caregiver WHERE first_name = 'Ana'`).get().n, 1);
+});
+
+test('several existing records sharing an email: the sign-up is held for staff, never assigned to a disputed record (41 review of #356)', async () => {
+  raw.prepare(`INSERT INTO caregiver (id, first_name, email, source, created_at, updated_at) VALUES ('cg_old', 'Jane', 'Jane.Doe@Example.org', 'staff', '2026-01-01 00:00:00', '2026-01-01 00:00:00')`).run();
+  raw.prepare(`INSERT INTO caregiver (id, first_name, email, source, created_at, updated_at) VALUES ('cg_low', 'Jane', 'jane.doe@example.org', 'staff', '2026-02-01 00:00:00', '2026-02-01 00:00:00')`).run();
+  const before = raw.prepare(`SELECT * FROM caregiver ORDER BY id`).all();
+  const signInIdentities = () => raw.prepare(`SELECT COUNT(*) AS n FROM caregiver WHERE LOWER(TRIM(email)) = 'jane.doe@example.org' AND status != 'archived'`).get().n;
+
+  // Even an exact match on the typed spelling, or on the lower-case form, is not assumed.
+  for (const [ref, email, kind] of [['amb-1', 'Jane.Doe@Example.org', 'support_request'], ['amb-2', 'jane.doe@example.org', 'membership'], ['amb-3', ' JANE.DOE@example.ORG ', 'support_request']]) {
+    const res = await handleIntake(db, { kind, first_name: 'Jane', last_name: 'Doe', email, external_ref: ref });
+    assert.equal(res.status, 201, ref);
+    assert.equal(res.body.caregiver_id, 'cg_unmatched_intake', ref);
+  }
+  assert.deepEqual(raw.prepare(`SELECT * FROM caregiver WHERE id IN ('cg_old','cg_low') ORDER BY id`).all(), before);
+  // Login boundary: no new record can sign in with this address; the holding record has no email.
+  assert.equal(signInIdentities(), 2);
+  const holding = raw.prepare(`SELECT email, status, sanctuary_member FROM caregiver WHERE id = 'cg_unmatched_intake'`).get();
+  assert.deepEqual({ ...holding }, { email: null, status: 'inactive', sanctuary_member: 0 });
+  // The activity is kept, and each one has an actionable staff task naming the person and candidates.
+  assert.equal(raw.prepare(`SELECT COUNT(*) AS n FROM followup WHERE caregiver_id = 'cg_unmatched_intake' AND kind IN ('support_request','membership_welcome')`).get().n, 3);
+  const reviews = raw.prepare(`SELECT detail, source, status FROM followup WHERE kind = 'possible_duplicate' ORDER BY id`).all();
+  assert.equal(reviews.length, 3);
+  for (const review of reviews) {
+    assert.equal(review.source, 'duplicate_check');
+    assert.equal(review.status, 'open');
+    assert.match(review.detail, /Jane Doe/);
+    assert.match(review.detail, /cg_low, cg_old/);
+  }
+  // A replay adds neither activity nor another review.
+  await handleIntake(db, { kind: 'membership', first_name: 'Jane', email: 'jane.doe@example.org', external_ref: 'amb-2' });
+  assert.equal(raw.prepare(`SELECT COUNT(*) AS n FROM followup WHERE kind = 'possible_duplicate'`).get().n, 3);
+});
+
+for (const kind of ['event_registration', 'grant_application']) {
+  test(`${kind}: a held (disputed-email) submission commits with its review task, and a failed review write rolls back so the retry completes (41 re-review of #356)`, async () => {
+    raw.prepare(`INSERT INTO caregiver (id, first_name, email, source) VALUES ('cg_x1', 'Kai', 'Kai@Example.org', 'staff')`).run();
+    raw.prepare(`INSERT INTO caregiver (id, first_name, email, source) VALUES ('cg_x2', 'Kai', 'kai@example.org', 'staff')`).run();
+    const eventId = raw.prepare(`SELECT id FROM event WHERE publish_state = 'published' AND (capacity IS NULL OR capacity > 0) LIMIT 1`).get()?.id;
+    const payload = { kind, first_name: 'Kai', last_name: 'Lee', email: 'KAI@example.org', caring_for: 'Mother', relationship: 'Daughter',
+      external_ref: `held-${kind}`, ...(kind === 'event_registration' ? { event_id: eventId } : { requested_for: 'Respite' }) };
+    const table = kind === 'event_registration' ? 'registration' : 'grant_application';
+    const count = sql => raw.prepare(sql).get().n;
+
+    raw.exec(`CREATE TEMP TRIGGER fail_review BEFORE INSERT ON followup WHEN NEW.kind = 'possible_duplicate' BEGIN SELECT RAISE(ABORT, 'FICTIONAL_REVIEW_FAILURE'); END;`);
+    await assert.rejects(handleIntake(db, payload), /FICTIONAL_REVIEW_FAILURE/);
+    raw.exec('DROP TRIGGER fail_review');
+    assert.equal(count(`SELECT COUNT(*) AS n FROM ${table} WHERE external_ref = 'held-${kind}'`), 0, 'held activity must not commit without its review');
+    assert.equal(count(`SELECT COUNT(*) AS n FROM caregiver WHERE id = 'cg_unmatched_intake'`), 0);
+
+    const retry = await handleIntake(db, payload);
+    assert.equal(retry.status, 201);
+    assert.equal(retry.body.caregiver_id, 'cg_unmatched_intake');
+    assert.equal(count(`SELECT COUNT(*) AS n FROM ${table} WHERE external_ref = 'held-${kind}' AND caregiver_id = 'cg_unmatched_intake'`), 1);
+    const review = raw.prepare(`SELECT detail FROM followup WHERE kind = 'possible_duplicate'`).all();
+    assert.equal(review.length, 1);
+    assert.match(review[0].detail, /Kai Lee <KAI@example\.org> \(caring for: Mother; relationship: Daughter\)/);
+    assert.match(review[0].detail, /cg_x1, cg_x2/);
+    assert.equal(count(`SELECT COUNT(*) AS n FROM audit_log WHERE action = 'intake.${kind}' AND entity_id = 'cg_unmatched_intake'`), 1);
+    // A replay is a no-op.
+    assert.equal((await handleIntake(db, payload)).body.duplicate, true);
+    assert.equal(count(`SELECT COUNT(*) AS n FROM followup WHERE kind = 'possible_duplicate'`), 1);
+  });
+}
