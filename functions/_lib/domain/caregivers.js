@@ -15,15 +15,6 @@ export const ALLOWED_CAREGIVER_UPDATE_FIELDS = [
   'outcome_notes'
 ];
 
-// Staff-console-only fields (not offered to the assistant mapper): the People search
-// "Caregiver?" marker (requester, Nov 12; schema/candidates/0021_caregiver_identity.sql).
-// Callers get the original allowlist by default; only the authenticated Staff PATCH route
-// opts in with { staffConsole: true }. Assistant drafts are validated without it.
-export const STAFF_ONLY_CAREGIVER_UPDATE_FIELDS = ['is_caregiver'];
-const updateFieldsFor = staffConsole => staffConsole
-  ? [...ALLOWED_CAREGIVER_UPDATE_FIELDS, ...STAFF_ONLY_CAREGIVER_UPDATE_FIELDS]
-  : ALLOWED_CAREGIVER_UPDATE_FIELDS;
-
 export const INTERNAL_TEST_SEGMENT_TAGS = Object.freeze(['qa_test', 'exclude_reporting']);
 export const INTERNAL_TEST_QUERY_SEGMENTS = Object.freeze(['qa_test', 'exclude_reporting', 'qa_staging', 'qa_prod']);
 export const DO_NOT_CONTACT_SEGMENT_TAGS = Object.freeze(['qa_test', 'exclude_reporting', 'do_not_contact']);
@@ -54,8 +45,7 @@ export function notDoNotContactCaregiverSql(alias = 'c') {
   )`;
 }
 
-export async function validate(db, { id, operation, payload = {}, staffConsole = false }) {
-  const CAREGIVER_UPDATE_FIELDS = updateFieldsFor(staffConsole);
+export async function validate(db, { id, operation, payload = {} }) {
   if (!id) {
     return { ok: false, status: 400, error: 'missing caregiver id' };
   }
@@ -83,7 +73,7 @@ export async function validate(db, { id, operation, payload = {}, staffConsole =
   }
 
   for (const key of bodyKeys) {
-    if (!CAREGIVER_UPDATE_FIELDS.includes(key)) {
+    if (!ALLOWED_CAREGIVER_UPDATE_FIELDS.includes(key)) {
       return { ok: false, status: 400, error: `unknown or forbidden field: ${key}` };
     }
   }
@@ -101,14 +91,6 @@ export async function validate(db, { id, operation, payload = {}, staffConsole =
     const validOutcomes = ['improving', 'stable', 'needs_support', 'disengaged'];
     if (!validOutcomes.includes(payload.outcome_status)) {
       return { ok: false, status: 400, error: `outcome_status must be one of: ${validOutcomes.join(', ')}` };
-    }
-  }
-
-  if ('is_caregiver' in payload) {
-    // People search: 'yes', 'no', or null for not yet identified (requester, Nov 12).
-    if (payload.is_caregiver === '' || payload.is_caregiver === undefined) normalizedPayload.is_caregiver = null;
-    else if (!['yes', 'no', null].includes(payload.is_caregiver)) {
-      return { ok: false, status: 400, error: 'is_caregiver must be yes, no or null' };
     }
   }
 
@@ -131,7 +113,7 @@ export async function validate(db, { id, operation, payload = {}, staffConsole =
   const afterChanges = {};
   const projected = { ...existing };
 
-  for (const field of CAREGIVER_UPDATE_FIELDS) {
+  for (const field of ALLOWED_CAREGIVER_UPDATE_FIELDS) {
     if (field in normalizedPayload) {
       beforeChanges[field] = existing[field];
       afterChanges[field] = normalizedPayload[field];
@@ -151,9 +133,8 @@ export async function validate(db, { id, operation, payload = {}, staffConsole =
 }
 
 // Additional statements are supplied only by trusted server callers (not request payloads).
-export async function apply(db, { id, operation, payload = {}, staffConsole = false }, actor, additionalStatements = [], preconditions = []) {
-  const CAREGIVER_UPDATE_FIELDS = updateFieldsFor(staffConsole);
-  const v = await validate(db, { id, operation, payload, staffConsole });
+export async function apply(db, { id, operation, payload = {} }, actor, additionalStatements = [], preconditions = []) {
+  const v = await validate(db, { id, operation, payload });
   if (!v.ok) {
     return v;
   }
@@ -161,7 +142,7 @@ export async function apply(db, { id, operation, payload = {}, staffConsole = fa
   const setClauses = [];
   const setParams = [];
 
-  for (const field of CAREGIVER_UPDATE_FIELDS) {
+  for (const field of ALLOWED_CAREGIVER_UPDATE_FIELDS) {
     if (field in v.payload) {
       setClauses.push(`${field} = ?`);
       setParams.push(v.payload[field]);

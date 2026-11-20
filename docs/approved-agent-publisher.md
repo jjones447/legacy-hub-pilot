@@ -2,7 +2,9 @@
 
 [pc2-codex-ct-5] Nov20 source design for private requirements54c7050609159.
 Supersedes the prior recommendation to wait for a human Staff browser. This
-candidate is not installed and creates no token, policy, credential or data.
+candidate is reconciled to installed374, excluding the TEST-only People marker
+code; it retains only379's reviewed delegated-test synchronization correction.
+It is not installed and creates no token, policy, credential or data.
 Profile Nov22 delivery retains priority. Same Devin4 source review and ct12
 security read precede TEST installation.
 
