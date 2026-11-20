@@ -81,20 +81,38 @@ without matching audit fail closed as conflict.
 
 ## Provisioning and TEST qualification
 
-Use the existing approved ops identity; never print secrets or request a human
-Staff sign-in. Read inventory and preserve existing app/policy/domains before
-changing them. On Nov20 this seat's configured Legacy account returned200 with
-EMPTY apps and service_tokens lists. Pages CF_ACCESS_TEAM_DOMAIN/CF_ACCESS_AUD
-are present as secret_text in BOTH production and preview; their values were not
-retrieved or printed. Existing Access app account/id must be located before updating it:
-do not create a duplicate application or guess an audience.
+[GUI3's Nov20 21:37 readback](https://github.com/jjones447/legacy-caregiver-hub/issues/54#issuecomment-7051239252)
+resolves the account/zone/team mapping. The live Staff application is on Legacy's
+account `b7b09c66fe896c2b65fada924d3eadc2`, zone `caregiversanctuary.org`, team
+`odd-smoke-0fc8.cloudflareaccess.com`. The old personal account
+`14430f444eb423b6942db904c93e4456` and its `legacy-hub.cloudflareaccess.com`
+application do not guard the current site. Do not reuse that stale application.
+
+The active Legacy ops token (Vault `cloudflare-api-token-legacy-hub-ops`, inventory
+id `ae80e304c9898993f9f29219ad7cd726`) lacks Access permissions. Organization and
+zone-level application reads returned403; empty account-level lists did not mean
+there was no live application. Jacob's exact pending action is to add Apps and
+Policies Edit, Service Tokens Edit, and Organizations/Identity Providers/Groups
+Read to this existing token, scoped to Legacy's account and zone. Its value and
+other settings stay unchanged. GUI3 owns the existing request to Jacob.
+
+After that permission update and source security closure, GUI3 accepted same-hour
+token creation, direct Vault storage, publisher-seat-only handoff, service-auth
+policy and preview hostname coverage. Ct13 consumes this handoff; no duplicate
+setup dispatch. Both bd5c816 source findings have closed, but actual permissions,
+application id/audience and service identity still require qualified readbacks.
+Pages team/audience secret values have not been retrieved or inferred here.
+Deployment-specific preview hosts currently return middleware403 on /staff.html,
+not an Access redirect; preview coverage must be installed and verified.
+The [account setup record](https://github.com/jjones447/legacy-caregiver-hub/blob/main/docs/operations/cloudflare-account-setup.md)
+retains the current/historical account distinction.
 
 Create one named legacy-publisher Access service token via the established
 Service Tokens API after review. Save the one-time client_secret directly to the
 existing Vault secret location and publisher-seat private file, mode0600, without
 terminal output; verify Vault write/readback through the established secret
-custodian. This seat currently has no exposed Vault writer/CLI, so secret custody
-handoff must be qualified before token creation to avoid losing its one-time value.
+custodian. GUI3 owns the supported Vault write; ct13 has no exposed writer/CLI. Qualify the
+private publisher-seat handoff before token creation to retain its one-time value.
 Only the publisher process receives the credential; never site JavaScript,
 repo, PR, chat, test fixture or in-product assistant.
 
@@ -161,10 +179,12 @@ Initial focused tests exercise real signed JWT verification, separate capabiliti
 approval operands, owner/origin/version, preserved fields, concurrent drift,
 audit failure and replay refusal. No live token/access policy/Vault write, native
 D1 publish, rendered preview, production change or People browser acceptance
-follows from source tests. No Cloudflare owner-only dashboard step has yet been
-proved: exact current engineering gaps are locating the existing app/account and
-qualifying Vault storage using the established ops/secret custodians. Escalate
-only a demonstrated API permission/ownership refusal, not a generic human login.
+follows from source tests. GUI3 has identified the exact pending owner step:
+the existing Legacy ops token permission update,
+already routed by GUI3 to Jacob. GUI3 owns the subsequent Vault/policy/preview
+setup. Ct13 qualifies actual origin/preimage snapshots after that handoff and
+returns populated catalog values to the retained reviewers. Source approval does
+not approve activation values or establish completion of setup.
 
 ## Security successor evidence (ct13)
 
