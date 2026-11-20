@@ -9,8 +9,8 @@ import { internalError } from '../../_lib/errors.js';
 import { _resetContentCache, findDisallowedHtml, buildContentPreviewInfo, renderProtectedDraftPreviewPage } from '../../_content.mjs';
 import { onRequestPost as postTranscribe } from './transcribe.js';
 import { confirmationActor, draftOwner, ownsDraft, confirmationBinding, confirmationAudit, matchesPersistedPreview } from '../../_lib/agent-confirmation.mjs';
-import { createWebJob, enabled as webJobsEnabled } from '../../_lib/assistant-web-jobs.mjs';
-import { converse } from './_conversation.mjs';
+import { enabled as webJobsEnabled } from '../../_lib/assistant-web-jobs.mjs';
+import { freeAiUnavailable } from '../../_lib/free-ai.mjs';
 
 export async function onRequestGet({ request, env, data }) {
   try {
@@ -165,15 +165,13 @@ export async function onRequestPost({ request, env, data, redactErrors = false, 
       const raw = new TextDecoder().decode(bytes);
       let body;
       try { body = JSON.parse(raw); } catch { return json({ ok: false, error: 'Invalid conversation request' }, 400); }
-      const result = await converse({ body, ai: env.AI, model: env.AGENT_MODEL || undefined,
-        gatewayUrl: env.EMP_LLM_GATEWAY_URL, gatewayKey: env.EMP_LLM_GATEWAY_KEY, backend: env.AGENT_MAPPER_BACKEND });
-      const response = json({ ok: result.status === 200, ...(result.reply ? { reply: result.reply } : { error: result.error }) }, result.status);
-      response.headers.set('Cache-Control', 'no-store');
-      return response;
+      return freeAiUnavailable();
     }
 
     if (webJobsEnabled(env) && ['/api/agent/draft','/api/agent/change/draft'].includes(url.pathname)) {
-      return createWebJob({ request, env, data });
+      // No verified free-only boundary exists for the external runner. Do not
+      // dispatch new work; already-produced job materialization is unchanged.
+      return freeAiUnavailable();
     }
 
     if (pathSegments[2] === 'transcribe') {
@@ -190,6 +188,9 @@ export async function onRequestPost({ request, env, data, redactErrors = false, 
       const body = await request.json().catch(() => ({}));
 
       if (subaction === 'draft') {
+        // Function mappers are server-only already-produced proposals (web-job
+        // materialization) or inert tests, not a provider or a client parameter.
+        if (typeof env.AGENT_MAPPER_BACKEND !== 'function') return freeAiUnavailable();
         if (!body.area || !body.target_id || !body.request) {
           return json({ ok: false, error: 'area, target_id, and request are required' }, 400);
         }
@@ -236,10 +237,6 @@ export async function onRequestPost({ request, env, data, redactErrors = false, 
         }
 
         const backend = env.AGENT_MAPPER_BACKEND || null;
-        const gatewayUrl = env.EMP_LLM_GATEWAY_URL || null;
-        const gatewayKey = env.EMP_LLM_GATEWAY_KEY || null;
-        const ai = env.AI || null;
-        const model = env.AGENT_MODEL || undefined;
 
         const mapRes = await mapRequestToWorkflowChange({
           area: body.area,
@@ -247,10 +244,6 @@ export async function onRequestPost({ request, env, data, redactErrors = false, 
           request: body.request,
           current: currentRecord,
           backend,
-          gatewayUrl,
-          gatewayKey,
-          ai,
-          model,
           role: body.role || 'bulk',
           sensitivity: body.sensitivity || 'low'
         });
@@ -559,6 +552,7 @@ export async function onRequestPost({ request, env, data, redactErrors = false, 
     const body = await request.json().catch(() => ({}));
 
     if (action === 'draft') {
+      if (typeof env.AGENT_MAPPER_BACKEND !== 'function') return freeAiUnavailable();
       if (!body.request || typeof body.request !== 'string' || !body.request.trim()) {
         return json({ ok: false, error: 'request and type_id are required' }, 400);
       }
@@ -633,20 +627,12 @@ export async function onRequestPost({ request, env, data, redactErrors = false, 
       }
 
       const backend = env.AGENT_MAPPER_BACKEND || null;
-      const gatewayUrl = env.EMP_LLM_GATEWAY_URL || null;
-      const gatewayKey = env.EMP_LLM_GATEWAY_KEY || null;
-      const ai = env.AI || null;
-      const model = env.AGENT_MODEL || undefined;
 
       const res = await mapRequestToChange({
         request: body.request,
         contentType,
         current: currentData,
         backend,
-        gatewayUrl,
-        gatewayKey,
-        ai,
-        model,
         role: body.role || 'bulk',
         sensitivity: body.sensitivity || 'low'
       });
