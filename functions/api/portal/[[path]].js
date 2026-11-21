@@ -3,6 +3,7 @@ import { checkIpRequestLimit, IP_LIMITS } from '../_shared.mjs';
 import { canSendEmail, isPreviewMailOptIn, sendEmail, signInEmail } from '../../_lib/email.js';
 import { QUESTIONS, validateCheckin, recordCheckin, caregiverHistory, isCheckinDue, CHECKIN_EVERY_DAYS } from '../../_lib/wellness.js';
 import { loadCaregiverProfile, saveCaregiverProfile, validateProfilePatch, readProfileBody } from '../../_lib/caregiver-profile.js';
+import { PROFILE_SECTIONS } from '../../_lib/caregiver-profile-fields.js';
 
 async function getHmacSha256(message, secret) {
   const enc = new TextEncoder();
@@ -290,7 +291,7 @@ export async function onRequestGet({ request, env }) {
       const caregiverId = await parseSessionCookie(request.headers.get('Cookie'), secret);
       if (!caregiverId || !await hasNonarchivedCaregiver(env.LEGACY_DB, caregiverId)) return json({ ok: false, error: 'unauthorized' }, 401);
       const profile = await loadCaregiverProfile(env.LEGACY_DB, caregiverId);
-      return profile ? json({ ok: true, profile }) : json({ ok: false, error: 'unauthorized' }, 401);
+      return profile ? json({ ok: true, profile, sections: PROFILE_SECTIONS }) : json({ ok: false, error: 'unauthorized' }, 401);
     }
 
     if (action === 'me') {

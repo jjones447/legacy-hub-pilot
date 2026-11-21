@@ -5,5 +5,6 @@ CREATE TABLE caregiver_profile (
   schema_version INTEGER NOT NULL DEFAULT 1 CHECK (schema_version = 1),
   revision INTEGER NOT NULL CHECK (revision >= 1),
   fields_json TEXT NOT NULL CHECK (json_valid(fields_json) AND json_type(fields_json) = 'object'),
+  restricted_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(restricted_json) AND json_type(restricted_json) = 'object'),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );

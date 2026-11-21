@@ -17,12 +17,12 @@ test('prefill is read-only; partial drafts save/load/resume without changing ide
   assert.equal(profile.fields.email, 'fictional.a@example.invalid');
   assert.equal(count(f), 0);
   assert.equal(audit(f).length, 0);
-  assert.deepEqual(await (await f.call(patch({ zip: '53202', mailing_address: null }))).json(), { ok: true, revision: 1 });
+  assert.deepEqual(await (await f.call(patch({ zip: '53202', street: null }))).json(), { ok: true, revision: 1 });
   assert.deepEqual(await (await f.call(patch({ first_name: 'Updated fictional' }, 1))).json(), { ok: true, revision: 2 });
   const resumed = (await (await f.call()).json()).profile;
   assert.equal(resumed.revision, 2);
   assert.equal(resumed.fields.zip, '53202');
-  assert.equal(resumed.fields.mailing_address, null);
+  assert.equal(resumed.fields.street, null);
   assert.equal(resumed.fields.email, 'fictional.a@example.invalid');
   assert.equal(resumed.fields.phone, profile.fields.phone);
   assert.equal(JSON.stringify(f.raw.prepare('SELECT * FROM caregiver ORDER BY id').all()), original);
@@ -86,7 +86,7 @@ test('archive between initial auth and joined read cannot disclose saved answers
   const f = setup(t, { beforeRead(raw, sql) {
     if (revoke && sql.includes('LEFT JOIN caregiver_profile')) raw.exec("UPDATE caregiver SET status='archived' WHERE id='cg_a'");
   } });
-  await f.call(patch({ mailing_address: 'Fictional private address' }));
+  await f.call(patch({ street: 'Fictional private address' }));
   revoke = true;
   const res = await f.call();
   assert.equal(res.status, 401);
@@ -172,11 +172,11 @@ test('email is read-only, never persisted as an answer, and always reflects the 
 
 test('empty and declined optional drafts persist; absent fields survive later partial saves', async t => {
   const f = setup(t);
-  assert.equal((await f.call(patch({ first_name: '', zip: '', mailing_address: null }))).status, 200);
+  assert.equal((await f.call(patch({ first_name: '', zip: '', street: null }))).status, 200);
   assert.equal((await f.call(patch({ phone: '414-555-0199' }, 1))).status, 200);
   const { fields } = (await (await f.call()).json()).profile;
   assert.equal(fields.email, 'fictional.a@example.invalid');
-  assert.equal(fields.mailing_address, null);
+  assert.equal(fields.street, null);
   assert.equal(fields.zip, '');
   assert.equal(fields.first_name, '');
 });
