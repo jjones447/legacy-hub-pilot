@@ -214,3 +214,34 @@ test('failed atomic publication leaves original draft reserved and unconsumed', 
   assert.equal((await f.call('confirm',body)).status,200);
   assert.equal(f.raw.prepare('SELECT COUNT(*) n FROM audit_log').get().n,1);
 });
+
+
+test('integrated375 journey renders the governed value before and after approved371 publication', async () => {
+  const { rewriteContent } = await import('../functions/_content.mjs');
+  const source = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const f = await fixture();
+  const renderJourney = async () => {
+    const row = f.raw.prepare('SELECT data FROM content_item WHERE id=?').get(entry.target_id);
+    const html = await (await rewriteContent(new Response(source), { 'home.journey': JSON.parse(row.data) })).text();
+    const panel = html.match(/<details class="container beyond-journey">([\s\S]*?)<\/details>/)?.[1];
+    assert.ok(panel, 'approved expandable arrangement remains');
+    assert.ok(html.indexOf('beyondSupportHeading') < html.indexOf('home-support-heading'));
+    assert.ok(html.indexOf('home-support-heading') < html.indexOf('homeModelHeading'));
+    return panel;
+  };
+  const before = await renderJourney();
+  assert.match(before, /<p>Old<\/p>/);
+  assert.ok(!before.includes(entry.changes.paragraph.split('\n\n')[0]), 'source fallback cannot bypass old governed content');
+  const id = await f.draft(), version = await f.preview(id);
+  assert.equal((await f.call('confirm', {draft_id:id, approval_ref:entry.approval_ref, preview_version:version})).status, 200);
+  const after = await renderJourney();
+  for (const paragraph of entry.changes.paragraph.split('\n\n')) assert.ok(after.includes('<p>'+paragraph+'</p>'));
+  assert.doesNotMatch(after, /<p>Old<\/p>/);
+  const audit = f.raw.prepare('SELECT * FROM audit_log').get();
+  assert.equal(JSON.parse(audit.before_json).data.paragraph, 'Old');
+  f.raw.prepare('UPDATE content_item SET data=?,updated_by=? WHERE id=?').run(JSON.stringify({heading:'Keep this',paragraph:'Later governed edit'}), 'later-human', entry.target_id);
+  const later = await renderJourney();
+  assert.match(later, /<p>Later governed edit<\/p>/);
+  assert.ok(!later.includes(entry.changes.paragraph.split('\n\n')[0]));
+  assert.equal((await f.call('draft', draftBody())).status, 409);
+});

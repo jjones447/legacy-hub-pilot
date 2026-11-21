@@ -31,7 +31,7 @@ test('About menu lists Our Model right after Overview; home and Sanctuary link t
   assert.match(read('templates/_header.html.j2'), /<a href="about\.html">Overview<\/a>\n\s*<a href="our-model\.html">Our Model<\/a>/);
   const home = read('index.html');
   const model = home.indexOf('Caregiver Support Rooted in Community');
-  assert.ok(model > 0 && model < home.indexOf('home-support-heading'), 'model section comes before How We Support Caregivers');
+  assert.ok(model > 0 && model > home.indexOf('home-support-heading'), 'model follows support tiles; new problem statement introduces programs');
   assert.match(home, /<a href="our-model\.html" class="btn btn-coral">Explore Our Model<\/a>/);
   // Requester's separate Sanctuary update (Nov 15, ts 1794763820.351269) links Our Model from Our Approach.
   assert.match(read('sanctuary.html'), /<a class="btn btn-coral" href="our-model\.html">Learn About Our Model<\/a>/);
