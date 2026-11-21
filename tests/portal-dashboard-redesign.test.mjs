@@ -217,3 +217,25 @@ test('real grant status and Memory Socials summary stay visible inside the redes
   assert.equal(h.el.portalQaSocialsLastVisit.textContent, '2026-10-10');
   assert.equal(h.el.portalQaSocialsNext.textContent, 'Upcoming Social · 2026-11-12');
 });
+
+
+test('Profile integration reloads new owners, preserves current edits, and clears on session reset', () => {
+  const h = ui(); const calls = []; let available = false;
+  h.el.portalProfileEditor = {};
+  h.context.window.createCaregiverProfileEditor = () => ({
+    clear() { available = false; calls.push('clear'); },
+    load() { available = true; calls.push('load'); },
+    get available() { return available; }
+  });
+  const data = id => ({ profile: { id, email: id + '@example.invalid', first_name: id }, events: [], grants: [] });
+  h.context.renderPortalData(data('owner-a'));
+  h.context.renderPortalData(data('owner-a'));
+  assert.deepEqual(calls, ['load']); // same owner keeps unsaved form state
+  h.context.renderPortalData(data('owner-b'));
+  assert.deepEqual(calls, ['load', 'clear', 'load']);
+  h.context.bumpPortalSessionGeneration();
+  h.context.renderPortalData(data('owner-b'));
+  assert.deepEqual(calls, ['load', 'clear', 'load', 'clear', 'load']);
+  h.context.resetPortalSessionState();
+  assert.equal(calls.at(-1), 'clear');
+});

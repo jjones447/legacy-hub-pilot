@@ -1,0 +1,50 @@
+# Customer TEST full-portal execution packet — 2026-11-21
+
+Executor: pc2-codex-ct-13. Existing private custodian: GUI3. Product source is the reviewed Profile implementation; this packet changes no handler, schema, login, or staff code. Native fault injection is not a prerequisite for customer delivery.
+
+## Authority and destination
+
+GUI3 accepted custody and TEST-only identity/ordinary sign-in email in [54c7064055087](https://github.com/jjones447/legacy-caregiver-hub/issues/54#issuecomment-7064055087); [54c7064076148](https://github.com/jjones447/legacy-caregiver-hub/issues/54#issuecomment-7064076148) selects `https://customer-test.legacy-hub-5qo.pages.dev`, branch `customer-test`, existing Pages project `legacy-hub`. It is a planned destination, not a readiness claim. Historical `staging.caregiversanctuary.org` is production and must not be used for TEST. GUI3 reports customer `/portal` and `/api/portal/*` outside Access; actual destination readbacks remain owed.
+
+TEST binding is `LEGACY_DB`, database `42be536c-e354-44c7-b246-2dcac18d8ac6` / `legacy-hub-db-staging`. Production database `3c06c3cb-e1a6-426c-ad85-0b8c94616ed2`, canonical deployment `106ce7c5-2f79-42a8-8e56-6c4eb669f9e8`, production variables and all existing unrelated bindings remain untouched. Migration0022 is already applied to TEST; no migration replay. Original fixture stays disabled; retained synthetic Profile/audit/follow-up evidence is not reset.
+
+## Artifact and configurations
+
+Built locally from `e14fc12b024fb91b24ded5d24a6f2d9a876a3772` using Node24 and locked Wrangler4.139.0. Source allowlist builder selected111 static files. Pages Functions compiled into `_worker.js`; `_routes.json` includes `/*` with no exclusions. Total113 files; no docs, scripts, schemas, tests, credentials, or fault fixture worker enter the asset tree. The worker runs the actual full-portal handlers and middleware, with no synthetic authentication adapter.
+
+Worker SHA256: `ce25f769269eb71ca8e27adb49a863fda13c742f70c3f6ec72d71cbcebb470cb`.
+
+Private artifact/config files are0700/0600. A complete file-hash manifest is retained locally. Deploy only these verified bytes with locked Wrangler `pages deploy <assets> --project-name=legacy-hub --branch=customer-test --commit-hash=<reviewed-head> --commit-dirty=false --no-bundle`, from the private build directory containing the selected `wrangler.json`. A docs-only successor must have identical product/functions/static source and identical artifact hashes; otherwise rebuild and return the delta for review.
+
+Both prepared configurations derive from the previously verified complete deployment configuration and preserve plain variables plus D1/R2/AI bindings. Secrets remain provider bindings, never placed in a config file. Production `ENVIRONMENT=production` and production bindings are retained. Preview `ENVIRONMENT=preview`, TESTD1, existing preview R2/AI are retained. Only intended preview additions are `PORTAL_PROFILE_ENABLED="1"` and `PORTAL_PREVIEW_MAIL_ENABLED`:
+
+- Mail-off stage: `"false"`; config SHA256 `2f2a6620d9797ab94963ce480e3f0b49f9765a1f06d11521c1fac0f0d562d3f9`.
+- Mail-on stage: `"true"`; config SHA256 `72d11b82462bbf02825bfc200f5af4d66825ff19a7136e8edb3cf49f24e3219a`.
+
+These are preview-environment switches, not branch-local authorization. Enabling mail can affect other preview deployments that consume this configuration; do not claim branch-only isolation. Recipient reconciliation and retained Security review must precede the switch. The full portal's ordinary preview guard deliberately refuses authentication while mail is off; that refusal is expected in the first stage.
+
+Before either deployment, re-read provider project, compare entire deployment configurations against the retained baseline except explicitly authorized preview additions/config hash, verify canonical production unchanged and the TEST binding. Refuse drift, missing bindings, unexpected branch/source or unrecognized config. On an unknown deploy acknowledgement, inspect existing deployment metadata before retrying; no blind second deployment. After each, verify actual preview/source/branch/alias/D1/flags and canonical production/config preservation. If verification fails, stop mail/identity testing, report exact mismatch, and restore only the proven owned preview delta under the same review; never silently overwrite foreign drift.
+
+## Identity reconciliation and guarded TEST changes
+
+GUI3 supplies the existing customer identity through the agreed private0600 `/home/node/.secrets/legacy-shanelle-test.json`, sourced from liaison records. It is absent at15:33. Do not guess an address, fetch production rows, substitute a session, or ask the customer again. Validate the private file's schema and provenance before constructing operands; missing required identity fields remain a custody gap. Never post addresses, row values, tokens, sessions or private file contents.
+
+The14:53 read-only inventory found17 non-archived TEST rows: example.com1, example.invalid9, gmail.com3, legacyhomehealthservices.org1, x-centric.com3. Seven potentially deliverable rows mean mail is currently blocked. Re-inventory at execution, including status=`inactive` because login excludes only `archived`. Match the normalized authorized email across all TEST caregiver rows, including archived rows. Exactly one eligible existing match is reused unchanged; an archived match, duplicate normalized matches or conflicting identity stops for existing-custodian disposition rather than automatically unarchiving or creating another identity. With no match, create only the authorized minimal caregiver identity from private supplied fields under actual installed schema, `status=active` and `is_caregiver='yes'`; no invented demographic data, automatic program enrollment or customer email is part of insertion.
+
+For each OTHER deliverable non-archived row, retain the entire private preimage and archive only that exact row using a parameterized UPDATE guarded by its id and every prior column with SQLite `IS` comparisons; set only status=`archived` and updated_at. Assert affected count1 and exact readback before proceeding. Do not delete rows or alter their profiles, tokens, follow-ups or audits. Zero changes/drift stops; unknown acknowledgement is resolved by reading the original row, never by blind replay. Existing fixture domains are verified against their row provenance before being treated as safe. If any non-customer deliverable identity remains, mail stays off. Retain counts and private preimages for reconciliation; do not restore archived deliverable identities while mail is enabled.
+
+Before an insert, verify the actual schema and no normalized existing match. Use a fixed privately retained new id, an INSERT...SELECT with NOT EXISTS normalized-email guard, and check exactly one resulting intended row. Unknown acknowledgement is reconciled by that id and normalized identity before another attempt. Preserve all unrelated caregiver columns/rows and complete Profile/audit/follow-up baseline evidence. GUI3's TEST-only archive/identity authorization is the basis; no production operation is permitted.
+
+## Mail and technical verification
+
+After exact recipient and deployment readbacks, enable only the preview mail stage and redeploy the same reviewed artifact to the same branch. Do not send a real customer sign-in email as an automated probe. Her ordinary login request is the authorized path: email -> 15-minute single-use link in her inbox -> confirmation page -> deliberate Continue POST -> HttpOnly owner cookie -> Profile.
+
+At the actual TEST origin, verify full portal/assets, anonymous me/Profile401 (with Profile flag on), off-origin login/verify/Profile refusals, no usable token in API responses, unknown fixture email generic `ok`, and archived fixture generic `ok`. Use only exact retained non-customer fixture addresses, never the customer's address, for the two permitted login probes. Verify unknown/archived `portal.login_requested` audit entity_id=`anonymous` (actor is the hashed email, not literal anonymous), no new portal_token or link_emailed record, and unchanged caregiver/Profile/follow-up records. Existing middleware/session/source tests complement but do not replace actual readbacks. Do not mint a fake owner session to claim customer acceptance.
+
+Provider mail-log capability remains unqualified. Application audits and absence of tokens alone are not provider-log evidence. If the existing provider binding supports authorized read-only logs, retain the bounded interval privately and publish only no-outside-recipient/no-send counts. Missing capability is reported explicitly to the existing GUI3 route; no new mail provider key/account or secret publication. Real inbox delivery and her sign-in/save/reload are distinct from negative technical tests.
+
+## Milestones and holds
+
+Accepted Nov21 UTC:17:00 recipient reconciliation disposition;17:30 reviewed full-portal deployment and authorized TEST row;17:45 preview mail after preceding gates;18:00 technical readbacks or exact gap. Shanelle's own sign-in/fill/save/reload verification or blocked disposition remains Nov22 16:00, with Lead2 liaison link/steps-or-gap byNov22 18:00 and customer promise23:59. Known misses must be reported without silently moving the clock.
+
+This packet is ready for the retained functional/Security review. No deployment, database change, provider configuration change, sign-in request or real mail was performed to prepare it. Private identity handoff, exact recipient reconciliation, explicit configuration/activation verdict, native deployment/readbacks and provider-log capability remain open.

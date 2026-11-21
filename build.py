@@ -300,6 +300,8 @@ def asset_versions() -> dict:
         "membership.css": hashlib.sha256((ROOT / "membership.css").read_bytes()).hexdigest()[:12],
         "styles.css": hashlib.sha256((ROOT / "styles.css").read_bytes()).hexdigest()[:12],
         "app.js": hashlib.sha256((ROOT / "app.js").read_bytes()).hexdigest()[:12],
+        "staff-profile.js": hashlib.sha256((ROOT / "staff-profile.js").read_bytes()).hexdigest()[:12],
+        "caregiver-profile.js": hashlib.sha256((ROOT / "caregiver-profile.js").read_bytes()).hexdigest()[:12],
         "staff.js": hashlib.sha256((ROOT / "staff.js").read_bytes()).hexdigest()[:12],
         "wellness-passport.css": hashlib.sha256((ROOT / "wellness-passport.css").read_bytes()).hexdigest()[:12],
         "our-model.css": hashlib.sha256((ROOT / "our-model.css").read_bytes()).hexdigest()[:12],
