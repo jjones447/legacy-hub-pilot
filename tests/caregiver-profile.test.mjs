@@ -18,12 +18,12 @@ test('prefill is read-only; partial drafts save/load/resume without changing ide
   assert.equal(count(f), 0);
   assert.equal(audit(f).length, 0);
   assert.deepEqual(await (await f.call(patch({ zip: '53202', mailing_address: null }))).json(), { ok: true, revision: 1 });
-  assert.deepEqual(await (await f.call(patch({ first_name: 'Updated fictional', email: 'different@example.invalid' }, 1))).json(), { ok: true, revision: 2 });
+  assert.deepEqual(await (await f.call(patch({ first_name: 'Updated fictional' }, 1))).json(), { ok: true, revision: 2 });
   const resumed = (await (await f.call()).json()).profile;
   assert.equal(resumed.revision, 2);
   assert.equal(resumed.fields.zip, '53202');
   assert.equal(resumed.fields.mailing_address, null);
-  assert.equal(resumed.fields.email, 'different@example.invalid');
+  assert.equal(resumed.fields.email, 'fictional.a@example.invalid');
   assert.equal(resumed.fields.phone, profile.fields.phone);
   assert.equal(JSON.stringify(f.raw.prepare('SELECT * FROM caregiver ORDER BY id').all()), original);
   assert.deepEqual(audit(f).map(row => JSON.parse(row.after_json)), [{ revision: 1 }, { revision: 2 }]);
@@ -154,12 +154,28 @@ test('invalid types, unknown fields, revisions, malformed or oversized bodies ne
   assert.equal(count(f), 0);
 });
 
+test('email is read-only, never persisted as an answer, and always reflects the account identity', async t => {
+  const f = setup(t);
+  for (const email of ['fictional.a@example.invalid', 'different@example.invalid', '', null]) {
+    assert.equal((await f.call(patch({ email }))).status, 400);
+  }
+  assert.equal(count(f), 0);
+  await f.call(patch({ zip: '53202' }));
+  const saved = JSON.parse(f.raw.prepare('SELECT fields_json FROM caregiver_profile').get().fields_json);
+  assert.equal(Object.hasOwn(saved, 'email'), false);
+  // Simulated supported account maintenance, not a Profile operation.
+  f.raw.prepare("UPDATE caregiver SET email=? WHERE id='cg_a'").run('updated.identity@example.invalid');
+  const profile = (await (await f.call()).json()).profile;
+  assert.equal(profile.fields.email, 'updated.identity@example.invalid');
+  assert.equal(profile.fields.zip, '53202');
+});
+
 test('empty and declined optional drafts persist; absent fields survive later partial saves', async t => {
   const f = setup(t);
-  assert.equal((await f.call(patch({ first_name: '', email: null, zip: '', mailing_address: null }))).status, 200);
+  assert.equal((await f.call(patch({ first_name: '', zip: '', mailing_address: null }))).status, 200);
   assert.equal((await f.call(patch({ phone: '414-555-0199' }, 1))).status, 200);
   const { fields } = (await (await f.call()).json()).profile;
-  assert.equal(fields.email, null);
+  assert.equal(fields.email, 'fictional.a@example.invalid');
   assert.equal(fields.mailing_address, null);
   assert.equal(fields.zip, '');
   assert.equal(fields.first_name, '');

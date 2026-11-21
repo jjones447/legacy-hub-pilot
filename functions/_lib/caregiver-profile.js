@@ -1,8 +1,9 @@
 // LP-01 initial storage slice. Option catalog/UI follow the private source packet.
-// Profile contact values are self-reported draft answers, never login identity,
+// Email is read-only and always comes from the existing sign-in identity.
+// Other contact values are self-reported draft answers, never login identity,
 // consent, membership, staff permissions or changes to the caregiver record.
 const TEXT_LIMITS = Object.freeze({
-  first_name: 120, last_name: 120, email: 254, phone: 40,
+  first_name: 120, last_name: 120, phone: 40,
   zip: 10, mailing_address: 500,
 });
 const own = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
@@ -19,7 +20,6 @@ export function validateProfilePatch(body) {
     if (!own(TEXT_LIMITS, key) || (value !== null && (typeof value !== 'string'
         || value.length > TEXT_LIMITS[key] || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value)))) return null;
     const normalized = value === null ? null : value.trim();
-    if (normalized && key === 'email' && !/^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(normalized)) return null;
     if (normalized && key === 'zip' && !/^\d{5}(?:-\d{4})?$/.test(normalized)) return null;
     fields[key] = normalized;
   }
@@ -35,11 +35,11 @@ export async function loadCaregiverProfile(db, caregiverId) {
     WHERE c.id = ? AND c.status != 'archived'`).bind(caregiverId).first();
   if (!row) return null;
   const fields = row.fields_json === null
-    ? { first_name: row.first_name, last_name: row.last_name, email: row.email, phone: row.phone }
+    ? { first_name: row.first_name, last_name: row.last_name, phone: row.phone }
     : JSON.parse(row.fields_json);
   // Corrupt or incompatible storage must not expose arbitrary fields.
   if (!object(fields) || Object.keys(fields).some(key => !own(TEXT_LIMITS, key))) throw new Error('profile_storage_invalid');
-  return { revision: row.revision ?? 0, fields, updated_at: row.updated_at ?? null };
+  return { revision: row.revision ?? 0, fields: { ...fields, email: row.email }, updated_at: row.updated_at ?? null };
 }
 
 export async function saveCaregiverProfile(db, caregiverId, patch) {
@@ -47,7 +47,8 @@ export async function saveCaregiverProfile(db, caregiverId, patch) {
   if (!previous) return { ok: false, status: 401, error: 'unauthorized' };
   if (previous.revision !== patch.revision) return { ok: false, status: 409, error: 'profile_conflict' };
   const nextRevision = patch.revision + 1;
-  const fields = { ...previous.fields, ...patch.fields };
+  const { email: _readOnlyEmail, ...previousAnswers } = previous.fields;
+  const fields = { ...previousAnswers, ...patch.fields };
   const serialized = JSON.stringify(fields);
   const write = patch.revision === 0
     ? db.prepare(`INSERT INTO caregiver_profile (caregiver_id, revision, fields_json)

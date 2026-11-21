@@ -1,6 +1,7 @@
 # Caregiver Profile implementation checkpoint
 
 Author: [pc2-codex-ct-13]. Nov21 06:00 UTC checkpoint, prepared early.
+Updated after the controlling Nov12 requester specification was recovered Nov21 05:43 UTC.
 Source base: `9c936ed2c2f296093bd19f7b5e613faf6c3364cb`.
 Scope authority: [Legacy54 author handoff](https://github.com/jjones447/legacy-caregiver-hub/issues/54#issuecomment-7057254580)
 and [temporary lead acceptance](https://github.com/jjones447/legacy-caregiver-hub/issues/54#issuecomment-7057587254).
@@ -16,7 +17,7 @@ The own author branch preserves ct5's unknown private work for reconciliation.
 | Storage | Candidate `schema/candidates/0022_caregiver_profile.sql`: one row per caregiver, JSON answers, monotonic revision, update time | Final field schema review, explicit isolated TEST migration/bookmark/readback |
 | Authentication | Existing signed portal session and current nonarchived owner; joined reads and write predicates repeat eligibility | Native TEST qualification; no claim of a new logout-revocation mechanism |
 | API | Exact `GET/POST /api/portal/profile`, no owner selector/query, `no-store`; strict same-origin JSON POST; streamed 8 KiB limit | Full field catalog and completion calculation |
-| Initial draft fields | First/last name, email, phone, ZIP and optional mailing address; caregiver-record prefill, partial merge, explicit empty/null retained | Exact source labels/requirements; contact preference and all choice fields |
+| Initial draft fields | First/last name, phone, ZIP and optional mailing address; email read-only from account; caregiver-record prefill, partial merge, explicit empty/null retained | Exact source labels/requirements; contact preference and all choice fields |
 | Writes | Additive profile only; revision compare-and-swap; transaction with revision-only audit; current owner eligibility inside write | Native D1 transactional/runtime checks |
 | Conflicts | Stale revision returns409 without overwrite; ambiguous acknowledgement returns generic500, then owner GET readback before retry | Accessible conflict/recovery UI and tests |
 | UI | Existing `portal.html#portalProfileCard` and portal `me` projection unchanged | Editable mobile/keyboard/screen-reader form, prefill/resume, progress, accessible field errors and confirmation |
@@ -26,7 +27,8 @@ configuration enables it. This allows synthetic handler tests without exposing t
 incomplete form/catalog. The ordinary preview containment applies first; the switch
 does not bypass preview identity/mail gates. Do not enable merely because unit tests pass.
 
-Profile email/phone/name answers do **not** mutate `caregiver`, login address,
+Email is rejected in writes and is never persisted as a draft answer. Reads always
+project the current account email. Profile phone/name answers do **not** mutate `caregiver`, login address,
 membership, consent, staff permissions or other existing records. Contact preference
 must never imply SMS consent. Draft saves do not require all completion fields; the
 final required-field completion logic must not prevent interruption/resume or access
@@ -34,23 +36,37 @@ to the rest of the portal.
 
 ## Exact source and remaining LP-01 work
 
-Issue54 provides the field/acceptance summary, not the complete approved labels and
-options. The existing private Oct2 packet or extracted LP-01/LP-09 register is required;
-lead2 has routed its recovery through the existing material custodian. Do not put the
-private client source into this public repository or invent choice values.
+The source gap is CLOSED: the controlling specification is the requester's Nov12
+Slack message, recovered in [private Legacy54 source receipt](https://github.com/jjones447/legacy-caregiver-hub/issues/54#issuecomment-7058110336).
+It supersedes the earlier Oct2 PDF dependency and older summary assumptions. Do not
+copy the private verbatim message into the public pilot repository; only field labels
+belong in the implementation. No new customer question is required.
 
-Pending catalog groups: contact preference; optional age/race/gender/language;
-care relationship/duration/journey stage including no diagnosis, not currently caring
-and bereavement; referral source/reason; support needs and at most three priorities
-that are a subset of selected needs; existing support/unmet access; barriers including
-inability to leave the care recipient; engagement/availability. Exact optional decline
-representations, required minimum and privacy copy must be reconciled with that source.
-No journal text, respite activation, clinical scoring, real email or production release.
+The five sections are Personal Information, About Your Caregiving Journey, Your
+Support Needs, Respite Care Information, and Optional Demographic Information.
+Implement their exact recovered option labels and conditional behavior. Email is
+read-only. Full name, account email and ZIP determine required-field completion;
+partial saves remain possible. Previously caring caregivers can skip current-care
+questions. Dementia type is shown only for diagnosed or suspected dementia.
 
-Next implementation: add the recovered versioned field catalog and validators,
-server-derived completion, UI save/load/resume states, every-field synthetic round-trip,
-top-three subset/optional-decline negatives and DOM accessibility/owner-isolation tests.
-Use the same retained Devin4 review window; no duplicate publisher1a0 review.
+DOB and demographic answers are visible to **admin staff only**; other staff receive
+aggregate totals, never individual values. The caregiver can access their own answers.
+This slice has no staff Profile read endpoint and does not yet collect DOB/demographics.
+Before adding them, separate restricted fields from ordinary staff projections and
+cover admin/nonadmin denials in tests. Never expose raw answers through existing People
+or exports. Privacy wording remains requester review on actual TEST.
+
+Remaining implementation: full typed catalog, sectioned accessible UI, conditional
+fields, completion, save/load/resume/conflict recovery, optional declines/other-text,
+restricted staff projections/aggregate behavior and reviewable follow-up flag. A request
+for support must not enroll the caregiver or automatically send contact. Respite
+information is part of this Profile; it does not activate respite services. No household
+income, detailed medical history/medications, Wellness Passport questions or wellness
+activity preferences. Do not carry older summary-only top-three/engagement fields into
+this controlling form without a later source requirement.
+
+Next checkpoint08:00 now concerns catalog/UI progress and the remaining source estimate,
+not packet recovery. SAME Devin4 review window retained; no duplicate publisher1a0 review.
 
 ## Verification and runtime handoff
 
@@ -72,7 +88,7 @@ operator verification; after writes, disable the feature and preserve stored ans
 for the approved retention/recovery disposition. Do not run an automatic destructive rollback.
 
 Working dates remain Nov22 10:00 UTC exact source/green checks and Nov22 23:59 actual
-owner-isolated TEST. At risk until exact source options/copy are recovered (planning
-cutoff Nov21 08:00) and an executor accepts runtime custody. Ct5's unpublished state
+owner-isolated TEST. Source options/copy are now recovered. Delivery remains at risk
+until the full form/privacy implementation is completed and an executor accepts runtime custody. Ct5's unpublished state
 remains unknown; reconcile rather than overwrite on return. Publisher setup and its
 existing owner permission request remain separate from this source work.
