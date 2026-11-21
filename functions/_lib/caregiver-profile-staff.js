@@ -1,5 +1,5 @@
 import { confirmationActor } from './agent-confirmation.mjs';
-import { PROFILE_FIELDS } from './caregiver-profile-fields.js';
+import { PROFILE_FIELDS, PROFILE_SECTIONS } from './caregiver-profile-fields.js';
 import { notInternalTestCaregiverSql } from './domain/caregivers.js';
 
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -35,7 +35,10 @@ export async function staffCaregiverProfile({ request, env, data }) {
   if (!row) return json({ ok: false, error: 'profile_unavailable' }, 404);
   const fields = { ...project(row.fields_json, false), email: row.email };
   if (row.role === 'admin') Object.assign(fields, project(row.restricted_json, true));
-  return json({ ok: true, profile: { revision: row.revision, fields } });
+  const sections = PROFILE_SECTIONS.map(section => ({ title: section.title,
+    fields: section.fields.filter(field => row.role === 'admin' || !field.restricted)
+      .map(field => ({ key: field.key, label: field.label })) })).filter(section => section.fields.length);
+  return json({ ok: true, profile: { revision: row.revision, fields }, sections });
 }
 
 // Fixed whole-cohort aggregates only. No owner, demographic, date or arbitrary

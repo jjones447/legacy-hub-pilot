@@ -1,8 +1,8 @@
 # Caregiver Profile implementation checkpoint
 
-Author: [pc2-codex-ct-13]. Nov21 08:00 UTC checkpoint, prepared early at07:22.
+Author: [pc2-codex-ct-13]. Nov21 08:20 UTC source checkpoint.
 Updated after the controlling Nov12 requester specification was recovered Nov21 05:43 UTC.
-The same PR implements its catalog, backend validation, follow-up flag, staff projections and caregiver form.
+The same PR implements its catalog, backend validation, follow-up flag, staff projections and caregiver/staff views.
 Source base: `9c936ed2c2f296093bd19f7b5e613faf6c3364cb`.
 Scope authority: [Legacy54 author handoff](https://github.com/jjones447/legacy-caregiver-hub/issues/54#issuecomment-7057254580)
 and [temporary lead acceptance](https://github.com/jjones447/legacy-caregiver-hub/issues/54#issuecomment-7057587254).
@@ -21,8 +21,8 @@ The own author branch preserves ct5's unknown private work for reconciliation.
 | Catalog | All five sections and 33 writable fields; exact options, conditional rules, optional declines, read-only account email, every-field round-trip | Browser and assistive-technology qualification |
 | Writes | Additive profile only; revision compare-and-swap; transaction with revision-only audit; current owner eligibility inside write | Native D1 transactional/runtime checks |
 | Conflicts | Stale revision returns409 without overwrite; ambiguous acknowledgement returns generic500, then owner GET readback before retry | Native conflict/recovery qualification |
-| Caregiver UI | Five catalog-driven sections, read-only email, conditional inputs, completion progress, partial save/resume, explicit conflict/unknown-save reconciliation, status announcements; owner/session changes clear all answers and reject stale responses | Actual browser/mobile/keyboard/screen-reader checks and field-specific validation guidance |
-| Staff UI | Restricted individual/aggregate backend projections already tested | Staff display/aggregate presentation and DOM no-disclosure checks |
+| Caregiver UI | Five catalog-driven sections, read-only email, conditional inputs, completion progress, partial save/resume, explicit conflict/unknown-save reconciliation, status announcements; owner/session changes clear all answers and reject stale responses | Actual browser/mobile/keyboard/screen-reader checks |
+| Staff UI | Read-only individual answers and whole-cohort aggregate tables; current-role-filtered labels/values; no cached answers/exports; clears on record change, back, access refresh, page hide or denied reload | Actual browser/runtime staff qualification |
 
 Initial feature switch `PORTAL_PROFILE_ENABLED` must equal `1`; no deployment
 configuration enables it. This allows synthetic handler tests without enabling the
@@ -77,17 +77,19 @@ answers in browser storage. Successful saves reload normalized owner data; stale
 and unknown acknowledgements require an explicit read before another write. Owner changes,
 sign-out and session resets clear the form and invalidate in-flight responses.
 
-Remaining implementation: staff Profile display/aggregate presentation, field-specific
-validation guidance, staff UI no-disclosure tests, browser qualification, migration/runtime
-handoff and independent exact-head review. A request
+Implemented since the first form checkpoint: staff individual and aggregate views,
+server-filtered field labels, linked field validation guidance and staff DOM no-disclosure
+tests. Remaining: browser qualification, migration/runtime handoff, independent exact-head
+review and any corrections those checks identify. A request
 for support must not enroll the caregiver or automatically send contact. Respite
 information is part of this Profile; it does not activate respite services. No household
 income, detailed medical history/medications, Wellness Passport questions or wellness
 activity preferences. Do not carry older summary-only top-three/engagement fields into
 this controlling form without a later source requirement.
 
-Next checkpoint08:00 now concerns catalog/UI progress and the remaining source estimate,
-not packet recovery. SAME Devin4 review window retained; no duplicate publisher1a0 review.
+The08:00 implementation checkpoint was delivered early. This successor is ready for
+retained source/schema review; browser/native acceptance is still open. SAME Devin4
+and ct12 routes are retained; publisher activation review remains separate.
 
 ## Verification and runtime handoff
 
@@ -96,11 +98,14 @@ in-memory SQLite, including two owners, session expiry, owner archive before rea
 same-revision saves, audit failure rollback and lost acknowledgement readback. It does
 not call provider APIs, send mail or establish native D1 behavior. The handler tests are explicitly included in `scripts/unit-test-files.mjs`.
 `tests/dom/caregiver-profile-ui.test.mjs` runs with the existing Staff DOM workflow,
-which installs the locked JSDOM dependencies. Eight UI cases use the actual controller in JSDOM
+which installs the locked JSDOM dependencies. Ten caregiver UI cases use the actual controller in JSDOM
 for partial saves, conditional preservation, read-only email, stale-owner responses,
 sign-out during save, conflict and ambiguous acknowledgement recovery, and denial clearing.
 The portal dashboard integration test covers new-owner reload, same-owner edit preservation
-and session reset. These are synthetic DOM checks, not installed browser acceptance.
+and session reset. Eight staff DOM cases combine the actual API projections with the renderer and
+exercise current role downgrade, stale person/identity responses, denial clearing,
+actual navigation/access refresh hooks and aggregate suppression. These are synthetic
+DOM checks, not installed browser acceptance.
 
 Candidate0022 must remain separate from People0021, which is already applied to TEST
 and must not be reapplied. A supported executor must verify the deployment-specific
@@ -123,11 +128,16 @@ receipt and explicit retained Security activation closure; its permission/custod
 
 ## Remaining implementation estimate
 
-After the caregiver form slice: approximately4–6 focused author hours for staff UI,
-field-specific validation guidance, no-disclosure/integration checks, corrections and
-review-ready packaging. Browser/native qualification and independent review are separate.
-The publisher gate remains external; further release work consumes author capacity.
-Working source target Nov22 10:00 remains feasible with capacity; keep SAME Devin4
-initial4–6h and successor2–3h windows. Actual TESTNov22 23:59 remains conditional on
-review closure, isolated migration/provider readback and browser/runtime qualification.
-This early08:00 checkpoint records source progress, not full Profile acceptance.
+The planned caregiver/staff source integration and synthetic no-disclosure checks are
+implemented. Allow approximately2–4 focused author hours for browser qualification,
+review corrections and runtime packaging; this estimate is not an activation promise.
+This seat has no installed browser executable or browser connector at this checkpoint.
+Native TEST also needs a reviewed synthetic owner-session route: shared preview portal
+access is disabled unless the existing preview identity/mail containment opt-in qualifies.
+The Profile feature switch alone cannot bypass that containment. Do not enable real
+mail, reuse production sessions, or alter that boundary merely to obtain a passing TEST.
+
+Working source target Nov22 10:00 remains feasible with capacity; SAME Devin4 initial4–6h
+and successor2–3h review windows are retained. Actual TESTNov22 23:59 remains conditional
+on review closure, isolated migration/provider readback, qualified synthetic owner access
+and browser/runtime checks. Profile source/schema review does not waive publisher gates.

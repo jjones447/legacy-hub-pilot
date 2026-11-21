@@ -107,3 +107,26 @@ test('feature-off and unauthorized reads clear the editor without exposing earli
     f.dom.window.close();
   }
 });
+
+test('invalid ZIP is linked to its input, opens its section, preserves partial answers and makes no POST', async () => {
+  const f = fixture(() => response(200, packet())); await f.editor.load();
+  const input = f.input('zip', 'bad'); const section = input.closest('details'); section.open = false;
+  f.submit(); await settle(); assert.equal(f.requests.length, 1);
+  assert.equal(input.getAttribute('aria-invalid'), 'true'); assert.equal(section.open, true);
+  assert.equal(f.window.document.activeElement, input);
+  assert.match(f.root.querySelector('#caregiver-profile-zip-error').textContent, /five-digit ZIP/);
+  assert.match(input.getAttribute('aria-describedby'), /caregiver-profile-zip-error/);
+  assert.equal(f.root.querySelector('#caregiver-profile-first_name').value, 'Synthetic');
+  f.input('zip', '53202'); assert.equal(input.hasAttribute('aria-invalid'), false);
+  f.dom.window.close();
+});
+
+test('future DOB gets field guidance; clearing optional answers remains valid and conditions exclude hidden errors', async () => {
+  const f = fixture(() => response(200, packet())); await f.editor.load();
+  f.input('date_of_birth', '9999-01-01'); f.submit(); await settle();
+  assert.equal(f.requests.length, 1); assert.match(f.root.querySelector('#caregiver-profile-date_of_birth-error').textContent, /today or earlier/);
+  f.input('date_of_birth', ''); f.submit(); await settle();
+  assert.equal(f.requests.filter(r => r.method === 'POST').length, 1);
+  assert.deepEqual(JSON.parse(f.requests[1].body).fields, { date_of_birth: '' });
+  f.dom.window.close();
+});

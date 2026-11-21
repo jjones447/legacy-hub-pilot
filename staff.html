@@ -76,6 +76,10 @@
 
     <div class="staff-workspace">
       <div>
+        <details class="panel" id="profileSummaryPanel">
+          <summary><strong>Caregiver Profile summary</strong></summary>
+          <div id="staffProfileSummary" aria-live="polite"></div>
+        </details>
         <details class="panel" id="peopleManagementPanel">
           <summary><strong>People &amp; access</strong> <span class="small muted">— staff and caregivers</span></summary>
           <p class="small muted mb-12">Choose caregivers or staff, search for a person, then open their record. Each group keeps its own permissions.</p>
@@ -303,6 +307,7 @@
         <button type="button" class="btn btn-outline mb-16" id="caregiverBackButton" data-action="caregiver-back">← Back to staff dashboard</button>
         <p class="small muted mb-12">View and manage caregiver contact details, program attendance, grants, and staff notes.</p>
         <div class="panel" id="caregiverRecordPanel"></div>
+        <section class="panel" id="staffCaregiverProfile" hidden aria-live="polite"></section>
       </div>
     </div>
   </div>
@@ -320,7 +325,8 @@
 
 <script src="app.js?v=4e2ad99e6308"></script>
 <script src="nav-v2.js"></script>
-<script src="staff.js?v=9023f88f3be3"></script>
+<script src="staff-profile.js?v=00db1033fba9"></script>
+<script src="staff.js?v=8bbc2a21bd45"></script>
 </body>
 </html>
 

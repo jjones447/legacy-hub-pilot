@@ -108,7 +108,9 @@ test('admin receives restricted answers; ordinary staff never receive individual
   const a = (await admin.json()).profile.fields;
   assert.equal(a.date_of_birth, ALL_ANSWERS.date_of_birth);
   const staff = await f.staffCall();
-  const b = (await staff.json()).profile.fields;
+  const staffBody = await staff.json();
+  const b = staffBody.profile.fields;
+  for (const key of RESTRICTED_PROFILE_FIELDS) assert.equal(staffBody.sections.flatMap(s => s.fields).some(f => f.key === key), false);
   assert.equal(b.support_needs[0], 'Respite care');
   for (const key of RESTRICTED_PROFILE_FIELDS) assert.equal(Object.hasOwn(b, key), false);
   assert.equal(JSON.stringify(b).includes('1980-02-29'), false);

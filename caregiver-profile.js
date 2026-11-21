@@ -38,6 +38,9 @@
       reloadButton.disabled = saving;
     }
     function changed(field, value, changedInput) {
+      const control = controls.get(field.key);
+      control.error.hidden = true; control.error.textContent = '';
+      control.inputs.forEach(input => input.removeAttribute('aria-invalid'));
       fields[field.key] = value;
       if (field.type === 'multi' && changedInput.checked) {
         const exclusive = field.exclusive || ['Prefer not to answer'];
@@ -88,7 +91,10 @@
             wrap.append(input); inputs.push(input);
           }
           if (field.restricted) wrap.append(node('p', 'You and authorized admin staff can see this answer. Other staff see aggregate information only.', 'small muted'));
-          controls.set(field.key, { field, wrap, inputs }); details.append(wrap);
+          const error = node('p', '', 'small'); error.id = id + '-error'; error.hidden = true;
+          inputs.forEach(input => input.setAttribute('aria-describedby', [input.getAttribute('aria-describedby'), error.id].filter(Boolean).join(' ')));
+          wrap.append(error);
+          controls.set(field.key, { field, wrap, inputs, error }); details.append(wrap);
         });
         form.append(details);
       });
@@ -123,9 +129,32 @@
         const retry = node('button', 'Load saved profile', 'btn btn-outline'); retry.type = 'button'; retry.addEventListener('click', () => { void load(); }); root.append(retry);
       }
     }
+    function validateAnswers() {
+      let first = null, count = 0;
+      controls.forEach(({ field, wrap, inputs, error }) => {
+        error.hidden = true; error.textContent = ''; inputs.forEach(input => input.removeAttribute('aria-invalid'));
+        if (field.readOnly || !visible(field) || same(fields[field.key], saved[field.key])) return;
+        const value = fields[field.key]; let message = '';
+        if (value !== null && value !== '' && value !== undefined) {
+          if (field.key === 'zip' && !/^\d{5}(?:-\d{4})?$/.test(String(value).trim())) message = 'Enter a five-digit ZIP code, with an optional four-digit extension.';
+          else if (field.type === 'date') {
+            const date = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(value + 'T00:00:00Z') : null;
+            if (!date || !Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== value || value > new Date().toISOString().slice(0, 10)) message = 'Enter a valid date that is today or earlier.';
+          } else if (typeof value === 'string' && field.maxLength && value.length > field.maxLength) message = 'Use ' + field.maxLength + ' characters or fewer.';
+          if (!message && typeof value === 'string' && /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value)) message = 'Remove unsupported control characters.';
+        }
+        if (inputs.some(input => input.validity?.badInput)) message = 'Enter a valid answer or clear this optional field.';
+        if (!message) return;
+        count++; error.textContent = message; error.hidden = false;
+        inputs.forEach(input => input.setAttribute('aria-invalid', 'true'));
+        if (!first) first = { input: inputs[0], section: wrap.closest('details') };
+      });
+      if (!first) return true;
+      first.section.open = true; first.input.focus(); announce('Check ' + count + ' highlighted answer' + (count === 1 ? '.' : 's.'), true); return false;
+    }
     async function save(event) {
       event.preventDefault();
-      if (!available || saving || locked || !dirty()) return;
+      if (!available || saving || locked || !dirty() || !validateAnswers()) return;
       const token = generation, ownerEpoch = epoch(), patch = {};
       sections.forEach(s => s.fields.forEach(f => {
         if (!f.readOnly && visible(f) && !same(fields[f.key], saved[f.key])) patch[f.key] = fields[f.key];
