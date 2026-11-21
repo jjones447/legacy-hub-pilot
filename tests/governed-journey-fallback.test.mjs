@@ -129,3 +129,49 @@ test('unrelated partial and conditional responses retain their status, body and 
     assert.equal(await response.text(),status === 304 ? '' : 'About slice');
   }
 });
+
+// Alias redirects release no asset body; the destination retains the published
+// row gate. An upstream arbitrary redirect must never become a redirect oracle.
+test('exact Pages home canonicalization is body-free and still reaches the governed root', async () => {
+  for (const path of ['/index', '/index/', '/index.html', '/index.html?campaign=fixture']) {
+    for (const status of [301, 308]) {
+      const query = new URL('https://caregiversanctuary.org' + path).search;
+      const response = await onRequest({
+        request: new Request('https://caregiversanctuary.org' + path), env: {},
+        next: async () => new Response(fragment, { status, headers: { location: '/' + query, etag: 'static', 'cache-control': 'public' } }),
+      });
+      assert.equal(response.status, 308);
+      assert.equal(response.headers.get('location'), '/' + query);
+      assert.equal(response.headers.get('cache-control'), 'no-store');
+      assert.equal(response.headers.get('etag'), null);
+      assert.equal(await response.text(), '');
+      await assertUnavailable(await render({}, '/' + query));
+      const root = await render({ LEGACY_DB: db([row('Fresh after alias redirect')]) }, '/' + query);
+      assert.equal(root.status, 200);
+      assert.ok((await root.text()).includes('<p>Fresh after alias redirect</p>'));
+    }
+  }
+});
+test('home redirect exception excludes unexpected destinations, cache/range requests and previews', async () => {
+  const cases = [
+    { location: 'https://other.invalid/' }, { location: '//other.invalid/' },
+    { location: '/about.html' }, { location: '/?different=1' },
+    { location: 'https://user:pass@caregiversanctuary.org/' },
+    { location: '/', path: '/' }, { location: '/', path: '/%69ndex.html' },
+    ...['Range', 'If-Range', 'If-None-Match', 'If-Modified-Since', 'If-Match', 'If-Unmodified-Since']
+      .map(name => ({ location: '/', headers: { [name]: 'fixture' } })),
+  ];
+  for (const entry of cases) {
+    const response = await onRequest({ request: new Request('https://caregiversanctuary.org' + (entry.path || '/index.html'), { headers: entry.headers }), env: {},
+      next: async () => new Response(fragment, { status: 301, headers: { location: entry.location } }) });
+    await assertUnavailable(response);
+    assert.equal(response.headers.get('location'), null);
+  }
+  for (const query of ['preview_draft=fixture', 'preview_version=fixture']) {
+    const response = await onRequest({ request: new Request('https://caregiversanctuary.org/index.html?' + query), env: {},
+      next: async () => new Response(fragment, { status: 301, headers: { location: '/?' + query } }) });
+    assert.notEqual(response.status, 308);
+    assert.equal(response.headers.get('location'), null);
+    assert.ok(!(await response.text()).includes(fragment));
+  }
+});

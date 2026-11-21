@@ -1387,6 +1387,23 @@ export async function maybeRewriteContent(context, response) {
       });
     }
 
+    // Pages canonicalizes spelled-out home files to /. Forward only that
+    // exact same-origin redirect, with no body/cache metadata. The following
+    // root GET still requires a fresh published-row rewrite. Draft previews,
+    // ranges and conditional requests never use this public alias path.
+    if (['/index', '/index/', '/index.html'].includes(url.pathname)
+        && [301, 308].includes(response?.status)
+        && !['range', 'if-range', 'if-none-match', 'if-modified-since', 'if-match', 'if-unmodified-since']
+          .some(name => request.headers.has(name))) {
+      const location = response.headers.get('location');
+      const canonical = new URL('/' + url.search, url.origin);
+      if (location && new URL(location, url).href === canonical.href) {
+        return new Response(null, { status: 308, headers: {
+          location: '/' + url.search, 'cache-control': 'no-store',
+        } });
+      }
+    }
+
     if (!response || response.status !== 200) {
       return requiresPublishedJourney ? publicContentUnavailable() : response;
     }
