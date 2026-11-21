@@ -6,11 +6,12 @@ import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
 const root = fileURLToPath(new URL('../..', import.meta.url));
-export async function buildHostedProfile() {
+export async function buildHostedProfile(kind = 'owner') {
+  assert.ok(['owner', 'fault'].includes(kind));
   assert.equal(JSON.parse(readFileSync(join(root, 'node_modules/esbuild/package.json'))).version, '0.28.1');
   const scratch = mkdtempSync('/tmp/profile-hosted-build-'); chmodSync(scratch, 0o700);
   const assets = join(scratch, 'assets'); mkdirSync(assets, { mode: 0o700 });
-  const bundled = await build({ absWorkingDir: root, entryPoints: ['tests/runtime/profile-hosted-worker.mjs'],
+  const bundled = await build({ absWorkingDir: root, entryPoints: [kind === 'fault' ? 'tests/runtime/profile-hosted-fault-worker.mjs' : 'tests/runtime/profile-hosted-worker.mjs'],
     bundle: true, format: 'esm', platform: 'browser', target: 'es2022', write: false, metafile: true,
     sourcemap: false, legalComments: 'none', logLevel: 'silent' });
   assert.equal(bundled.outputFiles.length, 1);
@@ -24,7 +25,7 @@ export async function buildHostedProfile() {
   writeFileSync(join(assets, '_routes.json'), JSON.stringify({ version: 1, include: ['/*'], exclude: [] }), { mode: 0o600 });
   const names = readdirSync(assets).sort();
   assert.deepEqual(names, ['_routes.json', '_worker.js', 'caregiver-profile.js', 'fixture-start.js', 'index.html', 'styles.css']);
-  const receipt = { files: names.map(name => ({ name, sha256: createHash('sha256').update(readFileSync(join(assets, name))).digest('hex') })),
+  const receipt = { kind, files: names.map(name => ({ name, sha256: createHash('sha256').update(readFileSync(join(assets, name))).digest('hex') })),
     inputs: Object.keys(bundled.metafile.inputs).sort(), externalImports: 0, mode: 'source-pinned-manifest-requires-exact-review' };
   writeFileSync(join(scratch, 'bundle-receipt.json'), JSON.stringify(receipt, null, 2), { mode: 0o600 });
   return { scratch, assets, receipt };

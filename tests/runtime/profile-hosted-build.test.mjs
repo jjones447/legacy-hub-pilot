@@ -16,3 +16,15 @@ test('private advanced-mode bundle has exact allowlist, no external imports, and
   assert.equal((await compiled.default.fetch(request(), {})).status, 403);
   assert.equal(result.receipt.externalImports, 0);
 });
+
+test('fault/race bundle is inert before any environment, DB, or asset capability access',async()=>{
+  const result=await buildHostedProfile('fault');
+  const source=readFileSync(join(result.assets,'_worker.js'),'utf8');
+  const compiled=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+  const env=new Proxy({}, {get(){throw Error('unexpected capability access');}});
+  for(const path of ['/','/api/portal/profile','/api/portal/login','/fault','/recover']){
+    const res=await compiled.default.fetch(new Request('https://profile-fixture-381.legacy-hub-5qo.pages.dev'+path),env);
+    assert.equal(res.status,403);assert.deepEqual(await res.json(),{ok:false,error:'fixture_unavailable'});
+  }
+  assert.equal(result.receipt.kind,'fault');assert.equal(result.receipt.externalImports,0);
+});

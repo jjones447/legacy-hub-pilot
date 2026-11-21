@@ -426,3 +426,17 @@ SAME ct12 review by Nov21 15:00UTC, with an explicit blocker if the design canno
 preserve the above fences. This is a source-package target, not a new hosted window
 or a promise of full-portal completion. Retained Devin4 owns functional acceptance;
 actual broader TEST Nov22 23:59 remains conditional on these remaining scopes.
+
+
+### Exact inert fault/race source delivered (Nov21 14:35UTC)
+
+The candidate implementation and native-readiness limits are recorded in
+[the source packet](profile-qualification/2026-11-21-fault-source.md). New adapter,
+ledger/cleanup logic and source-pinned inert worker are implemented; product handlers
+remain unchanged. Local causal/boundary/build coverage68 PASS and complete unit
+suite2222 PASS. This supersedes the earlier "adapter remains to be authored" status.
+The proposed16–17UTC follow-on window is conditional and NOT active or accepted.
+Exact source review, new test-ledger setup, native transactional DDL behavior and a
+private cleanup-only execution carrier remain gates before native action. Existing
+fixture stays disabled. Shanelle customer entry is a separate priority with existing
+Lead4→GUI3 custody routing, not solved by this fault adapter.
