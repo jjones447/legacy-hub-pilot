@@ -64,3 +64,70 @@ out of this persistence fixture. TESTNov22 23:59 remains conditional.
 
 Synthetic scratch and results are retained after execution. Stop only the owned local
 runtime/browser; do not delete shared state or perform automatic destructive rollback.
+
+## Nov21 09:22 checkpoint: proposed hosted boundary (not installed)
+
+The reviewed local fixture executed at59d8f686. Read-only inspection of its retained
+workerd D1 storage confirms owner A revision4, no owner B profile row, exactly four
+revision-only audit payloads (1 through4), and exactly one generic follow-up created
+at revision3 and now dismissed. This supplies local database witnesses for the
+contact transition; it is not hosted D1 or an injected rollback/transport-loss result.
+All earlier browser assertions completed; a remaining owned esbuild handle required
+explicit cleanup, so the process result was143 rather than a clean-zero exit.
+
+Proposed next package uses the existing legacy-hub Pages project, a dedicated fixture
+preview branch/alias, the already isolated TEST D142be536c and a separately bundled
+advanced-mode test worker. It must not deploy the product's whole Pages functions
+or change production, canonical staging, existing preview authentication or any
+existing secret. No additional Access app, account, service token or agent is proposed.
+This plan requires retained Security review before implementing/deploying the wrapper.
+
+The fixture worker would expose only fixed form assets and Profile GET/POST. It must
+check actual preview environment, exact deployment-specific allowed hostname/origin,
+expiry of the fixture window, method/path and a compile-time set of two newly reserved
+synthetic owner IDs plus one archived negative ID. A decoded cookie owner allowlist
+is only an additional prefilter: the unchanged handler must still verify the HMAC,
+expiry, current eligibility, same-origin write and revision checks. All other caregiver
+IDs, login/me/verify/mail/staff/publisher/mint routes and arbitrary assets are refused.
+
+Use a newly generated fixture-only secret retained in a private0600 executor file and
+one new preview-only binding named PROFILE_FIXTURE_SECRET. It must never replace or
+reuse PORTAL_TOKEN_SECRET. Before any binding update, preserve the existing preview
+configuration and verify all existing values/bindings remain unchanged. Source must
+refuse deployment to production; the deployed source, environment, TEST database and
+origin are independently read back before any fixture write. The deployment-specific
+origin is established from actual provider output, never guessed or carried from the
+publisher's qualified preview. No secret/session values enter source, logs or GitHub.
+
+The adapter passes an explicit, minimal environment to the existing Profile handlers:
+TEST database, fixture-only signing secret, Profile enabled and a fixture-only marker.
+It must not forward inherited email keys, preview mail flags, production portal secret,
+Access credentials or other provider bindings. That marker is a deliberate isolated
+fixture composition, not a change or qualification of the shared-preview guard. The
+product portal remains disabled in shared preview. The final cookie is offline-signed,
+short-lived and bound by browser custody to this actual fixture origin; no public
+mint endpoint or actual login/mail claim. Browser GET/POST traffic stays on that origin.
+
+Migration0022 is additive and already source-reviewed, but remains UNAPPLIED. Before
+applying once: verify TEST identity, capture a supported D1 bookmark plus table/row
+inventory, confirm0022 absent and0021 present, and stop on ambiguous schema state.
+Create only collision-checked, explicitly fictional fixture caregivers; preserve all
+existing rows. Keep a retained exact synthetic-ID manifest. Native witnesses must
+cover save/load/resume, owner isolation, revisions, conflict, generic follow-up/audit,
+eligibility changes and fresh readback. A scoped audit-failure injection needs its own
+reviewed synthetic-only trigger and confirmed removal; do not infer rollback from the
+local SQLite test. Do not repeat writes after unknown outcomes.
+
+Staff qualification is still distinct: do not mint a fake human Access actor or grant
+the publisher staff-edit authority. The existing staff-projection tests and local DOM
+results do not close actual human-session/full-portal qualification. Preserve this gap
+explicitly if the bounded owner persistence fixture is accepted first.
+
+Concrete capability/custody gap: current executor can use the delivered ops credential
+for the existing Pages/D1 account, but this advanced-mode bundle, per-preview fixture
+secret/configuration preservation, actual origin and synthetic-owner prefilter have not
+yet been implemented or qualified. No hosted fixture cookie has been created and no
+binding/migration/deployment has been changed for Profile. Retained ct12 must accept
+or correct this isolation design, then review the exact adapter before execution.
+The Nov22 23:59 actual TEST commitment remains conditional. This packet delivers the
+Nov21 10:00 mechanism/witness checkpoint early; it is not hosted TEST completion.
