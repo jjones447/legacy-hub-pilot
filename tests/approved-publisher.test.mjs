@@ -21,6 +21,7 @@ async function fixture() {
   let beforeBatch = () => {}, beforeRun = () => {}, afterRun = () => {}, afterBatch = () => {};
   const wrap = (sql, params = []) => ({ sql, params, bind: (...p) => wrap(sql, p),
     first: async () => raw.prepare(sql).get(...params) ?? null,
+    all: async () => ({ results: raw.prepare(sql).all(...params) }),
     run: async () => { beforeRun(); const r=raw.prepare(sql).run(...params); afterRun(); return r; },
   });
   const db = { prepare: sql => wrap(sql), async batch(statements) {
@@ -37,7 +38,7 @@ async function fixture() {
   });
   const draft = async () => (await (await call('draft', {approval_ref:entry.approval_ref,target_id:entry.target_id,changes:entry.changes})).json()).draft_id;
   const preview = async id => (await (await call('preview', { draft_id:id, approval_ref:entry.approval_ref })).json()).preview_version;
-  return { raw, call, draft, preview, reviewed,
+  return { raw, db, call, draft, preview, reviewed,
     setBeforeBatch: fn => { beforeBatch = fn; }, setBeforeRun: fn => { beforeRun = fn; },
     setAfterRun: fn => { afterRun = fn; }, setAfterBatch: fn => { afterBatch = fn; } };
 }
@@ -217,12 +218,13 @@ test('failed atomic publication leaves original draft reserved and unconsumed', 
 
 
 test('integrated375 journey renders the governed value before and after approved371 publication', async () => {
-  const { rewriteContent } = await import('../functions/_content.mjs');
+  const { maybeRewriteContent } = await import('../functions/_content.mjs');
   const source = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   const f = await fixture();
   const renderJourney = async () => {
-    const row = f.raw.prepare('SELECT data FROM content_item WHERE id=?').get(entry.target_id);
-    const html = await (await rewriteContent(new Response(source), { 'home.journey': JSON.parse(row.data) })).text();
+    const response = await maybeRewriteContent({ request: new Request('https://preview.invalid/'), env: { LEGACY_DB: f.db } }, new Response(source, { headers: { 'content-type': 'text/html' } }));
+    assert.equal(response.status, 200);
+    const html = await response.text();
     const panel = html.match(/<details class="container beyond-journey">([\s\S]*?)<\/details>/)?.[1];
     assert.ok(panel, 'approved expandable arrangement remains');
     assert.ok(html.indexOf('beyondSupportHeading') < html.indexOf('home-support-heading'));
@@ -244,4 +246,7 @@ test('integrated375 journey renders the governed value before and after approved
   assert.match(later, /<p>Later governed edit<\/p>/);
   assert.ok(!later.includes(entry.changes.paragraph.split('\n\n')[0]));
   assert.equal((await f.call('draft', draftBody())).status, 409);
+  const unavailable = await maybeRewriteContent({ request: new Request('https://preview.invalid/'), env: { LEGACY_DB: { prepare() { throw Error('offline'); } } } }, new Response(source, { headers: { 'content-type': 'text/html' } }));
+  assert.equal(unavailable.status, 503);
+  assert.ok(!(await unavailable.text()).includes(entry.changes.paragraph.split('\n\n')[0]));
 });

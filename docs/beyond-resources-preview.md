@@ -7,12 +7,20 @@ The publisher PR380 successor integrates approved375 `0d6fb0f` with371
 About JOIN US removal, reinforcement sentences, support descriptions and Our Model
 addition are preserved. The journey panel retains375's native expandable placement
 but uses371's `data-cs-list="home.journey.paragraph"` binding and narrow string-to-
-paragraph adapter. Its canonical fallback remains the exact371 approved wording.
+paragraph adapter. The static build contains the exact371 wording for source
+preview only; the public governed route must successfully replace it before serving.
 
 The published `ps_home.journey.paragraph` value governs the rendered panel: an
 old published value remains visible until an authorized update, and subsequent
 human edits remain visible. Static source cannot bypass the governed publication
-step. The publisher's exact origin/target/operation catalog, audit and rollback
+step. Missing/unavailable/malformed published journey data or any rewrite failure
+returns a non-cacheable 503 with no source copy. Governed public requests read D1
+fresh (bypassing the shared section cache), buffer the rewrite to catch streaming
+errors, require the journey binding to be visited, and serve successful responses
+with no-store. This trades homepage availability for preserving the publication
+boundary during a D1 outage; unrelated pages retain their existing fallback.
+Authenticated staff draft previews retain their explicitly labeled preview path.
+The publisher's exact origin/target/operation catalog, audit and rollback
 contract are unchanged and disabled pending qualified activation values. No D1,
 provider, credential, migration, deployed content or production change follows
 from this source integration. Exact successor review, native TEST and final
