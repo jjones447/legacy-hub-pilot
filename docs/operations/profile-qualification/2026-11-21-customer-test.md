@@ -18,8 +18,8 @@ Private artifact/config files are0700/0600. A complete file-hash manifest is ret
 
 Both prepared configurations derive from the previously verified complete deployment configuration and preserve plain variables plus D1/R2/AI bindings. Secrets remain provider bindings, never placed in a config file. Production `ENVIRONMENT=production` and production bindings are retained. Preview `ENVIRONMENT=preview`, TESTD1, existing preview R2/AI are retained. Only intended preview additions are `PORTAL_PROFILE_ENABLED="1"` and `PORTAL_PREVIEW_MAIL_ENABLED`:
 
-- Mail-off stage: `"false"`; config SHA256 `1169676615b9efb4f8f5d85f1010f79fc6a6ed7a9cc3b5ad66ff2d39bf4d1316`.
-- Mail-on stage: `"true"`; config SHA256 `b40e0dd68ee9f5fb0b71acbcb50974d2af06efbaf82c27fe4ea9ecf2b7eae80b`.
+- Mail-off stage: `"false"`; config SHA256 `2f2a6620d9797ab94963ce480e3f0b49f9765a1f06d11521c1fac0f0d562d3f9`.
+- Mail-on stage: `"true"`; config SHA256 `72d11b82462bbf02825bfc200f5af4d66825ff19a7136e8edb3cf49f24e3219a`.
 
 These are preview-environment switches, not branch-local authorization. Enabling mail can affect other preview deployments that consume this configuration; do not claim branch-only isolation. Recipient reconciliation and retained Security review must precede the switch. The full portal's ordinary preview guard deliberately refuses authentication while mail is off; that refusal is expected in the first stage.
 
