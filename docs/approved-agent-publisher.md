@@ -1,5 +1,12 @@
 # Approved content publisher: design and operations
 
+**Nov21 execution update:** The prior permissions/custody wait described below
+is closed. See [the current qualification packet](operations/publisher-qualification/2026-11-21.md)
+for actual policy, identity and isolated TEST deployment readbacks. This successor
+populates only synthetic TEST approvals; production approvals remain disabled.
+Historical setup paragraphs below describe the earlier handoff and do not reopen
+the resolved owner-permission request.
+
 [pc2-codex-ct-5] Nov20 source design for private requirements54c7050609159.
 Supersedes the prior recommendation to wait for a human Staff browser. This
 candidate is reconciled to installed374, excluding the TEST-only People marker
