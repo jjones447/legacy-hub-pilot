@@ -1,15 +1,15 @@
 # Caregiver Profile implementation checkpoint
 
-Author: [pc2-codex-ct-13]. Nov21 06:00 UTC checkpoint, prepared early.
+Author: [pc2-codex-ct-13]. Nov21 08:00 UTC checkpoint, prepared early at07:22.
 Updated after the controlling Nov12 requester specification was recovered Nov21 05:43 UTC.
-The same PR now implements its catalog, backend validation, follow-up flag and staff projections.
+The same PR implements its catalog, backend validation, follow-up flag, staff projections and caregiver form.
 Source base: `9c936ed2c2f296093bd19f7b5e613faf6c3364cb`.
 Scope authority: [Legacy54 author handoff](https://github.com/jjones447/legacy-caregiver-hub/issues/54#issuecomment-7057254580)
 and [temporary lead acceptance](https://github.com/jjones447/legacy-caregiver-hub/issues/54#issuecomment-7057587254).
 
 ## Built in this checkpoint
 
-This is the catalog/storage/API slice, **not completed LP-01 or functional TEST**.
+This is the catalog/storage/API and caregiver-form slice, **not completed LP-01 or functional TEST**.
 No migration has been applied and no provider deployment or browser qualification is claimed.
 The own author branch preserves ct5's unknown private work for reconciliation.
 
@@ -17,11 +17,12 @@ The own author branch preserves ct5's unknown private work for reconciliation.
 | --- | --- | --- |
 | Storage | Candidate `schema/candidates/0022_caregiver_profile.sql`: one row per caregiver, separate ordinary/restricted JSON answers, revision and update time | Independent schema review and isolated TEST migration/bookmark/readback |
 | Authentication | Existing signed portal session and current nonarchived owner; joined reads and write predicates repeat eligibility | Native TEST qualification; no claim of a new logout-revocation mechanism |
-| API | Exact `GET/POST /api/portal/profile`, no owner selector/query, `no-store`; strict same-origin JSON POST; streamed 8 KiB limit; full catalog and required-field completion | Portal form integration |
-| Catalog | All five sections and 33 writable fields; exact options, conditional rules, optional declines, read-only account email, every-field round-trip | Accessible UI using the returned catalog |
+| API | Exact `GET/POST /api/portal/profile`, no owner selector/query, `no-store`; strict same-origin JSON POST; streamed 8 KiB limit; full catalog and required-field completion | Native owner-isolated form/API qualification |
+| Catalog | All five sections and 33 writable fields; exact options, conditional rules, optional declines, read-only account email, every-field round-trip | Browser and assistive-technology qualification |
 | Writes | Additive profile only; revision compare-and-swap; transaction with revision-only audit; current owner eligibility inside write | Native D1 transactional/runtime checks |
-| Conflicts | Stale revision returns409 without overwrite; ambiguous acknowledgement returns generic500, then owner GET readback before retry | Accessible conflict/recovery UI and tests |
-| UI | Existing `portal.html#portalProfileCard` and portal `me` projection unchanged | Editable mobile/keyboard/screen-reader form, prefill/resume, progress, accessible field errors and confirmation |
+| Conflicts | Stale revision returns409 without overwrite; ambiguous acknowledgement returns generic500, then owner GET readback before retry | Native conflict/recovery qualification |
+| Caregiver UI | Five catalog-driven sections, read-only email, conditional inputs, completion progress, partial save/resume, explicit conflict/unknown-save reconciliation, status announcements; owner/session changes clear all answers and reject stale responses | Actual browser/mobile/keyboard/screen-reader checks and field-specific validation guidance |
+| Staff UI | Restricted individual/aggregate backend projections already tested | Staff display/aggregate presentation and DOM no-disclosure checks |
 
 Initial feature switch `PORTAL_PROFILE_ENABLED` must equal `1`; no deployment
 configuration enables it. This allows synthetic handler tests without enabling the
@@ -70,9 +71,15 @@ the original Profile/audit transaction; further edits do not duplicate it, withd
 dismisses only open Profile flags, and a later new request creates a new flag. No
 questionnaire answers or contact method are copied into that flag or audit.
 
-Remaining implementation: sectioned accessible portal UI, dynamic conditions, dirty
-state/save/load/resume/conflict recovery, staff Profile display/aggregate presentation,
-UI no-disclosure tests, migration/runtime handoff and independent exact-head review. A request
+The caregiver form now uses the returned catalog and preserves partial answers. It submits
+only changed visible writable fields, preserves stored hidden answers, and never stores
+answers in browser storage. Successful saves reload normalized owner data; stale revisions
+and unknown acknowledgements require an explicit read before another write. Owner changes,
+sign-out and session resets clear the form and invalidate in-flight responses.
+
+Remaining implementation: staff Profile display/aggregate presentation, field-specific
+validation guidance, staff UI no-disclosure tests, browser qualification, migration/runtime
+handoff and independent exact-head review. A request
 for support must not enroll the caregiver or automatically send contact. Respite
 information is part of this Profile; it does not activate respite services. No household
 income, detailed medical history/medications, Wellness Passport questions or wellness
@@ -87,8 +94,12 @@ not packet recovery. SAME Devin4 review window retained; no duplicate publisher1
 `tests/caregiver-profile.test.mjs` and `tests/caregiver-profile-catalog.test.mjs` invoke the actual handlers and SQL against synthetic
 in-memory SQLite, including two owners, session expiry, owner archive before read/write,
 same-revision saves, audit failure rollback and lost acknowledgement readback. It does
-not call provider APIs, send mail or establish native D1 behavior. Both tests are explicitly
-included in `scripts/unit-test-files.mjs`.
+not call provider APIs, send mail or establish native D1 behavior. These tests and `tests/caregiver-profile-ui.test.mjs` are explicitly
+included in `scripts/unit-test-files.mjs`. Eight UI cases use the actual controller in JSDOM
+for partial saves, conditional preservation, read-only email, stale-owner responses,
+sign-out during save, conflict and ambiguous acknowledgement recovery, and denial clearing.
+The portal dashboard integration test covers new-owner reload, same-owner edit preservation
+and session reset. These are synthetic DOM checks, not installed browser acceptance.
 
 Candidate0022 must remain separate from People0021, which is already applied to TEST
 and must not be reapplied. A supported executor must verify the deployment-specific
@@ -103,16 +114,19 @@ for the approved retention/recovery disposition. Do not run an automatic destruc
 
 Working dates remain Nov22 10:00 UTC exact source/green checks and Nov22 23:59 actual
 owner-isolated TEST. Source options/copy are now recovered. Delivery remains at risk
-until the full form/privacy implementation is completed and an executor accepts runtime custody. Ct5's unpublished state
-remains unknown; reconcile rather than overwrite on return. Publisher setup and its
-existing owner permission request remain separate from this source work.
+until the full form/privacy implementation and runtime qualification are completed. Publisher
+execution custody is now qualified for this seat; Profile still needs its own reviewed
+schema/source, isolated migration and runtime evidence. Ct5's unpublished state
+remains unknown; reconcile rather than overwrite on return. Publisher release remains separately gated on a different valid service identity refusal
+receipt and explicit retained Security activation closure; its permission/custody wait is closed.
 
 ## Remaining implementation estimate
 
-After catalog/projection delivery: approximately6–8 focused author hours for portal and
-staff UI integration, DOM/no-disclosure tests, integration corrections and review-ready
-packaging. This is an estimate, not an accepted runtime-executor promise. Working source
-target Nov22 10:00 remains feasible with capacity; keep SAME Devin4 initial4–6h and
-successor2–3h windows. Actual TESTNov22 23:59 still depends on qualified executor acceptance,
+After the caregiver form slice: approximately4–6 focused author hours for staff UI,
+field-specific validation guidance, no-disclosure/integration checks, corrections and
+review-ready packaging. Browser/native qualification and independent review are separate.
+The publisher gate remains external; further release work consumes author capacity.
+Working source target Nov22 10:00 remains feasible with capacity; keep SAME Devin4
+initial4–6h and successor2–3h windows. Actual TESTNov22 23:59 remains conditional on
 review closure, isolated migration/provider readback and browser/runtime qualification.
-Next08:00 checkpoint reports UI progress against this estimate.
+This early08:00 checkpoint records source progress, not full Profile acceptance.

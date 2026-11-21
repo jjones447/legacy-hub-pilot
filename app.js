@@ -824,6 +824,7 @@ function renderPortalData(data) {
     nextQaSamples !== portalQaSamplesActive ||
     (portalSupportCacheCaregiverKey && portalSupportCacheCaregiverKey !== nextCaregiverKey);
   if (identityChanged) {
+    if (typeof portalProfileEditor !== 'undefined' && portalProfileEditor) portalProfileEditor.clear();
     portalSessionGeneration += 1;
     portalEventsFilterState = 'all';
     portalSupportRealRequests = [];
@@ -857,7 +858,7 @@ function renderPortalData(data) {
     welcome.textContent = first ? 'Welcome to Your Sanctuary, ' + first + '!' : 'Welcome to Your Sanctuary!';
   }
 
-  // My Profile & Intake: read-only account details (updates/intake are not built yet).
+  // Account identity stays read-only; the separately gated Profile editor saves owner answers.
   const setText = function (id, value) {
     const el = document.getElementById(id);
     if (el) el.textContent = value ? String(value) : '—';
@@ -865,6 +866,8 @@ function renderPortalData(data) {
   setText('portalProfileName', [profile.first_name, profile.last_name].filter(Boolean).join(' '));
   setText('portalProfileEmail', profile.email);
   setText('portalProfilePhone', profile.phone);
+  if ((identityChanged || (typeof portalProfileEditor !== 'undefined' && portalProfileEditor && !portalProfileEditor.available))
+      && typeof loadPortalProfileEditor === 'function') loadPortalProfileEditor();
 
   // Membership status
   const memberStatus = document.getElementById('portalMembershipStatus');
@@ -955,6 +958,23 @@ function renderPortalData(data) {
   });
 }
 
+var portalProfileEditor = null;
+function loadPortalProfileEditor() {
+  const root = document.getElementById('portalProfileEditor');
+  if (!root || typeof window.createCaregiverProfileEditor !== 'function') return;
+  if (!portalProfileEditor) portalProfileEditor = window.createCaregiverProfileEditor(root, {
+    epoch: function () { return portalSessionGeneration; },
+    available: function (enabled) {
+      const fallback = document.getElementById('portalProfileComingSoon');
+      if (fallback) fallback.hidden = enabled;
+      const card = document.getElementById('portalProfileCard');
+      if (card && enabled) card.hidden = false;
+      if (card && card.classList) card.classList.toggle('profile-editor-open', enabled);
+    }
+  });
+  void portalProfileEditor.load();
+}
+
 var portalSessionGeneration = 0;
 var portalActiveCaregiverKey = '';
 var portalQaSamplesActive = false;
@@ -967,6 +987,7 @@ var portalSupportHistoryUnavailable = false;
 var portalSupportFilterState = 'all';
 
 function bumpPortalSessionGeneration() {
+  if (typeof portalProfileEditor !== 'undefined' && portalProfileEditor) portalProfileEditor.clear();
   portalSessionGeneration += 1;
   return portalSessionGeneration;
 }
@@ -983,6 +1004,7 @@ function portalProfileIdentityKey(profile) {
 }
 
 function resetPortalSessionState() {
+  if (typeof portalProfileEditor !== 'undefined' && portalProfileEditor) portalProfileEditor.clear();
   portalSessionGeneration += 1;
   portalActiveCaregiverKey = '';
   portalQaSamplesActive = false;
