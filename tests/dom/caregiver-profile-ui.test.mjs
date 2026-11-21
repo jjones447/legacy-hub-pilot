@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
-import { PROFILE_SECTIONS } from '../functions/_lib/caregiver-profile-fields.js';
-const script = readFileSync(new URL('../caregiver-profile.js', import.meta.url), 'utf8');
+import { PROFILE_SECTIONS } from '../../functions/_lib/caregiver-profile-fields.js';
+const script = readFileSync(new URL('../../caregiver-profile.js', import.meta.url), 'utf8');
 const response = (status, body) => ({ status, redirected: false, json: async () => body });
 const packet = (fields = {}, revision = 0) => ({ ok: true, sections: PROFILE_SECTIONS,
   profile: { revision, fields: { first_name: 'Synthetic', last_name: 'Owner', email: 'owner@example.invalid', ...fields } } });

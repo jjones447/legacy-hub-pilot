@@ -94,8 +94,9 @@ not packet recovery. SAME Devin4 review window retained; no duplicate publisher1
 `tests/caregiver-profile.test.mjs` and `tests/caregiver-profile-catalog.test.mjs` invoke the actual handlers and SQL against synthetic
 in-memory SQLite, including two owners, session expiry, owner archive before read/write,
 same-revision saves, audit failure rollback and lost acknowledgement readback. It does
-not call provider APIs, send mail or establish native D1 behavior. These tests and `tests/caregiver-profile-ui.test.mjs` are explicitly
-included in `scripts/unit-test-files.mjs`. Eight UI cases use the actual controller in JSDOM
+not call provider APIs, send mail or establish native D1 behavior. The handler tests are explicitly included in `scripts/unit-test-files.mjs`.
+`tests/dom/caregiver-profile-ui.test.mjs` runs with the existing Staff DOM workflow,
+which installs the locked JSDOM dependencies. Eight UI cases use the actual controller in JSDOM
 for partial saves, conditional preservation, read-only email, stale-owner responses,
 sign-out during save, conflict and ambiguous acknowledgement recovery, and denial clearing.
 The portal dashboard integration test covers new-owner reload, same-owner edit preservation
