@@ -2,6 +2,7 @@
 import { checkIpRequestLimit, IP_LIMITS } from '../_shared.mjs';
 import { canSendEmail, isPreviewMailOptIn, sendEmail, signInEmail } from '../../_lib/email.js';
 import { QUESTIONS, validateCheckin, recordCheckin, caregiverHistory, isCheckinDue, CHECKIN_EVERY_DAYS } from '../../_lib/wellness.js';
+import { loadCaregiverProfile, saveCaregiverProfile, validateProfilePatch, readProfileBody } from '../../_lib/caregiver-profile.js';
 
 async function getHmacSha256(message, secret) {
   const enc = new TextEncoder();
@@ -268,6 +269,9 @@ export async function onRequestGet({ request, env }) {
     // credentials must not unlock caregiver records after this containment.
     if (previewPortalDisabled(env)) return previewUnavailable();
 
+    if (action === 'profile' && (env.PORTAL_PROFILE_ENABLED !== '1'
+        || url.pathname !== '/api/portal/profile' || url.search)) return json({ ok: false, error: 'not_found' }, 404);
+
     const secret = env.PORTAL_TOKEN_SECRET;
     if (!secret) {
       return json({ ok: false, error: 'auth_not_configured' }, 503);
@@ -280,6 +284,13 @@ export async function onRequestGet({ request, env }) {
       }
       if (url.searchParams.getAll('token').length !== 1 || !OPAQUE_TOKEN.test(token)) return htmlErrorPage('This access link is unrecognized or has been revoked.');
       return await confirmationPage(request, token, secret);
+    }
+
+    if (action === 'profile') {
+      const caregiverId = await parseSessionCookie(request.headers.get('Cookie'), secret);
+      if (!caregiverId || !await hasNonarchivedCaregiver(env.LEGACY_DB, caregiverId)) return json({ ok: false, error: 'unauthorized' }, 401);
+      const profile = await loadCaregiverProfile(env.LEGACY_DB, caregiverId);
+      return profile ? json({ ok: true, profile }) : json({ ok: false, error: 'unauthorized' }, 401);
     }
 
     if (action === 'me') {
@@ -364,6 +375,14 @@ export async function onRequestPost({ request, env }) {
         return response;
       }
       return previewUnavailable();
+    }
+
+    // Profile is browser-only: strict origin plus JSON rejects simple form CSRF.
+    // Keep the initial storage slice off until full source/review/TEST qualification.
+    if (action === 'profile') {
+      if (env.PORTAL_PROFILE_ENABLED !== '1' || url.pathname !== '/api/portal/profile' || url.search) return json({ ok: false, error: 'not_found' }, 404);
+      if (request.headers.get('Origin') !== url.origin) return json({ ok: false, error: 'forbidden' }, 403);
+      if (request.headers.get('Content-Type')?.split(';')[0].trim().toLowerCase() !== 'application/json') return json({ ok: false, error: 'invalid_content_type' }, 415);
     }
 
     // Incremental browser-origin defense for known production POST actions.
@@ -488,6 +507,15 @@ export async function onRequestPost({ request, env }) {
       }
 
       return json(responseObj);
+    }
+
+    if (action === 'profile') {
+      const caregiverId = await parseSessionCookie(request.headers.get('Cookie'), secret);
+      if (!caregiverId || !await hasNonarchivedCaregiver(env.LEGACY_DB, caregiverId)) return json({ ok: false, error: 'unauthorized' }, 401);
+      const patch = validateProfilePatch(await readProfileBody(request));
+      if (!patch) return json({ ok: false, error: 'invalid_profile' }, 400);
+      const result = await saveCaregiverProfile(env.LEGACY_DB, caregiverId, patch);
+      return json(result.ok ? { ok: true, revision: result.revision } : { ok: false, error: result.error }, result.status ?? 200);
     }
 
     if (action === 'wellness') {
