@@ -346,3 +346,83 @@ current human staff, real login/mail, all fields/accessibility, or native audit-
 rollback. Product remains OFF in production; shared preview guard unchanged. Do not
 silently extend the window or rerun the completed native sequence. Any additional
 runtime scope needs its own precise qualification plan and retained review.
+
+
+### Retained runtime verdicts and remaining work (Nov21 13:25UTC)
+
+Both retained reviewers accepted the completed bounded fixture: functional
+[54c7062576333](https://github.com/jjones447/legacy-caregiver-hub/issues/54#issuecomment-7062576333)
+and Security [381c7062578263](https://github.com/jjones447/legacy-hub-pilot/pull/381#issuecomment-7062578263).
+Security explicitly leaves no additional gate or rerun for that scope. Four hosted
+checks also passed at evidence564f8b6f. Disable403 is the fixture boundary's
+`fixture_unavailable`, not proof of the product feature-flag404 branch; the preserved
+response body identifies the fixture refusal. Protected staff/publisher302 remains
+outer Access only. No provider replay or expiry probe is needed.
+
+The following is a proposed follow-on qualification plan, **not execution approval**.
+Keep product handlers unchanged and the currently deployed fixture inert. No renewed
+window, new route, database injection or existing owner mutation is activated here.
+
+1. Native audit atomicity: reuse only fictional owner A at observed revision4, with
+   a fresh exact Profile/caregiver/audit/follow-up snapshot and TEST identity check.
+   Require no pre-existing trigger of the candidate name. Candidate SQL is:
+
+   ```sql
+   CREATE TRIGGER profile_ct13_audit_fault_20261121
+   BEFORE INSERT ON audit_log
+   WHEN NEW.actor = 'profile_ct13_20261121_a_571d390c'
+     AND NEW.action = 'portal.profile_saved'
+     AND NEW.entity = 'caregiver_profile'
+     AND NEW.entity_id = 'profile_ct13_20261121_a_571d390c'
+   BEGIN
+     SELECT RAISE(ABORT, 'profile_fixture_audit_fault');
+   END;
+   ```
+
+   After separate exact SQL/artifact/window review, a single revision4 contact-Yes
+   request must produce generic500 with no answer/SQL disclosure and leave the full
+   snapshot unchanged (including no new follow-up). Read original state on any unknown
+   acknowledgement; never replay the write. Remove only the exact reviewed trigger:
+   `DROP TRIGGER profile_ct13_audit_fault_20261121;`, then independently query
+   sqlite_master for absence and compare unchanged records. On unknown CREATE/DROP,
+   inspect sqlite_master before any corrective action. Do not restore the whole DB,
+   delete audits or rerun0022/seed. Trigger failure/cleanup must be finally-protected
+   in the reviewed executor. This candidate has NOT been installed.
+
+2. Native mid-request ineligibility: a separate reviewed test-only adapter may wrap
+   the native D1 binding immediately before the unchanged handler's batch call. It
+   must first verify the exact fictional owner and expected revision, issue one
+   guarded native status transition for that owner, then call the original batch.
+   Expect409 with unchanged Profile/audit/follow-up state. Restore only that owner's
+   original status using a guarded predicate and independently read back. Review must
+   cover exact SQL, one-use server-side selection, no request/body-controlled hook,
+   owner/alias/window fences, cleanup and no real records. No fake staff actor and no
+   timing-based concurrent guess count as proof. Initial-revision0 and existing-row
+   cases need separate pinned fictional operands; do not overwrite A's evidence.
+   The adapter and its source tests remain to be authored/reviewed.
+
+3. Lost acknowledgement and form coverage: a reviewed browser transport can discard
+   the response only after observing a successful original save internally, then let
+   the UI reconcile by GET without replaying POST; distinguish injected transport
+   loss from D1 transaction acknowledgement uncertainty. A later reviewed fixture
+   window can exercise all current option/conditional fields, read-only email,
+   validation focus, keyboard flow and accessible labels with fictional data. No
+   widening of the expired12–13 window is implied.
+
+4. Supported full portal and staff composition: the fixture cannot supply this.
+   Ordinary preview portal entry is gated by `isPreviewMailOptIn`; enabling it can
+   enable actual transactional mail when the platform key is present. Existing
+   publisher service custody does not grant `confirmationActor`: the middleware
+   requires a verified human Access identity and current active staff_member role.
+   The unresolved custody is a legitimate supported test owner entry and current
+   human admin/ordinary-staff sessions, plus an authorized role-change operator for
+   downgrade/no-cached-disclosure checks. Do not expose sessions, fabricate actor
+   proof, repurpose publisher tokens, enable preview mail, or alter real staff roles.
+   Existing lead/custodian route must identify that supported method or retain this
+   precise gap. No new customer/account/credential request is created by this plan.
+
+The author will prepare the exact synthetic fault/race adapter and local checks for
+SAME ct12 review by Nov21 15:00UTC, with an explicit blocker if the design cannot
+preserve the above fences. This is a source-package target, not a new hosted window
+or a promise of full-portal completion. Retained Devin4 owns functional acceptance;
+actual broader TEST Nov22 23:59 remains conditional on these remaining scopes.
