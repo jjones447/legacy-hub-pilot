@@ -294,3 +294,22 @@ human staff/login/mail acceptance remain separate. Reviewer Node22's SQLite warn
 caused its initial sentinel-log assertion failure (38/39), then39/39 passed with that
 warning disabled; author/hosted Node24 runs passed unflagged. This portability difference
 is recorded and does not change the non-disclosure assertion or native qualification.
+
+
+### Native setup correction before activation (Nov21 11:28UTC)
+
+At reviewed e406d0ec, the fresh preview-only fixture binding was added with exact
+unrelated configuration/production preservation. Fresh TEST identity, collisions,
+bookmark and all16 prior-table inventories passed. Candidate0022 applied once and its
+six-column schema/empty table were read back. Do not repeat either completed step.
+
+The three-row seed then failed atomically: installed People0021 constrains is_caregiver
+to nullable TEXT `yes`/`no`, whereas the first seed incorrectly used integer1. Explicit
+native readback found ZERO proposed owner rows. No retry or active deploy/session took
+place. This successor changes only those three operands to `yes` and the SQLite seed
+test to the actual installed TEXT CHECK constraint. Product/boundary/window unchanged.
+The existing0021 column must not be altered to accommodate the fixture. SAME ct12 must
+carry scope to the corrected exact seed before its one reconciled execution. Refresh
+zero ID/email collision state, verify0022 remains empty and preserve all original table
+counts (except expected three new caregivers). Secret and0022 receipts remain valid;
+no reapplication or secret rotation is proposed.

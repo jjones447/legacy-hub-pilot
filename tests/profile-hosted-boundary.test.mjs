@@ -152,13 +152,13 @@ test('pinned hosted candidate is closed outside its exact reviewed window', asyn
 
 test('reviewed synthetic seed preserves prior owners and refuses any duplicate insert', t => {
   const f = fixture(); t.after(() => f.close());
-  f.raw.exec('ALTER TABLE caregiver ADD COLUMN is_caregiver INTEGER NOT NULL DEFAULT 0');
+  f.raw.exec("ALTER TABLE caregiver ADD COLUMN is_caregiver TEXT CHECK(is_caregiver IS NULL OR is_caregiver IN ('yes','no'))");
   const before = JSON.stringify(f.raw.prepare('SELECT * FROM caregiver ORDER BY id').all());
   const sql = readFileSync(new URL('./runtime/profile-hosted-seed.sql', import.meta.url), 'utf8');
   f.raw.exec(sql);
   const rows = f.raw.prepare("SELECT * FROM caregiver WHERE source='profile_qualification' ORDER BY id").all();
   assert.deepEqual(rows.map(row => row.id).sort(), [...owners].sort());
-  assert.ok(rows.every(row => row.is_caregiver === 1 && row.email.endsWith('@example.invalid')));
+  assert.ok(rows.every(row => row.is_caregiver === 'yes' && row.email.endsWith('@example.invalid')));
   assert.equal(rows.filter(row => row.status === 'archived').length, 1);
   assert.equal(JSON.stringify(f.raw.prepare("SELECT * FROM caregiver WHERE source != 'profile_qualification' ORDER BY id").all()), before);
   const inserted = JSON.stringify(rows);
