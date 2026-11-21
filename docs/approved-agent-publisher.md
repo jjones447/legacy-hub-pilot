@@ -2,8 +2,10 @@
 
 **Nov21 execution update:** The prior permissions/custody wait described below
 is closed. See [the current qualification packet](operations/publisher-qualification/2026-11-21.md)
-for actual policy, identity and isolated TEST deployment readbacks. This successor
-populates only synthetic TEST approvals; production approvals remain disabled.
+for actual policy, identity and isolated TEST deployment readbacks. The final
+catalog binds production approvals to fresh actual operands after successful
+native synthetic TEST execution; retained exact-head activation review is still
+required before deployment or publication.
 Historical setup paragraphs below describe the earlier handoff and do not reopen
 the resolved owner-permission request.
 
@@ -45,9 +47,10 @@ cannot create another publishing operation. No request or environment variable
 can supply or override catalog bindings. The factory seam is trusted server/test
 construction only; the deployed dispatcher uses the imported catalog.
 
-**Current live entries are deliberately NOT ACTIVATED:** environment, origin and
-target_version are null until actual deployment/target readbacks are qualified
-and included in an exact reviewed catalog successor. Inventing a live preimage,
+The initial live entries deliberately used null environment, origin and
+target_version. The Nov21 final catalog now binds actual qualified readbacks;
+its exact retained review and native TEST closure are required before deployment.
+Inventing a live preimage,
 accepting the current row on first use, or enabling a wildcard origin would undo
 the security fix. TEST uses a separately reviewed synthetic target/operation at
 its exact qualified preview origin. Live approval scope must cover the actual

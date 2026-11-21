@@ -1,11 +1,11 @@
-// Server-owned exact approval operands. Production entries remain disabled.
-// TEST readbacks and retained review: docs/operations/publisher-qualification/2026-11-21.md
+// Server-owned exact approval operands. Production activation requires retained review
+// and native TEST closure recorded in docs/operations/publisher-qualification/2026-11-21.md.
 export const PUBLISHER_APPROVALS = Object.freeze([
   {
     "operation_id": "legacy-wellbeing-20261121",
-    "environment": null,
-    "origin": null,
-    "target_version": null,
+    "environment": "production",
+    "origin": "https://caregiversanctuary.org",
+    "target_version": "db4b106409f1ecbebf8fca02103f310f20d41320cbb008622c59e13953bbe32e",
     "approval_ref": "tracker:6966964897",
     "target_id": "ps_home.journey",
     "type_id": "page_section",
@@ -15,9 +15,9 @@ export const PUBLISHER_APPROVALS = Object.freeze([
   },
   {
     "operation_id": "legacy-wellbeing-20261121",
-    "environment": null,
-    "origin": null,
-    "target_version": null,
+    "environment": "production",
+    "origin": "https://caregiversanctuary.org",
+    "target_version": "db4b106409f1ecbebf8fca02103f310f20d41320cbb008622c59e13953bbe32e",
     "approval_ref": "tracker:7043252292",
     "target_id": "ps_home.journey",
     "type_id": "page_section",

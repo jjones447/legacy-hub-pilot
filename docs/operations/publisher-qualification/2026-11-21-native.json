@@ -1,0 +1,263 @@
+{
+  "at": "2026-11-21T06:16:38.872705+00:00",
+  "checks": [
+    {
+      "check": "provider-source-database-origin",
+      "source": "e0e5ef54bd24a51d327cf8ea6e2d7d9ca97119b2",
+      "deployment_id": "a58f7cb9-ec29-4c26-a86c-4ad43047ca08",
+      "database": "42be536c-e354-44c7-b246-2dcac18d8ac6",
+      "origin": "https://publisher-qualified-380.legacy-hub-5qo.pages.dev"
+    },
+    {
+      "check": "initial-status-flow",
+      "status": 200
+    },
+    {
+      "check": "initial-status-audit",
+      "status": 200
+    },
+    {
+      "check": "initial-status-drift_draft",
+      "status": 200
+    },
+    {
+      "check": "initial-status-drift_confirm",
+      "status": 200
+    },
+    {
+      "check": "wrong-reference",
+      "status": 403
+    },
+    {
+      "check": "wrong-target",
+      "status": 403
+    },
+    {
+      "check": "wrong-copy",
+      "status": 403
+    },
+    {
+      "check": "body-actor",
+      "status": 400
+    },
+    {
+      "check": "cross-origin-header",
+      "status": 403
+    },
+    {
+      "check": "anonymous-access",
+      "status": 302
+    },
+    {
+      "check": "invalid-service-credential",
+      "status": 302
+    },
+    {
+      "check": "assistant-refusal",
+      "status": 403
+    },
+    {
+      "check": "people-write-refusal",
+      "status": 403
+    },
+    {
+      "check": "people-read",
+      "status": 200
+    },
+    {
+      "check": "post-race-status",
+      "status": 200
+    },
+    {
+      "check": "concurrent-draft",
+      "statuses": [
+        200,
+        409
+      ],
+      "draft_id": "cid_pub_9fb3c33eee1efea3b241d85f4fe1a748e9b71489dcc373cea162f379bbed8067"
+    },
+    {
+      "check": "flow-preview",
+      "status": 200
+    },
+    {
+      "check": "cross-draft-origin-preview",
+      "status": 403
+    },
+    {
+      "check": "cross-draft-origin-confirm",
+      "status": 403
+    },
+    {
+      "check": "stale-preview-version",
+      "status": 409
+    },
+    {
+      "check": "native-concurrent-confirm-one-audit",
+      "statuses": [
+        200,
+        409
+      ],
+      "audit_id": 212,
+      "archive_retained": true
+    },
+    {
+      "check": "lost-ack-readonly-reconciliation",
+      "status": 200
+    },
+    {
+      "check": "published-operation-replay",
+      "status": 409
+    },
+    {
+      "check": "human-edit-replay-refusal",
+      "status": 409
+    },
+    {
+      "check": "human-edit-preserved",
+      "original_audit_id": 212
+    },
+    {
+      "check": "pre-draft-drift",
+      "status": 409
+    },
+    {
+      "check": "drift-reserve",
+      "status": 200
+    },
+    {
+      "check": "drift-preview",
+      "status": 200
+    },
+    {
+      "check": "post-preview-drift",
+      "status": 409
+    },
+    {
+      "check": "audit-reserve",
+      "status": 200
+    },
+    {
+      "check": "audit-preview",
+      "status": 200
+    },
+    {
+      "check": "native-audit-failure",
+      "status": 409
+    },
+    {
+      "check": "native-batch-rollback",
+      "target_unchanged": true,
+      "draft_unchanged": true,
+      "no_publish_audit": true
+    },
+    {
+      "check": "synthetic-fault-trigger-removed"
+    },
+    {
+      "check": "native-test-complete",
+      "production_written": false
+    }
+  ],
+  "source_tested": "e0e5ef54bd24a51d327cf8ea6e2d7d9ca97119b2",
+  "synthetic_rows": [
+    {
+      "id": "cid_pub_9fb3c33eee1efea3b241d85f4fe1a748e9b71489dcc373cea162f379bbed8067",
+      "type_id": "page_section",
+      "data": "{\"heading\":\"Synthetic publisher qualification only\",\"paragraph\":\"Synthetic approved value for flow; no caregiver data.\",\"unrelated\":\"preserve this synthetic field\"}",
+      "status": "archived",
+      "updated_by": "access_publisher:{\"actor\":\"service:legacy-publisher\",\"approval_ref\":\"synthetic:publisher-20261121-flow\",\"changes\":{\"paragraph\":\"Synthetic approved value for flow; no caregiver data.\"},\"environment\":\"preview\",\"operation_id\":\"publisher-test-20261121-flow\",\"origin\":\"https://publisher-qualified-380.legacy-hub-5qo.pages.dev\",\"target_id\":\"ps_publisher_20261121_flow\",\"target_version\":\"633636d8418111f2c74ad81a48930120d8a597051763a578978dbd58de3caa5f\",\"type_id\":\"page_section\"}",
+      "updated_at": "2026-11-21 06:16:34",
+      "draft_of": "ps_publisher_20261121_flow"
+    },
+    {
+      "id": "cid_pub_e3244f4d797d20fa8a9b22a2a982ed2c7a20a533d03448f311d3d3bc32772390",
+      "type_id": "page_section",
+      "data": "{\"heading\":\"Synthetic publisher qualification only\",\"paragraph\":\"Synthetic approved value for audit; no caregiver data.\",\"unrelated\":\"preserve this synthetic field\"}",
+      "status": "draft",
+      "updated_by": "access_publisher:{\"actor\":\"service:legacy-publisher\",\"approval_ref\":\"synthetic:publisher-20261121-audit\",\"changes\":{\"paragraph\":\"Synthetic approved value for audit; no caregiver data.\"},\"environment\":\"preview\",\"operation_id\":\"publisher-test-20261121-audit\",\"origin\":\"https://publisher-qualified-380.legacy-hub-5qo.pages.dev\",\"target_id\":\"ps_publisher_20261121_audit\",\"target_version\":\"0a984fbb8efe4a11fdca5207c97f39510d8a75b0f4dc59cdca225122649a1d86\",\"type_id\":\"page_section\"}",
+      "updated_at": "2026-11-21 06:16:38",
+      "draft_of": "ps_publisher_20261121_audit"
+    },
+    {
+      "id": "cid_pub_fe99baf30b3c1a911fe79180ed07f7b6757bc5c2f797c9b7b58b4239d3ac9ee4",
+      "type_id": "page_section",
+      "data": "{\"heading\":\"Synthetic publisher qualification only\",\"paragraph\":\"Synthetic approved value for drift_confirm; no caregiver data.\",\"unrelated\":\"preserve this synthetic field\"}",
+      "status": "draft",
+      "updated_by": "access_publisher:{\"actor\":\"service:legacy-publisher\",\"approval_ref\":\"synthetic:publisher-20261121-drift_confirm\",\"changes\":{\"paragraph\":\"Synthetic approved value for drift_confirm; no caregiver data.\"},\"environment\":\"preview\",\"operation_id\":\"publisher-test-20261121-drift_confirm\",\"origin\":\"https://publisher-qualified-380.legacy-hub-5qo.pages.dev\",\"target_id\":\"ps_publisher_20261121_drift_confirm\",\"target_version\":\"8960faa70c98d3f358ae60d43d61a4c1175dce0704ecf7d8aa1d01d05a93dbc7\",\"type_id\":\"page_section\"}",
+      "updated_at": "2026-11-21 06:16:37",
+      "draft_of": "ps_publisher_20261121_drift_confirm"
+    },
+    {
+      "id": "ps_publisher_20261121_audit",
+      "type_id": "page_section",
+      "data": "{\"heading\":\"Synthetic publisher qualification only\",\"paragraph\":\"Synthetic prior value; no caregiver data.\",\"unrelated\":\"preserve this synthetic field\"}",
+      "status": "published",
+      "updated_by": "synthetic:pc2-codex-ct-13:publisher-qualification",
+      "updated_at": "2026-11-21 06:12:51",
+      "draft_of": null
+    },
+    {
+      "id": "ps_publisher_20261121_drift_confirm",
+      "type_id": "page_section",
+      "data": "{\"heading\":\"Synthetic publisher qualification only\",\"paragraph\":\"Synthetic edit after preview.\",\"unrelated\":\"preserve this synthetic field\"}",
+      "status": "published",
+      "updated_by": "synthetic:human-edit",
+      "updated_at": "2026-11-21 06:16:37",
+      "draft_of": null
+    },
+    {
+      "id": "ps_publisher_20261121_drift_draft",
+      "type_id": "page_section",
+      "data": "{\"heading\":\"Synthetic publisher qualification only\",\"paragraph\":\"Synthetic edit before reservation.\",\"unrelated\":\"preserve this synthetic field\"}",
+      "status": "published",
+      "updated_by": "synthetic:human-edit",
+      "updated_at": "2026-11-21 06:16:36",
+      "draft_of": null
+    },
+    {
+      "id": "ps_publisher_20261121_flow",
+      "type_id": "page_section",
+      "data": "{\"heading\":\"Synthetic publisher qualification only\",\"paragraph\":\"Synthetic later human edit must survive replay.\",\"unrelated\":\"preserve this synthetic field\"}",
+      "status": "published",
+      "updated_by": "synthetic:human-edit",
+      "updated_at": "2026-11-21 06:16:35",
+      "draft_of": null
+    }
+  ],
+  "synthetic_audits": [
+    {
+      "id": 212,
+      "actor": "service:legacy-publisher",
+      "action": "content_item.publish",
+      "entity": "content_item",
+      "entity_id": "ps_publisher_20261121_flow",
+      "before_json": "{\"status\":\"published\",\"data\":{\"heading\":\"Synthetic publisher qualification only\",\"paragraph\":\"Synthetic prior value; no caregiver data.\",\"unrelated\":\"preserve this synthetic field\"}}",
+      "after_json": "{\"status\":\"published\",\"data\":{\"heading\":\"Synthetic publisher qualification only\",\"paragraph\":\"Synthetic approved value for flow; no caregiver data.\",\"unrelated\":\"preserve this synthetic field\"},\"approval_ref\":\"synthetic:publisher-20261121-flow\",\"publisher_operation\":\"publisher-test-20261121-flow\",\"publisher_binding\":\"access_publisher:{\\\"actor\\\":\\\"service:legacy-publisher\\\",\\\"approval_ref\\\":\\\"synthetic:publisher-20261121-flow\\\",\\\"changes\\\":{\\\"paragraph\\\":\\\"Synthetic approved value for flow; no caregiver data.\\\"},\\\"environment\\\":\\\"preview\\\",\\\"operation_id\\\":\\\"publisher-test-20261121-flow\\\",\\\"origin\\\":\\\"https://publisher-qualified-380.legacy-hub-5qo.pages.dev\\\",\\\"target_id\\\":\\\"ps_publisher_20261121_flow\\\",\\\"target_version\\\":\\\"633636d8418111f2c74ad81a48930120d8a597051763a578978dbd58de3caa5f\\\",\\\"type_id\\\":\\\"page_section\\\"}\",\"draft_id\":\"cid_pub_9fb3c33eee1efea3b241d85f4fe1a748e9b71489dcc373cea162f379bbed8067\"}",
+      "at": "2026-11-21 06:16:34"
+    }
+  ],
+  "trigger_removal_readback": {
+    "results": [],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "ENAM",
+      "served_by_colo": "ORD",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.1816
+      },
+      "duration": 0.1816,
+      "changes": 0,
+      "last_row_id": 0,
+      "changed_db": false,
+      "size_after": 290816,
+      "rows_read": 43,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  },
+  "fault_trigger_sql": "CREATE TRIGGER publisher_qualification_audit_failure_20261121 BEFORE INSERT ON audit_log WHEN NEW.entity_id='ps_publisher_20261121_audit' AND NEW.action='content_item.publish' BEGIN SELECT RAISE(ABORT,'synthetic publisher qualification audit failure'); END",
+  "remaining_evidence_gap": "Valid different service-token native refusal awaiting existing GUI3 custodian; invalid credential and anonymous refusal passed."
+}

@@ -133,7 +133,7 @@ test('regression: consumed approval cannot overwrite a later human edit through 
 
 const draftBody = () => ({approval_ref:entry.approval_ref,target_id:entry.target_id,changes:entry.changes});
 const statusBody = () => ({approval_ref:entry.approval_ref,target_id:entry.target_id});
-test('unqualified live catalog and caller-supplied binding are refused without writes', async () => {
+test('deployed catalog cannot authorize fixture origin or caller-supplied binding', async () => {
   const f=await fixture();
   assert.equal((await f.call('draft',draftBody(),{defaultCatalog:true})).status,403);
   assert.equal((await f.call('draft',{...draftBody(),origin:'https://preview.invalid',target_version:f.reviewed.target_version})).status,400);
