@@ -131,3 +131,109 @@ binding/migration/deployment has been changed for Profile. Retained ct12 must ac
 or correct this isolation design, then review the exact adapter before execution.
 The Nov22 23:59 actual TEST commitment remains conditional. This packet delivers the
 Nov21 10:00 mechanism/witness checkpoint early; it is not hosted TEST completion.
+
+## Nov21 11:00 packet: exact hosted adapter, inert source
+
+Retained Security design acceptance is PR381 comment7060534707. The implementation
+is in `tests/runtime/profile-hosted-{manifest,boundary,worker}.mjs`; the independent
+build entry is `tests/runtime/build-profile-hosted.mjs`. Product handlers, shared
+preview guard, schema candidate and public site allowlist are unchanged.
+
+The checked-in manifest has **null origin and window**. Its compiled worker returns403
+before reading any environment binding. Three public synthetic IDs are proposed in
+that manifest; they are NOT yet reserved or collision-checked in TEST. No fixture
+secret, signed cookie, provider config, migration or deployment has been created.
+
+The active boundary, exercised only with a fictional unit-test manifest, requires:
+
+- A single exact HTTPS `profile-fixture-*` alias under the existing Pages project,
+  preview environment and a source-pinned window of at most one hour. No wildcard,
+  production/default host, runtime env activation or caller-selected manifest.
+- Exact Profile GET/POST path without query, matching supplied Origin and no cross-site
+  fetch. POST requires Origin. Before DB access, a bounded, uniquely named session
+  cookie must contain one pinned owner, canonical timestamp within five minutes and
+  the fixture window, and a hex signature. This is only a prefilter; the unchanged
+  handler verifies actual HMAC/expiry/current eligibility before Profile access.
+- A fresh64-hex fixture-only secret. Only LEGACY_DB, that secret mapped to
+  PORTAL_TOKEN_SECRET, the fixture environment marker and Profile flag reach handlers.
+  Request forwarding strips unrelated cookies, Access credentials and authorization.
+- Four fixed asset routes, no fallback, no public mint/login/staff/publisher route.
+  Asset fetches carry no request headers/cookies. Responses are no-store and have a
+  restrictive same-origin CSP. Exceptions are not serialized or logged by the adapter.
+
+Attached preview secrets remain runtime capabilities. Isolation is code-enforced
+non-use/non-disclosure, not capability-level absence. Unit sentinels assert fake
+production/mail/provider secret getters are never read, only the four safe env fields
+reach real handlers, secret headers are stripped, and no outbound fetch/log/response
+contains those sentinels. Real handler SQLite tests cover valid save/readback, owner
+isolation, stale revision/foreign selector refusals, invalid HMAC and current archive
+revocation. Early denials cannot even read DB or asset bindings. This does not establish
+hosted D1 atomicity or actual browser/login/staff qualification.
+
+Build with locked esbuild0.28.1 (from existing Wrangler lock), no network or credentials:
+`node tests/runtime/build-profile-hosted.mjs`. It creates a new private0700 scratch and
+six0600 files: `_worker.js`, `_routes.json`, `index.html`, `caregiver-profile.js`,
+`styles.css`, `fixture-start.js`. The routes file intercepts all paths, excluding none.
+The bundle has no external imports; its input inventory and SHA256 file hashes go to a
+private sibling receipt, outside the deployable asset directory. No source maps, config,
+session manifest, tooling or secret files are copied. The independent build test imports
+the emitted worker and proves its inert403 behavior. This is a local artifact test,
+not a hosted deployment. Unit CI needs no esbuild installation; the separate build test
+requires the existing locked build dependencies.
+
+### Exact execution gates after adapter review
+
+1. Using existing delivered ops custody, read the existing project, preview configuration,
+   deployment environment and TEST D1 identity. Retain raw configuration only in private
+   executor storage; record sanitized identities and per-field preservation comparisons.
+   No rotation, read/reuse of the existing portal signing key, or production change.
+   Require PROFILE_FIXTURE_SECRET absent; an existing binding requires custody
+   reconciliation, not replacement or silent reuse.
+   Confirm the three proposed IDs absent across caregiver/Profile/audit/follow-up records;
+   if occupied, stop and return a new reviewed manifest rather than adopt an existing row.
+2. Stage this exact **inert** advanced-mode artifact on one dedicated fixture preview
+   branch. Use a private deployment config constructed from verified current preview
+   nonsecret configuration and bindings, not the product root config or production branch.
+   Do not silently replace preview vars/bindings with defaults. Read actual provider
+   deployment/source/env/TEST-D1 and returned alias, then prove inert403. Do not guess
+   the alias or enable a wildcard while discovering it. Alias must match the fixed
+   prefix restriction; a different actual provider result requires review, not widening.
+3. Prepare a successor source manifest with only the provider-returned stable fixture
+   alias, at-most-one-hour future execution window and collision-qualified fixed IDs.
+   Send exact source/artifact hashes plus config-preservation/collision/readback evidence
+   to SAME ct12 before activation. The alias is pinned across the successor deployment;
+   the initial inert deployment URL is never treated as the active deployment. Keep the
+   deployment inert while preparing the reviewed binding/schema/owner prerequisites.
+4. Generate one fresh32-byte secret locally in a private0600 file, independently of all
+   existing keys. Add only PROFILE_FIXTURE_SECRET to **preview**, preserve every other
+   project setting and read back the secret binding's presence/type, without printing
+   its value. This new binding is project-wide for future preview deployments, not
+   branch-scoped; disclose that impact and keep existing previews/product guard intact.
+   If supported tooling cannot preserve the existing configuration exactly, stop with
+   that specific gap. Never put the secret in source, CLI arguments or public receipts.
+5. Before migration, use the installed Wrangler4.139.0 supported D1 Time Travel bookmark
+   read (`/accounts/{account}/d1/database/{TEST_ID}/time_travel/bookmark`) and schema/row
+   inventory. Retain the actual bookmark privately. Verify existing People0021 installed
+   state from its prior receipt/schema, without applying it again. Require Profile0022
+   table absent; an existing/ambiguous table requires reconciliation. Apply only the
+   reviewed additive candidate0022 once, then read back its schema and prior-row inventory.
+   No broad migration runner, replacement DB, destructive restore or automatic rollback.
+6. Seed only the exact collision-qualified fictional owners; retain a private manifest
+   of original row state/operations. Deploy the reviewed active successor, verify actual
+   source/alias/env/TEST bindings and unchanged unrelated configuration, then sign
+   five-minute cookies offline with the new secret,
+   capped by the source window. Browser custody is private and confined to the exact
+   alias; server origin/window gates supply the scope, not cookie custody alone.
+   Exercise the existing owner persistence/refusal/revision/contact plan, with original
+   revision GET reconciliation after unknown outcomes. A native audit-failure trigger
+   remains a separate exact reviewed SQL change; none is included/applied in this packet.
+7. On completion or failure, disable with an inert successor or let the fixed window
+   expire, then read back denial/no-write behavior. Retain evidence and synthetic rows;
+   do not delete unrelated preview configuration or restore a whole database after
+   answers exist. A secret cleanup must preserve all other preview bindings.
+
+Provider deployment/config-preservation support, actual alias, collision clearance,
+bookmark and migration are still execution gates, not claims made by this source packet.
+No public synthetic-session minting, real mail, human staff actor substitution, or
+production Profile enablement is authorized by a passing unit test. Full portal and
+human staff qualification remain separate. Actual TEST Nov22 23:59 stays conditional.
