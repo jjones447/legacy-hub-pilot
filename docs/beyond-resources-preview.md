@@ -19,7 +19,13 @@ fresh (bypassing the shared section cache), buffer the rewrite to catch streamin
 errors, require the journey binding to be visited, and serve successful responses
 with no-store. This trades homepage availability for preserving the publication
 boundary during a D1 outage; unrelated pages retain their existing fallback.
-Authenticated staff draft previews retain their explicitly labeled preview path.
+The home route fence runs before method/status/type passthrough: partial206,
+conditional304, other non-200 responses, and non-HTML or HEAD responses fail
+closed with no-store503 (HEAD has no body). A Range/conditional request that
+receives full200 HTML still requires the normal governed rewrite, and emitted
+responses omit static validators and range metadata. Unrelated route status
+behavior is unchanged. Authenticated staff draft previews retain their explicitly
+labeled preview path.
 The publisher's exact origin/target/operation catalog, audit and rollback
 contract are unchanged and disabled pending qualified activation values. No D1,
 provider, credential, migration, deployed content or production change follows

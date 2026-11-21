@@ -490,7 +490,7 @@ export async function rewriteContent(response, sections, { requirePublishedJourn
   if (!journeyRewritten) throw new Error('Governed journey was not rewritten');
   const headers = new Headers(response.headers);
   headers.set('cache-control', 'no-store');
-  for (const name of ['etag', 'last-modified', 'content-length', 'content-encoding']) headers.delete(name);
+  for (const name of ['etag', 'last-modified', 'content-length', 'content-encoding', 'content-range', 'accept-ranges']) headers.delete(name);
   return new Response(html, { status: response.status, headers });
 }
 
@@ -1342,8 +1342,8 @@ export async function renderProtectedDraftPreviewPage(context) {
   }
 }
 
-function publicContentUnavailable() {
-  return new Response('Content is temporarily unavailable. Please try again later.', {
+function publicContentUnavailable(method = 'GET') {
+  return new Response(method === 'HEAD' ? null : 'Content is temporarily unavailable. Please try again later.', {
     status: 503,
     headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' },
   });
@@ -1354,9 +1354,7 @@ export async function maybeRewriteContent(context, response) {
   let requiresPublishedJourney = false;
   try {
     const { request, env } = context;
-    if (!request || request.method !== 'GET') {
-      return response;
-    }
+    if (!request) return response;
 
     const url = new URL(request.url);
     let path = url.pathname;
@@ -1366,6 +1364,14 @@ export async function maybeRewriteContent(context, response) {
 
     if (!isRewritableRoute(path)) {
       return response;
+    }
+
+    // Qualify known home aliases before method/status/type short circuits. A
+    // 206 slice may omit every selector; 304 would reuse unqualified cached HTML.
+    const route = decodeURIComponent(path).replace(/\/+$/, '') || '/';
+    requiresPublishedJourney = ['/', '/index', '/index.html'].includes(route);
+    if (request.method !== 'GET') {
+      return requiresPublishedJourney ? publicContentUnavailable(request.method) : response;
     }
 
     isPreviewRequest = url.searchParams.has('preview_draft') || url.searchParams.has('preview_version');
@@ -1382,16 +1388,14 @@ export async function maybeRewriteContent(context, response) {
     }
 
     if (!response || response.status !== 200) {
-      return response;
+      return requiresPublishedJourney ? publicContentUnavailable() : response;
     }
     const contentType = response.headers.get('content-type');
     if (contentType && !contentType.includes('text/html')) {
-      return response;
+      return requiresPublishedJourney ? publicContentUnavailable() : response;
     }
 
-    // Recognize the governed panel in the actual asset, including route aliases.
-    // Home routes also fail closed if reading the source itself throws.
-    requiresPublishedJourney = ['/', '/index', '/index.html'].includes(path);
+    // Also recognize a governed panel in other full HTML assets.
     const source = await response.clone().text();
     requiresPublishedJourney ||= /data-cs-list\s*=\s*["']home\.journey\.paragraph["']/i.test(source);
     if (!env || !env.LEGACY_DB) {
