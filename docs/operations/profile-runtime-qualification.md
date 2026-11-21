@@ -313,3 +313,36 @@ carry scope to the corrected exact seed before its one reconciled execution. Ref
 zero ID/email collision state, verify0022 remains empty and preserve all original table
 counts (except expected three new caregivers). Secret and0022 receipts remain valid;
 no reapplication or secret rotation is proposed.
+
+
+### Hosted synthetic-owner result and disable (Nov21 12:25UTC)
+
+The retained Security scopes381c7061877096/7061909961 authorized exact34846454.
+It was installed as efcb1ecb-846e-4d58-8123-5a36209c19b0 on the pinned fixture alias,
+preview/TEST42be536c. Native execution **PASS 12:21:19–12:21:28UTC**: Chromium partial
+ZIP save, reload and new-context resume; owner B remained blank; invalid/expired/
+wrong-HMAC/archived/outside-owner refusals; route, origin, body-owner and type refusals
+with unchanged records; revision race yielded exactly200/409; stale write preserved
+all witnesses. Contact Yes created one generic follow-up; No dismissed it. Final owner
+A revision4, audits213–216 containing revision1–4 only, one follow-up23 dismissed.
+No browser local/session storage. Evidence: `profile-qualification/2026-11-21-native.json`.
+
+First transport run aborted on a protected-route redirect before writes; empty native
+witnesses were reconciled. Corrected transport classified staff/publisher302 as outer
+Access admission refusal, NOT an inner authorization proof. The successful second run
+exited zero and closed Chromium. GET after successful POST is reconciliation coverage,
+not an injected lost acknowledgement. No native audit-failure SQL was introduced.
+
+Disabled at **12:22:04UTC** by deploying previously reviewed inert7654b816 on the same
+fixture branch: **bbf8be2a-1c73-46e1-a245-17a1082a241f**. Provider source/environment/
+TEST binding/alias verified; exact configuration and production canonical106ce7c5
+preserved. At12:24:53, newly signed Profile GET/POST and root returned403 no-store;
+complete synthetic Profile/audit/follow-up witnesses exactly matched final saved state.
+Records retained. No migration/reseed/secret rotation or native operation replay.
+
+This closes the author's bounded hosted owner persistence/refusal execution and disable
+steps, subject to SAME ct12/Devin4 evidence assessment. It does not qualify full portal,
+current human staff, real login/mail, all fields/accessibility, or native audit-failure
+rollback. Product remains OFF in production; shared preview guard unchanged. Do not
+silently extend the window or rerun the completed native sequence. Any additional
+runtime scope needs its own precise qualification plan and retained review.
