@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { onRequest } from '../functions/_middleware.js';
+import { publishedHomeEnv, publishedHomeResponse } from './helpers/published-home.mjs';
 import { onRequestGet as portalGet, onRequestHead as portalHead } from '../functions/api/portal/[[path]].js';
 
 const EXPECTED_CSP =
@@ -9,8 +10,8 @@ const CONFIRMATION_CSP = "default-src 'none'; style-src 'self'; form-action 'sel
 
 test('security headers on public page response', async () => {
   const request = new Request('https://legacy-hub.pages.dev/index.html');
-  const next = async () => new Response('public ok', { status: 200 });
-  const resp = await onRequest({ request, next, env: {} });
+  const next = publishedHomeResponse;
+  const resp = await onRequest({ request, next, env: publishedHomeEnv });
 
   assert.equal(resp.status, 200);
   assert.equal(
@@ -54,24 +55,24 @@ test('security headers on console response via non-prod escape', async () => {
 test('staging hostname gets X-Robots-Tag noindex,nofollow', async () => {
   // LEGACY-STAGING-NOINDEX-R1: the staging preview branch must never be indexed.
   const request = new Request('https://staging.caregiversanctuary.org/index.html');
-  const next = async () => new Response('public ok', { status: 200 });
-  const resp = await onRequest({ request, next, env: {} });
+  const next = publishedHomeResponse;
+  const resp = await onRequest({ request, next, env: publishedHomeEnv });
   assert.equal(resp.status, 200);
   assert.equal(resp.headers.get('X-Robots-Tag'), 'noindex, nofollow');
 });
 
 test('production hostname does NOT get X-Robots-Tag', async () => {
   const request = new Request('https://www.caregiversanctuary.org/index.html');
-  const next = async () => new Response('public ok', { status: 200 });
-  const resp = await onRequest({ request, next, env: {} });
+  const next = publishedHomeResponse;
+  const resp = await onRequest({ request, next, env: publishedHomeEnv });
   assert.equal(resp.status, 200);
   assert.equal(resp.headers.get('X-Robots-Tag'), null);
 });
 
 test('pages.dev alias gets X-Robots-Tag noindex,nofollow', async () => {
   const request = new Request('https://legacy-hub-5qo.pages.dev/index.html');
-  const next = async () => new Response('public ok', { status: 200 });
-  const resp = await onRequest({ request, next, env: {} });
+  const next = publishedHomeResponse;
+  const resp = await onRequest({ request, next, env: publishedHomeEnv });
   assert.equal(resp.status, 308);
   assert.equal(resp.headers.get('Location'), 'https://caregiversanctuary.org/index.html');
   assert.equal(resp.headers.get('X-Robots-Tag'), 'noindex, nofollow');

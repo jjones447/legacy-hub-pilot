@@ -166,6 +166,7 @@ test('2. a published form.request_support row with new option wording shows on t
   ];
 
   const db = new FakeD1([
+    { id: 'ps_home.journey', status: 'published', data: JSON.stringify({ paragraph: 'Published journey' }) },
     {
       id: 'ps_form.request_support',
       status: 'published',
@@ -218,6 +219,7 @@ test('3. hostile option text is properly escaped and never rendered as raw execu
   ];
 
   const db = new FakeD1([
+    { id: 'ps_home.journey', status: 'published', data: JSON.stringify({ paragraph: 'Published journey' }) },
     {
       id: 'ps_form.membership',
       status: 'published',
@@ -254,6 +256,7 @@ test('4. empty option list leaves committed options untouched', async () => {
   const committedHtml = loadHtml('index.html');
 
   const db = new FakeD1([
+    { id: 'ps_home.journey', status: 'published', data: JSON.stringify({ paragraph: 'Published journey' }) },
     {
       id: 'ps_form.membership',
       status: 'published',
@@ -393,6 +396,7 @@ test('6. options with apostrophes render with literal single quotes, matching bu
   ];
 
   const db = new FakeD1([
+    { id: 'ps_home.journey', status: 'published', data: JSON.stringify({ paragraph: 'Published journey' }) },
     {
       id: 'ps_form.membership',
       status: 'published',
