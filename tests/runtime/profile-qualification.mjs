@@ -13,6 +13,8 @@ assert.ok(browserModule && browserModule.startsWith('/'), 'Provide the separatel
 assert.equal(JSON.parse(readFileSync(join(dirname(browserModule), 'package.json'))).version, '1.65.1', 'Reviewed browser-tool version only');
 const browserApi = await import(pathToFileURL(browserModule));
 const browserExecutable = browserApi.chromium.executablePath();
+const browserLibraryPath = process.env.PROFILE_BROWSER_LIBRARY_PATH || '';
+assert.ok(!browserLibraryPath || browserLibraryPath.split(':').every(path => path.startsWith('/workspace/profile-browser-tools/lib/')), 'Only isolated browser-tool library paths allowed');
 const toolDir = join(root, 'node_modules/wrangler');
 assert.equal(JSON.parse(readFileSync(join(toolDir, 'package.json'))).version, '4.139.0');
 const { unstable_dev } = await import(pathToFileURL(join(toolDir, 'wrangler-dist/cli.js')));
@@ -73,7 +75,7 @@ try {
   assert.equal((await fetch(origin + '/mint')).status, 404);
   assert.equal((await call(cookies.a, { zip: '53202' }, 0, { Origin: 'https://other.invalid' })).status, 403);
   checks.push('no_login_mint_cross_origin');
-  browser = await browserApi.chromium.launch({ headless: true, executablePath: browserExecutable });
+  browser = await browserApi.chromium.launch({ headless: true, executablePath: browserExecutable, env: { ...cleanEnv, LD_LIBRARY_PATH: browserLibraryPath } });
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
   await context.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
   await context.addCookies([{ name: 'portal_session', value: cookies.a, url: origin, httpOnly: true, sameSite: 'Strict' }]);
