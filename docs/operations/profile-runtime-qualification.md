@@ -38,11 +38,13 @@ files are outside both site allowlist and Pages functions; no deploy command is 
 
 ## Current capability and next checkpoint
 
-Playwright1.65.1 and Chromium159 downloads completed. The first isolated browser launch
-failed because the container lacks OS shared libraries (including glib/NSS/X11).
-User-space Debian libraries are being acquired into a separate tools directory; no
-system package installation, host change or new agent is requested. Browser execution
-is not yet qualified. Wrangler4.139.0 is already pinned in the repository.
+Playwright1.65.1/Chromium159.0.8154.6 and user-space shared libraries are installed.
+The reviewed b2ce83ad fixture passed authentication/route refusals, then its browser
+stopped before the first save: first missing libraries, then font initialization.
+The successor supplies a fixed tools-only fontconfig file to the browser environment;
+fonts and configuration remain under `/workspace/profile-browser-tools`, with no system
+installation. SAME ct12 reviews that environment delta before execution. No completed
+Profile browser/persistence result is claimed. Wrangler4.139.0 is pinned.
 
 Next checkpoint: **Nov21 09:30 UTC**, exact reviewed adapter source plus actual browser
 capability/local persistence outcome, or precise remaining error. SAME ct12 reviews

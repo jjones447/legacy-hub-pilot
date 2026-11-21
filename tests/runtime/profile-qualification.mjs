@@ -77,7 +77,7 @@ try {
   assert.equal((await fetch(origin + '/mint')).status, 404);
   assert.equal((await call(cookies.a, { zip: '53202' }, 0, { Origin: 'https://other.invalid' })).status, 403);
   checks.push('no_login_mint_cross_origin');
-  browser = await browserApi.chromium.launch({ headless: true, executablePath: browserExecutable, env: { ...cleanEnv, LD_LIBRARY_PATH: browserLibraryPath } });
+  browser = await browserApi.chromium.launch({ headless: true, executablePath: browserExecutable, env: { ...cleanEnv, LD_LIBRARY_PATH: browserLibraryPath, FONTCONFIG_FILE: '/workspace/profile-browser-tools/fonts.conf' } });
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
   await context.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
   await context.addCookies([{ name: 'portal_session', value: cookies.a, url: origin, httpOnly: true, sameSite: 'Strict' }]);
