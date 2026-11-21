@@ -1,11 +1,12 @@
 // Explicit local-only harness; NOT included in unit CI or a Pages deployment.
 // Run only after retained review: PROFILE_RUNTIME_LOCAL=1 PROFILE_BROWSER_MODULE=<locked playwright index.mjs> node this-file
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, copyFileSync, chmodSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, copyFileSync, chmodSync, existsSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { randomBytes, createHmac } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
+import { homedir } from 'node:os';
 const root = fileURLToPath(new URL('../..', import.meta.url));
 assert.equal(process.env.PROFILE_RUNTIME_LOCAL, '1', 'Explicit local runtime opt-in required');
 const browserModule = process.env.PROFILE_BROWSER_MODULE;
@@ -17,7 +18,7 @@ const browserLibraryPath = process.env.PROFILE_BROWSER_LIBRARY_PATH || '';
 assert.ok(!browserLibraryPath || browserLibraryPath.split(':').every(path => path.startsWith('/workspace/profile-browser-tools/lib/')), 'Only isolated browser-tool library paths allowed');
 const toolDir = join(root, 'node_modules/wrangler');
 assert.equal(JSON.parse(readFileSync(join(toolDir, 'package.json'))).version, '4.139.0');
-const { unstable_dev } = await import(pathToFileURL(join(toolDir, 'wrangler-dist/cli.js')));
+assert.equal(existsSync(join(homedir(), '.wrangler')), false, 'Legacy Wrangler home configuration present; stop without reading it');
 const cli = join(toolDir, 'bin/wrangler.js');
 // All config/state is freshly owned and private. No env-file loading, provider
 // credentials, existing secret reads, remote D1 IDs or inherited cloud settings.
@@ -30,7 +31,7 @@ writeFileSync(config, JSON.stringify({ name: 'profile-local-fixture', compatibil
     PORTAL_PROFILE_ENABLED: '1', PORTAL_TOKEN_SECRET: secret },
   d1_databases: [{ binding: 'LEGACY_DB', database_name: 'profile-local-fixture', database_id: '00000000-0000-4000-8000-000000000013' }],
 }), { mode: 0o600 });
-const cleanEnv = { PATH: process.env.PATH, HOME: scratch, WRANGLER_SEND_METRICS: 'false', CI: '1' };
+const cleanEnv = { PATH: process.env.PATH, HOME: process.env.HOME, XDG_CONFIG_HOME: scratch, WRANGLER_SEND_METRICS: 'false', CI: '1' };
 function localSql(sql) {
   const path = join(scratch, 'fixture.sql'); writeFileSync(path, sql, { mode: 0o600 });
   // Literal --local is mandatory, never parameterized by caller or response.
@@ -54,8 +55,9 @@ let worker, browser; const checks = [];
 try {
   // Remove inherited provider credentials before the local dev API creates children.
   // This affects this dedicated harness process only, never the calling shell.
-  for (const key of Object.keys(process.env)) if (!['PATH', 'LANG', 'LC_ALL', 'TMPDIR'].includes(key)) delete process.env[key];
-  process.env.HOME = scratch; process.env.WRANGLER_SEND_METRICS = 'false';
+  for (const key of Object.keys(process.env)) if (!['PATH', 'HOME', 'LANG', 'LC_ALL', 'TMPDIR'].includes(key)) delete process.env[key];
+  process.env.XDG_CONFIG_HOME = scratch; process.env.WRANGLER_SEND_METRICS = 'false';
+  const { unstable_dev } = await import(pathToFileURL(join(toolDir, 'wrangler-dist/cli.js')));
   worker = await unstable_dev(join(root, 'tests/runtime/profile-worker.mjs'), {
     config, local: true, envFiles: [], persistTo: scratch, ip: '127.0.0.1', logLevel: 'none',
     experimental: { watch: false, liveReload: false, showInteractiveDevSession: false,
