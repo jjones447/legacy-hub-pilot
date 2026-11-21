@@ -5,7 +5,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildHostedProfile } from './build-profile-hosted.mjs';
 const request = () => new Request('https://profile-fixture-unit.legacy-hub-5qo.pages.dev/api/portal/profile');
-test('private advanced-mode bundle has exact allowlist, no external imports, and inert compiled entry', async () => {
+test('private advanced-mode bundle has exact allowlist, no external imports, and compiled wrong-origin refusal', async () => {
   const result = await buildHostedProfile();
   assert.equal(statSync(result.scratch).mode & 0o777, 0o700);
   assert.deepEqual(readdirSync(result.assets).sort(), result.receipt.files.map(f => f.name));

@@ -25,7 +25,7 @@ export async function buildHostedProfile() {
   const names = readdirSync(assets).sort();
   assert.deepEqual(names, ['_routes.json', '_worker.js', 'caregiver-profile.js', 'fixture-start.js', 'index.html', 'styles.css']);
   const receipt = { files: names.map(name => ({ name, sha256: createHash('sha256').update(readFileSync(join(assets, name))).digest('hex') })),
-    inputs: Object.keys(bundled.metafile.inputs).sort(), externalImports: 0, mode: 'inert-unless-reviewed-manifest-activated' };
+    inputs: Object.keys(bundled.metafile.inputs).sort(), externalImports: 0, mode: 'source-pinned-manifest-requires-exact-review' };
   writeFileSync(join(scratch, 'bundle-receipt.json'), JSON.stringify(receipt, null, 2), { mode: 0o600 });
   return { scratch, assets, receipt };
 }

@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { createHostedProfileFixture } from './runtime/profile-hosted-boundary.mjs';
 import { HOSTED_PROFILE_MANIFEST } from './runtime/profile-hosted-manifest.mjs';
-import deployed from './runtime/profile-hosted-worker.mjs';
 import { onRequestGet, onRequestPost } from '../functions/api/portal/[[path]].js';
 import { fixture } from './helpers/caregiver-profile-fixture.mjs';
 const ORIGIN = 'https://profile-fixture-unit.legacy-hub-5qo.pages.dev';
@@ -29,10 +29,9 @@ function setup(t) {
 }
 function witness(f) { return JSON.stringify(['caregiver_profile', 'audit_log', 'followup'].map(table => f.raw.prepare(`SELECT * FROM ${table}`).all())); }
 
-test('checked-in deployed worker is inert before touching ANY env or DB', async () => {
-  assert.equal(HOSTED_PROFILE_MANIFEST.origin, null);
+test('inert null manifest stays closed before touching ANY env or DB', async () => {
   const unreadable = new Proxy({}, { get() { throw Error('must never read ambient env'); } });
-  assert.equal((await deployed.fetch(request(), unreadable)).status, 403);
+  assert.equal((await worker({ ...manifest(), origin: null, startsAt: null, expiresAt: null }).fetch(request(), unreadable)).status, 403);
 });
 
 const denied = [
@@ -140,3 +139,30 @@ test('fixed asset forwarding strips secrets/cookies, ignores upstream headers an
   assert.equal(assets, 4);
 });
 
+
+test('pinned hosted candidate is closed outside its exact reviewed window', async () => {
+  const blocked = new Proxy({}, { get() { throw Error('outside window accessed env'); } });
+  for (const time of [HOSTED_PROFILE_MANIFEST.startsAt - 1, HOSTED_PROFILE_MANIFEST.expiresAt]) {
+    const candidate = createHostedProfileFixture({ manifest: HOSTED_PROFILE_MANIFEST,
+      get: onRequestGet, post: onRequestPost, now: () => time });
+    const r = new Request(HOSTED_PROFILE_MANIFEST.origin + '/api/portal/profile');
+    assert.equal((await candidate.fetch(r, blocked)).status, 403);
+  }
+});
+
+test('reviewed synthetic seed preserves prior owners and refuses any duplicate insert', t => {
+  const f = fixture(); t.after(() => f.close());
+  f.raw.exec('ALTER TABLE caregiver ADD COLUMN is_caregiver INTEGER NOT NULL DEFAULT 0');
+  const before = JSON.stringify(f.raw.prepare('SELECT * FROM caregiver ORDER BY id').all());
+  const sql = readFileSync(new URL('./runtime/profile-hosted-seed.sql', import.meta.url), 'utf8');
+  f.raw.exec(sql);
+  const rows = f.raw.prepare("SELECT * FROM caregiver WHERE source='profile_qualification' ORDER BY id").all();
+  assert.deepEqual(rows.map(row => row.id).sort(), [...owners].sort());
+  assert.ok(rows.every(row => row.is_caregiver === 1 && row.email.endsWith('@example.invalid')));
+  assert.equal(rows.filter(row => row.status === 'archived').length, 1);
+  assert.equal(JSON.stringify(f.raw.prepare("SELECT * FROM caregiver WHERE source != 'profile_qualification' ORDER BY id").all()), before);
+  const inserted = JSON.stringify(rows);
+  assert.throws(() => f.raw.exec(sql), /UNIQUE constraint/);
+  assert.equal(JSON.stringify(f.raw.prepare("SELECT * FROM caregiver WHERE source='profile_qualification' ORDER BY id").all()), inserted);
+  assert.equal(witness(f), '[[],[],[]]');
+});

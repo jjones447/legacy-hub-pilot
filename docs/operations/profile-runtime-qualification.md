@@ -237,3 +237,60 @@ bookmark and migration are still execution gates, not claims made by this source
 No public synthetic-session minting, real mail, human staff actor substitution, or
 production Profile enablement is authorized by a passing unit test. Full portal and
 human staff qualification remain separate. Actual TEST Nov22 23:59 stays conditional.
+
+## Nov21 12:00 preflight packet: inert installed; active candidate awaiting review
+
+Retained ct12 source approval381c7061241768 cleared only exact7654b816 inert staging
+and read-only preflight. That artifact is now preview deployment
+cc060827-f5d5-4959-8213-388a23d4f43f, completed11:20:23.67998UTC. The provider returned
+`https://profile-fixture-381.legacy-hub-5qo.pages.dev`; this actual stable alias is the
+active candidate's only accepted origin. Actual deployment source/preview marker and
+TEST42be536c binding are verified. Root/Profile/login/script GETs each returned the
+expected no-store403 JSON. No fixture session, Profile table or native Profile write.
+Sanitized evidence and six artifact hashes: `profile-qualification/2026-11-21-inert.json`.
+
+Configuration disposition: locked Wrangler ran from private artifact scratch, without
+any discovered config and with `--no-bundle`, inheriting verified dashboard settings.
+This avoided reconstructing or forwarding existing secret values. Readback caught
+Pages clearing only preview `wrangler_config_hash`. Execution stopped; vars/bindings
+and production were independently equal. A single narrow PATCH restored the exact
+prior hash, then full `deployment_configs` equality and unchanged canonical production
+were verified. This temporary management-metadata drift is retained, not reported as
+an entirely mutation-free deployment. For the active candidate, use a private config
+with only the verified preview plain vars/bindings/settings, preserve both before/after
+snapshots and reconcile the expected source-config hash separately; never copy secrets
+into config. Do not repeat the config-less metadata-clearing path without disclosure.
+
+TEST preflight captured the supported Time Travel bookmark,16 application-table counts,
+current schema, and zero collisions for all three pinned IDs/emails, audit actor/entity
+and follow-up owner/external_ref. Profile table absent. People `is_caregiver` column
+already installed;0021 is untouched. Two oversized combined inventory SELECTs failed
+with provider7500/too-many-terms before any write; individual COUNT queries succeeded.
+The Pages list read rejected per_page100; per_page25 succeeded before the single deploy.
+These were read corrections, not write/deployment retries.
+
+Active candidate changes only source manifest origin/window (Nov21 **12:00–13:00UTC**),
+boundary test wording/explicit outside-window test, build receipt wording, this evidence
+and the exact three-row `tests/runtime/profile-hosted-seed.sql`. The six-file artifact
+allowlist excludes that SQL, all config and all session material. Production product
+Profile flag remains OFF. No active bundle is deployed by committing this candidate.
+
+Request SAME ct12 scope disposition for the exact active successor and following staged
+steps: generate fresh private32-byte fixture secret; add only preview PROFILE_FIXTURE_SECRET
+while preserving all existing config; refresh TEST identity/collisions/bookmark/inventory;
+apply exact reviewed candidate0022 once; seed exact three fictional rows; deploy active
+artifact on the already observed alias and verify source/env/TEST/config; only within the
+pinned window run synthetic-owner persistence/refusal/browser tests using offline five-minute
+sessions. Current native D1/bookmark capability is demonstrated; later mutation/installed
+claims are still absent. No additional token/Access app/customer ask. No production session,
+login/mail or staff-actor simulation. A native audit-failure trigger still needs separate
+exact SQL review and is not part of this activation request.
+
+At expiry require fresh API denial and unchanged synthetic profile/audit/follow-up counts.
+Keep the original deployment and before/after records. Do not delete answers, restore the
+whole DB or silently extend the window; any successor window needs a new exact source
+receipt. Native persistence can qualify the bounded owner fixture; full portal/current
+human staff/login/mail acceptance remain separate. Reviewer Node22's SQLite warning
+caused its initial sentinel-log assertion failure (38/39), then39/39 passed with that
+warning disabled; author/hosted Node24 runs passed unflagged. This portability difference
+is recorded and does not change the non-disclosure assertion or native qualification.
