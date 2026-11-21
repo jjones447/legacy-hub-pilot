@@ -428,7 +428,7 @@ or a promise of full-portal completion. Retained Devin4 owns functional acceptan
 actual broader TEST Nov22 23:59 remains conditional on these remaining scopes.
 
 
-### Exact inert fault/race source delivered (Nov21 14:35UTC)
+### Exact inert fault/race source delivered (Nov21 14:29UTC)
 
 The candidate implementation and native-readiness limits are recorded in
 [the source packet](profile-qualification/2026-11-21-fault-source.md). New adapter,
