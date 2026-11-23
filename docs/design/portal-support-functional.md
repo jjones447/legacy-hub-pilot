@@ -28,9 +28,13 @@ Collection scope is a support request linked to an existing caregiver. Retention
 
 ## Work sequence and schedule
 
-1. Nov24 noon: contract/candidate increment and baseline/operator readiness assessment (accepted author checkpoint). Current increment delivers pure validation/status proposal only; writer/routes/UI are unbuilt.
+1. Nov24 noon: contract/candidate increment and baseline/operator readiness assessment (accepted author checkpoint). Current increment delivers pure validation/status proposal and an inert unnumbered SQL candidate; writer/routes/UI are unbuilt.
 2. Nov25 noon: separately bounded #369 source reconciliation, not a full respite registration promise.
 3. Nov26 noon: accepted full functional #378 source candidate with owner route/writer/Staff projection and coordinated warm UI patch, tests and migration proposal. Shared Profile intersections serialize through ct13.
 4. Nov27 18: conditional E2E TEST target. Devin4 accepted review within4–6h of actual complete exact-head delivery and one successor within2–3h; it is not approval and conflicts must be surfaced. Lead41 coordinates ct13 integration and GUI5 operator readiness. No reviewer/operator acceptance is inferred beyond that explicit review turnaround.
 
 The named isolated browser + authorized inbox readiness remains an external dependency, not resolved by this source artifact or customer's Profile-save report. Reuse actual accepted evidence when available; do not replay a login/mail probe. Review, compatible migration backup/bookmark, deployment and own-inbox runtime acceptance stay separate. This PR grants none of those actions. No unconditional customer date or full-candidate claim.
+
+## Candidate SQL qualification
+
+schema/candidates/portal_support_request.sql is an unapplied storage proposal, not a migration allocation. Six in-memory Node SQLite tests exercise distinct options/Text, current active owner and task association, malformed JSON/duplicate options, immutable identity/payload, revision/status guards, foreign-owner CAS and transaction rollback. These are native local SQLite tests, not D1 batch qualification, route authorization, retention/removal implementation, or atomic writer/audit proof. The writer must still bind verified actor and expected revision; SQL integrity guards do not identify Staff or authorize requests. No table or fixture was applied to TEST/production.
