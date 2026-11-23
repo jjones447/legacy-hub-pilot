@@ -441,7 +441,7 @@ test('carousel track rewritten on index.html', async () => {
     headers: { 'content-type': 'text/html; charset=utf-8' },
   });
 
-  const resp = await onRequest({ request, next, env: { MEDIA: media } });
+  const resp = await onRequest({ request, next, env: { MEDIA: media, LEGACY_DB: { prepare: () => ({ all: async () => ({ results: [{ id: 'ps_home.journey', data: JSON.stringify({ paragraph: 'Published journey' }) }] }) }) } } });
   assert.equal(resp.status, 200);
   const html = await resp.text();
 

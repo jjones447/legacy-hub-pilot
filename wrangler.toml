@@ -14,6 +14,11 @@ compatibility_date = "2026-07-01"
 # so docs, scripts, schema and tests in this repository are never uploaded as site files.
 pages_build_output_dir = "dist"
 
+# Pages deployment replaces non-secret variables from this file. Keep the
+# production catalog environment explicit; preview overrides it below.
+[vars]
+ENVIRONMENT = "production"
+
 [ai]
 binding = "AI"
 
