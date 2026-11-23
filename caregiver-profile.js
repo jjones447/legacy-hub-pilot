@@ -58,6 +58,7 @@
         const details = node('details', undefined, 'profile-section'); details.open = index === 0;
         details.append(node('summary', section.title));
         if (section.intro) details.append(node('p', section.intro));
+        if (section.key !== 'demographics') details.append(node('p', 'Optional — sharing this helps us support you better.', 'profile-optional-help'));
         section.fields.forEach(field => {
           const multi = field.type === 'multi';
           const wrap = node(multi ? 'fieldset' : 'div', undefined, 'profile-field');

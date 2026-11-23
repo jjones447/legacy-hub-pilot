@@ -21,7 +21,7 @@ jobs:
       - name: Install locked DOM test dependencies without lifecycle scripts
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Exercise local Staff and caregiver Profile controls
-        run: node --test tests/dom/staff-production-panels.test.mjs tests/dom/caregiver-profile-ui.test.mjs tests/dom/staff-profile.test.mjs
+        run: node --test tests/dom/staff-production-panels.test.mjs tests/dom/caregiver-profile-ui.test.mjs tests/dom/profile-page.test.mjs tests/dom/staff-profile.test.mjs
       - name: Evidence boundary
         if: always()
         run: echo "Local DOM only. No browser, network, layout, workerd or installed acceptance." >> "$GITHUB_STEP_SUMMARY"

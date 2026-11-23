@@ -120,6 +120,11 @@ PAGE_METADATA = {
         "stylesheets": ("get-involved.css",),
         "description": "Partner, volunteer, sponsor, or invite us to speak to help support dementia caregivers.",
     },
+    "profile.html": {
+        "title": "My Caregiver Profile — Legacy Home & Respite Care Foundation",
+        "description": "Your caregiving story, at your own pace.",
+        "stylesheets": ("profile-page.css",),
+    },
     "portal.html": {
         "title": "Caregiver Portal — Legacy Home & Respite Care Foundation",
         "description": "Your events, your wellness and your resources, in one place.",
@@ -181,6 +186,7 @@ SHARED_PAGES = [
     "faq.html",
     "get-involved.html",
     "portal.html",
+    "profile.html",
     "programs-events.html",
     "sanctuary.html",
 ]
@@ -301,6 +307,8 @@ def asset_versions() -> dict:
         "styles.css": hashlib.sha256((ROOT / "styles.css").read_bytes()).hexdigest()[:12],
         "app.js": hashlib.sha256((ROOT / "app.js").read_bytes()).hexdigest()[:12],
         "staff-profile.js": hashlib.sha256((ROOT / "staff-profile.js").read_bytes()).hexdigest()[:12],
+        "profile-page.js": hashlib.sha256((ROOT / "profile-page.js").read_bytes()).hexdigest()[:12],
+        "profile-page.css": hashlib.sha256((ROOT / "profile-page.css").read_bytes()).hexdigest()[:12],
         "caregiver-profile.js": hashlib.sha256((ROOT / "caregiver-profile.js").read_bytes()).hexdigest()[:12],
         "staff.js": hashlib.sha256((ROOT / "staff.js").read_bytes()).hexdigest()[:12],
         "wellness-passport.css": hashlib.sha256((ROOT / "wellness-passport.css").read_bytes()).hexdigest()[:12],
