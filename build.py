@@ -27,6 +27,7 @@ PAGE_METADATA = {
     "membership.html": {"title": "Caregiver Sanctuary Membership — Legacy Home & Respite Care Foundation", "description": "Free membership connects caregivers with Legacy support, resources and community.", "stylesheets": ("membership.css",)},
     "index.html": {
         "title": "Legacy Home & Respite Care Foundation — Caregiver Wellness & Resource Hub",
+        "stylesheets": ("beyond-support.css",),
         "description": "Supporting dementia caregivers through community, wellness, and respite.",
     },
     "about.html": {
@@ -304,6 +305,7 @@ def asset_versions() -> dict:
     """Return 12-hex-char SHA-256 prefixes for versioned root stylesheet and script assets."""
     return {
         "membership.css": hashlib.sha256((ROOT / "membership.css").read_bytes()).hexdigest()[:12],
+        "beyond-support.css": hashlib.sha256((ROOT / "beyond-support.css").read_bytes()).hexdigest()[:12],
         "styles.css": hashlib.sha256((ROOT / "styles.css").read_bytes()).hexdigest()[:12],
         "app.js": hashlib.sha256((ROOT / "app.js").read_bytes()).hexdigest()[:12],
         "staff-profile.js": hashlib.sha256((ROOT / "staff-profile.js").read_bytes()).hexdigest()[:12],

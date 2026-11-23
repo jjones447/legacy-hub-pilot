@@ -9,6 +9,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { onRequest } from '../functions/_middleware.js';
+import { publishedHomeEnv, publishedHomeResponse } from './helpers/published-home.mjs';
 
 // Endpoints that return or mutate data spanning multiple caregivers.
 const MUST_BE_GUARDED = [
@@ -38,7 +39,9 @@ const MUST_STAY_REACHABLE = [
 
 async function statusFor(path, env = {}) {
   const request = new Request('https://legacy-hub.pages.dev' + path);
-  const next = async () => new Response('handler', { status: 200 });
+  const home = ['/', '/index.html'].includes(path);
+  if (home) env = { ...publishedHomeEnv, ...env };
+  const next = async () => home ? publishedHomeResponse() : new Response('handler', { status: 200 });
   const resp = await onRequest({ request, next, env });
   return resp.status;
 }

@@ -116,3 +116,33 @@ for (const scenario of ['active-human', 'service', 'dev', 'missing-staff', 'staf
     } finally { globalThis.fetch = previousFetch; console.error = previousError; }
   });
 }
+
+test('publisher middleware grants separate proof only after real signature and pinned service identity', async () => {
+  const { publisherActor } = await import('../functions/_lib/publisher-identity.mjs');
+  const oldFetch = globalThis.fetch; globalThis.fetch = fetchImpl;
+  try {
+    for (const scenario of ['publisher','other-service','human','tampered','missing-config','dev-forgery','workflow','production-people','preview-people']) {
+      let token = await makeJwt({email:null,common_name:scenario==='other-service'?'other':'publisher-client'});
+      if(scenario==='human') token=await makeJwt();
+      if(scenario==='tampered') token=token.slice(0,-3)+'BAD';
+      const path = scenario==='workflow'?'/api/agent/caregiver/confirm'
+        : scenario.endsWith('people')?'/api/staff/caregivers':'/api/agent/publisher/draft';
+      const context = {
+        request:new Request('https://publisher.invalid'+path,{method:scenario.endsWith('people')?'GET':'POST',
+          headers:{'Cf-Access-Jwt-Assertion':token,'x-dev-actor':'service:legacy-publisher'}}),
+        env:{CF_ACCESS_TEAM_DOMAIN:TEAM,CF_ACCESS_AUD:AUD,
+          ...(scenario==='missing-config'?{}:{LEGACY_PUBLISHER_CLIENT_ID:'publisher-client'}),
+          ...(scenario==='preview-people'?{ENVIRONMENT:'preview'}:{}),
+          ...(scenario==='dev-forgery'?{ALLOW_DEV_CONSOLE:'1'}:{})},
+        data:{actor:'service:legacy-publisher',publisher:true},
+        next:async()=>new Response('{}'),
+      };
+      if(scenario==='dev-forgery') context.request=new Request(context.request.url,{method:'POST',headers:{'x-dev-actor':'service:legacy-publisher'}});
+      const response=await onRequest(context);
+      const accepted=['publisher','preview-people'].includes(scenario);
+      assert.equal(response.status,accepted?200:403,scenario);
+      assert.equal(publisherActor(context.data),accepted?'service:legacy-publisher':null,scenario);
+      assert.equal(confirmationActor(context.data),null,scenario);
+    }
+  } finally {globalThis.fetch=oldFetch;}
+});

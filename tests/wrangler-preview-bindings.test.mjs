@@ -85,7 +85,7 @@ test('MEDIA bound in production only is rejected', () => {
   assert.throws(() => assertMediaParity(planted), /both environments/);
 });
 
-test('preview keeps its environment marker but never configures a dev-link bypass', () => {
+test('production and preview retain distinct markers without a dev-link bypass', () => {
   const previewVars = valuesUnder(TOML, 'env.preview.vars', 'ENVIRONMENT');
   assert.deepEqual(previewVars, ['preview']);
   assert.deepEqual(valuesUnder(TOML, 'env.preview.vars', 'PORTAL_DEV_RETURN_LINK'), []);
@@ -94,7 +94,7 @@ test('preview keeps its environment marker but never configures a dev-link bypas
     [],
     'the retired PORTAL_DEV_RETURN_LINK must not be configured'
   );
-  assert.deepEqual(valuesUnder(TOML, 'vars', 'ENVIRONMENT'), []);
+  assert.deepEqual(valuesUnder(TOML, 'vars', 'ENVIRONMENT'), ['production']);
 });
 
 test('wrangler.toml has no account_id key (Pages rejects it at deploy)', () => {

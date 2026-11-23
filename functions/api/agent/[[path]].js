@@ -1,3 +1,4 @@
+import { approvedPublisher } from '../../_lib/approved-publisher.mjs';
 // GET/POST /api/agent/[[path]] — site-builder agent editing loop endpoints (slice 07)
 // and governed workflow data changes (slice D7-S1).
 import { mapRequestToChange, mapRequestToWorkflowChange, validateJsonSchema, resolveContentTarget } from './_mapper.mjs';
@@ -13,6 +14,7 @@ import { createWebJob, enabled as webJobsEnabled } from '../../_lib/assistant-we
 import { converse } from './_conversation.mjs';
 
 export async function onRequestGet({ request, env, data }) {
+  if (new URL(request.url).pathname.startsWith('/api/agent/publisher/')) return approvedPublisher({ request, env, data });
   try {
     const url = new URL(request.url);
     const pathSegments = url.pathname.split('/').filter(Boolean); // ['api', 'agent', 'drafts' | 'changes' | 'preview']
@@ -138,6 +140,7 @@ export async function onRequestGet({ request, env, data }) {
 }
 
 export async function onRequestPost({ request, env, data, redactErrors = false, draftGuards = [] }) {
+  if (new URL(request.url).pathname.startsWith('/api/agent/publisher/')) return approvedPublisher({ request, env, data });
   try {
     const url = new URL(request.url);
     const pathSegments = url.pathname.split('/').filter(Boolean); // ['api', 'agent', ...]

@@ -3,7 +3,8 @@
 // [data-cs] text elements and [data-cs-list] paragraph containers with HTMLRewriter.
 //
 // Hard fallback: if LEGACY_DB is undefined, D1 query errors, key/field is missing,
-// or type is unexpected, the response passes through untouched.
+// or type is unexpected, the response passes through untouched, except the governed
+// journey panel: public responses require a fresh valid value and a complete rewrite.
 import { confirmationActor, draftOwner, ownsDraft, confirmationBinding } from './_lib/agent-confirmation.mjs';
 import { PREVIEW_TRANSFER_TTL_SECONDS, isPreviewTransferSource, previewTransferConfigured, signPreviewTransfer, verifyPreviewTransfer } from './_lib/preview-transfer.mjs';
 
@@ -250,11 +251,11 @@ export function _resetContentCache() {
   _contentCache = { sections: null, at: 0 };
 }
 
-export async function getPublishedSections(env, now = Date.now()) {
+export async function getPublishedSections(env, now = Date.now(), { fresh = false } = {}) {
   if (!env || !env.LEGACY_DB || typeof env.LEGACY_DB.prepare !== 'function') {
     return null;
   }
-  if (_contentCache.sections && (now - _contentCache.at < CACHE_TTL_MS)) {
+  if (!fresh && _contentCache.sections && (now - _contentCache.at < CACHE_TTL_MS)) {
     return _contentCache.sections;
   }
   try {
@@ -397,7 +398,8 @@ export function getHTMLRewriterClass() {
   return typeof globalThis.HTMLRewriter !== 'undefined' ? globalThis.HTMLRewriter : NodeHTMLRewriter;
 }
 
-export async function rewriteContent(response, sections) {
+export async function rewriteContent(response, sections, { requirePublishedJourney = false } = {}) {
+  let journeyRewritten = false;
   const RewriterClass = getHTMLRewriterClass();
   const rewriter = new RewriterClass();
 
@@ -432,7 +434,8 @@ export async function rewriteContent(response, sections) {
       const section = sections[sectionKey];
       if (!section || typeof section !== 'object') return;
 
-      const val = section[fieldKey];
+      const raw = section[fieldKey];
+      const val = attr === 'home.journey.paragraph' && typeof raw === 'string' ? raw.split('\n\n') : raw;
       if (!Array.isArray(val)) return;
       for (const item of val) {
         if (typeof item !== 'string') return;
@@ -448,6 +451,7 @@ export async function rewriteContent(response, sections) {
       const indent = '        ';
       const listHtml = '\n' + val.map((item) => `${indent}${openTag}${sanitizeInlineHtml(item)}${closeTag}`).join('\n') + '\n' + indent;
       el.setInnerContent(listHtml, { html: true });
+      if (attr === 'home.journey.paragraph') journeyRewritten = true;
     },
   });
 
@@ -478,7 +482,16 @@ export async function rewriteContent(response, sections) {
     },
   });
 
-  return rewriter.transform(response);
+  const rewritten = rewriter.transform(response);
+  if (!requirePublishedJourney) return rewritten;
+  // HTMLRewriter executes lazily on the provider. Buffer before returning so a
+  // streaming error or an unvisited binding cannot release the source fallback.
+  const html = await (await rewritten).text();
+  if (!journeyRewritten) throw new Error('Governed journey was not rewritten');
+  const headers = new Headers(response.headers);
+  headers.set('cache-control', 'no-store');
+  for (const name of ['etag', 'last-modified', 'content-length', 'content-encoding', 'content-range', 'accept-ranges']) headers.delete(name);
+  return new Response(html, { status: response.status, headers });
 }
 
 const SECTION_PREVIEW_MAP = Object.freeze({
@@ -1329,13 +1342,19 @@ export async function renderProtectedDraftPreviewPage(context) {
   }
 }
 
+function publicContentUnavailable(method = 'GET') {
+  return new Response(method === 'HEAD' ? null : 'Content is temporarily unavailable. Please try again later.', {
+    status: 503,
+    headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' },
+  });
+}
+
 export async function maybeRewriteContent(context, response) {
   let isPreviewRequest = false;
+  let requiresPublishedJourney = false;
   try {
     const { request, env } = context;
-    if (!request || request.method !== 'GET') {
-      return response;
-    }
+    if (!request) return response;
 
     const url = new URL(request.url);
     let path = url.pathname;
@@ -1345,6 +1364,14 @@ export async function maybeRewriteContent(context, response) {
 
     if (!isRewritableRoute(path)) {
       return response;
+    }
+
+    // Qualify known home aliases before method/status/type short circuits. A
+    // 206 slice may omit every selector; 304 would reuse unqualified cached HTML.
+    const route = decodeURIComponent(path).replace(/\/+$/, '') || '/';
+    requiresPublishedJourney = ['/', '/index', '/index.html'].includes(route);
+    if (request.method !== 'GET') {
+      return requiresPublishedJourney ? publicContentUnavailable(request.method) : response;
     }
 
     isPreviewRequest = url.searchParams.has('preview_draft') || url.searchParams.has('preview_version');
@@ -1360,19 +1387,46 @@ export async function maybeRewriteContent(context, response) {
       });
     }
 
+    // Pages canonicalizes spelled-out home files to /. Forward only that
+    // exact same-origin redirect, with no body/cache metadata. The following
+    // root GET still requires a fresh published-row rewrite. Draft previews,
+    // ranges and conditional requests never use this public alias path.
+    if (['/index', '/index/', '/index.html'].includes(url.pathname)
+        && [301, 308].includes(response?.status)
+        && !['range', 'if-range', 'if-none-match', 'if-modified-since', 'if-match', 'if-unmodified-since']
+          .some(name => request.headers.has(name))) {
+      const location = response.headers.get('location');
+      const canonical = new URL('/' + url.search, url.origin);
+      if (location && new URL(location, url).href === canonical.href) {
+        return new Response(null, { status: 308, headers: {
+          location: '/' + url.search, 'cache-control': 'no-store',
+        } });
+      }
+    }
+
     if (!response || response.status !== 200) {
-      return response;
+      return requiresPublishedJourney ? publicContentUnavailable() : response;
     }
     const contentType = response.headers.get('content-type');
     if (contentType && !contentType.includes('text/html')) {
-      return response;
+      return requiresPublishedJourney ? publicContentUnavailable() : response;
     }
 
+    // Also recognize a governed panel in other full HTML assets.
+    const source = await response.clone().text();
+    requiresPublishedJourney ||= /data-cs-list\s*=\s*["']home\.journey\.paragraph["']/i.test(source);
     if (!env || !env.LEGACY_DB) {
-      return response;
+      return requiresPublishedJourney ? publicContentUnavailable() : response;
     }
 
-    const publishedSections = await getPublishedSections(env);
+    const publishedSections = await getPublishedSections(env, Date.now(), { fresh: requiresPublishedJourney });
+    if (requiresPublishedJourney) {
+      const journey = publishedSections?.['home.journey'];
+      if (!journey || Array.isArray(journey) || typeof journey.paragraph !== 'string' || !journey.paragraph.trim()) {
+        return publicContentUnavailable();
+      }
+      return await rewriteContent(response, publishedSections, { requirePublishedJourney: true });
+    }
     if (!publishedSections || Object.keys(publishedSections).length === 0) {
       return response;
     }
@@ -1382,7 +1436,8 @@ export async function maybeRewriteContent(context, response) {
     if (isPreviewRequest) {
       return previewFailClosed(500, 'preview_error', 'Draft preview failed closed.');
     }
-    // Hard fallback: never break a public page if rewrite fails
+    if (requiresPublishedJourney) return publicContentUnavailable();
+    // Retain the existing fallback on unrelated pages.
     return response;
   }
 }

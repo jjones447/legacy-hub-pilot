@@ -239,13 +239,26 @@ test('support-group sign-up is a named native dialog with only name/email, then 
   assert.doesNotMatch(panel, /November 25/);
 });
 
-test('support-group delegated request reaches its own shared staff task and original audit without membership or registration', async () => {
+test('support-group delegated request reaches its own shared staff task and original audit without membership or registration', { timeout: 5000 }, async () => {
   const app = file('app.js');
   const source = app.slice(0, app.indexOf('/* ---------- Resource hub:'))
     + app.slice(app.indexOf('function openRegister('), app.indexOf("document.addEventListener('click'"))
     + app.slice(app.indexOf("document.addEventListener('submit'"), app.indexOf('/* ---------- Portal: My Wellness'));
   const regions = Object.fromEntries(['[data-intake-success]', '[data-intake-routing]', '[data-intake-error]', '[type="submit"]']
     .map(selector => [selector, { style: { display: 'none' }, disabled: false, textContent: '' }]));
+  // Observe the actual terminal UI update, not an assumed number of event-loop turns.
+  // The intake route can still be awaiting WebCrypto/Response work after setImmediate.
+  let terminal;
+  const armTerminal = () => new Promise(resolve => { terminal = resolve; });
+  for (const selector of ['[data-intake-success]', '[data-intake-error]']) {
+    let display = 'none';
+    Object.defineProperty(regions[selector].style, 'display', {
+      get: () => display,
+      set(value) { display = value; if (value === 'block') terminal(); },
+    });
+  }
+  let releaseResponse;
+  const responseGate = new Promise(resolve => { releaseResponse = resolve; });
   const form = { id: 'supportGroupInterestForm', querySelector: selector => regions[selector],
     getAttribute: () => 'submit-support-group-interest', closest: () => form };
   const listeners = {}, dialogHandlers = {}, storage = new Map(), requests = [];
@@ -268,9 +281,8 @@ test('support-group delegated request reaches its own shared staff task and orig
     crypto: { randomUUID: () => 'fictional-support-group-ref' },
     sessionStorage: { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value) },
     fetch: async (url, options) => {
+      await responseGate;
       requests.push({ url, payload: JSON.parse(options.body) });
-      // A real Response body/handler may settle after several task turns.
-      await new Promise(resolve => setImmediate(() => setImmediate(resolve)));
       return postIntake({ request: new Request('https://example.invalid/api/intake', {
         method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': '203.0.113.30' },
         body: options.body,
@@ -278,21 +290,22 @@ test('support-group delegated request reaches its own shared staff task and orig
     },
   };
   vm.runInNewContext(source, context);
-  const actualPostIntake = context.postIntake;
-  let submission;
-  context.postIntake = (...args) => {
-    submission = actualPostIntake(...args);
-    return submission;
-  };
   context.openSupportGroupInterest(opener);
   assert.equal(dialog.open, true);
   assert.equal(inputFocus, 1);
   context.closeSupportGroupInterest();
   assert.equal(dialog.open, false);
   assert.equal(openerFocus, 1);
+  let completed = armTerminal();
   listeners.submit({ target: form, currentTarget: context.document, preventDefault() {} });
   assert.equal(regions['[type="submit"]'].disabled, true);
-  await submission;
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(regions['[data-intake-success]'].style.display, 'none', 'held response cannot expose success');
+  assert.equal(regions['[data-intake-routing]'].style.display, 'none');
+  assert.deepEqual(assigned, [], 'no Meet navigation before the saved acknowledgment');
+  assert.equal(regions['[type="submit"]'].disabled, true);
+  releaseResponse();
+  await completed;
   assert.equal(regions['[data-intake-success]'].style.display, 'block');
   assert.deepEqual(assigned, ['https://meet.google.com/dmc-orwi-afk'], 'a saved sign-up goes straight to Google Meet');
   assert.deepEqual(requests[0].payload, {
@@ -312,8 +325,9 @@ test('support-group delegated request reaches its own shared staff task and orig
   assert.equal(audit.actor, 'site_form:support_group');
   assert.equal(audit.entity_id, caregiver.id);
   assert.deepEqual(JSON.parse(audit.after_json), { kind: 'support_request', external_ref: 'fictional-support-group-ref', event_id: null });
+  completed = armTerminal();
   listeners.submit({ target: form, currentTarget: context.document, preventDefault() {} });
-  await submission;
+  await completed;
   assert.equal(requests[1].payload.external_ref, requests[0].payload.external_ref);
   assert.equal(raw.prepare(`SELECT COUNT(*) AS n FROM followup`).get().n, 1);
   assert.equal(raw.prepare(`SELECT COUNT(*) AS n FROM audit_log WHERE action = 'intake.support_request'`).get().n, 1);
