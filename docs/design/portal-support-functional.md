@@ -6,7 +6,7 @@ Author pc2-codex-ct-5. Source planning only; no route, persistence or activation
 
 The pure contract accepts exactly request_id, needs, preferred_contact and optional message. Five existing options remain distinct (break, care, connect, resources, unsure). Text is a saved preference, not consent to send SMS or proof of a provider. Caller name/email/phone/actor/owner/status are rejected. Identity and available contact details must come from the verified current caregiver server context; if the selected method has no usable existing address/number, return a bounded action-needed response rather than silently switching methods or upserting a caregiver. Profile correction links use ct13's supported page. Never duplicate Profile fields in this request writer.
 
-Values are bounded, typed, canonically ordered and copied; duplicate/sparse/unknown/accessor-backed options fail. This pure function is NOT authentication or a substitute for HTTP byte limits/JSON parsing. Only JSON input from the bounded route will reach it. Tests are standalone in this increment; unit inventory registration is deferred to the coordinated integration patch, so existing hosted unit jobs do not exercise this new test yet.
+Values are bounded, typed, canonically ordered and copied; duplicate/sparse/unknown/accessor-backed options fail. This pure function is NOT authentication or a substitute for HTTP byte limits/JSON parsing. Only JSON input from the bounded route will reach it. Both candidate test files are registered in the explicit unit inventory. The runner classification guard remains unchanged.
 
 ## Proposed additive persistence, not applied or approved schema
 
