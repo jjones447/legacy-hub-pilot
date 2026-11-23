@@ -19,7 +19,7 @@ export async function createOwnerSupportRequest(db,ownerId,body){
  // The request VALUES statement must execute, even if the owner vanished after
  // the read: FK/NOT NULL/active-owner guards abort the whole atomic batch.
  const statements=[
-  db.prepare(`INSERT INTO followup(caregiver_id,kind,detail,status,source,external_ref) SELECT id,'support_request','Portal support request','open',?,? FROM caregiver WHERE id=? AND status='active'`).bind(SOURCE,externalRef,ownerId),
+  db.prepare(`INSERT INTO followup(caregiver_id,kind,detail,status,source,external_ref) SELECT id,'support_request','Portal support request','open',?,? FROM caregiver WHERE id=? AND status='active' AND CASE WHEN ?='email' THEN email IS NOT NULL AND length(trim(email))>0 ELSE phone IS NOT NULL AND length(trim(phone))>0 END`).bind(SOURCE,externalRef,ownerId,value.preferred_contact),
   db.prepare(`INSERT INTO portal_support_request(id,caregiver_id,request_key,payload_digest,needs_json,preferred_contact,message,followup_id) VALUES(?,?,?,?,?,?,?,(SELECT id FROM followup WHERE source=? AND external_ref=? AND caregiver_id=?))`).bind(id,ownerId,value.request_id,digest,JSON.stringify(value.needs),value.preferred_contact,value.message,SOURCE,externalRef,ownerId),
   db.prepare(`INSERT INTO audit_log(actor,action,entity,entity_id,after_json) VALUES(?, 'portal.support_request.create','portal_support_request',?,?)`).bind('caregiver:'+ownerId,id,JSON.stringify({revision:1,followup_source:SOURCE})),
  ];
