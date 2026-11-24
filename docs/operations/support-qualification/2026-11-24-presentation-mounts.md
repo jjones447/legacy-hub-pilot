@@ -54,3 +54,15 @@ files with closed imports. JSDOM is not a physical browser/mobile/layout, native
 D1, installed Staff session or customer acceptance proof. Stacked PR CI may not
 run under main-only workflow filters; exact composed hosted checks and retained
 review are still required. Support remains disabled and candidate schema unapplied.
+
+## Serialized registration callback amendment
+
+The entry also exports mount(root, transport) for ct13's standalone session module.
+It makes no request before the caller's /me validation. Each owner mount calls
+window.registerPortalSupportView(view) exactly once when that callback is present;
+it retains the returned unregister function and calls it once on dispose/remount.
+reset clears data but retains the registered view for the same session. Registration
+failures dispose the view and propagate, rather than claiming a safe mounted state.
+Ct13 reserves all app.js owner-change/logout/session wiring and Staff server routes.
+The existing convenience mountOwner calls history only after the session caller
+explicitly invokes it. No automatic auth fetch or cookie parser was introduced.
