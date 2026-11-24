@@ -76,3 +76,11 @@ counts/results and remove only scoped synthetic fixtures after evidence capture.
 Activation requires that native evidence, completed UI/import closure, exact-head
 functional/Security review and GUI5's authenticated browser qualification. The
 Support flag remains off; #386's merge and customer acceptance remain independent.
+
+Generic follow-up reconciliation: both `/api/followups` status updates and Staff
+`/api/staff/followup/:id/resolve` now reject the immutable creation source
+`portal_owner_support_request` with 409 `use_support_status`, before mutation or
+audit. This guard does not require the candidate table or enabled flag. Dedicated
+Support status remains authoritative; generic Reviewed/Done/Dismissed never imply
+owner progress. Final Staff presentation must suppress those generic controls for
+these records and direct users to the dedicated status workflow.

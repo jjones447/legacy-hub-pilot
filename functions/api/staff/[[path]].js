@@ -448,11 +448,15 @@ export async function onRequestPost({ request, env, data }) {
 
       // Fetch followup status
       const followup = await env.LEGACY_DB.prepare(`
-        SELECT status, caregiver_id FROM followup WHERE id = ?
+        SELECT status, caregiver_id, source FROM followup WHERE id = ?
       `).bind(id).first();
 
       if (!followup) {
         return json({ ok: false, error: 'followup not found' }, 404);
+      }
+
+      if (followup.source === 'portal_owner_support_request') {
+        return json({ ok: false, error: 'use_support_status' }, 409);
       }
 
       if (followup.status !== 'open') {
