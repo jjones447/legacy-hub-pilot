@@ -234,3 +234,33 @@ test('(i) flat and grouped single destinations treat blank, missing and null as 
     assert.doesNotMatch(rendered, /href="(?:\s*|None|#)"/);
   }
 });
+
+test('link cards and downloadable guides expose unique catalog IDs for available resources', () => {
+  const links = JSON.parse(loadHtml('content/resource-links.json'));
+  const resources = JSON.parse(loadHtml('content/resources.json'));
+  const ids = new Set();
+
+  function linkCards(collection) {
+    const items = collection.groups?.flatMap(group => group.items) ?? collection.items;
+    return items.filter(item => item.url?.trim() || item.links?.some(link => link.url?.trim()));
+  }
+
+  const pages = [
+    ['trusted-resources.html', [...linkCards(links.trusted_organizations), ...linkCards(links.caregiver_recommended)]],
+    ['follow-and-learn.html', linkCards(links.follow_and_learn)],
+    ['caregiver-tools.html', resources.downloads],
+  ];
+  for (const [page, entries] of pages) {
+    const expected = entries.map(entry => entry.resource_id);
+    for (const id of expected) {
+      assert.match(id, /^[a-z0-9][a-z0-9_-]{0,79}$/);
+      assert.ok(!ids.has(id), `Duplicate resource ID on ${page}: ${id}`);
+      ids.add(id);
+    }
+    const rendered = Array.from(loadHtml(page).matchAll(/data-resource-id="([^"]*)"/g), match => match[1]);
+    assert.deepEqual(rendered.sort(), expected.sort(), page);
+  }
+  for (const item of resources.items.filter(item => item.link.startsWith('#'))) {
+    assert.equal(item.resource_id, undefined, item.title);
+  }
+});
