@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { canSendEmail, signInEmail, sendEmail, EMAIL_FROM, EMAIL_REPLY_TO } from '../functions/_lib/email.js';
+import { onRequest as middleware } from '../functions/_middleware.js';
 import { onRequestPost as postPortal } from '../functions/api/portal/[[path]].js';
 
 const SCHEMA_1 = readFileSync(new URL('../schema/0001_init.sql', import.meta.url), 'utf8');
@@ -192,7 +193,8 @@ test('delivery audit failure cannot change the public response by membership', a
 for (const host of ['staging.legacy-hub-5qo.pages.dev','customer-test.legacy-hub-5qo.pages.dev']) {
   test(`named preview ${host} sends normal sign-in email when explicitly enabled`, async () => {
     const env={...PROD(),ENVIRONMENT:'preview',PORTAL_PREVIEW_MAIL_ENABLED:'true'};
-    const res=await postPortal({request:request(`https://${host}/api/portal/login`,{email:'jane.doe@example.com'}),env});
+    const req=request(`https://${host}/api/portal/login`,{email:'jane.doe@example.com'});
+    const res=await middleware({request:req,env,next:()=>postPortal({request:req,env})});
     assert.equal(res.status,200);
     assert.equal(calls.length,1);
     assert.ok(JSON.parse(calls[0].init.body).text.includes(`https://${host}/api/portal/verify?token=`));

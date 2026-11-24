@@ -14,3 +14,8 @@ wrong-host refusal without token creation, existing confirmation/session contain
 and capture one-use/expiry/admin checks. This is source evidence, not installation
 or external-provider delivery proof. Both aliases need exact deployment/DB/flag
 readbacks and operator verification before claiming the reported staging issue fixed.
+
+Security composition correction: middleware no longer redirects the named Pages
+staging host to staging.caregiversanctuary.org (the latter currently aliases production).
+The production Pages redirect remains. Tests pass actual middleware page navigation
+and named-host login through the portal handler; exact-host ephemeral containment stays.

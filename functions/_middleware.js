@@ -233,9 +233,10 @@ export async function onRequest(context) {
   // Retire human-facing provider aliases without redirecting webhook/API traffic
   // or origin-bound protected draft previews. The destination enforces its own
   // normal staff/caregiver authentication; no session or access is transferred.
+  // Named Pages staging is an independent TEST origin; the historical custom
+  // staging hostname currently aliases production and must not receive TEST users.
   const canonicalHost = {
     'legacy-hub-5qo.pages.dev': 'caregiversanctuary.org',
-    'staging.legacy-hub-5qo.pages.dev': 'staging.caregiversanctuary.org',
   }[url.hostname];
   const isPage = !/\.[a-z0-9]+$/i.test(path) || /\.html$/i.test(path);
   if (canonicalHost && isPage && !matchesPrefix(path, '/api') && !isDraftPreview && ['GET', 'HEAD'].includes(request.method)) {
