@@ -17,7 +17,7 @@ CREATE TABLE portal_support_request (
 CREATE INDEX portal_support_request_owner ON portal_support_request(caregiver_id,created_at,id);
 CREATE TRIGGER portal_support_request_insert_guard BEFORE INSERT ON portal_support_request BEGIN
  SELECT CASE WHEN NEW.status!='received' OR NEW.revision!=1 THEN RAISE(ABORT,'initial_state') END;
- SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM caregiver WHERE id=NEW.caregiver_id AND status='active') THEN RAISE(ABORT,'inactive_owner') END;
+ SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM caregiver WHERE id=NEW.caregiver_id AND status!='archived') THEN RAISE(ABORT,'inactive_owner') END;
  SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM followup WHERE id=NEW.followup_id AND caregiver_id=NEW.caregiver_id AND kind='support_request') THEN RAISE(ABORT,'foreign_task') END;
  SELECT CASE WHEN json_array_length(NEW.needs_json) NOT BETWEEN 1 AND 5
   OR EXISTS(SELECT 1 FROM json_each(NEW.needs_json) WHERE type!='text' OR value NOT IN ('break','care','connect','resources','unsure'))
@@ -30,7 +30,7 @@ CREATE TRIGGER portal_support_request_update_guard BEFORE UPDATE ON portal_suppo
   OR NEW.message!=OLD.message OR NEW.followup_id!=OLD.followup_id OR NEW.created_at!=OLD.created_at
   THEN RAISE(ABORT,'immutable_request') END;
  SELECT CASE WHEN NEW.revision!=OLD.revision+1 THEN RAISE(ABORT,'revision_conflict') END;
- SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM caregiver WHERE id=NEW.caregiver_id AND status='active') THEN RAISE(ABORT,'inactive_owner') END;
+ SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM caregiver WHERE id=NEW.caregiver_id AND status!='archived') THEN RAISE(ABORT,'inactive_owner') END;
  SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM followup WHERE id=NEW.followup_id AND caregiver_id=NEW.caregiver_id AND kind='support_request') THEN RAISE(ABORT,'foreign_task') END;
  SELECT CASE WHEN NOT ((OLD.status='received' AND NEW.status='in_review')
   OR (OLD.status='in_review' AND NEW.status IN ('followed_up','closed'))
