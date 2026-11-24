@@ -1,0 +1,11 @@
+/* Dedicated warm functional form; only applies inside the future support mount. */
+.support-request-form{background:#fffaf5;border:1px solid #eadfd5;border-radius:20px;padding:1.5rem;color:#5a3526}
+.support-request-form fieldset{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;border:0;padding:0}
+.support-request-form legend{font-weight:700;margin-bottom:1rem}.support-request-form label{display:block;margin-bottom:1rem}
+.support-request-form .support-need{display:flex;align-items:start;gap:.75rem;background:white;border:2px solid #eadfd5;border-radius:16px;padding:1rem;min-height:72px;margin:0}
+.support-request-form .support-need:has(input:checked){border-color:#a84a32;background:#fff1e5}
+.support-request-form input[type=checkbox]{width:22px;height:22px;flex-shrink:0;accent-color:#a84a32}
+.support-request-form select,.support-request-form textarea{display:block;width:100%;min-height:48px;font:inherit;padding:.75rem;margin-top:.5rem;border:1px solid #cdb7a8;border-radius:10px}
+.support-request-form textarea{min-height:110px}.support-request-form button{background:#a84a32;color:white;border:0;border-radius:12px;min-height:48px;padding:.75rem 1.5rem;font:inherit}
+.support-request-form button:disabled{opacity:.65}.support-request-form :focus-visible{outline:3px solid #5a3526;outline-offset:3px}
+@media(max-width:650px){.support-request-form fieldset{grid-template-columns:1fr}.support-request-form{padding:1rem}}
