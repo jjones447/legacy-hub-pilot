@@ -4,7 +4,7 @@ import { onRequest } from '../functions/_middleware.js';
 import { publishedHomeEnv, publishedHomeResponse } from './helpers/published-home.mjs';
 
 test('known public provider aliases send human page visits to the matching canonical environment', async () => {
-  for (const [host, expected] of [['legacy-hub-5qo.pages.dev', 'caregiversanctuary.org'], ['staging.legacy-hub-5qo.pages.dev', 'staging.caregiversanctuary.org']]) {
+  for (const [host, expected] of [['legacy-hub-5qo.pages.dev', 'caregiversanctuary.org']]) {
     for (const path of ['/', '/staff', '/portal?view=events', '/programs.html']) {
       const response = await onRequest({ request: new Request(`https://${host}${path}`), env: {}, next() { throw Error('Do not serve duplicate page'); } });
       assert.equal(response.status, 308);
@@ -33,4 +33,11 @@ test('origin-bound draft preview remains guarded and is not redirected', async (
   const response = await onRequest({ request: new Request('https://staging.legacy-hub-5qo.pages.dev/?preview_draft=example'), env: {}, next() { throw Error('must stay guarded'); } });
   assert.equal(response.status, 403);
   assert.equal(response.headers.get('Location'), null);
+});
+
+test('named TEST portal pages retain their origin through middleware',async()=>{
+ for(const host of ['staging.legacy-hub-5qo.pages.dev','customer-test.legacy-hub-5qo.pages.dev']){
+  const response=await onRequest({request:new Request(`https://${host}/portal.html`),env:{ENVIRONMENT:'preview'},next:async()=>new Response('portal')});
+  assert.equal(response.status,200);assert.equal(response.headers.get('Location'),null);
+ }
 });
