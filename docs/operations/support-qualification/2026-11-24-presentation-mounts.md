@@ -66,3 +66,18 @@ failures dispose the view and propagate, rather than claiming a safe mounted sta
 Ct13 reserves all app.js owner-change/logout/session wiring and Staff server routes.
 The existing convenience mountOwner calls history only after the session caller
 explicitly invokes it. No automatic auth fetch or cookie parser was introduced.
+
+## Staff projection amendment
+
+The dedicated Staff module now exports readStaffSupportRequests(db, verifiedEmail).
+It returns {ok:true,requests} with the agreed fixed ten-field projection (status
+is {code,label} or null), or {ok:false,error:'forbidden'}. It authorizes current
+active Staff/admin before querying, repeats that predicate inside the sensitive
+SELECT and checks again before returning rows. Archived owners and the existing
+internal-QA source/tag policy are excluded; ordinary inactive/nonarchived owners
+remain eligible. The query is capped at50 with stable created_at/id ordering and
+returns no contact identity, request key or digest. Seven local SQLite Staff tests
+cover CAS plus bounded projection, source/tag exclusions and revocation before/
+after projection. Shared HTTP dispatcher remains ct13-owned; no helper proves
+verified identity merely because an email argument was supplied. No runtime or
+native D1 qualification is implied.

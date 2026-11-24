@@ -1,5 +1,6 @@
 // Unmounted Staff store. verifiedEmail MUST come from the current verified Access
 // context; accepting an email parameter here is not an authentication mechanism.
+import {notInternalTestCaregiverSql} from './domain/caregivers.js';
 import {canAdvanceSupportStatus,projectSupportStatus} from './portal-support-request-contract.mjs';
 export async function updateSupportStatus(db,verifiedEmail,body){
  if(typeof verifiedEmail!=='string'||!body||Object.getPrototypeOf(body)!==Object.prototype||
@@ -21,4 +22,23 @@ export async function updateSupportStatus(db,verifiedEmail,body){
  if(results?.[0]?.meta?.changes!==1)return {ok:false,error:'conflict'};
  if(results?.[1]?.meta?.changes!==1)return {ok:false,error:'outcome_unknown'};
  return {ok:true,id:body.id,revision:body.revision+1,status:projectSupportStatus(body.status)};
+}
+
+// Fixed Staff projection. Caller identity still comes only from verified Access.
+export async function readStaffSupportRequests(db,verifiedEmail){
+ if(typeof verifiedEmail!=='string'||!verifiedEmail||verifiedEmail.length>254)return {ok:false,error:'forbidden'};
+ const authorized=()=>db.prepare("SELECT email FROM staff_member WHERE email=? AND status='active' AND role IN ('staff','admin')").bind(verifiedEmail).first();
+ if(!await authorized())return {ok:false,error:'forbidden'};
+ const result=await db.prepare(`SELECT r.id,r.caregiver_id,r.revision,r.needs_json,r.preferred_contact,r.message,r.status,r.created_at,r.updated_at,r.followup_id
+  FROM portal_support_request r JOIN caregiver c ON c.id=r.caregiver_id
+  WHERE c.status!='archived' AND ${notInternalTestCaregiverSql('c')}
+   AND EXISTS(SELECT 1 FROM staff_member s WHERE s.email=? AND s.status='active' AND s.role IN ('staff','admin'))
+  ORDER BY r.created_at DESC,r.id DESC LIMIT 50`).bind(verifiedEmail).all();
+ // A known revocation between initial authorization and projection must not be
+ // reported as an authorized empty queue or release already-read private rows.
+ if(!await authorized())return {ok:false,error:'forbidden'};
+ if(!Array.isArray(result?.results))throw Error('invalid_support_projection');
+ return {ok:true,requests:result.results.map(r=>({id:r.id,caregiver_id:r.caregiver_id,revision:r.revision,
+  needs:JSON.parse(r.needs_json),preferred_contact:r.preferred_contact,message:r.message,
+  status:projectSupportStatus(r.status),created_at:r.created_at,updated_at:r.updated_at,followup_id:r.followup_id}))};
 }
