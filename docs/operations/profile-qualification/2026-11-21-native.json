@@ -1,0 +1,114 @@
+{
+  "prior_attempt": "stopped on protected-route redirect before writes; empty native witnesses reconciled",
+  "source": "34846454bbd923b5d3974ea1864d6d6a25a464cf",
+  "deployment": "efcb1ecb-846e-4d58-8123-5a36209c19b0",
+  "origin": "https://profile-fixture-381.legacy-hub-5qo.pages.dev",
+  "started_at": "2026-11-21T12:21:19.407Z",
+  "checks": [
+    "invalid_expired_wrong_hmac_archived_outside_owner_routes_origin_selector_type_refused_no_writes",
+    "chromium_partial_save_reload_no_browser_storage",
+    "owner_isolation_native_revision_race_one_winner_stale_no_write",
+    "native_revision_only_audits_single_generic_followup_yes_then_dismissed_no_mail",
+    "fresh_browser_context_resume_and_second_owner_blank_profile"
+  ],
+  "status": "pass",
+  "protected_route_refusals": [
+    {
+      "path": "/api/staff/people",
+      "status": 302,
+      "layer": "Access admission refusal"
+    },
+    {
+      "path": "/api/agent/publisher/status",
+      "status": 302,
+      "layer": "Access admission refusal"
+    }
+  ],
+  "completed_at": "2026-11-21T12:21:28.258Z",
+  "recorded_by": "pc2-codex-ct-13",
+  "security_scope_receipts": [
+    "https://github.com/jjones447/legacy-hub-pilot/pull/381#issuecomment-7061877096",
+    "https://github.com/jjones447/legacy-hub-pilot/pull/381#issuecomment-7061909961"
+  ],
+  "native_witness": {
+    "profile_rows": 1,
+    "owner_a_revision": 4,
+    "owner_b_profile_rows": 0,
+    "audit_ids": [
+      213,
+      214,
+      215,
+      216
+    ],
+    "audit_action": "portal.profile_saved",
+    "audit_entity": "caregiver_profile",
+    "audit_before_json": "NULL",
+    "audit_after_json": [
+      {
+        "revision": 1
+      },
+      {
+        "revision": 2
+      },
+      {
+        "revision": 3
+      },
+      {
+        "revision": 4
+      }
+    ],
+    "followup_id": 23,
+    "followup_count": 1,
+    "followup_kind": "profile_support_review",
+    "followup_created_at_revision": 3,
+    "followup_final_status": "dismissed"
+  },
+  "disable": {
+    "checked_at": "2026-11-21T12:24:53.703357+00:00",
+    "deployment": "bbf8be2a-1c73-46e1-a245-17a1082a241f",
+    "source": "7654b816760ca05c1271c0001fe5ddd55b0da3bd",
+    "completed_at": "2026-11-21T12:22:04.227695Z",
+    "origin": "https://profile-fixture-381.legacy-hub-5qo.pages.dev",
+    "environment": "preview",
+    "db": "42be536c-e354-44c7-b246-2dcac18d8ac6",
+    "configuration_preserved": true,
+    "production_unchanged": true,
+    "http": [
+      {
+        "method": "GET",
+        "path": "/api/portal/profile",
+        "status": 403,
+        "no_store": true
+      },
+      {
+        "method": "POST",
+        "path": "/api/portal/profile",
+        "status": 403,
+        "no_store": true
+      },
+      {
+        "method": "GET",
+        "path": "/",
+        "status": 403,
+        "no_store": true
+      }
+    ],
+    "native_records_and_audits_unchanged": true
+  },
+  "limitations": [
+    "Bounded synthetic-owner fixture, not full portal or current human staff qualification.",
+    "No real login, production session, actual mail, automatic enrollment, or public session mint.",
+    "No native audit-failure trigger or injected lost network acknowledgement; successful write followed by GET reconciliation only.",
+    "Archived-owner negative uses initially archived owner; no mid-request archive race claim.",
+    "Access 302 on staff/publisher paths proves outer admission refusal, not inner application authorization.",
+    "Browser exercised partial ZIP save/reload/resume at mobile viewport, not complete accessibility or all-field acceptance.",
+    "Attached preview secrets remain capabilities: non-use is code-enforced, not capability isolation.",
+    "Source/schema/privacy approvals carry separately; retained reviewers have not yet accepted this runtime evidence."
+  ],
+  "execution_notes": [
+    "Initial runner aborted on redirect:error before writes; native empty witnesses reconciled before corrected transport run.",
+    "Corrected transport manually classifies Access redirects; second run exited zero and closed browser.",
+    "Disable verification initially used incorrect DB metadata key; read actual LEGACY_DB key and verified TEST identity before HTTP checks; no redeploy/retry.",
+    "No repeat migration, reseed, native write protocol, secret rotation, or production action."
+  ]
+}

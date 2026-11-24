@@ -30,7 +30,7 @@ test('the real site build contains the site and nothing forbidden', () => {
   withTempDir((out) => {
     const files = buildSite(ROOT, out);
     assert.deepEqual(findForbidden(files), []);
-    for (const required of ['index.html', 'staff.html', 'styles.css', 'app.js', 'nav-v2.js', 'staff.js', '_redirects', '_headers', 'media/hero.mp4']) {
+    for (const required of ['index.html', 'profile.html', 'profile-page.js', 'profile-page.css', 'caregiver-profile.js', 'staff.html', 'styles.css', 'app.js', 'nav-v2.js', 'staff.js', '_redirects', '_headers', 'media/hero.mp4']) {
       assert.ok(files.includes(required), `expected ${required} in the build`);
     }
     for (const excluded of ['docs', 'scripts', 'schema', 'tests', 'workers', 'functions', 'content', 'templates', 'wrangler.toml', 'package.json', 'build.py']) {
@@ -50,9 +50,16 @@ test('built HTML pages stamp exact SHA-256 version query params onto styles.css,
       const html = readFileSync(join(out, page), 'utf8');
       assert.ok(html.includes(`href="styles.css?v=${stylesVer}"`), `${page} must reference styles.css?v=${stylesVer}`);
       assert.ok(!html.includes('href="styles.css"'), `${page} must not reference unversioned styles.css`);
-      if (page !== 'coming-soon.html') {
+      if (page !== 'coming-soon.html' && page !== 'profile.html') {
         assert.ok(html.includes(`src="app.js?v=${appVer}"`), `${page} must reference app.js?v=${appVer}`);
         assert.ok(!html.includes('src="app.js"'), `${page} must not reference unversioned app.js`);
+      }
+      if (page === 'profile.html') {
+        for (const asset of ['profile-page.js', 'profile-page.css', 'caregiver-profile.js']) {
+          const version = createHash('sha256').update(readFileSync(join(out, asset))).digest('hex').slice(0, 12);
+          assert.ok(html.includes(`${asset}?v=${version}`), `profile.html must version ${asset}`);
+        }
+        assert.ok(!html.includes('src="app.js'), 'dedicated Profile uses its own session controller');
       }
       if (page === 'staff.html') {
         assert.ok(html.includes(`src="staff.js?v=${staffVer}"`), `staff.html must reference staff.js?v=${staffVer}`);

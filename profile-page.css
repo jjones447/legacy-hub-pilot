@@ -1,0 +1,23 @@
+/* Warm presentation shared with the approved #378 visual direction; scoped to this page. */
+.profile-page{max-width:1000px;padding:2rem 1.25rem 4rem}
+.profile-page [hidden]{display:none!important}
+.profile-page h1{font-size:clamp(1.9rem,4.5vw,3rem);line-height:1.2;margin:.75rem 0 1rem;color:var(--plum-dark)}
+.profile-page p{line-height:1.65}
+.profile-page .profile-welcome{padding:2rem;margin:1.5rem 0;background:linear-gradient(110deg,#f7e6d5,#fffaf5);border-radius:24px;border-left:6px solid var(--coral);box-shadow:var(--shadow)}
+.profile-page .profile-eyebrow{color:var(--coral-dark);font-weight:700;letter-spacing:.04em}
+.profile-page .profile-toolbar{display:flex;flex-wrap:wrap;gap:.75rem;align-items:center;justify-content:space-between}
+.profile-page .profile-session{background:#fff;border:1px solid #eadfd5;border-radius:18px;padding:1.25rem;margin:1.5rem 0}
+.profile-page .profile-section{background:#fff;border:1px solid #eadfd5;border-radius:18px;padding:1.5rem;box-shadow:var(--shadow)}
+.profile-page .profile-section summary{min-height:44px;padding:.6rem 0;font-size:1.15rem;color:var(--plum-dark);cursor:pointer}
+.profile-page .profile-field{margin:1.5rem 0}
+.profile-page .profile-field input:not([type=checkbox]),.profile-page .profile-field select,.profile-page .profile-field textarea{display:block;width:100%;max-width:100%;min-height:48px;border:1px solid #cdb7a8;border-radius:10px;padding:.75rem;font:inherit;background:#fff}
+.profile-page .profile-field input[readonly]{background:#f5f1ed}
+.profile-page .profile-field textarea{min-height:115px;resize:vertical}
+.profile-page .profile-choice{display:flex;align-items:baseline;gap:.6rem;padding:.65rem;border:1px solid #eadfd5;border-radius:10px;margin:.5rem 0;min-height:44px}
+.profile-page .profile-choice input{width:20px;height:20px;flex-shrink:0;accent-color:var(--coral-dark)}
+.profile-page .profile-choice:has(input:checked){background:#fff1e5;border-color:var(--coral-dark)}
+.profile-page .profile-actions{display:flex;flex-wrap:wrap;gap:.75rem;margin:1.5rem 0}
+.profile-page .btn{min-height:44px;white-space:normal}
+.profile-page :focus-visible{outline:3px solid var(--coral-dark);outline-offset:4px}
+.profile-page button:disabled{opacity:.65;cursor:not-allowed}
+@media(max-width:650px){.profile-page{padding:1.25rem .85rem 3rem}.profile-page .profile-welcome{padding:1.5rem 1.15rem}.profile-page .profile-section{padding:1.1rem}.profile-page .profile-actions{flex-direction:column}.profile-page .profile-actions .btn{width:100%}}

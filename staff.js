@@ -1,3 +1,6 @@
+var staffProfileViews = typeof window !== 'undefined' && typeof window.createStaffProfileViews === 'function'
+  ? window.createStaffProfileViews(document.getElementById('staffCaregiverProfile'), document.getElementById('staffProfileSummary')) : null;
+
 function escapeHtml(str) {
   if (str == null) return '';
   return String(str)
@@ -786,6 +789,7 @@ function openCaregiverEditor() {
 }
 
 function backToStaffDashboard() {
+  if (typeof staffProfileViews !== 'undefined' && staffProfileViews) staffProfileViews.clearCaregiver();
   caregiverDetailEpoch++;
   caregiverDetailOpen = false;
   document.getElementById('caregiverDetailView')?.classList.add('d-none');
@@ -803,6 +807,7 @@ function backToStaffDashboard() {
 }
 
 async function viewCaregiver(id) {
+  if (typeof staffProfileViews !== 'undefined' && staffProfileViews) staffProfileViews.clearCaregiver();
   const epoch = ++caregiverDetailEpoch;
   openCaregiverDetail();
   const recordPanel = document.getElementById('caregiverRecordPanel');
@@ -1106,6 +1111,7 @@ async function viewCaregiver(id) {
         </form>
       </details>
     `;
+    if (typeof staffProfileViews !== 'undefined' && staffProfileViews) staffProfileViews.selectCaregiver(id);
     const heading = document.getElementById('caregiverDetailHeading');
     heading?.focus();
   } catch (e) {
@@ -2246,6 +2252,7 @@ function noteNeedsAttentionActionable(actionable) {
 // The current person can't be established (#306 review): stop writing anyone's choices.
 // Cancels a pending identity hash; stored choices are kept, never deleted.
 function forgetStaffPanelIdentity() {
+  if (typeof staffProfileViews !== 'undefined' && staffProfileViews) staffProfileViews.beginIdentity();
   staffPanelKeyEpoch++;
   staffPanelStorageKey = null;
   staffPanelSaved = null;
@@ -3361,6 +3368,7 @@ let staffTeam = [];
 let staffTeamError = null;
 
 async function loadStaffTeam() {
+  const profileIdentityToken = typeof staffProfileViews !== 'undefined' && staffProfileViews ? staffProfileViews.beginIdentity() : null;
   const list = document.getElementById('staffTeamList');
   let identityKnown = false;
   try {
@@ -3373,6 +3381,7 @@ async function loadStaffTeam() {
     if (typeof rememberStaffPanelsFor === 'function') void rememberStaffPanelsFor(meData.me);
     if (!teamRes.ok || !teamData.ok) throw new Error(teamData.error || 'Failed to load staff');
     staffMe = meData.me;
+    if (typeof staffProfileViews !== 'undefined' && staffProfileViews) staffProfileViews.setIdentity(profileIdentityToken, staffMe);
     updatePeopleAddActions();
     staffTeam = teamData.team || [];
     staffTeamError = null;
