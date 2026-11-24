@@ -360,3 +360,37 @@ test('GiveButter webhook is idempotent on event replay', async () => {
   const count = raw.prepare(`SELECT COUNT(*) AS n FROM followup WHERE source = 'givebutter' AND external_ref = 'evt_idempotency_test'`).get();
   assert.equal(count.n, 1);
 });
+
+async function mappedTicket(data, mapping) {
+ env.GIVEBUTTER_EVENT_MAP_JSON=mapping;
+ const body={id:'mapping-fixture',event:'ticket.created',data:{email:'fixture@example.invalid',...data}};
+ return postGiveButter({env,request:mockRequest('https://example.invalid/api/webhooks/givebutter','POST',body,{Signature:computeSignature(JSON.stringify(body),WEBHOOK_SECRET)})});
+}
+test('explicit campaign mapping creates one local registration rather than fallback, and replay remains idempotent',async()=>{
+ const mapping=JSON.stringify({campaign:{'12345':'ev_virtual_support_group'}});
+ assert.equal((await mappedTicket({campaign_id:12345},mapping)).status,200);
+ assert.equal(raw.prepare('SELECT count(*) n FROM followup').get().n,0);
+ assert.equal(raw.prepare('SELECT event_id FROM registration').get().event_id,'ev_virtual_support_group');
+ assert.equal((await(await mappedTicket({campaign_id:12345},mapping)).json()).duplicate,true);
+ assert.equal(raw.prepare('SELECT count(*) n FROM registration').get().n,1);
+});
+test('conflicting provider mappings refuse before any contact or followup write',async()=>{
+ const mapping=JSON.stringify({event:{one:'ev_virtual_support_group'},campaign:{two:'ev_memory_social_jul18'}});
+ assert.equal((await mappedTicket({event_id:'one',campaign_id:'two'},mapping)).status,503);
+ assert.equal(raw.prepare('SELECT count(*) n FROM caregiver').get().n,0);
+ assert.equal(raw.prepare('SELECT count(*) n FROM followup').get().n,0);
+});
+test('malformed configured mapping refuses; unknown or unpublished target preserves fallback',async()=>{
+ assert.equal((await mappedTicket({campaign_id:'x'},'{bad')).status,503);
+ assert.equal(raw.prepare('SELECT count(*) n FROM caregiver').get().n,0);
+ assert.equal((await mappedTicket({campaign_id:'x'},JSON.stringify({campaign:{x:'not_published'}}))).status,200);
+ assert.equal(raw.prepare('SELECT count(*) n FROM registration').get().n,0);
+ assert.equal(raw.prepare('SELECT count(*) n FROM followup').get().n,1);
+});
+test('campaign ticket mapping does not turn an unrelated donation into event attendance',async()=>{
+ env.GIVEBUTTER_EVENT_MAP_JSON=JSON.stringify({campaign:{'12345':'ev_virtual_support_group'}});
+ const body={id:'donation-mapping-fixture',event:'donation',data:{email:'fixture@example.invalid',campaign_id:12345,amount:5}};
+ const res=await postGiveButter({env,request:mockRequest('https://example.invalid/api/webhooks/givebutter','POST',body,{Signature:computeSignature(JSON.stringify(body),WEBHOOK_SECRET)})});
+ assert.equal(res.status,200);assert.equal(raw.prepare('SELECT count(*) n FROM registration').get().n,0);
+ assert.equal(raw.prepare('SELECT kind FROM followup').get().kind,'donation');
+});
