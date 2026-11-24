@@ -4,6 +4,8 @@ import { canSendEmail, isPreviewMailOptIn, sendEmail, signInEmail } from '../../
 import { QUESTIONS, validateCheckin, recordCheckin, caregiverHistory, isCheckinDue, CHECKIN_EVERY_DAYS } from '../../_lib/wellness.js';
 import { loadCaregiverProfile, saveCaregiverProfile, validateProfilePatch, readProfileBody } from '../../_lib/caregiver-profile.js';
 import { PROFILE_SECTIONS } from '../../_lib/caregiver-profile-fields.js';
+import { createOwnerSupportRequest, readOwnerSupportRequests } from '../../_lib/portal-support-request-store.mjs';
+import { supportRequestBoundary, readSupportRequestBody, supportRequestStatus } from '../../_lib/portal-support-request-http.mjs';
 
 async function getHmacSha256(message, secret) {
   const enc = new TextEncoder();
@@ -273,6 +275,11 @@ export async function onRequestGet({ request, env }) {
     if (action === 'profile' && (env.PORTAL_PROFILE_ENABLED !== '1'
         || url.pathname !== '/api/portal/profile' || url.search)) return json({ ok: false, error: 'not_found' }, 404);
 
+    if (action === 'support-requests') {
+      const refusal = supportRequestBoundary(request, env);
+      if (refusal) return json({ ok: false, error: refusal.error }, refusal.status);
+    }
+
     const secret = env.PORTAL_TOKEN_SECRET;
     if (!secret) {
       return json({ ok: false, error: 'auth_not_configured' }, 503);
@@ -285,6 +292,13 @@ export async function onRequestGet({ request, env }) {
       }
       if (url.searchParams.getAll('token').length !== 1 || !OPAQUE_TOKEN.test(token)) return htmlErrorPage('This access link is unrecognized or has been revoked.');
       return await confirmationPage(request, token, secret);
+    }
+
+    if (action === 'support-requests') {
+      const caregiverId = await parseSessionCookie(request.headers.get('Cookie'), secret);
+      if (!caregiverId || !await hasNonarchivedCaregiver(env.LEGACY_DB, caregiverId)) return json({ ok: false, error: 'unauthorized' }, 401);
+      const requests = await readOwnerSupportRequests(env.LEGACY_DB, caregiverId);
+      return json({ ok: true, requests });
     }
 
     if (action === 'profile') {
@@ -404,6 +418,11 @@ export async function onRequestPost({ request, env }) {
       }
     }
 
+    if (action === 'support-requests') {
+      const refusal = supportRequestBoundary(request, env);
+      if (refusal) return json({ ok: false, error: refusal.error }, refusal.status);
+    }
+
     const secret = env.PORTAL_TOKEN_SECRET;
     if (!secret) {
       return json({ ok: false, error: 'auth_not_configured' }, 503);
@@ -508,6 +527,15 @@ export async function onRequestPost({ request, env }) {
       }
 
       return json(responseObj);
+    }
+
+    if (action === 'support-requests') {
+      const caregiverId = await parseSessionCookie(request.headers.get('Cookie'), secret);
+      if (!caregiverId || !await hasNonarchivedCaregiver(env.LEGACY_DB, caregiverId)) return json({ ok: false, error: 'unauthorized' }, 401);
+      // Only this verified server owner reaches the writer. The writer rechecks
+      // nonarchived eligibility at write time; this precheck is not a lock.
+      const result = await createOwnerSupportRequest(env.LEGACY_DB, caregiverId, await readSupportRequestBody(request));
+      return json(result, supportRequestStatus(result));
     }
 
     if (action === 'profile') {
