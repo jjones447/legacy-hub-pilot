@@ -207,7 +207,7 @@ test('explicit PORTAL_PREVIEW_MAIL_ENABLED opt-in enables staging caregiver sign
       } };
     },
   };
-  const stagingOrigin = 'https://staging.caregiversanctuary.org';
+  const stagingOrigin = 'https://staging.legacy-hub-5qo.pages.dev';
   const env = {
     ENVIRONMENT: 'preview',
     PORTAL_PREVIEW_MAIL_ENABLED: '1',
@@ -251,7 +251,7 @@ test('explicit PORTAL_PREVIEW_MAIL_ENABLED opt-in enables staging caregiver sign
     assert.equal(login.status, 200);
     assert.deepEqual(await login.json(), { ok: true });
     assert.equal(sends, 1);
-    assert.match(mailedLink, /^https:\/\/staging\.caregiversanctuary\.org\/api\/portal\/verify\?token=[A-Za-z0-9_-]{43}$/);
+    assert.match(mailedLink, /^https:\/\/staging\.legacy-hub-5qo\.pages\.dev\/api\/portal\/verify\?token=[A-Za-z0-9_-]{43}$/);
 
     // 3. Single-use confirmation succeeds on staging and refuses replay
     const verify = await confirmPortal({ env, request: new Request(mailedLink) });

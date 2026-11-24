@@ -63,9 +63,15 @@ function json(obj, status = 200) {
 // portal access there, including redemption of old dev links and old sessions.
 // Public pages and the separate staff Access routes are unaffected. This is not
 // production session revocation, and the retired dev-link flag cannot bypass it.
-function previewPortalDisabled(env) {
+function previewPortalDisabled(env, request) {
   if (env.ENVIRONMENT === 'development') return true;
-  if (env.ENVIRONMENT === 'preview') return !isPreviewMailOptIn(env);
+  if (env.ENVIRONMENT === 'preview') {
+    const origin = new URL(request.url).origin;
+    return !isPreviewMailOptIn(env) || ![
+      'https://customer-test.legacy-hub-5qo.pages.dev',
+      'https://staging.legacy-hub-5qo.pages.dev',
+    ].includes(origin);
+  }
   return false;
 }
 
@@ -271,7 +277,7 @@ export async function onRequestGet({ request, env }) {
 
     // Before secret, token, cookie or database access: existing preview bearer
     // credentials must not unlock caregiver records after this containment.
-    if (previewPortalDisabled(env)) return previewUnavailable();
+    if (previewPortalDisabled(env, request)) return previewUnavailable();
 
     if (action === 'profile' && (env.PORTAL_PROFILE_ENABLED !== '1'
         || url.pathname !== '/api/portal/profile' || url.search)) return json({ ok: false, error: 'not_found' }, 404);
@@ -382,7 +388,7 @@ export async function onRequestPost({ request, env, data }) {
     const pathSegments = url.pathname.split('/').filter(Boolean);
     const action = pathSegments[pathSegments.length - 1];
 
-    if (previewPortalDisabled(env)) {
+    if (previewPortalDisabled(env, request)) {
       // Allow local cookie clearing without resolving the old preview identity,
       // consulting the database or relying on a configured signing secret.
       if (action === 'logout') {
