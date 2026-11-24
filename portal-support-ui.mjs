@@ -20,7 +20,7 @@ export function mountSupportForm(root,transport){
  const error=el('p'),success=el('p'),list=el('ul');error.setAttribute('role','alert');success.setAttribute('role','status');
  const send=el('button','Send My Request');send.type='submit';form.append(fieldset,contactLabel,noteLabel,send,error,success);
  root.replaceChildren(title,intro,form,el('h2','My Support Requests'),list);
- const view={clear(){choices.forEach(c=>{c.checked=false;});note.value='';success.textContent='';error.textContent='';list.replaceChildren();},busy(on){send.disabled=on;form.setAttribute('aria-busy',String(on));},error(text){error.textContent=text;},saved(){success.textContent='Your request was received.';},history(rows){list.replaceChildren(...rows.map(r=>el('li',r.status?.label||'Progress unavailable')));}};
+ const view={clear(){choices.forEach(c=>{c.checked=false;});note.value='';select.value='phone';success.textContent='';error.textContent='';list.replaceChildren();},busy(on){send.disabled=on;form.setAttribute('aria-busy',String(on));},error(text){error.textContent=text;},saved(){success.textContent='Your request was received.';},history(rows){list.replaceChildren(...rows.map(r=>el('li',r.status?.label||'Progress unavailable')));}};
  const controller=createSupportController({transport,view});form.addEventListener('submit',event=>{event.preventDefault();controller.submit({needs:choices.filter(c=>c.checked).map(c=>c.value),preferred_contact:select.value,message:note.value});});
  return controller;
 }
