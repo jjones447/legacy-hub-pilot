@@ -321,6 +321,12 @@ export async function onRequestGet({ request, env }) {
         return json({ ok: false, error: 'unauthorized' }, 401);
       }
 
+      if (url.pathname === '/api/portal/me' && url.search === '?support=1') {
+        const owner = await env.LEGACY_DB.prepare("SELECT id FROM caregiver WHERE id = ? AND status != 'archived'").bind(caregiverId).first();
+        if (!owner) return json({ ok: false, error: 'profile_not_found' }, 404);
+        return json({ ok: true, profile: { id: owner.id }, capabilities: { support_requests: env.PORTAL_SUPPORT_REQUEST_ENABLED === '1' } });
+      }
+
       // Get profile
       const profile = await env.LEGACY_DB
         .prepare(`SELECT id, first_name, last_name, email, phone, sanctuary_member, member_since FROM caregiver WHERE id = ? AND status != 'archived'`)

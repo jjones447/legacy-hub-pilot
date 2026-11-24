@@ -23,7 +23,7 @@ export function createSupportMounts(document,fetchImpl){
  const api={
   mountOwner(checkedFetch=fetchImpl){if(typeof checkedFetch!=='function')throw Error('Validated Support session fetch is required');api.resetOwner();const root=ownerRoot();if(!root)return null;root.hidden=false;owner=mount(root,supportTransport(checkedFetch));void owner.history();return owner;},
   resetOwner(){owner?.dispose();owner=null;const root=ownerRoot();if(root){root.replaceChildren();root.hidden=true;}},
-  mountStaff(){api.resetStaff();const root=staffRoot();if(!root)return null;root.hidden=false;staff=mountStaffSupport(root,staffSupportTransport(fetchImpl));void staff.load();return staff;},
+  mountStaff(checkedFetch=fetchImpl){if(typeof checkedFetch!=='function')throw Error('Validated Staff session fetch is required');api.resetStaff();const root=staffRoot();if(!root)return null;root.hidden=false;staff=mountStaffSupport(root,staffSupportTransport(checkedFetch));void staff.load();return staff;},
   resetStaff(){staff?.dispose();staff=null;const root=staffRoot();if(root){root.replaceChildren();root.hidden=true;}},
   dispose(){api.resetOwner();api.resetStaff();}
  };return api;

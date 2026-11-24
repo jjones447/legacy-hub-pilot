@@ -11,3 +11,5 @@
 @media(max-width:650px){.support-request-form fieldset{grid-template-columns:1fr}.support-request-form{padding:1rem}}
 .support-staff-card{background:white;border:1px solid #eadfd5;border-radius:16px;padding:1.25rem;margin:1rem 0;overflow-wrap:anywhere}
 .support-staff-card select{display:block;min-height:48px;margin-top:.5rem;font:inherit;max-width:100%}
+
+#dashView[data-functional-support='active'] #portalSupportCard { display: none; }

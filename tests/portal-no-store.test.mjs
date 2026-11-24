@@ -237,3 +237,13 @@ for (const environment of ['preview', 'development']) {
     assert.deepEqual(effects, []);
   });
 }
+
+test('opt-in Support capability reads only the current owner and feature setting', async () => {
+  for (const enabled of [false, true]) {
+    const f = fixture();
+    const env = { ...f.env, PORTAL_SUPPORT_REQUEST_ENABLED: enabled ? '1' : '0' };
+    await expectJson(await onRequestGet({ env, request: request('me?support=1', f.effects, { signedCookie: await cookie() }) }),
+      200, { ok: true, profile: { id: ID }, capabilities: { support_requests: enabled } });
+    assert.equal(f.effects.sql.length, 1);
+  }
+});

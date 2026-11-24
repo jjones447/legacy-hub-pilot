@@ -3,3 +3,6 @@
 
 /*.css
   Cache-Control: no-cache, must-revalidate
+
+/*.mjs
+  Cache-Control: no-cache, must-revalidate

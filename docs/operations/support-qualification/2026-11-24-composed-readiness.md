@@ -1,59 +1,18 @@
 # Functional Support composition readiness — November 24
 
-Candidate composes deployed #386 f090fcfc with ct5 #382 b79b707, preserving both
-histories. The sole conflict was the unit inventory; both sets remain. All 2,383
-unit tests pass. No deployment, schema application or activation follows. #383's
-owner dispatcher is present but PORTAL_SUPPORT_REQUEST_ENABLED remains disabled.
+Draft #387 combines the deployed #386 Profile base, ct5’s #382 Support modules and the projection and presentation from #389. The candidate is ready for source review. Support remains disabled on both TEST hosts and in production.
 
-## Concrete remaining work
+## Review scope
 
-- Ct5 owns Support page/controller/CSS and narrow portal/Staff presentation mounts.
-  `mountSupportForm(root, transport)` returns submit/history/reset/dispose. Ct13 wires
-  reset immediately on owner/session invalidation; dispose on navigation/unmount.
-- Owner GET/POST `/api/portal/support-requests` contract matches the dedicated transport:
-  server-derived owner, strict Origin/JSON, received receipt, same-key replay, conflict.
-- Staff store `updateSupportStatus(db, verifiedEmail, body)` exists, but its server route
-  is now mounted through the verified-human/current-active Staff HTTP adapter.
-  GET fails closed until ct5 supplies readStaffSupportRequests(db, verifiedEmail).
-- Proposed Staff list is NOT implemented: GET `/api/staff/support-requests`, no query,
-  max50, fixed projection of id/caregiver_id/revision/needs/preferred_contact/message/
-  status/created_at/updated_at/followup_id, exclude archived and internal QA owners.
-  Do not substitute owner history for that Staff projection.
-- Browser modules use `.mjs`; current static build allowlist excludes `.mjs`.
-  Final mounting must include the explicit browser-module assets and a dist import
-  closure test. No assertion that the current compiled artifact can serve those modules.
-- Candidate schema remains unapplied. Native D1 must qualify batch transaction rollback,
-  changes() audit gating, idempotency, Staff CAS and revoked-eligibility races before
-  activation. Source SQLite tests do not replace native proof.
-- Final exact composed Security/functional review and four hosted checks are required.
-  Preserve Profile, People, capture, Reviewed controls and the named-host correction.
+The dashboard and dedicated Support page validate the caregiver through the existing session handler. The Staff console validates the active staff member and verified Access identity. The opt-in capability check precedes mounting and each Support request. The ordinary caregiver dashboard response retains its existing contract.
 
-Planning: ct5 full source Nov26 noon remains the last accepted author checkpoint.
-Ct13's conditional Nov27 12–16 integration reservation supports QA16–18 only with
-complete reviewed/green input and an accepted operator window. This preparation
-is not a new unconditional Nov27 customer date or an accepted external review slot.
+Page hiding clears rendered history and form values. Browser restoration and focus recheck the session before displaying the form. Dashboard logout and account changes invalidate outstanding requests. Once the signed-in form has replaced public intake, only an explicit feature-off response restores public intake on that page.
 
-## November 24 server/session increment
+Staff can read the fixed 50-row projection and update status through the dedicated endpoint. The update checks the current revision, eligibility and actor. Dedicated requests remain visible in Alerts. Staff use the dedicated status control for them. Bulk review applies only to ordinary follow-ups.
 
-The Staff adapter rejects disabled flags, unknown paths, queries, wrong methods,
-non-same-origin writes, non-JSON writes and client actor fields. It derives the
-actor from verified authentication and checks current active Staff authorization.
-The status store retains its write-time eligibility and revision predicates.
-A real dispatcher test exercises the SQLite-backed success and stale-revision
-paths; it is not native D1 evidence.
+The static build includes the seven explicit Support browser modules and checks local imports. Local unit and DOM tests exercise these source paths. GUI5 owns authenticated browser qualification after the isolated D1 and review steps. The scheduled Security review is November 25, 11:00–12:30 UTC.
 
-The owner session transport validates /me before requests and rejects changed
-owners or late responses after invalidation. The portal registration bridge
-resets mounted Support views on owner change, logout initiation, session reset
-and pagehide. Unmount callers dispose their views; pagehide uses reset to support
-browser history restoration. Ct5's dedicated page still needs to mount the
-transport and revalidate on restoration/focus before displaying owner data.
-
-Packaging owner is ct5: scripts/build-site.mjs must explicitly include the
-browser module closure, including portal-support-session.mjs. Ct13 owns the
-final composed regeneration. No partial source increment is deployable evidence.
-
-## Native D1 qualification plan (not executed)
+## Native D1 qualification plan
 
 Use a separately authorized isolated synthetic database, with a verified binding
 that is neither production nor the shared customer-test database. Record candidate
@@ -72,26 +31,3 @@ client-owner/actor rejection. Verify the fixed bounded Staff projection excludes
 archived and internal QA identities and leaks no uncontracted fields. Reconcile
 unknown or late acknowledgments by readback, never blind replay. Retain redacted
 counts/results and remove only scoped synthetic fixtures after evidence capture.
-
-Activation requires that native evidence, completed UI/import closure, exact-head
-functional/Security review and GUI5's authenticated browser qualification. The
-Support flag remains off; #386's merge and customer acceptance remain independent.
-
-Generic follow-up reconciliation: both `/api/followups` status updates and Staff
-`/api/staff/followup/:id/resolve` now reject the immutable creation source
-`portal_owner_support_request` with 409 `use_support_status`, before mutation or
-audit. This guard does not require the candidate table or enabled flag. Dedicated
-Support status remains authoritative; generic Reviewed/Done/Dismissed never imply
-owner progress. Final Staff presentation must suppress those generic controls for
-these records and direct users to the dedicated status workflow.
-
-Ct5 exact presentation/package patch d9c76fc183523eca711139097ac06a5c48c65c40
-is merged with history preserved at 044243c. Two generated HTML script-tag
-conflicts retained the module entry and regenerated current app hashes. Combined
-unit suite: 2,397 pass; presentation DOM: 4 pass. Added the owner session module
-to the explicit asset allowlist and closure regression: 2 packaging tests pass,
-actual dist contains 122 files. This proves artifact inclusion, not authenticated
-mount qualification. The global bridge currently defaults to global fetch; final
-session composition must supply the guarded transport rather than bypass it.
-Staff projection, capability-gated owner/Staff bootstrap, restoration lifecycle,
-generic-control suppression and exact composed review remain incomplete.

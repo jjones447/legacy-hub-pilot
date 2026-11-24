@@ -27,3 +27,16 @@ test('actual Staff dispatcher status write uses verified actor and preserves CAS
  assert.equal(raw.prepare('SELECT revision FROM portal_support_request').get().revision,2);
  assert.equal(raw.prepare('SELECT count(*) n FROM audit_log').get().n,1);
 });
+
+test('Staff capability requires a verified active member even when the general console permits access', async () => {
+  const email = 'staff@example.invalid';
+  for (const [proof, status, enabled] of [[true,'active',true],[false,'active',false],[true,'archived',false],[true,null,false]]) {
+    const data = {};
+    if (proof) setVerifiedAccessStaffActor(data,email);
+    const request = new Request('https://test.invalid/api/staff/me?support=1',{headers:{'x-dev-actor':email}});
+    const db = {prepare:()=>({bind:()=>({first:async()=>status ? {email, role:'admin', status} : null})})};
+    const result = await onRequestGet({request,data,env:{LEGACY_DB:db,ALLOW_DEV_CONSOLE:'1',PORTAL_SUPPORT_REQUEST_ENABLED:'1'}});
+    assert.equal(result.headers.get('Cache-Control'),'no-store');
+    assert.equal((await result.json()).capabilities.support_requests,enabled);
+  }
+});

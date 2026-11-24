@@ -1,3 +1,4 @@
+import { confirmationActor } from '../../_lib/agent-confirmation.mjs';
 import { staffSupportRequest } from '../../_lib/portal-support-staff-http.mjs';
 // GET/POST /api/staff/[[path]] — staff endpoints for queue and caregiver management (slice 08).
 import { getActor } from '../../_lib/actor.js';
@@ -365,7 +366,12 @@ export async function onRequestGet({ request, env, data }) {
       // GET /api/staff/me -- the signed-in person's staff record (role decides admin controls)
       const actor = getActor(request, env);
       const member = await getStaffMember(env.LEGACY_DB, actor);
-      return json({ ok: true, me: member || { email: actor, display_name: null, role: 'staff', status: 'active' } });
+      const supportEnabled = env.PORTAL_SUPPORT_REQUEST_ENABLED === '1' && member?.status === 'active'
+        && ['staff','admin'].includes(member.role) && confirmationActor(data) === member.email;
+      const response = json({ ok: true, me: member || { email: actor, display_name: null, role: 'staff', status: 'active' },
+        ...(url.search === '?support=1' ? { capabilities: { support_requests: Boolean(supportEnabled) } } : {}) });
+      response.headers.set('Cache-Control', 'no-store');
+      return response;
     }
 
     if (subRoute === 'wellness') {

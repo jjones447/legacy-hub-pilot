@@ -307,7 +307,7 @@ def asset_versions() -> dict:
     """Return 12-hex-char SHA-256 prefixes for versioned root stylesheet and script assets."""
     return {
         "portal-support-ui.css": hashlib.sha256((ROOT / "portal-support-ui.css").read_bytes()).hexdigest()[:12],
-        "portal-support-entry.mjs": hashlib.sha256((ROOT / "portal-support-entry.mjs").read_bytes()).hexdigest()[:12],
+        "portal-support-bootstrap.mjs": hashlib.sha256((ROOT / "portal-support-bootstrap.mjs").read_bytes()).hexdigest()[:12],
         "membership.css": hashlib.sha256((ROOT / "membership.css").read_bytes()).hexdigest()[:12],
         "beyond-support.css": hashlib.sha256((ROOT / "beyond-support.css").read_bytes()).hexdigest()[:12],
         "styles.css": hashlib.sha256((ROOT / "styles.css").read_bytes()).hexdigest()[:12],

@@ -120,6 +120,8 @@ function postIntake(form, payload) {
 function submitSupport(e) {
   e.preventDefault();
   const form = document.getElementById('supportForm');
+  const publicForm = document.getElementById('supportLegacyPublicForm');
+  if (publicForm?.hidden || publicForm?.inert) return false;
   const name = splitName(document.getElementById('supName').value);
   const contact = contactFields(document.getElementById('supEmail').value);
   const payload = Object.assign({
@@ -650,6 +652,8 @@ function checkPortalSession() {
       if (result.outcome === 'signed_in') {
         takePortalHandoff(); // discard: an existing session wins, nothing is sent
         renderPortalData(result.data);
+        window.portalFunctionalOwner = result.data.profile?.id || null;
+        window.portalSupportRefresh?.();
         loadWellness();
         if (document.getElementById('portalSupportForm')) {
           loadPortalSupport();
@@ -1013,9 +1017,17 @@ if (typeof window !== 'undefined') window.registerPortalSupportView = function (
   return function () { if (portalSupportMountedViews.delete(view)) view.dispose(); };
 };
 function resetPortalSupportViews() {
+  if (typeof window !== 'undefined') {
+    window.portalFunctionalOwner = null;
+    window.portalSupportInvalidate?.();
+  }
   if (typeof portalSupportMountedViews !== 'undefined') portalSupportMountedViews.forEach(function (view) { view.reset(); });
 }
-if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') window.addEventListener('pagehide', function () { resetPortalSupportViews(); });
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') window.addEventListener('pagehide', function () {
+  const expectedOwner = window.portalFunctionalOwner;
+  resetPortalSupportViews();
+  window.portalFunctionalOwner = expectedOwner;
+});
 
 function resetPortalSessionState() {
   resetPortalSupportViews();
