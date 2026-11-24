@@ -1,4 +1,5 @@
 // POST /api/webhooks/givebutter — GiveButter donations/registrations webhook ingestion (slice 08).
+import { givebutterEventTarget } from '../../_lib/givebutter-event-mapping.mjs';
 import { internalError } from '../../_lib/errors.js';
 
 async function getHmacSha256(message, secret) {
@@ -119,6 +120,10 @@ export async function onRequestPost({ request, env }) {
       return json({ ok: false, error: 'missing event id' }, 400);
     }
 
+    let eventId;
+    try { eventId = givebutterEventTarget(body, env.GIVEBUTTER_EVENT_MAP_JSON); }
+    catch { return json({ ok: false, error: 'webhook_mapping_invalid' }, 503); }
+
     // Idempotency: same (source='givebutter', external_ref) -> no-op, return 200
     const dupReg = await env.LEGACY_DB
       .prepare(`SELECT id FROM registration WHERE source = 'givebutter' AND external_ref = ?`)
@@ -171,7 +176,6 @@ export async function onRequestPost({ request, env }) {
     }
 
     // Check if it maps to an event in our event table
-    const eventId = body.data?.event_id || body.data?.campaign_id || null;
     let eventExists = false;
     if (eventId) {
       const ev = await env.LEGACY_DB
