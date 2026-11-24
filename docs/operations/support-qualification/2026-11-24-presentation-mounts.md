@@ -81,3 +81,15 @@ cover CAS plus bounded projection, source/tag exclusions and revocation before/
 after projection. Shared HTTP dispatcher remains ct13-owned; no helper proves
 verified identity merely because an email argument was supplied. No runtime or
 native D1 qualification is implied.
+
+## Session module / BFCache amendment
+
+The explicit allowlist now includes the sixth browser module, ct13's unchanged
+portal-support-session.mjs copied from the387 successor (dependency only, no
+ct5 session edits). bindOwnerPageLifecycle(view,root,revalidate) accepts ct13's
+validated session.start callback. pagehide resets/hides without disposing,
+while pageshow/focus hide history until revalidation succeeds; actual unmount
+disposes/unregisters. No automatic module-load fetch. Convenience mountOwner
+requires an explicitly supplied session-wrapped fetch (or one supplied to the
+factory); it does not default to raw global fetch. Standalone session bootstrap
+still belongs to ct13 and must call start before the initial mount.
