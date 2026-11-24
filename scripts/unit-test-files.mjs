@@ -94,6 +94,8 @@ export const UNIT_TEST_FILES = Object.freeze([
   'portal-support-request-schema.test.mjs',
   'portal-support-request-store.test.mjs',
   'portal-support-request-route.test.mjs',
+  'portal-support-staff-http.test.mjs',
+  'portal-support-session.test.mjs',
   'portal-test-inbox.test.mjs',
   'portal-support-request-staff.test.mjs',
   'portal-support-ui.test.mjs',

@@ -1,3 +1,4 @@
+import { staffSupportRequest } from '../../_lib/portal-support-staff-http.mjs';
 // GET/POST /api/staff/[[path]] — staff endpoints for queue and caregiver management (slice 08).
 import { getActor } from '../../_lib/actor.js';
 import { internalError } from '../../_lib/errors.js';
@@ -17,6 +18,7 @@ function json(obj, status = 200) {
 }
 
 export async function onRequestGet({ request, env, data }) {
+  if (new URL(request.url).pathname.startsWith('/api/staff/support-requests')) return staffSupportRequest({request,env,data});
   try {
     const url = new URL(request.url);
     const pathSegments = url.pathname.split('/').filter(Boolean); // ['api', 'staff', 'queue'] or ['api', 'staff', 'caregiver', ':id']
@@ -387,7 +389,8 @@ export async function onRequestGet({ request, env, data }) {
   }
 }
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env, data }) {
+  if (new URL(request.url).pathname.startsWith('/api/staff/support-requests')) return staffSupportRequest({request,env,data});
   try {
     const url = new URL(request.url);
     const pathSegments = url.pathname.split('/').filter(Boolean);

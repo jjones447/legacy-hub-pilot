@@ -775,6 +775,7 @@ function portalLogout() {
   const logoutStatus = document.getElementById('portalLogoutStatus');
   if (btn && btn.disabled) return; // pending or uncertain: do not repeat the POST
   if (btn) btn.disabled = true;
+  if (typeof resetPortalSupportViews === 'function') resetPortalSupportViews();
   if (logoutStatus) {
     logoutStatus.style.display = 'block';
     logoutStatus.textContent = 'Signing out...';
@@ -824,6 +825,7 @@ function renderPortalData(data) {
     nextQaSamples !== portalQaSamplesActive ||
     (portalSupportCacheCaregiverKey && portalSupportCacheCaregiverKey !== nextCaregiverKey);
   if (identityChanged) {
+    if (typeof resetPortalSupportViews === 'function') resetPortalSupportViews();
     if (typeof portalProfileEditor !== 'undefined' && portalProfileEditor) portalProfileEditor.clear();
     portalSessionGeneration += 1;
     portalEventsFilterState = 'all';
@@ -1003,7 +1005,20 @@ function portalProfileIdentityKey(profile) {
   return '';
 }
 
+// Support mount bridge; presentation owns mounting, shared auth owns invalidation.
+var portalSupportMountedViews = new Set();
+if (typeof window !== 'undefined') window.registerPortalSupportView = function (view) {
+  if (!view || typeof view.reset !== 'function' || typeof view.dispose !== 'function') throw new TypeError('invalid_support_view');
+  portalSupportMountedViews.add(view);
+  return function () { if (portalSupportMountedViews.delete(view)) view.dispose(); };
+};
+function resetPortalSupportViews() {
+  if (typeof portalSupportMountedViews !== 'undefined') portalSupportMountedViews.forEach(function (view) { view.reset(); });
+}
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') window.addEventListener('pagehide', function () { resetPortalSupportViews(); });
+
 function resetPortalSessionState() {
+  resetPortalSupportViews();
   if (typeof portalProfileEditor !== 'undefined' && portalProfileEditor) portalProfileEditor.clear();
   portalSessionGeneration += 1;
   portalActiveCaregiverKey = '';
