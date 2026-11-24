@@ -1,3 +1,6 @@
+var staffProfileViews = typeof window !== 'undefined' && typeof window.createStaffProfileViews === 'function'
+  ? window.createStaffProfileViews(document.getElementById('staffCaregiverProfile'), document.getElementById('staffProfileSummary')) : null;
+
 function escapeHtml(str) {
   if (str == null) return '';
   return String(str)
@@ -705,6 +708,8 @@ async function loadFollowups() {
     if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to fetch queue');
     
     const openCount = Array.isArray(data.queue) ? data.queue.length : 0;
+    const reviewAll = document.getElementById('reviewAllFollowups');
+    if (reviewAll) reviewAll.disabled = !openCount || reviewAll.dataset.busy === 'true';
     if (count) count.textContent = openCount ? `(${openCount} open)` : '(nothing open)';
     noteNeedsAttentionActionable(openCount > 0);
     const body = document.getElementById('needsAttentionBody');
@@ -720,11 +725,11 @@ async function loadFollowups() {
       const rawName = `${first} ${last}`.trim() || 'Anonymous';
       const caregiverName = escapeHtml(rawName);
       const badgeClass = fu.status === 'open' ? 'badge-plum' : 'badge-green';
-      const statusText = fu.status === 'open' ? 'Queued' : 'Resolved';
+      const statusText = fu.status === 'open' ? 'Queued' : 'Reviewed';
       
       let actionHtml = '';
       if (fu.status === 'open') {
-        actionHtml = `<button class="btn btn-sm btn-coral btn-compact-ml" data-action="resolve-followup" data-followup-id="${escapeHtml(fu.id)}">Resolve</button>`;
+        actionHtml = `<button class="btn btn-sm btn-coral btn-compact-ml" data-action="resolve-followup" data-followup-id="${escapeHtml(fu.id)}">Reviewed</button>`;
       }
       
       return `
@@ -743,6 +748,33 @@ async function loadFollowups() {
     const body = document.getElementById('needsAttentionBody');
     if (body) body.innerHTML = '<tr><td colspan="3" role="alert">Could not load alerts. Reload the page to try again.</td></tr>';
     console.error(e);
+  }
+}
+
+async function reviewAllFollowups(event) {
+  if (event) event.stopPropagation();
+  const button = document.getElementById('reviewAllFollowups');
+  const status = document.getElementById('followupReviewStatus');
+  if (!button || button.disabled || button.dataset.busy === 'true') return;
+  const ids = [...new Set(Array.from(document.querySelectorAll('#needsAttentionBody [data-action="resolve-followup"]'))
+    .map(node => Number(node.dataset.followupId)).filter(id => Number.isSafeInteger(id) && id > 0))];
+  button.dataset.busy = 'true'; button.disabled = true;
+  let reviewed = 0;
+  try {
+    for (const id of ids) {
+      const response = await fetch(`/api/staff/followup/${id}/resolve`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'done' })
+      });
+      const result = await response.json();
+      if (!response.ok || result.ok !== true) throw new Error('review failed');
+      reviewed++;
+    }
+    if (status) status.textContent = `${reviewed} items marked reviewed.`;
+  } catch {
+    if (status) status.textContent = `${reviewed} items confirmed reviewed. Stopped after an unconfirmed result; reload and check the remaining queue before trying again.`;
+  } finally {
+    delete button.dataset.busy;
+    await loadFollowups();
   }
 }
 
@@ -795,6 +827,7 @@ function openCaregiverEditor() {
 }
 
 function backToStaffDashboard() {
+  if (typeof staffProfileViews !== 'undefined' && staffProfileViews) staffProfileViews.clearCaregiver();
   caregiverDetailEpoch++;
   caregiverDetailOpen = false;
   document.getElementById('caregiverDetailView')?.classList.add('d-none');
@@ -812,6 +845,7 @@ function backToStaffDashboard() {
 }
 
 async function viewCaregiver(id) {
+  if (typeof staffProfileViews !== 'undefined' && staffProfileViews) staffProfileViews.clearCaregiver();
   const epoch = ++caregiverDetailEpoch;
   openCaregiverDetail();
   const recordPanel = document.getElementById('caregiverRecordPanel');
@@ -1123,6 +1157,7 @@ async function viewCaregiver(id) {
         </form>
       </details>
     `;
+    if (typeof staffProfileViews !== 'undefined' && staffProfileViews) staffProfileViews.selectCaregiver(id);
     const heading = document.getElementById('caregiverDetailHeading');
     heading?.focus();
   } catch (e) {
@@ -2032,7 +2067,9 @@ document.addEventListener('click', function (e) {
   const target = e.target.closest('[data-action]');
   if (!target) return;
   const action = target.getAttribute('data-action');
-  if (action === 'resolve-followup') {
+  if (action === 'review-all-followups') {
+    reviewAllFollowups(e);
+  } else if (action === 'resolve-followup') {
     e.stopPropagation();
     const id = Number(target.getAttribute('data-followup-id'));
     resolveFollowup(id, e);
@@ -2269,6 +2306,7 @@ function noteNeedsAttentionActionable(actionable) {
 // The current person can't be established (#306 review): stop writing anyone's choices.
 // Cancels a pending identity hash; stored choices are kept, never deleted.
 function forgetStaffPanelIdentity() {
+  if (typeof staffProfileViews !== 'undefined' && staffProfileViews) staffProfileViews.beginIdentity();
   staffPanelKeyEpoch++;
   staffPanelStorageKey = null;
   staffPanelSaved = null;
@@ -3384,6 +3422,7 @@ let staffTeam = [];
 let staffTeamError = null;
 
 async function loadStaffTeam() {
+  const profileIdentityToken = typeof staffProfileViews !== 'undefined' && staffProfileViews ? staffProfileViews.beginIdentity() : null;
   const list = document.getElementById('staffTeamList');
   let identityKnown = false;
   try {
@@ -3396,6 +3435,7 @@ async function loadStaffTeam() {
     if (typeof rememberStaffPanelsFor === 'function') void rememberStaffPanelsFor(meData.me);
     if (!teamRes.ok || !teamData.ok) throw new Error(teamData.error || 'Failed to load staff');
     staffMe = meData.me;
+    if (typeof staffProfileViews !== 'undefined' && staffProfileViews) staffProfileViews.setIdentity(profileIdentityToken, staffMe);
     updatePeopleAddActions();
     staffTeam = teamData.team || [];
     staffTeamError = null;

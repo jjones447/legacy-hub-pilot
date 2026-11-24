@@ -137,6 +137,7 @@ test('exact call wiring: every action branch calls its expected function and exc
   }
 
   const actionCallMap = {
+    'review-all-followups': 'reviewAllFollowups(e)',
     'submit-support': 'submitSupport(e)',
     'submit-membership': 'submitMembership(e)',
     'submit-grant-apply': 'submitGrantApply(e)',

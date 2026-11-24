@@ -6,7 +6,7 @@
 <title>Legacy Hub · Staff console</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=3f83afcc1af3">
+<link rel="stylesheet" href="styles.css?v=2326affafb7e">
 <link rel="icon" href="favicon.ico" sizes="32x32">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -76,6 +76,10 @@
 
     <div class="staff-workspace">
       <div>
+        <details class="panel" id="profileSummaryPanel">
+          <summary><strong>Caregiver Profile summary</strong></summary>
+          <div id="staffProfileSummary" aria-live="polite"></div>
+        </details>
         <details class="panel" id="peopleManagementPanel">
           <summary><strong>People &amp; access</strong> <span class="small muted">— staff and caregivers</span></summary>
           <p class="small muted mb-12">Choose caregivers or staff, search for a person, then open their record. Each group keeps its own permissions.</p>
@@ -174,7 +178,9 @@
 
         <details class="panel staff-section" id="needsAttentionPanel" open>
           <summary><h4 class="staff-section-heading">📥 Alerts</h4> <span class="staff-section-count small muted" id="needsAttentionCount">(loading…)</span></summary>
-          <p class="small muted mb-12">Open follow-ups and action items requiring staff review.</p>
+          <p class="small muted mb-12">Open follow-ups and action items requiring staff review. Reviewed items leave this queue; their records are retained.</p>
+          <button type="button" class="btn btn-sm btn-plum" id="reviewAllFollowups" data-action="review-all-followups" disabled>Mark all reviewed</button>
+          <p id="followupReviewStatus" class="small muted" role="status" aria-live="polite"></p>
           <table class="data">
             <thead><tr><th>Caregiver</th><th>Item</th><th>Status</th></tr></thead>
             <tbody id="needsAttentionBody">
@@ -309,6 +315,7 @@
         <button type="button" class="btn btn-outline mb-16" id="caregiverBackButton" data-action="caregiver-back">← Back to staff dashboard</button>
         <p class="small muted mb-12">View and manage caregiver contact details, program attendance, grants, and staff notes.</p>
         <div class="panel" id="caregiverRecordPanel"></div>
+        <section class="panel" id="staffCaregiverProfile" hidden aria-live="polite"></section>
       </div>
     </div>
   </div>
@@ -324,9 +331,11 @@
   </div>
 </footer>
 
-<script src="app.js?v=3ef1a0a42206"></script>
+<script src="app.js?v=4e2ad99e6308"></script>
 <script src="nav-v2.js"></script>
-<script src="staff.js?v=37815d342834"></script>
+<script src="staff-profile.js?v=00db1033fba9"></script>
+<script src="staff.js?v=79479b7f6a6a"></script>
+
 </body>
 </html>
 

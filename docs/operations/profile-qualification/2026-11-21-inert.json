@@ -1,0 +1,94 @@
+{
+  "scope": "inert staging and read-only preflight only",
+  "source": "7654b816760ca05c1271c0001fe5ddd55b0da3bd",
+  "review": "https://github.com/jjones447/legacy-hub-pilot/pull/381#issuecomment-7061241768",
+  "deployment": "cc060827-f5d5-4959-8213-388a23d4f43f",
+  "completed_at": "2026-11-21T11:20:23.67998Z",
+  "url": "https://cc060827.legacy-hub-5qo.pages.dev",
+  "alias": "https://profile-fixture-381.legacy-hub-5qo.pages.dev",
+  "environment": "preview",
+  "test_database_id": "42be536c-e354-44c7-b246-2dcac18d8ac6",
+  "http_checks": [
+    {
+      "path": "/",
+      "status": 403,
+      "body": {
+        "ok": false,
+        "error": "fixture_unavailable"
+      },
+      "no_store": true
+    },
+    {
+      "path": "/api/portal/profile",
+      "status": 403,
+      "body": {
+        "ok": false,
+        "error": "fixture_unavailable"
+      },
+      "no_store": true
+    },
+    {
+      "path": "/api/portal/login",
+      "status": 403,
+      "body": {
+        "ok": false,
+        "error": "fixture_unavailable"
+      },
+      "no_store": true
+    },
+    {
+      "path": "/caregiver-profile.js",
+      "status": 403,
+      "body": {
+        "ok": false,
+        "error": "fixture_unavailable"
+      },
+      "no_store": true
+    }
+  ],
+  "artifact_files": [
+    {
+      "name": "_routes.json",
+      "sha256": "1301eaf7b0e8272b5bb4575abcfbd2cffde53af2c6ea4d77a5ec78919a5a2daa"
+    },
+    {
+      "name": "_worker.js",
+      "sha256": "7afafb3b21380c08caf00d2476759f912f2235db9c3d64f917b66e6d24ea4b82"
+    },
+    {
+      "name": "caregiver-profile.js",
+      "sha256": "0a1bec5de23f0a4aff881d172f528cc1ad478566b497fd7b619313f70ab0ce7f"
+    },
+    {
+      "name": "fixture-start.js",
+      "sha256": "810f83c2c0948b29bcec66d59e80ff3f7ef450e51cb51c4933113cde8a21de8b"
+    },
+    {
+      "name": "index.html",
+      "sha256": "063e385d349a7e7987be4c5e183dc07275279caa9ba4203649afb540cdb14e97"
+    },
+    {
+      "name": "styles.css",
+      "sha256": "2326affafb7e64d1f630e961dab1a3f14ff9ee4e1afffb9ced23f33772415488"
+    }
+  ],
+  "external_imports": 0,
+  "collision_counts": {
+    "caregiver_ids": 0,
+    "caregiver_emails": 0,
+    "audit_actor_or_entity": 0,
+    "followup_owner_or_external_ref": 0
+  },
+  "profile_table_present": false,
+  "inventory_table_count": 16,
+  "time_travel_bookmark": "captured privately; refresh before mutation",
+  "configuration": {
+    "vars_and_bindings_unchanged": true,
+    "production_unchanged": true,
+    "unexpected_change": "CLI without config cleared preview wrangler_config_hash",
+    "repair": "restored exact prior hash with narrow PATCH; full deployment_configs equality verified",
+    "blind_deployment_retry": false
+  },
+  "inherited_secrets": "code-enforced non-use, not capability isolation",
+  "native_profile_writes": 0
+}
