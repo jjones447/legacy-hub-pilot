@@ -25,3 +25,21 @@ A lost request/response can leave an undisclosed token until expiry. Do not blin
 23 local HTTP/SQLite tests and2360 whole-suite tests PASS; template verification/build115files/diff clean. Actual ordinary confirmation GET/POST is exercised: GET issues no portal_session, Continue consumes once, replay/expiry refuse. Refusals cover prod/development/missing config/wrong origin, fake proof/nonadmin/deactivated/archived/unmarked/one-tag/duplicate-normalized-email/wrong pin, method/query/Origin/type/body injection, downgrade/marker removal at write, downgrade before delivery, public forged context and scoped cleanup. Existing middleware signature tests run in the full suite; fixtures use synthetic server proof, not actual Access/browser evidence.
 
 Required before operation: retained exact-source Security/functional review and hosted green; normal approved source integration; deployed TEST binding/flags/pins and admin-session qualification; recognized QA identity classification and installed exclusions; safe Shanelle window; isolated normal Continue/Profile save/reload and scoped cleanup readbacks. No deployment/readiness or external delivery is claimed. GUI5 owns browser operation after approved/green integration, ct13 owns auth/mail source and execution coordination. Customer Profile acceptance and separate support source remain distinct. Handoff fulfills06UTC source-or-gap checkpoint only.
+
+## November 24 Security correction
+
+Both `LEGACY_TEST_INBOX_ENABLED=1` and `PORTAL_TEST_INBOX_ENABLED=1` are required,
+in addition to exact preview environment and customer-test HTTPS origin. Production
+is explicitly refused before bindings even with both flags. No runtime flags were set.
+
+The existing write-time predicate requires BOTH qa_test and exclude_reporting plus
+current active admin and the pinned unique caregiver identity. GET is deliberately
+405/no-store for every principal: there is no stored plaintext inbox or GET token API.
+The only link delivery remains the verified-admin POST response.
+
+Authenticated POST `{action:"purge"}` removes only the selected QA owner's expired
+or consumed portal_token hashes, rechecking current admin/QA eligibility in the DELETE.
+Request performs the same purge before issuance; cleanup invalidates the selected hash
+then purges. Normal customer tokens, live unused tokens, sessions and audit history are
+untouched. After successful Continue, the operator calls purge; this does not revoke
+the new portal session. Expiry alone denies redemption even before the next purge.
