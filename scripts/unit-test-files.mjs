@@ -112,6 +112,7 @@ export const UNIT_TEST_FILES = Object.freeze([
   'restore-payload-integrity.test.mjs',
   'security-headers-csp.test.mjs',
   'site-build-allowlist.test.mjs',
+  'support-browser-package.test.mjs',
   'slice-05-events-v1.test.mjs',
   'square-completion-status.test.mjs',
   'square-payment-identity.test.mjs',
