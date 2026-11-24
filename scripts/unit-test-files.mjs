@@ -120,4 +120,5 @@ export const UNIT_TEST_FILES = Object.freeze([
   'wellness-reminders.test.mjs',
   'wrangler-preview-bindings.test.mjs',
   'downloadable-guides.test.mjs',
+  'portal-support-presentation.test.mjs',
 ]);
