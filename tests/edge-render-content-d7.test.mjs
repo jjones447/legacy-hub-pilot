@@ -149,6 +149,7 @@ test('isRewritableRoute excludes staff console and api endpoints', () => {
 test('published row replaces marked text on public page via onRequest middleware', async () => {
   const committedHtml = loadHtml('index.html');
   const db = new FakeD1([
+    { id: 'ps_home.journey', status: 'published', data: JSON.stringify({ paragraph: 'Published journey' }) },
     {
       id: 'ps_home.hero',
       status: 'published',
@@ -182,6 +183,7 @@ test('published row replaces marked text on public page via onRequest middleware
 test('hostile value (<img src=x onerror=alert(1)>) is rendered as text, never raw markup', async () => {
   const committedHtml = loadHtml('index.html');
   const db = new FakeD1([
+    { id: 'ps_home.journey', status: 'published', data: JSON.stringify({ paragraph: 'Published journey' }) },
     {
       id: 'ps_home.hero',
       status: 'published',
@@ -255,9 +257,9 @@ test('list field renders escaped <p> elements for each array item', async () => 
   assert.ok(!html.includes('<img src=x onerror=alert(1)>'));
 });
 
-test('fallback pass-through when LEGACY_DB binding is absent leaves HTML byte-identical', async () => {
-  const committedHtml = loadHtml('index.html');
-  const request = new Request('https://legacy-hub.pages.dev/index.html', { method: 'GET' });
+test('unrelated page fallback pass-through when LEGACY_DB binding is absent leaves HTML byte-identical', async () => {
+  const committedHtml = loadHtml('about.html');
+  const request = new Request('https://legacy-hub.pages.dev/about.html', { method: 'GET' });
   const next = async () =>
     new Response(committedHtml, {
       status: 200,
@@ -271,8 +273,8 @@ test('fallback pass-through when LEGACY_DB binding is absent leaves HTML byte-id
   assert.equal(html, committedHtml);
 });
 
-test('fallback pass-through when D1 errors or returns no rows leaves HTML byte-identical', async () => {
-  const committedHtml = loadHtml('index.html');
+test('unrelated page fallback pass-through when D1 errors or returns no rows leaves HTML byte-identical', async () => {
+  const committedHtml = loadHtml('about.html');
   const next = async () =>
     new Response(committedHtml, {
       status: 200,
@@ -284,7 +286,7 @@ test('fallback pass-through when D1 errors or returns no rows leaves HTML byte-i
     _resetContentCache();
     const db = new FakeD1([]);
     db.shouldThrow = true;
-    const request = new Request('https://legacy-hub.pages.dev/index.html', { method: 'GET' });
+    const request = new Request('https://legacy-hub.pages.dev/about.html', { method: 'GET' });
     const resp = await onRequest({ request, next, env: { LEGACY_DB: db } });
     assert.equal(await resp.text(), committedHtml);
   }
@@ -293,7 +295,7 @@ test('fallback pass-through when D1 errors or returns no rows leaves HTML byte-i
   {
     _resetContentCache();
     const db = new FakeD1([]);
-    const request = new Request('https://legacy-hub.pages.dev/index.html', { method: 'GET' });
+    const request = new Request('https://legacy-hub.pages.dev/about.html', { method: 'GET' });
     const resp = await onRequest({ request, next, env: { LEGACY_DB: db } });
     assert.equal(await resp.text(), committedHtml);
   }
@@ -561,7 +563,7 @@ test('preview_draft query parameter overlays unconfirmed draft wording with non-
       }),
     };
     const db = new FakeD1(
-      [publishedTarget, draftRow],
+      [publishedTarget, draftRow, { id: 'ps_home.journey', status: 'published', data: JSON.stringify({ paragraph: 'Published journey' }) }],
       [{ email: 'jane@legacy.org', display_name: 'Jane', role: 'staff', status: 'active' }]
     );
     const binding = await confirmationBinding(db, 'content', draftRow, 'https://staging.caregiversanctuary.org', publishedTarget);
@@ -1102,6 +1104,7 @@ test('authorized modal form previews (ps_form.membership, ps_form.grant_apply, p
         updated_at: '2026-10-01 00:00:00',
         data: JSON.stringify({ section_key: 'form.coaching_interest', heading: 'LIVE coaching form' }),
       },
+      { id: 'ps_home.journey', status: 'published', data: JSON.stringify({ paragraph: 'Published journey' }) },
     ];
     const drafts = [
       {

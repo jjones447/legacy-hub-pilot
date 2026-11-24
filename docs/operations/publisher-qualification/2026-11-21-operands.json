@@ -1,0 +1,105 @@
+{
+  "observed_at": "2026-11-21T06:13:16.816Z",
+  "account": "b7b09c66fe896c2b65fada924d3eadc2",
+  "preview_database": "42be536c-e354-44c7-b246-2dcac18d8ac6",
+  "production_database": "3c06c3cb-e1a6-426c-ad85-0b8c94616ed2",
+  "preview_origin": "https://publisher-qualified-380.legacy-hub-5qo.pages.dev",
+  "inert_deployment": {
+    "id": "c02fcb98-863a-491b-9644-8dd0af27f7c5",
+    "source": "1a0c14c44ebc7d156f116c9222932918aee2c3be"
+  },
+  "identity": [
+    {
+      "environment": "production",
+      "app_id": "65765c33-5320-4582-8675-4af8eaee964f",
+      "rs256_issuer_audience_expiry_verified": true,
+      "no_email": true,
+      "common_name_matches_delivered_client_id": true,
+      "publisher_identity_matches": true
+    },
+    {
+      "environment": "preview",
+      "app_id": "3757b2d6-30de-46f8-87b5-ba070dd95269",
+      "rs256_issuer_audience_expiry_verified": true,
+      "no_email": true,
+      "common_name_matches_delivered_client_id": true,
+      "publisher_identity_matches": true
+    }
+  ],
+  "synthetic_preimages": [
+    {
+      "row": {
+        "id": "ps_publisher_20261121_audit",
+        "type_id": "page_section",
+        "data": "{\"heading\":\"Synthetic publisher qualification only\",\"paragraph\":\"Synthetic prior value; no caregiver data.\",\"unrelated\":\"preserve this synthetic field\"}",
+        "status": "published",
+        "updated_by": "synthetic:pc2-codex-ct-13:publisher-qualification",
+        "updated_at": "2026-11-21 06:12:51",
+        "draft_of": null
+      },
+      "target_version": "0a984fbb8efe4a11fdca5207c97f39510d8a75b0f4dc59cdca225122649a1d86"
+    },
+    {
+      "row": {
+        "id": "ps_publisher_20261121_drift_confirm",
+        "type_id": "page_section",
+        "data": "{\"heading\":\"Synthetic publisher qualification only\",\"paragraph\":\"Synthetic prior value; no caregiver data.\",\"unrelated\":\"preserve this synthetic field\"}",
+        "status": "published",
+        "updated_by": "synthetic:pc2-codex-ct-13:publisher-qualification",
+        "updated_at": "2026-11-21 06:12:51",
+        "draft_of": null
+      },
+      "target_version": "8960faa70c98d3f358ae60d43d61a4c1175dce0704ecf7d8aa1d01d05a93dbc7"
+    },
+    {
+      "row": {
+        "id": "ps_publisher_20261121_drift_draft",
+        "type_id": "page_section",
+        "data": "{\"heading\":\"Synthetic publisher qualification only\",\"paragraph\":\"Synthetic prior value; no caregiver data.\",\"unrelated\":\"preserve this synthetic field\"}",
+        "status": "published",
+        "updated_by": "synthetic:pc2-codex-ct-13:publisher-qualification",
+        "updated_at": "2026-11-21 06:12:51",
+        "draft_of": null
+      },
+      "target_version": "b53ee88425ac6d142c4bcf4432bc49244f4c2297484cef348a9229046c738602"
+    },
+    {
+      "row": {
+        "id": "ps_publisher_20261121_flow",
+        "type_id": "page_section",
+        "data": "{\"heading\":\"Synthetic publisher qualification only\",\"paragraph\":\"Synthetic prior value; no caregiver data.\",\"unrelated\":\"preserve this synthetic field\"}",
+        "status": "published",
+        "updated_by": "synthetic:pc2-codex-ct-13:publisher-qualification",
+        "updated_at": "2026-11-21 06:12:51",
+        "draft_of": null
+      },
+      "target_version": "633636d8418111f2c74ad81a48930120d8a597051763a578978dbd58de3caa5f"
+    }
+  ],
+  "production_preimages": [
+    {
+      "row": {
+        "id": "ps_home.journey",
+        "type_id": "page_section",
+        "data": "{\"heading\":\"Caregiving can change every part of life.<br>You shouldn't have to navigate it alone.\",\"paragraph\":\"Caring for someone living with dementia can change every part of life. As needs evolve, caregivers often find themselves navigating new roles, responsibilities, and decisions while trying to care for themselves, too. Caregiver Sanctuary provides respite, wellness, practical support, and community to help caregivers feel supported throughout the journey.\"}",
+        "status": "published",
+        "updated_by": "seed",
+        "updated_at": "2026-09-25 02:56:36",
+        "draft_of": null
+      },
+      "target_version": "db4b106409f1ecbebf8fca02103f310f20d41320cbb008622c59e13953bbe32e"
+    },
+    {
+      "row": {
+        "id": "ps_home.support",
+        "type_id": "page_section",
+        "data": "{\"heading\":\"HOW WE SUPPORT CAREGIVERS\",\"tiles\":[{\"title\":\"Wellness\"},{\"title\":\"Respite\"},{\"title\":\"Community\"}],\"secondary\":\"Plus education, practical resources and connections to trusted support.\"}",
+        "status": "published",
+        "updated_by": "seed",
+        "updated_at": "2026-09-25 02:56:36",
+        "draft_of": null
+      },
+      "target_version": "7cea1077228abdaaab5708ba8027ce025241986e780bf82647ffb66089aca1f8"
+    }
+  ]
+}

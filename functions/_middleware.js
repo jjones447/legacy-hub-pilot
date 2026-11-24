@@ -1,3 +1,4 @@
+import { setVerifiedPublisher, isPublisherPayload, publisherRouteAllowed } from './_lib/publisher-identity.mjs';
 import { maybeRewriteMedia } from './_media.mjs';
 import { maybeRewriteContent, isRewritableRoute, renderProtectedDraftPreviewPage } from './_content.mjs';
 import { recordStaffSignIn, getStaffMember, normalizeEmail } from './_lib/staff.js';
@@ -219,6 +220,7 @@ export async function onRequest(context) {
   // Server-only capability seam: wire fields and dev headers never establish this.
   context.data ||= {};
   setVerifiedAccessStaffActor(context.data, null);
+  setVerifiedPublisher(context.data, false);
   const url = new URL(request.url);
   const path = url.pathname;
   const isProtectedPreviewRender =
@@ -251,7 +253,7 @@ export async function onRequest(context) {
       return withSecurityHeaders(forbidden(), url.hostname, path, request.method);
     }
     // Non-prod escape for console only (never grants confirmationActor or draft preview access).
-    if (isConsole && !isDraftPreview && env.ALLOW_DEV_CONSOLE === '1') {
+    if (isConsole && !isDraftPreview && !path.startsWith('/api/agent/publisher/') && env.ALLOW_DEV_CONSOLE === '1') {
       return withSecurityHeaders(await next(), url.hostname, path, request.method);
     }
     // Real verification. Fail closed until Cloudflare Access is configured.
@@ -261,6 +263,12 @@ export async function onRequest(context) {
     const token = request.headers.get('Cf-Access-Jwt-Assertion');
     const payload = await verifyAccessJwt(token, { teamDomain, aud });
     if (!payload) return withSecurityHeaders(forbidden(), url.hostname, path, request.method);
+    if (isPublisherPayload(payload, env)) {
+      if (!publisherRouteAllowed(request, env)) return withSecurityHeaders(forbidden(), url.hostname, path, request.method);
+      setVerifiedPublisher(context.data, true);
+    } else if (path.startsWith('/api/agent/publisher/')) {
+      return withSecurityHeaders(forbidden(), url.hostname, path, request.method);
+    }
     const refused = await staffGate(env, payload);
     if (refused) return withSecurityHeaders(refused, url.hostname, path, request.method);
     if (typeof payload.email === 'string' && !payload.common_name) {
