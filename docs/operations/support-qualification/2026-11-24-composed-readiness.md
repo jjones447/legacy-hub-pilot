@@ -84,3 +84,14 @@ audit. This guard does not require the candidate table or enabled flag. Dedicate
 Support status remains authoritative; generic Reviewed/Done/Dismissed never imply
 owner progress. Final Staff presentation must suppress those generic controls for
 these records and direct users to the dedicated status workflow.
+
+Ct5 exact presentation/package patch d9c76fc183523eca711139097ac06a5c48c65c40
+is merged with history preserved at 044243c. Two generated HTML script-tag
+conflicts retained the module entry and regenerated current app hashes. Combined
+unit suite: 2,397 pass; presentation DOM: 4 pass. Added the owner session module
+to the explicit asset allowlist and closure regression: 2 packaging tests pass,
+actual dist contains 122 files. This proves artifact inclusion, not authenticated
+mount qualification. The global bridge currently defaults to global fetch; final
+session composition must supply the guarded transport rather than bypass it.
+Staff projection, capability-gated owner/Staff bootstrap, restoration lifecycle,
+generic-control suppression and exact composed review remain incomplete.
