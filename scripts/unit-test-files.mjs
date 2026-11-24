@@ -93,6 +93,7 @@ export const UNIT_TEST_FILES = Object.freeze([
   'portal-support-request-schema.test.mjs',
   'portal-support-request-store.test.mjs',
   'portal-support-request-route.test.mjs',
+  'portal-test-inbox.test.mjs',
   'public-events-render.test.mjs',
   'drop-in-respite-page.test.mjs',
   'resource-closeout.test.mjs',

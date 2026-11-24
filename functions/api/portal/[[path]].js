@@ -1,3 +1,4 @@
+import { testInboxCapture, insertCapturedToken, deliverCapturedToken } from '../../_lib/portal-test-inbox.mjs';
 // GET/POST /api/portal/[[path]] — Magic-link authentication and gated caregiver portal API endpoints (slice 09).
 import { checkIpRequestLimit, IP_LIMITS } from '../_shared.mjs';
 import { canSendEmail, isPreviewMailOptIn, sendEmail, signInEmail } from '../../_lib/email.js';
@@ -375,7 +376,7 @@ export async function onRequestGet({ request, env }) {
   }
 }
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env, data }) {
   try {
     const url = new URL(request.url);
     const pathSegments = url.pathname.split('/').filter(Boolean);
@@ -435,6 +436,7 @@ export async function onRequestPost({ request, env }) {
     }
 
     if (action === 'login') {
+      const capture = testInboxCapture(data, request, env);
       const limited = await checkIpRequestLimit(env.LEGACY_DB, request, IP_LIMITS.portalLogin);
       if (!limited.ok) {
         return json({ ok: false, error: limited.error }, limited.status);
@@ -449,7 +451,7 @@ export async function onRequestPost({ request, env }) {
       const emailEnabled = canSendEmail(env);
       // Deployment-wide readiness is checked before membership lookup, so the
       // unavailable response cannot reveal whether this address is registered.
-      if (!emailEnabled) {
+      if (!emailEnabled && !capture) {
         const reason = 'email_not_configured';
         try {
           await env.LEGACY_DB.prepare(`
@@ -463,6 +465,7 @@ export async function onRequestPost({ request, env }) {
       }
 
       const normalizedEmail = email.toLowerCase().trim();
+      if (capture && normalizedEmail !== capture.email) return json({ ok:false, error:'forbidden' },403);
       const emailHash = await sha256(normalizedEmail);
 
       // Basic rate limiting via audit_log
@@ -491,17 +494,27 @@ export async function onRequestPost({ request, env }) {
 
       if (caregiver) {
         // Mint a single-use, short-TTL (~15 min) opaque token
-        const expiresAt = Date.now() + 15 * 60 * 1000;
+        const expiresAt = Date.now() + (capture ? 5 : 15) * 60 * 1000;
         const tokenValue = randomToken();
 
         const tokenHash = await sha256(tokenValue);
         const expiresAtIso = new Date(expiresAt).toISOString().replace('T', ' ').slice(0, 19);
 
         // Store hash in portal_token table
-        await env.LEGACY_DB
-          .prepare(`INSERT INTO portal_token (token_hash, caregiver_id, expires_at, used) VALUES (?, ?, ?, 0)`)
-          .bind(tokenHash, caregiver.id, expiresAtIso)
-          .run();
+        if (capture) {
+          if (caregiver.id !== capture.id) return json({ ok:false, error:'forbidden' },403);
+          await insertCapturedToken(capture, tokenHash, expiresAtIso);
+        } else {
+          await env.LEGACY_DB
+            .prepare(`INSERT INTO portal_token (token_hash, caregiver_id, expires_at, used) VALUES (?, ?, ?, 0)`)
+            .bind(tokenHash, caregiver.id, expiresAtIso)
+            .run();
+        }
+        if (capture) {
+          const link = `${new URL(request.url).origin}/api/portal/verify?token=${encodeURIComponent(tokenValue)}`;
+          await deliverCapturedToken(capture, link, tokenHash, expiresAt);
+          return json({ ok:true });
+        }
 
         // Production: email the link. The response stays the same generic { ok: true } whether or
         // not the email went, so the page never reveals who is a Legacy client.
