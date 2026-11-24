@@ -68,3 +68,35 @@ specific remaining implementation gap. This advances the previous Nov25 noon
 reconciliation checkpoint; it is not a complete collection-enabled TEST date.
 SatNov28 review-only look remains separate. Collection OFF; no SQL/migration,
 runtime, live recipient, mail, operator or customer action follows from this branch.
+
+## Pending create/read source increment — Nov24 evening
+
+functions/_lib/respite-pending-store.mjs now supplies strict create-body validation,
+createPendingRespiteRequest(db,serverOwnerId,body,serverAckVersions), and bounded
+readOwnerRespiteRequests(db,serverOwnerId). The existing participant must already
+belong to that verified caregiver and match the submitted revision. Snapshot is
+copied from the server participant row, not a browser caregiver/email/medical
+payload. Stable owner-scoped key/digest reconciles replay and lost acknowledgment;
+changed payload conflicts. Creation records pending/needs_review and a metadata
+only audit together. It NEVER creates registration or reserves capacity.
+
+The retained lifecycle SQL from369a8594de is copied byte-for-byte, plus a separate
+UNAPPLIED prerequisite/supplement adding the explicit event marker and pending
+insert guards. Those guards recheck owner, participant revision/snapshot and future
+published marked event at write time; audit failure rolls back the request. No
+marker is populated and no table is applied externally. Local SQLite tests are
+not native D1 batch proof. Actual server dispatcher must verify the exact reviewed
+schema/trigger preflight before calling the store; a flag or table name alone is
+not schema qualification. No route or activation is supplied by this increment.
+
+Six synthetic SQLite tests pass for typed/acknowledgment rejection, pending/no-seat
+creation, owner isolation, replay/conflict, stale/foreign participant, owner/
+participant/session races, audit rollback and lost acknowledgment. No real data,
+HTTP, mail or customer action.
+
+Still unbuilt: participant creation/field split validation, full private detail
+read/edit UI, same-model Staff follow-up/review/confirm/reconfirmation/capacity
+writer, generic registration/Attendance protection, removal ledger/restore and
+native D1/schema/authenticated composition qualification. The oldB1 producer is
+not activated as a substitute. This delivers the bounded Nov25 06 create/read
+candidate early; it is not a complete registration candidate or TEST launch date.

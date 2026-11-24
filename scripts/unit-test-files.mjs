@@ -103,6 +103,7 @@ export const UNIT_TEST_FILES = Object.freeze([
   'resource-closeout.test.mjs',
   'resource-links.test.mjs',
   'respite-visual-preview.test.mjs',
+  'respite-pending-store.test.mjs',
   'sanctuary-our-approach.test.mjs',
   'restore-audit-integrity.test.mjs',
   'restore-count-report.test.mjs',
