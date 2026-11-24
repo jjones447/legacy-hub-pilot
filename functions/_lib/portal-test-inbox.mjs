@@ -5,8 +5,7 @@ const capabilities=new WeakMap();
 const QA=`EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(c.segment_tags) AND json_type(c.segment_tags)='array' THEN c.segment_tags ELSE '[]' END) WHERE value='qa_test') AND EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(c.segment_tags) AND json_type(c.segment_tags)='array' THEN c.segment_tags ELSE '[]' END) WHERE value='exclude_reporting')`;
 const ELIGIBLE=`FROM caregiver c JOIN staff_member s ON s.email=? AND s.role='admin' AND s.status='active' WHERE c.id=? AND LOWER(TRIM(c.email))=? AND c.status!='archived' AND ${QA} AND (SELECT COUNT(*) FROM caregiver other WHERE LOWER(TRIM(other.email))=LOWER(TRIM(c.email)) AND other.status!='archived')=1`;
 export function testInboxEnabled(request,env){
- if(env.ENVIRONMENT==='production')return false;
- return env.LEGACY_TEST_INBOX_ENABLED==='1' && env.ENVIRONMENT==='preview' && env.PORTAL_TEST_INBOX_ENABLED==='1' && new URL(request.url).origin===TEST_INBOX_ORIGIN
+ return env.ENVIRONMENT==='preview' && env.PORTAL_TEST_INBOX_ENABLED==='1' && new URL(request.url).origin===TEST_INBOX_ORIGIN
   && typeof env.PORTAL_TEST_INBOX_CAREGIVER_ID==='string' && /^[A-Za-z0-9_-]{1,128}$/.test(env.PORTAL_TEST_INBOX_CAREGIVER_ID)
   && typeof env.PORTAL_TEST_INBOX_EMAIL==='string' && /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(env.PORTAL_TEST_INBOX_EMAIL)
   && env.PORTAL_TEST_INBOX_EMAIL.length<=254;
@@ -35,14 +34,6 @@ export async function deliverCapturedToken(cap,link,hash,expiresAt){
 }
 export async function cleanupCapturedToken(cap,hash){
  const r=await cap.env.LEGACY_DB.prepare(`UPDATE portal_token SET used=1 WHERE token_hash=? AND caregiver_id=? AND EXISTS(SELECT c.id ${ELIGIBLE})`).bind(hash,cap.id,cap.actor,cap.id,cap.email).run();
- if(r?.success!==true || !Number.isInteger(r?.meta?.changes))throw Error('cleanup_unavailable');
- return r.meta.changes;
-}
-
-// Delete only expired/consumed token hashes for the currently authorized QA owner.
-// No plaintext inbox exists. Customer tokens and live unused QA tokens are retained.
-export async function purgeCapturedTokens(cap){
- const r=await cap.env.LEGACY_DB.prepare(`DELETE FROM portal_token WHERE caregiver_id=? AND (used=1 OR datetime(expires_at)<=datetime('now')) AND EXISTS(SELECT c.id ${ELIGIBLE})`).bind(cap.id,cap.actor,cap.id,cap.email).run();
  if(r?.success!==true || !Number.isInteger(r?.meta?.changes))throw Error('cleanup_unavailable');
  return r.meta.changes;
 }

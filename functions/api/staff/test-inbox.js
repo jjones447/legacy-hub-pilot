@@ -1,6 +1,6 @@
 // Protected by the existing /api/staff/ Access middleware AND current admin proof.
 import {onRequestPost as portalLogin} from '../portal/[[path]].js';
-import {testInboxEnabled,openTestInboxCapture,cleanupCapturedToken,purgeCapturedTokens,TEST_INBOX_ORIGIN} from '../../_lib/portal-test-inbox.mjs';
+import {testInboxEnabled,openTestInboxCapture,cleanupCapturedToken,TEST_INBOX_ORIGIN} from '../../_lib/portal-test-inbox.mjs';
 import {readSupportRequestBody} from '../../_lib/portal-support-request-http.mjs';
 const reply=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json','Cache-Control':'no-store, private','Pragma':'no-cache','Referrer-Policy':'no-referrer','X-Content-Type-Options':'nosniff'}});
 export async function onRequest({request,env,data}){
@@ -15,11 +15,9 @@ export async function onRequest({request,env,data}){
   const body=await readSupportRequestBody(request);
   if(!body||typeof body!=='object'||Array.isArray(body))return reply({ok:false,error:'invalid_request'},400);
   if(body.action==='cleanup'&&Object.keys(body).sort().join(',')==='action,token_hash'&&/^[a-f0-9]{64}$/.test(body.token_hash)){
-   await cleanupCapturedToken(capture.cap,body.token_hash);await purgeCapturedTokens(capture.cap);return reply({ok:true});
+   await cleanupCapturedToken(capture.cap,body.token_hash);return reply({ok:true});
   }
-  if(body.action==='purge'&&Object.keys(body).join(',')==='action'){await purgeCapturedTokens(capture.cap);return reply({ok:true});}
   if(body.action!=='request'||Object.keys(body).join(',')!=='action')return reply({ok:false,error:'invalid_request'},400);
-  await purgeCapturedTokens(capture.cap);
   const headers=new Headers({'Origin':TEST_INBOX_ORIGIN,'Content-Type':'application/json'});
   const ip=request.headers.get('CF-Connecting-IP');if(ip)headers.set('CF-Connecting-IP',ip);
   const result=await portalLogin({request:new Request(TEST_INBOX_ORIGIN+'/api/portal/login',{method:'POST',headers,body:JSON.stringify({email:capture.cap.email})}),env,data:capture.context});
