@@ -172,7 +172,9 @@
 
         <details class="panel staff-section" id="needsAttentionPanel" open>
           <summary><h4 class="staff-section-heading">📥 Alerts</h4> <span class="staff-section-count small muted" id="needsAttentionCount">(loading…)</span></summary>
-          <p class="small muted mb-12">Open follow-ups and action items requiring staff review.</p>
+          <p class="small muted mb-12">Open follow-ups and action items requiring staff review. Reviewed items leave this queue; their records are retained.</p>
+          <button type="button" class="btn btn-sm btn-plum" id="reviewAllFollowups" data-action="review-all-followups" disabled>Mark all reviewed</button>
+          <p id="followupReviewStatus" class="small muted" role="status" aria-live="polite"></p>
           <table class="data">
             <thead><tr><th>Caregiver</th><th>Item</th><th>Status</th></tr></thead>
             <tbody id="needsAttentionBody">
@@ -326,7 +328,7 @@
 <script src="app.js?v=4e2ad99e6308"></script>
 <script src="nav-v2.js"></script>
 <script src="staff-profile.js?v=00db1033fba9"></script>
-<script src="staff.js?v=8bbc2a21bd45"></script>
+<script src="staff.js?v=e8577eab37cc"></script>
 </body>
 </html>
 

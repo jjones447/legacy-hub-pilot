@@ -268,3 +268,31 @@ test('identity completion can lag multiple task turns without losing an early ch
     assert.equal(JSON.parse(Object.values(p.storage())[0]).eventsPanel, false);
   } finally { p.close(); }
 });
+
+test('bulk Reviewed snapshots visible IDs, deduplicates and stops without retry after uncertain result', async () => {
+  const dom = new JSDOM(html, {url:'https://fixture.example.invalid/staff',runScripts:'outside-only'});
+  const w=dom.window;
+  w.document.getElementById('needsAttentionBody').innerHTML='<button data-action="resolve-followup" data-followup-id="1"></button><button data-action="resolve-followup" data-followup-id="1"></button><button data-action="resolve-followup" data-followup-id="2"></button><button data-action="resolve-followup" data-followup-id="3"></button>';
+  w.document.getElementById('reviewAllFollowups').disabled=false;
+  const calls=[];let reloads=0;
+  w.fetch=async(url,init)=>{calls.push(url);assert.equal(JSON.parse(init.body).status,'done');return {ok:calls.length===1,json:async()=>({ok:calls.length===1})};};
+  w.loadFollowups=async()=>{reloads++;};
+  w.eval(block('async function reviewAllFollowups(', 'async function resolveFollowup('));
+  await w.reviewAllFollowups();
+  assert.deepEqual(calls,['/api/staff/followup/1/resolve','/api/staff/followup/2/resolve']);
+  assert.equal(reloads,1);
+  assert.match(w.document.getElementById('followupReviewStatus').textContent,/1 items confirmed reviewed.*unconfirmed/);
+  assert.equal(w.document.getElementById('reviewAllFollowups').dataset.busy,undefined);
+  dom.window.close();
+});
+
+test('bulk Reviewed prevents double submission while a request is pending', async () => {
+  const dom=new JSDOM(html,{url:'https://fixture.example.invalid/staff',runScripts:'outside-only'});const w=dom.window;
+  w.document.getElementById('needsAttentionBody').innerHTML='<button data-action="resolve-followup" data-followup-id="7"></button>';
+  w.document.getElementById('reviewAllFollowups').disabled=false;
+  let finish,calls=0;w.fetch=()=>{calls++;return new Promise(resolve=>{finish=resolve;});};
+  w.loadFollowups=async()=>{};w.eval(block('async function reviewAllFollowups(', 'async function resolveFollowup('));
+  const first=w.reviewAllFollowups();await w.reviewAllFollowups();assert.equal(calls,1);
+  finish({ok:true,json:async()=>({ok:true})});await first;
+  assert.match(w.document.getElementById('followupReviewStatus').textContent,/1 items marked reviewed/);dom.window.close();
+});
