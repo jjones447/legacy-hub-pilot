@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css?v=2326affafb7e">
+<link rel="stylesheet" href="profile-page.css?v=b1c536b00ec8">
 <link rel="icon" href="favicon.ico" sizes="32x32">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -156,6 +157,11 @@
     </div>
     <p class="small mt-8 d-none" id="portalLogoutStatus" role="alert"></p>
 
+    <nav class="caregiver-tabs" aria-label="Caregiver portal">
+        <a href="portal.html" aria-current="page">Dashboard</a>
+        <a href="profile.html">My Profile</a>
+      </nav>
+
     <details class="mt-16" id="portalWellnessSample">
       <summary id="portalPreviewToggle">Preview a filled-out portal (sample data)</summary>
       <p class="small"><strong>SAMPLE DATA — fictional portal preview.</strong> The events, grant and Memory Social visits below are fictional illustrations, not your records. Your real wellness check-ins remain below, unchanged; this preview adds no check-ins or scores. Nothing here registers you, submits an application, awards a grant or makes a payment.</p>
@@ -208,7 +214,7 @@
         <div class="kv-row"><span class="k">Membership</span><span class="v" id="portalProfileMembershipStatus"><span class="badge badge-gray">—</span></span></div>
         <p class="portal-qa-sample-note small mt-12 m-0" id="portalProfileSampleNote" data-portal-sample="profile" hidden><span class="badge badge-amber">SAMPLE / TEST</span> <strong>Fictional intake placement preview:</strong> Primary caregiver for a parent living with dementia · Preferred respite window: Tuesday &amp; Thursday afternoons. Read-only illustration; your real profile fields above remain unchanged.</p>
         <p><a class="btn btn-plum" href="profile.html">My Caregiver Profile</a></p>
-        <p class="small muted mt-8 m-0">Your profile has its own page. Save a little at a time and return when you are ready.</p>
+        <p class="small muted mt-8 m-0">Save a little at a time and return when you are ready.</p>
         <a href="request-support.html" class="btn btn-outline btn-sm mt-16 d-inline-block">Contact Legacy</a>
       </div>
 
