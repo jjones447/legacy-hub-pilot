@@ -188,3 +188,21 @@ test('delivery audit failure cannot change the public response by membership', a
   assert.deepEqual(await known.json(), await unknown.json());
   assert.equal(calls.length, 1, 'only the registered fixture receives a mocked send');
 });
+
+for (const host of ['staging.legacy-hub-5qo.pages.dev','customer-test.legacy-hub-5qo.pages.dev']) {
+  test(`named preview ${host} sends normal sign-in email when explicitly enabled`, async () => {
+    const env={...PROD(),ENVIRONMENT:'preview',PORTAL_PREVIEW_MAIL_ENABLED:'true'};
+    const res=await postPortal({request:request(`https://${host}/api/portal/login`,{email:'jane.doe@example.com'}),env});
+    assert.equal(res.status,200);
+    assert.equal(calls.length,1);
+    assert.ok(JSON.parse(calls[0].init.body).text.includes(`https://${host}/api/portal/verify?token=`));
+  });
+}
+for(const host of ['abc123.legacy-hub-5qo.pages.dev','staging.legacy-hub-5qo.pages.dev.evil.example']) {
+  test(`unapproved preview ${host} refuses before token issuance and email`,async()=>{
+    const env={...PROD(),ENVIRONMENT:'preview',PORTAL_PREVIEW_MAIL_ENABLED:'true'};
+    const res=await postPortal({request:request(`https://${host}/api/portal/login`,{email:'jane.doe@example.com'}),env});
+    assert.equal(res.status,503);assert.equal(calls.length,0);
+    assert.equal(raw.prepare('SELECT count(*) AS n FROM portal_token').get().n,0);
+  });
+}
