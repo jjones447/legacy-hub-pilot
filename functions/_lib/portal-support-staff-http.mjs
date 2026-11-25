@@ -1,3 +1,4 @@
+import {matchesSupportSession} from './support-session-proof.mjs';
 import {confirmationActor} from './agent-confirmation.mjs';
 import * as store from './portal-support-request-staff.mjs';
 import {readSupportRequestBody} from './portal-support-request-http.mjs';
@@ -12,6 +13,7 @@ export async function staffSupportRequest({request,env,data}) {
   if(write&&request.headers.get('Content-Type')?.split(';')[0].trim().toLowerCase()!=='application/json')return reply({ok:false,error:'invalid_content_type'},415);
   const actor=confirmationActor(data);
   if(!actor)return reply({ok:false,error:'forbidden'},403);
+  if(!await matchesSupportSession(request,'staff',actor))return reply({ok:false,error:'session_changed'},403);
   const staff=await env.LEGACY_DB.prepare("SELECT email FROM staff_member WHERE email=? AND status='active' AND role IN ('staff','admin')").bind(actor).first();
   if(!staff)return reply({ok:false,error:'forbidden'},403);
   let result;

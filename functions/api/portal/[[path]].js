@@ -1,3 +1,4 @@
+import {portalSessionValue, supportSessionProof, matchesSupportSession} from '../../_lib/support-session-proof.mjs';
 import { testInboxCapture, insertCapturedToken, deliverCapturedToken } from '../../_lib/portal-test-inbox.mjs';
 // GET/POST /api/portal/[[path]] — Magic-link authentication and gated caregiver portal API endpoints (slice 09).
 import { checkIpRequestLimit, IP_LIMITS } from '../_shared.mjs';
@@ -214,10 +215,8 @@ function htmlErrorPage(message) {
 }
 
 async function parseSessionCookie(cookieHeader, secret) {
-  if (!cookieHeader) return null;
-  const match = cookieHeader.match(/portal_session=([^;]+)/);
-  if (!match) return null;
-  const sessionVal = decodeURIComponent(match[1]);
+  const sessionVal = portalSessionValue(cookieHeader);
+  if (!sessionVal) return null;
   const parts = sessionVal.split(':');
   if (parts.length !== 3) return null;
   const [caregiverId, exp, signature] = parts;
@@ -303,6 +302,7 @@ export async function onRequestGet({ request, env }) {
 
     if (action === 'support-requests') {
       const caregiverId = await parseSessionCookie(request.headers.get('Cookie'), secret);
+      if (caregiverId && !await matchesSupportSession(request, 'owner', caregiverId)) return json({ ok: false, error: 'session_changed' }, 403);
       if (!caregiverId || !await hasNonarchivedCaregiver(env.LEGACY_DB, caregiverId)) return json({ ok: false, error: 'unauthorized' }, 401);
       const requests = await readOwnerSupportRequests(env.LEGACY_DB, caregiverId);
       return json({ ok: true, requests });
@@ -324,7 +324,9 @@ export async function onRequestGet({ request, env }) {
       if (url.pathname === '/api/portal/me' && url.search === '?support=1') {
         const owner = await env.LEGACY_DB.prepare("SELECT id FROM caregiver WHERE id = ? AND status != 'archived'").bind(caregiverId).first();
         if (!owner) return json({ ok: false, error: 'profile_not_found' }, 404);
-        return json({ ok: true, profile: { id: owner.id }, capabilities: { support_requests: env.PORTAL_SUPPORT_REQUEST_ENABLED === '1' } });
+        const enabled = env.PORTAL_SUPPORT_REQUEST_ENABLED === '1';
+        return json({ ok: true, profile: { id: owner.id }, capabilities: { support_requests: enabled },
+          ...(enabled ? {support_session: await supportSessionProof(request, 'owner', owner.id)} : {}) });
       }
 
       // Get profile
@@ -556,6 +558,7 @@ export async function onRequestPost({ request, env, data }) {
 
     if (action === 'support-requests') {
       const caregiverId = await parseSessionCookie(request.headers.get('Cookie'), secret);
+      if (caregiverId && !await matchesSupportSession(request, 'owner', caregiverId)) return json({ ok: false, error: 'session_changed' }, 403);
       if (!caregiverId || !await hasNonarchivedCaregiver(env.LEGACY_DB, caregiverId)) return json({ ok: false, error: 'unauthorized' }, 401);
       // Only this verified server owner reaches the writer. The writer rechecks
       // nonarchived eligibility at write time; this precheck is not a lock.

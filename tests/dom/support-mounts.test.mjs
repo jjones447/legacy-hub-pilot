@@ -17,7 +17,7 @@ test('public intake stays retired after owner loss and returns only on confirmed
   let enabled = true, owner = 'member-one', reads = 0;
   window.fetch = async url => {
     if (url === '/api/portal/me?support=1') return owner
-      ? response({ok:true, profile:{id:owner}, capabilities:{support_requests:enabled}})
+      ? response({ok:true, profile:{id:owner}, support_session:'a'.repeat(64), capabilities:{support_requests:enabled}})
       : new Response('', {status:401});
     assert.equal(url, '/api/portal/support-requests');
     reads++;
@@ -53,7 +53,7 @@ test('dashboard waits for its authenticated owner and rejects another session', 
   window.fetch = async url => {
     calls++;
     assert.equal(url, '/api/portal/me?support=1');
-    return response({ok:true,profile:{id:'other'},capabilities:{support_requests:true}});
+    return response({ok:true,profile:{id:'other'},support_session:'a'.repeat(64), capabilities:{support_requests:true}});
   };
   const dispose = bindSupportPage(window);
   try {
@@ -72,7 +72,7 @@ test('Staff mount checks active identity again before posting a status change', 
   let actor = 'one@example.invalid', writes = 0;
   window.fetch = async (url, options) => {
     if (url === '/api/staff/me?support=1') return response({
-      ok:true, me:{email:actor,status:'active',role:'staff'}, capabilities:{support_requests:true}
+      ok:true, me:{email:actor,status:'active',role:'staff'}, support_session:'a'.repeat(64), capabilities:{support_requests:true}
     });
     if (options.method === 'POST') writes++;
     return response({ok:true,requests:[{id:'synthetic',revision:1,needs:[],status:{code:'in_review'}}]});

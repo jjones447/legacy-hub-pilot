@@ -1,3 +1,4 @@
+import {supportSessionProof} from '../../_lib/support-session-proof.mjs';
 import { confirmationActor } from '../../_lib/agent-confirmation.mjs';
 import { staffSupportRequest } from '../../_lib/portal-support-staff-http.mjs';
 // GET/POST /api/staff/[[path]] — staff endpoints for queue and caregiver management (slice 08).
@@ -368,8 +369,11 @@ export async function onRequestGet({ request, env, data }) {
       const member = await getStaffMember(env.LEGACY_DB, actor);
       const supportEnabled = env.PORTAL_SUPPORT_REQUEST_ENABLED === '1' && member?.status === 'active'
         && ['staff','admin'].includes(member.role) && confirmationActor(data) === member.email;
+      const supportProof = url.search === '?support=1' && supportEnabled
+        ? await supportSessionProof(request, 'staff', member.email) : null;
       const response = json({ ok: true, me: member || { email: actor, display_name: null, role: 'staff', status: 'active' },
-        ...(url.search === '?support=1' ? { capabilities: { support_requests: Boolean(supportEnabled) } } : {}) });
+        ...(url.search === '?support=1' ? { capabilities: { support_requests: Boolean(supportProof) } } : {}),
+        ...(supportProof ? {support_session: supportProof} : {}) });
       response.headers.set('Cache-Control', 'no-store');
       return response;
     }

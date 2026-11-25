@@ -11,3 +11,23 @@ test('missing Staff and illegal transition cannot update request',()=>check(asyn
 test('Staff projection is fixed, bounded and includes no request-key/digest or contact identity',()=>check(async({db,raw})=>{for(let i=2;i<=60;i++){raw.prepare("INSERT INTO followup(id,caregiver_id,kind)VALUES(?,'owner','support_request')").run(i);raw.prepare("INSERT INTO portal_support_request(id,caregiver_id,request_key,payload_digest,needs_json,preferred_contact,followup_id)VALUES(?,'owner',?,?,'[\"break\"]','text',?)").run('request_'+String(i).padStart(3,'0'),'synthetic_request_'+i,'a'.repeat(64),i);}const r=await readStaffSupportRequests(db,'staff@example.invalid');assert.equal(r.ok,true);assert.equal(r.requests.length,50);assert.deepEqual(Object.keys(r.requests[0]).sort(),['id','caregiver_id','revision','needs','preferred_contact','message','status','created_at','updated_at','followup_id'].sort());assert.deepEqual(r.requests[0].status,{code:'received',label:'Received'});}));
 test('Staff projection excludes archived and internal QA source/tags, keeps ordinary inactive owner',async()=>{for(const patch of ["status='archived'","source='qa_fixture'","segment_tags='[\"qa_test\"]'","segment_tags='[\"exclude_reporting\"]'"])await check(async({db,raw})=>{raw.exec('UPDATE caregiver SET '+patch);assert.deepEqual(await readStaffSupportRequests(db,'staff@example.invalid'),{ok:true,requests:[]});});await check(async({db,raw})=>{raw.exec("UPDATE caregiver SET status='inactive'");assert.equal((await readStaffSupportRequests(db,'staff@example.invalid')).requests.length,1);});});
 test('missing/deactivated Staff and revocation before or after projection fail without private rows',async()=>{await check(async({db})=>assert.deepEqual(await readStaffSupportRequests(db,'foreign@example.invalid'),{ok:false,error:'forbidden'}));for(const hook of ['beforeRead','afterRead'])await check(async({db,raw,state})=>{state[hook]=()=>raw.exec("UPDATE staff_member SET status='deactivated'");const r=await readStaffSupportRequests(db,'staff@example.invalid');assert.deepEqual(r,{ok:false,error:'forbidden'});assert.equal('requests' in r,false);});});
+
+test('QA reclassification before commit preserves the request revision and audit count', async () => {
+ for (const change of ["source='qa_fixture'", "segment_tags='[\"qa_test\"]'", "segment_tags='[\"exclude_reporting\"]'"]) {
+  await check(async ({db,raw,state}) => {
+   state.beforeBatch = () => raw.exec('UPDATE caregiver SET '+change);
+   assert.equal((await updateSupportStatus(db,'staff@example.invalid',body())).error,'conflict');
+   assert.equal(raw.prepare('SELECT revision FROM portal_support_request').get().revision,1);
+   assert.equal(raw.prepare('SELECT count(*) n FROM audit_log').get().n,0);
+   let issuedBatch=false;
+   state.beforeBatch = () => {issuedBatch=true;};
+   assert.equal((await updateSupportStatus(db,'staff@example.invalid',body())).error,'conflict');
+   assert.equal(issuedBatch,false);
+  });
+ }
+ await check(async ({db,raw}) => {
+  raw.exec("UPDATE caregiver SET status='inactive'");
+  assert.equal((await updateSupportStatus(db,'staff@example.invalid',body())).ok,true);
+  assert.equal(raw.prepare('SELECT count(*) n FROM audit_log').get().n,1);
+ });
+});
