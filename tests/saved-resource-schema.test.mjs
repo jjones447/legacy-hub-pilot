@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
-import { saveResource, removeSavedResource } from '../functions/_lib/domain/saved-resources.mjs';
+import { saveResource, removeSavedResource, listSavedResources } from '../functions/_lib/domain/saved-resources.mjs';
 
 function setup(t) {
   const db = new DatabaseSync(':memory:');
@@ -114,4 +114,43 @@ test('store checks session expiry and current caregiver eligibility within the w
   assert.deepEqual(await removeSavedResource(db, owner, 'example-guide'), { status: 'unauthorized' });
   assert.deepEqual(await saveResource(db, owner, 'example-guide'), { status: 'unauthorized' });
   assert.equal(sqlite.prepare('SELECT count(*) AS n FROM saved_resource').get().n, 1);
+});
+
+test('owner list pages through ties after removal and returns retired bookmarks as unavailable', async t => {
+  const sqlite = setup(t);
+  const db = atomicStore(sqlite);
+  const owner = { caregiverId: 'cg_a', expiresAtMs: Date.now() + 60000 };
+  const other = { ...owner, caregiverId: 'cg_b' };
+  const publish = sqlite.prepare('INSERT INTO saved_resource_catalog VALUES (?, 1)');
+  const bookmark = sqlite.prepare('INSERT INTO saved_resource (caregiver_id, resource_id, created_at) VALUES (?, ?, ?)');
+  for (let i = 0; i < 52; i++) {
+    const id = 'guide-' + String(i).padStart(2, '0');
+    publish.run(id);
+    bookmark.run('cg_a', id, i === 51 ? '2026-11-25 01:00:00' : '2026-11-24 01:00:00');
+  }
+  await saveResource(db, other, 'example-guide');
+  sqlite.exec("UPDATE saved_resource_catalog SET published = 0 WHERE resource_id = 'guide-00'");
+
+  const first = await listSavedResources(db, owner);
+  assert.equal(first.status, 'ok');
+  assert.equal(first.items.length, 50);
+  assert.equal(first.items[0].resourceId, 'guide-51');
+  assert.equal(first.items[1].available, false);
+  assert.deepEqual(first.next, { createdAt: '2026-11-24 01:00:00', resourceId: 'guide-48' });
+  await removeSavedResource(db, owner, first.next.resourceId);
+  const second = await listSavedResources(db, owner, first.next);
+  assert.deepEqual(second.items.map(item => item.resourceId), ['guide-49', 'guide-50']);
+  assert.equal(second.next, null);
+  assert.deepEqual((await listSavedResources(db, other)).items.map(item => item.resourceId), ['example-guide']);
+});
+
+test('listing distinguishes an eligible empty list from an expired or archived caregiver', async t => {
+  const sqlite = setup(t);
+  const db = atomicStore(sqlite);
+  const owner = { caregiverId: 'cg_a', expiresAtMs: Date.now() + 60000 };
+  assert.deepEqual(await listSavedResources(db, owner), { status: 'ok', items: [], next: null });
+  await saveResource(db, owner, 'example-guide');
+  assert.deepEqual(await listSavedResources(db, { ...owner, expiresAtMs: 0 }), { status: 'unauthorized' });
+  sqlite.exec("UPDATE caregiver SET status = 'archived' WHERE id = 'cg_a'");
+  assert.deepEqual(await listSavedResources(db, owner), { status: 'unauthorized' });
 });

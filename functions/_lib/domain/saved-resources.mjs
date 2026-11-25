@@ -8,20 +8,24 @@ const publishedResource = `
   SELECT resource_id FROM saved_resource_catalog
   WHERE resource_id = ?3 AND published = 1`;
 
-function bookmarkBindings(session, resourceId) {
+function ownerBindings(session) {
   if (typeof session?.caregiverId !== 'string' || !session.caregiverId ||
       !Number.isSafeInteger(session.expiresAtMs)) {
     throw new TypeError('Invalid verified session');
   }
+  return [session.caregiverId, session.expiresAtMs];
+}
+
+function checkedResourceId(resourceId) {
   if (typeof resourceId !== 'string' || resourceId.length === 0 || resourceId.length > 80 ||
       !/^[a-z0-9]/.test(resourceId) || /[^a-z0-9_-]/.test(resourceId)) {
     throw new TypeError('Invalid resource ID');
   }
-  return [session.caregiverId, session.expiresAtMs, resourceId];
+  return resourceId;
 }
 
 export async function saveResource(db, session, resourceId) {
-  const params = bookmarkBindings(session, resourceId);
+  const params = [...ownerBindings(session), checkedResourceId(resourceId)];
   const insert = db.prepare(`
     INSERT INTO saved_resource (caregiver_id, resource_id)
     SELECT ?1, ?3 WHERE EXISTS (${eligibleOwner}) AND EXISTS (${publishedResource})
@@ -41,7 +45,7 @@ export async function saveResource(db, session, resourceId) {
 }
 
 export async function removeSavedResource(db, session, resourceId) {
-  const params = bookmarkBindings(session, resourceId);
+  const params = [...ownerBindings(session), checkedResourceId(resourceId)];
   // Removal also works after the public resource has been retired.
   const remove = db.prepare(`
     DELETE FROM saved_resource WHERE caregiver_id = ?1 AND resource_id = ?3
@@ -49,4 +53,38 @@ export async function removeSavedResource(db, session, resourceId) {
   const owner = db.prepare(eligibleOwner).bind(session.caregiverId, session.expiresAtMs);
   const [, result] = await db.batch([remove, owner]);
   return { status: result.results.length ? 'removed' : 'unauthorized' };
+}
+
+const PAGE_SIZE = 50;
+
+// The HTTP adapter handles the external cursor. This store accepts its decoded sort key.
+export async function listSavedResources(db, session, after = null) {
+  const identity = ownerBindings(session);
+  const params = [...identity];
+  let continuation = '';
+  if (after !== null) {
+    if (typeof after?.createdAt !== 'string' || after.createdAt.length !== 19 ||
+        !/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(after.createdAt)) {
+      throw new TypeError('Invalid bookmark timestamp');
+    }
+    params.push(after.createdAt, checkedResourceId(after.resourceId));
+    continuation = 'AND (s.created_at < ?3 OR (s.created_at = ?3 AND s.resource_id > ?4))';
+  }
+
+  const page = db.prepare(`
+    SELECT s.resource_id AS resourceId, s.created_at AS createdAt, c.published
+    FROM saved_resource AS s
+    JOIN saved_resource_catalog AS c ON c.resource_id = s.resource_id
+    WHERE s.caregiver_id IN (${eligibleOwner}) ${continuation}
+    ORDER BY s.created_at DESC, s.resource_id ASC
+    LIMIT ${PAGE_SIZE + 1}`).bind(...params);
+  const owner = db.prepare(eligibleOwner).bind(...identity);
+  const [result, currentOwner] = await db.batch([page, owner]);
+  if (!currentOwner.results.length) return { status: 'unauthorized' };
+  const items = result.results.slice(0, PAGE_SIZE).map(row => ({
+    resourceId: row.resourceId, createdAt: row.createdAt, available: row.published === 1,
+  }));
+  const last = items.at(-1);
+  const next = result.results.length > PAGE_SIZE ? { createdAt: last.createdAt, resourceId: last.resourceId } : null;
+  return { status: 'ok', items, next };
 }
