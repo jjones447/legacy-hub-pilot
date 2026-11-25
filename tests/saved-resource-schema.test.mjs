@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { publicResourceIds } from '../functions/_lib/resource-cards.mjs';
 import { test } from 'node:test';
 import { saveResource, removeSavedResource, listSavedResources } from '../functions/_lib/domain/saved-resources.mjs';
 import { listSavedResourcePage } from '../functions/_lib/saved-resource-page.mjs';
@@ -256,4 +259,28 @@ test('the portal saves, reloads and removes a signed-in caregiver’s bookmarks 
   assert.equal((await get(cookie, path, { ...env, PORTAL_SAVED_RESOURCES_ENABLED: '' })).status, 404);
   assert.equal((await get(cookie, path, { ...env, ENVIRONMENT: 'production' })).status, 404);
   assert.equal((await get(cookie, path.replace('staging.', 'unlisted.'))).status, 404);
+});
+
+test('catalog publication matches the source and preserves bookmarks when a card retires', t => {
+  const db = setup(t);
+  db.prepare(save).run('cg_a', 'example-guide');
+  const firstId = publicResourceIds()[0];
+  db.prepare('INSERT INTO saved_resource_catalog VALUES (?, 0)').run(firstId);
+
+  const script = fileURLToPath(new URL('../scripts/saved-resource-catalog-sql.mjs', import.meta.url));
+  const sql = execFileSync(process.execPath, [script], { encoding: 'utf8' });
+  db.exec(`CREATE TRIGGER simulate_publication_failure BEFORE UPDATE ON saved_resource_catalog
+    WHEN NEW.published = 0 BEGIN SELECT RAISE(ABORT, 'fixture rollback'); END`);
+  assert.throws(() => db.exec(sql), /fixture rollback/);
+  assert.equal(db.prepare('SELECT count(*) AS n FROM saved_resource_catalog').get().n, 2);
+  assert.equal(db.prepare('SELECT published FROM saved_resource_catalog WHERE resource_id = ?').get(firstId).published, 0);
+  db.exec('DROP TRIGGER simulate_publication_failure');
+  db.exec(sql);
+  const published = db.prepare('SELECT resource_id FROM saved_resource_catalog WHERE published = 1 ORDER BY resource_id');
+  assert.deepEqual(published.all().map(row => row.resource_id), publicResourceIds());
+  assert.equal(db.prepare('SELECT published FROM saved_resource_catalog WHERE resource_id = ?').get('example-guide').published, 0);
+  assert.equal(db.prepare('SELECT count(*) AS n FROM saved_resource WHERE caregiver_id = ?').get('cg_a').n, 1);
+  assert.throws(() => db.prepare(save).run('cg_b', 'example-guide'), /saved resource unavailable/);
+  db.exec(sql);
+  assert.equal(db.prepare('SELECT changes() AS n').get().n, 0);
 });

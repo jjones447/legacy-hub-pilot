@@ -29,3 +29,7 @@ for (const guide of resources.downloads) {
 export function findResourceCard(id) {
   return cards.get(id);
 }
+
+export function publicResourceIds() {
+  return [...cards.keys()].sort();
+}
