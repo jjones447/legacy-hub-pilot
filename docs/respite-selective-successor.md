@@ -144,3 +144,18 @@ fresh reviewed_revision equal to the current request revision. A local regressio
 proves a changed session snapshot cannot reserve under the stale decision, then
 can reserve after fresh review while the participant base remains unchanged. No
 registration/Attendance/update bypass or runtime activation is inferred.
+
+## First-time follow-up attestation store
+
+completeRespiteFirstTimeFollowup(db,verifiedStaffEmail,{id,revision}) now records
+one current Staff attestation on a pending first-time request, with exact revision,
+current participant/owner predicates and metadata-only audit in one batch. It
+creates no registration and is not evidence a phone call/email was delivered.
+Duplicate/stale commands conflict; unknown acknowledgment requires refresh rather
+than automatic replay. A separate unapplied trigger requires material session/
+participant/first-time changes to clear old follow-up metadata, matching the donor
+owner writer's existing invalidation behavior. Five additional SQLite cases prove
+record→later confirm, refusal/revocation, audit rollback, fresh-follow-up after
+changed needs and lost-ack handling. Actual UI/HTTP/action authorization, linked
+reservation cancellation/reconfirmation, Attendance/update protection and native
+D1/restore/removal qualification remain unfinished; collection stays OFF.
