@@ -1,3 +1,4 @@
+import { findResourceCard } from '../functions/_lib/resource-cards.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -256,6 +257,11 @@ test('link cards and downloadable guides expose unique catalog IDs for available
       assert.match(id, /^[a-z0-9][a-z0-9_-]{0,79}$/);
       assert.ok(!ids.has(id), `Duplicate resource ID on ${page}: ${id}`);
       ids.add(id);
+    }
+    for (const entry of entries) {
+      const id = entry.resource_id;
+      assert.deepEqual(findResourceCard(id), { title: entry.title ?? entry.name, href: '/' + page.replace('.html', '') + '#' + id });
+      assert.ok(loadHtml(page).includes(' id="' + id + '" data-resource-id="' + id + '"'));
     }
     const rendered = Array.from(loadHtml(page).matchAll(/data-resource-id="([^"]*)"/g), match => match[1]);
     assert.deepEqual(rendered.sort(), expected.sort(), page);

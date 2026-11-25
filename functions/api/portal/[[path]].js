@@ -3,6 +3,7 @@ import { checkIpRequestLimit, IP_LIMITS } from '../_shared.mjs';
 import { canSendEmail, isPreviewMailOptIn, sendEmail, signInEmail } from '../../_lib/email.js';
 import { QUESTIONS, validateCheckin, recordCheckin, caregiverHistory, isCheckinDue, CHECKIN_EVERY_DAYS } from '../../_lib/wellness.js';
 import { isSavedResourceId, saveResource, removeSavedResource } from '../../_lib/domain/saved-resources.mjs';
+import { findResourceCard } from '../../_lib/resource-cards.mjs';
 import { listSavedResourcePage } from '../../_lib/saved-resource-page.mjs';
 
 async function getHmacSha256(message, secret) {
@@ -308,6 +309,9 @@ async function changeSavedResource({ request, env }, operation) {
       return json({ ok: false, error: 'invalid_body' }, 400);
     }
 
+    if (operation === saveResource && !findResourceCard(body.resource_id)) {
+      return json({ ok: false, error: 'unavailable' }, 404);
+    }
     const result = await operation(env.LEGACY_DB, session, body.resource_id);
     if (result.status === 'unauthorized') return json({ ok: false, error: 'unauthorized' }, 401);
     if (result.status === 'unavailable') return json({ ok: false, error: 'unavailable' }, 404);
@@ -358,7 +362,11 @@ export async function onRequestGet({ request, env }) {
       const page = await listSavedResourcePage(env.LEGACY_DB, session, secret, url.searchParams.get('cursor'));
       if (page.status !== 'ok') return json({ ok: false, error: page.status }, page.status === 'unauthorized' ? 401 : 400);
       const csrfToken = await savedResourcesProof(session, secret);
-      return json({ ok: true, items: page.items, nextCursor: page.nextCursor, csrfToken });
+      const items = page.items.map(item => {
+        const card = item.available && findResourceCard(item.resourceId);
+        return card ? { ...item, ...card } : { ...item, available: false, title: null, href: null };
+      });
+      return json({ ok: true, items, nextCursor: page.nextCursor, csrfToken });
     }
 
     if (action === 'verify') {

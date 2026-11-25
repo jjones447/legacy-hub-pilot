@@ -28,7 +28,7 @@
     {%- if group.get('items') %}
     <div class="card-grid mt-24">
       {%- for item in group['items'] %}
-      <div class="card"{% if item.get('resource_id') %} data-resource-id="{{ item.resource_id | e }}"{% endif %}>
+      <div class="card"{% if item.get('resource_id') %} id="{{ item.resource_id | e }}" data-resource-id="{{ item.resource_id | e }}"{% endif %}>
         <h3>{{ item.name }}</h3>
         {%- if item.get('note') %}
         <p>{{ item.note }}</p>
@@ -51,7 +51,7 @@
 {%- elif collection.get('items') %}
 <div class="card-grid mt-24">
   {%- for item in collection['items'] %}
-  <div class="card"{% if item.get('resource_id') %} data-resource-id="{{ item.resource_id | e }}"{% endif %}>
+  <div class="card"{% if item.get('resource_id') %} id="{{ item.resource_id | e }}" data-resource-id="{{ item.resource_id | e }}"{% endif %}>
     <h3>{{ item.name }}</h3>
     {%- if item.get('note') %}
     <p>{{ item.note }}</p>

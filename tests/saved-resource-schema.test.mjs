@@ -187,7 +187,10 @@ test('a page cursor continues only within its issuing caregiver session', async 
 });
 
 test('the portal saves, reloads and removes a signed-in caregiver’s bookmarks on opted-in TEST', async t => {
-  const db = atomicStore(setup(t));
+  const sqlite = setup(t);
+  const guide = JSON.parse(readFileSync(new URL('../content/resources.json', import.meta.url), 'utf8')).downloads[0];
+  sqlite.prepare('INSERT INTO saved_resource_catalog VALUES (?, 1)').run(guide.resource_id);
+  const db = atomicStore(sqlite);
   const secret = 'fictional local test secret';
   const expiresAtMs = Date.now() + 60000;
   const env = {
@@ -208,7 +211,7 @@ test('the portal saves, reloads and removes a signed-in caregiver’s bookmarks 
   const otherCookie = cookieFor('cg_b');
   const token = (await (await get(cookie)).json()).csrfToken;
   const otherToken = (await (await get(otherCookie)).json()).csrfToken;
-  function write(method, sessionCookie, proof, body = { resource_id: 'example-guide' }) {
+  function write(method, sessionCookie, proof, body = { resource_id: guide.resource_id }) {
     const request = new Request(path, {
       method, headers: {
         Cookie: sessionCookie, Origin: new URL(path).origin, 'Sec-Fetch-Site': 'same-origin',
@@ -219,8 +222,9 @@ test('the portal saves, reloads and removes a signed-in caregiver’s bookmarks 
   }
   assert.equal((await write('PUT', cookie, '')).status, 403);
   assert.equal((await write('PUT', cookie, otherToken)).status, 403);
-  assert.equal((await write('PUT', cookie, token, { owner: 'cg_b', resource_id: 'example-guide' })).status, 400);
+  assert.equal((await write('PUT', cookie, token, { owner: 'cg_b', resource_id: guide.resource_id })).status, 400);
   assert.equal((await write('PUT', cookie, token, { resource_id: 'x'.repeat(1500) })).status, 400);
+  assert.equal((await write('PUT', cookie, token, { resource_id: 'example-guide' })).status, 404);
   const saved = await (await write('PUT', cookie, token)).json();
   assert.equal(saved.status, 'saved');
   assert.deepEqual(await (await write('PUT', cookie, token)).json(), saved);
@@ -230,8 +234,15 @@ test('the portal saves, reloads and removes a signed-in caregiver’s bookmarks 
   assert.equal(response.headers.get('Cache-Control'), 'no-store');
   const page = await response.json();
   assert.equal(page.ok, true);
-  assert.deepEqual(page.items.map(item => item.resourceId), ['example-guide']);
+  assert.deepEqual(page.items.map(item => item.resourceId), [guide.resource_id]);
+  assert.equal(page.items[0].title, guide.title);
+  assert.equal(page.items[0].href, '/caregiver-tools#' + guide.resource_id);
   assert.equal(page.nextCursor, null);
+  sqlite.prepare('UPDATE saved_resource_catalog SET published = 0 WHERE resource_id = ?').run(guide.resource_id);
+  const [retired] = (await (await get(cookie)).json()).items;
+  assert.equal(retired.available, false);
+  assert.equal(retired.href, null);
+  assert.equal(retired.title, null);
   assert.deepEqual((await (await get(cookieFor('cg_b'))).json()).items, []);
 
   assert.equal((await write('DELETE', cookie, token)).status, 200);
