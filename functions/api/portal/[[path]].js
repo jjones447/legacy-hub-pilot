@@ -351,6 +351,10 @@ export async function onRequestGet({ request, env }) {
     const pathSegments = url.pathname.split('/').filter(Boolean);
     const action = pathSegments[pathSegments.length - 1];
 
+    if (action === 'saved-resources' && !savedResourcesEnabled(env, url)) {
+      return json({ ok: false, error: 'not_found' }, 404);
+    }
+
     // Before secret, token, cookie or database access: existing preview bearer
     // credentials must not unlock caregiver records after this containment.
     if (previewPortalDisabled(env, request)) return previewUnavailable();
@@ -361,10 +365,6 @@ export async function onRequestGet({ request, env }) {
     if (action === 'support-requests') {
       const refusal = supportRequestBoundary(request, env);
       if (refusal) return json({ ok: false, error: refusal.error }, refusal.status);
-    }
-
-    if (action === 'saved-resources' && !savedResourcesEnabled(env, url)) {
-      return json({ ok: false, error: 'not_found' }, 404);
     }
 
     const secret = env.PORTAL_TOKEN_SECRET;
