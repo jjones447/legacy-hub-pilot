@@ -2,6 +2,7 @@
 import { checkIpRequestLimit, IP_LIMITS } from '../_shared.mjs';
 import { canSendEmail, isPreviewMailOptIn, sendEmail, signInEmail } from '../../_lib/email.js';
 import { QUESTIONS, validateCheckin, recordCheckin, caregiverHistory, isCheckinDue, CHECKIN_EVERY_DAYS } from '../../_lib/wellness.js';
+import { isSavedResourceId, saveResource, removeSavedResource } from '../../_lib/domain/saved-resources.mjs';
 import { listSavedResourcePage } from '../../_lib/saved-resource-page.mjs';
 
 async function getHmacSha256(message, secret) {
@@ -153,9 +154,7 @@ async function confirmationPage(request, token, secret) {
   } });
 }
 
-async function confirmationToken(request, secret) {
-  const nonce = confirmationCookieNonce(request);
-  if (!nonce || (request.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase() !== 'application/x-www-form-urlencoded') return null;
+async function readPortalBodyBytes(request) {
   const reader = request.body?.getReader();
   if (!reader) return null;
   const chunks = [];
@@ -172,6 +171,14 @@ async function confirmationToken(request, secret) {
   const bytes = new Uint8Array(size);
   let offset = 0;
   for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+  return bytes;
+}
+
+async function confirmationToken(request, secret) {
+  const nonce = confirmationCookieNonce(request);
+  if (!nonce || (request.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase() !== 'application/x-www-form-urlencoded') return null;
+  const bytes = await readPortalBodyBytes(request);
+  if (!bytes) return null;
   const form = new URLSearchParams(new TextDecoder().decode(bytes));
   if ([...form.keys()].sort().join(',') !== 'csrf,proof,token') return null;
   const token = form.get('token'), csrf = form.get('csrf'), proof = form.get('proof');
@@ -259,6 +266,65 @@ async function redeemToken(token, env, secret) {
   } });
 }
 
+function savedResourcesEnabled(env, url) {
+  const onTestHost = url.origin === 'https://customer-test.legacy-hub-5qo.pages.dev'
+    || url.origin === 'https://staging.legacy-hub-5qo.pages.dev';
+  return env.PORTAL_SAVED_RESOURCES_ENABLED === '1' && env.ENVIRONMENT === 'preview'
+    && onTestHost && url.pathname === '/api/portal/saved-resources';
+}
+
+function savedResourcesProof(session, secret) {
+  return getHmacSha256(`saved-resource-write:${session.caregiverId}:${session.expiresAtMs}`, secret);
+}
+
+async function changeSavedResource({ request, env }, operation) {
+  try {
+    const url = new URL(request.url);
+    if (!savedResourcesEnabled(env, url)) return json({ ok: false, error: 'not_found' }, 404);
+    if (previewPortalDisabled(env)) return previewUnavailable();
+    if (url.search) return json({ ok: false, error: 'invalid_query' }, 400);
+    if (request.headers.get('Origin') !== url.origin || request.headers.get('Sec-Fetch-Site') !== 'same-origin') {
+      return json({ ok: false, error: 'forbidden' }, 403);
+    }
+    if (request.headers.get('Content-Type')?.split(';')[0].trim().toLowerCase() !== 'application/json') {
+      return json({ ok: false, error: 'unsupported_media_type' }, 415);
+    }
+    const secret = env.PORTAL_TOKEN_SECRET;
+    if (!secret) return json({ ok: false, error: 'auth_not_configured' }, 503);
+    const session = await verifiedPortalSession(request.headers.get('Cookie'), secret);
+    if (!session) return json({ ok: false, error: 'unauthorized' }, 401);
+    const proof = request.headers.get('X-Portal-CSRF') || '';
+    if (!constantTimeEqual(proof, await savedResourcesProof(session, secret))) return json({ ok: false, error: 'forbidden' }, 403);
+
+    const bytes = await readPortalBodyBytes(request);
+    if (!bytes) return json({ ok: false, error: 'invalid_body' }, 400);
+    let body;
+    try {
+      body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+    } catch {
+      return json({ ok: false, error: 'invalid_body' }, 400);
+    }
+    if (!body || Object.keys(body).length !== 1 || !isSavedResourceId(body.resource_id)) {
+      return json({ ok: false, error: 'invalid_body' }, 400);
+    }
+
+    const result = await operation(env.LEGACY_DB, session, body.resource_id);
+    if (result.status === 'unauthorized') return json({ ok: false, error: 'unauthorized' }, 401);
+    if (result.status === 'unavailable') return json({ ok: false, error: 'unavailable' }, 404);
+    return json({ ok: true, ...result });
+  } catch {
+    return json({ ok: false, error: 'internal_error' }, 500);
+  }
+}
+
+export function onRequestPut(context) {
+  return changeSavedResource(context, saveResource);
+}
+
+export function onRequestDelete(context) {
+  return changeSavedResource(context, removeSavedResource);
+}
+
 export async function onRequestHead(context) {
   const response = await onRequestGet(context);
   return new Response(null, { status: response.status, headers: response.headers });
@@ -274,13 +340,8 @@ export async function onRequestGet({ request, env }) {
     // credentials must not unlock caregiver records after this containment.
     if (previewPortalDisabled(env)) return previewUnavailable();
 
-    if (action === 'saved-resources') {
-      const onTestHost = url.origin === 'https://customer-test.legacy-hub-5qo.pages.dev'
-        || url.origin === 'https://staging.legacy-hub-5qo.pages.dev';
-      if (env.PORTAL_SAVED_RESOURCES_ENABLED !== '1' || env.ENVIRONMENT !== 'preview' || !onTestHost
-          || url.pathname !== '/api/portal/saved-resources') {
-        return json({ ok: false, error: 'not_found' }, 404);
-      }
+    if (action === 'saved-resources' && !savedResourcesEnabled(env, url)) {
+      return json({ ok: false, error: 'not_found' }, 404);
     }
 
     const secret = env.PORTAL_TOKEN_SECRET;
@@ -296,7 +357,8 @@ export async function onRequestGet({ request, env }) {
       }
       const page = await listSavedResourcePage(env.LEGACY_DB, session, secret, url.searchParams.get('cursor'));
       if (page.status !== 'ok') return json({ ok: false, error: page.status }, page.status === 'unauthorized' ? 401 : 400);
-      return json({ ok: true, items: page.items, nextCursor: page.nextCursor });
+      const csrfToken = await savedResourcesProof(session, secret);
+      return json({ ok: true, items: page.items, nextCursor: page.nextCursor, csrfToken });
     }
 
     if (action === 'verify') {

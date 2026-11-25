@@ -16,11 +16,13 @@ function ownerBindings(session) {
   return [session.caregiverId, session.expiresAtMs];
 }
 
+export function isSavedResourceId(value) {
+  return typeof value === 'string' && value.length > 0 && value.length <= 80 &&
+    /^[a-z0-9]/.test(value) && !/[^a-z0-9_-]/.test(value);
+}
+
 function checkedResourceId(resourceId) {
-  if (typeof resourceId !== 'string' || resourceId.length === 0 || resourceId.length > 80 ||
-      !/^[a-z0-9]/.test(resourceId) || /[^a-z0-9_-]/.test(resourceId)) {
-    throw new TypeError('Invalid resource ID');
-  }
+  if (!isSavedResourceId(resourceId)) throw new TypeError('Invalid resource ID');
   return resourceId;
 }
 
