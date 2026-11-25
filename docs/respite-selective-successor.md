@@ -100,3 +100,17 @@ writer, generic registration/Attendance protection, removal ledger/restore and
 native D1/schema/authenticated composition qualification. The oldB1 producer is
 not activated as a substitute. This delivers the bounded Nov25 06 create/read
 candidate early; it is not a complete registration candidate or TEST launch date.
+
+## Registration insert/capacity guard increment
+
+A separate UNAPPLIED SQL candidate now blocks generic registration INSERT for
+marked respite sessions, requires a current same-owner/event/participant reviewed
+new-model request and current eligible Staff row, rechecks published/future session
+and registered/attended capacity inside the insert, and locks event marker removal
+while requests exist. It does not prove the initiating actor: authenticated Staff
+identity must still come from the owning server adapter. Four synthetic SQLite
+cases cover generic bypass/pending-no-seat, duplicate reference/full-capacity
+rollback, reviewer/owner/event/participant drift and marker bypass. This is NOT a
+complete Staff confirmation writer: atomic request review+registration link/CAS+
+audit, cancellation/reconfirmation/Attendance/update guard paths and native D1
+qualification remain unbuilt. No migration is numbered/applied or marker populated.
