@@ -293,7 +293,7 @@ async function changeSavedResource({ request, env }, operation) {
   try {
     const url = new URL(request.url);
     if (!savedResourcesEnabled(env, url)) return json({ ok: false, error: 'not_found' }, 404);
-    if (previewPortalDisabled(env)) return previewUnavailable();
+    if (previewPortalDisabled(env, request)) return previewUnavailable();
     if (url.search) return json({ ok: false, error: 'invalid_query' }, 400);
     if (request.headers.get('Origin') !== url.origin || request.headers.get('Sec-Fetch-Site') !== 'same-origin') {
       return json({ ok: false, error: 'forbidden' }, 403);
