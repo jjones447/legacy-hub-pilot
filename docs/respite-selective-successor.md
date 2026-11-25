@@ -132,3 +132,15 @@ and mid-batch Staff revocation. This does not supply the Staff follow-up writer,
 reconfirmation/cancellation/Attendance UI or HTTP routes, native D1 batch/results
 qualification, schema preflight or activation. All schema candidates remain
 unapplied and collection OFF. Existing static previews are unchanged.
+
+## Per-session detail / participant revision distinction
+
+Donor369's owner update changes a request's session-specific details and clears
+Staff review/follow-up without necessarily rewriting the base participant record.
+The reservation guard therefore checks the participant revision is current and
+request details are present, NOT that request JSON equals base participant JSON.
+Initial creation still snapshots exact participant JSON. Confirmation requires
+fresh reviewed_revision equal to the current request revision. A local regression
+proves a changed session snapshot cannot reserve under the stale decision, then
+can reserve after fresh review while the participant base remains unchanged. No
+registration/Attendance/update bypass or runtime activation is inferred.

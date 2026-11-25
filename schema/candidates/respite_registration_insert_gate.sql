@@ -15,7 +15,7 @@ BEGIN
   JOIN event e ON e.id=r.event_id
   WHERE r.id=NEW.external_ref AND r.caregiver_id=NEW.caregiver_id AND r.event_id=NEW.event_id
    AND r.status='confirmed' AND r.needs_review=0 AND r.reviewed_revision=r.revision
-   AND r.participant_revision=p.revision AND r.details_json=p.details_json
+   AND r.participant_revision=p.revision AND r.details_json IS NOT NULL
    AND r.removed_at IS NULL AND r.registration_id IS NULL
    AND c.status!='archived' AND s.status='active' AND s.role IN ('staff','admin')
    AND e.respite_review_required=1 AND e.publish_state='published'
