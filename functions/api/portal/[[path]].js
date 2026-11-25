@@ -2,6 +2,7 @@
 import { checkIpRequestLimit, IP_LIMITS } from '../_shared.mjs';
 import { canSendEmail, isPreviewMailOptIn, sendEmail, signInEmail } from '../../_lib/email.js';
 import { QUESTIONS, validateCheckin, recordCheckin, caregiverHistory, isCheckinDue, CHECKIN_EVERY_DAYS } from '../../_lib/wellness.js';
+import { listSavedResourcePage } from '../../_lib/saved-resource-page.mjs';
 
 async function getHmacSha256(message, secret) {
   const enc = new TextEncoder();
@@ -202,22 +203,27 @@ function htmlErrorPage(message) {
   });
 }
 
-async function parseSessionCookie(cookieHeader, secret) {
-  if (!cookieHeader) return null;
-  const match = cookieHeader.match(/portal_session=([^;]+)/);
-  if (!match) return null;
-  const sessionVal = decodeURIComponent(match[1]);
-  const parts = sessionVal.split(':');
+async function verifiedPortalSession(cookieHeader, secret) {
+  const cookies = (cookieHeader || '').split(';').map(value => value.trim())
+    .filter(value => value.startsWith('portal_session='));
+  if (cookies.length !== 1) return null;
+  let decoded;
+  try {
+    decoded = decodeURIComponent(cookies[0].slice('portal_session='.length));
+  } catch {
+    return null;
+  }
+  const parts = decoded.split(':');
   if (parts.length !== 3) return null;
   const [caregiverId, exp, signature] = parts;
-  // SEC-3: domain-separate session vs magic-link. A session cookie is signed over
-  // `session:<payload>`; an opaque magic-link token pasted as a cookie is not an
-  // `id:exp:session-hmac` value and cannot establish a session.
-  const computedSig = await getHmacSha256(`session:${caregiverId}:${exp}`, secret);
-  if (!constantTimeEqual(computedSig, signature)) return null;
-  const expMs = Number(exp);
-  if (!Number.isFinite(expMs) || Date.now() > expMs) return null;
-  return caregiverId;
+  const expiresAtMs = Number(exp);
+  if (!caregiverId || !Number.isSafeInteger(expiresAtMs) || expiresAtMs <= Date.now()) return null;
+  const expected = await getHmacSha256(`session:${caregiverId}:${exp}`, secret);
+  return constantTimeEqual(expected, signature) ? { caregiverId, expiresAtMs } : null;
+}
+
+async function parseSessionCookie(cookieHeader, secret) {
+  return (await verifiedPortalSession(cookieHeader, secret))?.caregiverId ?? null;
 }
 
 async function redeemToken(token, env, secret) {
@@ -268,9 +274,29 @@ export async function onRequestGet({ request, env }) {
     // credentials must not unlock caregiver records after this containment.
     if (previewPortalDisabled(env)) return previewUnavailable();
 
+    if (action === 'saved-resources') {
+      const onTestHost = url.origin === 'https://customer-test.legacy-hub-5qo.pages.dev'
+        || url.origin === 'https://staging.legacy-hub-5qo.pages.dev';
+      if (env.PORTAL_SAVED_RESOURCES_ENABLED !== '1' || env.ENVIRONMENT !== 'preview' || !onTestHost
+          || url.pathname !== '/api/portal/saved-resources') {
+        return json({ ok: false, error: 'not_found' }, 404);
+      }
+    }
+
     const secret = env.PORTAL_TOKEN_SECRET;
     if (!secret) {
       return json({ ok: false, error: 'auth_not_configured' }, 503);
+    }
+
+    if (action === 'saved-resources') {
+      const session = await verifiedPortalSession(request.headers.get('Cookie'), secret);
+      if (!session) return json({ ok: false, error: 'unauthorized' }, 401);
+      if ([...url.searchParams.keys()].some(key => key !== 'cursor') || url.searchParams.getAll('cursor').length > 1) {
+        return json({ ok: false, error: 'invalid_query' }, 400);
+      }
+      const page = await listSavedResourcePage(env.LEGACY_DB, session, secret, url.searchParams.get('cursor'));
+      if (page.status !== 'ok') return json({ ok: false, error: page.status }, page.status === 'unauthorized' ? 401 : 400);
+      return json({ ok: true, items: page.items, nextCursor: page.nextCursor });
     }
 
     if (action === 'verify') {

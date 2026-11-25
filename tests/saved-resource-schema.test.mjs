@@ -4,6 +4,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { saveResource, removeSavedResource, listSavedResources } from '../functions/_lib/domain/saved-resources.mjs';
 import { listSavedResourcePage } from '../functions/_lib/saved-resource-page.mjs';
+import { onRequestGet } from '../functions/api/portal/[[path]].js';
+import { createHmac } from 'node:crypto';
 
 function setup(t) {
   const db = new DatabaseSync(':memory:');
@@ -182,4 +184,42 @@ test('a page cursor continues only within its issuing caregiver session', async 
   for (const invalid of ['', changed, 'x'.repeat(400)]) {
     assert.deepEqual(await listSavedResourcePage(db, owner, secret, invalid), { status: 'invalid_cursor' });
   }
+});
+
+test('the portal lists the signed-in caregiver’s saved resources on opted-in TEST', async t => {
+  const db = atomicStore(setup(t));
+  const secret = 'fictional local test secret';
+  const expiresAtMs = Date.now() + 60000;
+  const env = {
+    ENVIRONMENT: 'preview', PORTAL_PREVIEW_MAIL_ENABLED: '1', PORTAL_SAVED_RESOURCES_ENABLED: '1',
+    PORTAL_TOKEN_SECRET: secret, LEGACY_DB: db,
+  };
+  const path = 'https://staging.legacy-hub-5qo.pages.dev/api/portal/saved-resources';
+  const get = (cookie, url = path, settings = env) => onRequestGet({
+    request: new Request(url, { headers: { Cookie: cookie } }), env: settings,
+  });
+  function cookieFor(id) {
+    const payload = id + ':' + expiresAtMs;
+    const signature = createHmac('sha256', secret).update('session:' + payload).digest('hex');
+    return 'portal_session=' + encodeURIComponent(payload + ':' + signature);
+  }
+
+  await saveResource(db, { caregiverId: 'cg_a', expiresAtMs }, 'example-guide');
+  const cookie = cookieFor('cg_a');
+  const response = await get(cookie);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('Cache-Control'), 'no-store');
+  const page = await response.json();
+  assert.equal(page.ok, true);
+  assert.deepEqual(page.items.map(item => item.resourceId), ['example-guide']);
+  assert.equal(page.nextCursor, null);
+  assert.deepEqual((await (await get(cookieFor('cg_b'))).json()).items, []);
+
+  assert.equal((await get('')).status, 401);
+  assert.equal((await get(cookie + '; ' + cookie)).status, 401);
+  assert.equal((await get(cookie, path + '?owner=other')).status, 400);
+  assert.equal((await get(cookie, path + '?cursor=bad')).status, 400);
+  assert.equal((await get(cookie, path, { ...env, PORTAL_SAVED_RESOURCES_ENABLED: '' })).status, 404);
+  assert.equal((await get(cookie, path, { ...env, ENVIRONMENT: 'production' })).status, 404);
+  assert.equal((await get(cookie, path.replace('staging.', 'unlisted.'))).status, 404);
 });
