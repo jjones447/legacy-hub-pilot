@@ -7,6 +7,7 @@ import { getStaffMember, listStaff, updateStaffMember, createStaffMember } from 
 import { staffSeries, caregiversWithCheckins } from '../../_lib/wellness.js';
 import { _resetContentCache } from '../../_content.mjs';
 import { listSubscribers, subscribedForExport, subscribersCsv } from '../../_lib/newsletter.mjs';
+import { staffCaregiverProfile, staffProfileSummary } from '../../_lib/caregiver-profile-staff.js';
 
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), {
@@ -15,7 +16,7 @@ function json(obj, status = 200) {
   });
 }
 
-export async function onRequestGet({ request, env }) {
+export async function onRequestGet({ request, env, data }) {
   try {
     const url = new URL(request.url);
     const pathSegments = url.pathname.split('/').filter(Boolean); // ['api', 'staff', 'queue'] or ['api', 'staff', 'caregiver', ':id']
@@ -25,6 +26,19 @@ export async function onRequestGet({ request, env }) {
     }
 
     const subRoute = pathSegments[2];
+
+    if (subRoute === 'caregiver-profile' || subRoute === 'profile-summary') {
+      try {
+        return await (subRoute === 'caregiver-profile' ? staffCaregiverProfile : staffProfileSummary)({ request, env, data });
+      } catch (error) {
+        // Database errors may contain sensitive bound values. Do not pass them
+        // through the older generic staff logger or cache an error response.
+        console.error('profile staff handler error:', error instanceof Error ? error.name : typeof error);
+        return new Response(JSON.stringify({ ok: false, error: 'internal_error' }), {
+          status: 500, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+        });
+      }
+    }
 
     if (subRoute === 'queue') {
       // GET /api/staff/queue — open follow-up items

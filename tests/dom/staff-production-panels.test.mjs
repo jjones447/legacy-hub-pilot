@@ -41,19 +41,27 @@ async function page({ origin = 'https://fixture.example.invalid', saved = {}, wi
   w.renderStaffTeam = () => {};
   w.currentEventId = null;
   w.eval(panels + '\n' + team + '\n' + peopleRoleUi + '\n' + followups + '\n' + events);
+  // loadStaffTeam intentionally starts hashing without awaiting it. Observe the
+  // real promise rather than assuming one timer turn finishes WebCrypto on CI.
+  let identityPending = Promise.resolve();
+  const remember = w.rememberStaffPanelsFor;
+  w.rememberStaffPanelsFor = function (...args) {
+    identityPending = remember.apply(this, args);
+    return identityPending;
+  };
   // Match real page startup: register before DOMContentLoaded; do not flush parser toggles.
   await new Promise(resolve => w.document.addEventListener('DOMContentLoaded', () => {
     w.initStaffPanels();
     resolve();
   }, { once: true }));
   const storage = () => Object.fromEntries(Object.keys(w.localStorage).map(key => [key, w.localStorage.getItem(key)]));
-  return { w, dom, calls, storage, setIdentity: value => { currentMe = value; }, failIdentity: () => { identityFails = true; }, failLists: () => { listFails = true; }, close: () => w.close() };
+  return { w, dom, calls, storage, identitySettled: () => identityPending, setIdentity: value => { currentMe = value; }, failIdentity: () => { identityFails = true; }, failLists: () => { listFails = true; }, close: () => w.close() };
 }
 
 for (const width of [1280, 390]) test(`actual summary clicks, synthetic rows and same-person reload (${width}px DOM context; no layout claim)`, async () => {
   const p = await page({ width });
   try {
-    await p.w.loadStaffTeam(); await wait();
+    await p.w.loadStaffTeam(); await p.identitySettled(); await wait();
     await p.w.loadFollowups(); await p.w.loadEvents(); await wait();
     for (const [id, label, rowSelector] of [['needsAttentionPanel', 'Alerts', '#needsAttentionBody tr'], ['eventsPanel', 'Events', '#upcomingEventsBody tr']]) {
       const panel = p.w.document.getElementById(id), heading = panel.querySelector('summary h4');
@@ -74,7 +82,7 @@ for (const width of [1280, 390]) test(`actual summary clicks, synthetic rows and
     assert.equal(choices.needsAttentionPanel, false); assert.equal(choices.eventsPanel, false);
     const reloaded = await page({ saved, width });
     try {
-      await reloaded.w.loadStaffTeam(); await wait();
+      await reloaded.w.loadStaffTeam(); await reloaded.identitySettled(); await wait();
       await reloaded.w.loadFollowups(); await reloaded.w.loadEvents(); await wait();
       assert.equal(reloaded.w.document.getElementById('needsAttentionPanel').open, false, 'saved closed wins even with open requests');
       assert.equal(reloaded.w.document.getElementById('eventsPanel').open, false);
@@ -105,22 +113,22 @@ test('all main sections toggle via real summaries; controls remain in their pane
 test('preferences are separated by verified person and origin; malformed/extra fields never become content storage', async () => {
   const p = await page();
   try {
-    await p.w.loadStaffTeam(); await wait(); p.w.document.querySelector('#eventsPanel summary').click(); await wait();
+    await p.w.loadStaffTeam(); await p.identitySettled(); await wait(); p.w.document.querySelector('#eventsPanel summary').click(); await wait();
     const saved = p.storage();
     for (const different of [{ identity: { ...me, email: 'other.staff@example.invalid' } }, { origin: 'https://other.example.invalid' }]) {
       const q = await page({ saved, origin: different.origin });
-      try { if (different.identity) q.setIdentity(different.identity); await q.w.loadStaffTeam(); await wait(); assert.equal(q.w.document.getElementById('eventsPanel').open, true); } finally { q.close(); }
+      try { if (different.identity) q.setIdentity(different.identity); await q.w.loadStaffTeam(); await q.identitySettled(); await wait(); assert.equal(q.w.document.getElementById('eventsPanel').open, true); } finally { q.close(); }
     }
     const key = Object.keys(saved)[0]; const q = await page({ saved: { [key]: JSON.stringify({ eventsPanel: false, staffAssistantPanel: false, arbitrary: 'no content', needsAttentionPanel: 'false' }) } });
-    try { await q.w.loadStaffTeam(); await wait(); q.w.document.querySelector('#grantsPanel summary').click(); await wait(); const values = JSON.parse(q.storage()[key]); assert.ok(!('arbitrary' in values)); assert.ok(!('staffAssistantPanel' in values)); assert.ok(!('needsAttentionPanel' in values)); assert.equal(values.eventsPanel, false); } finally { q.close(); }
+    try { await q.w.loadStaffTeam(); await q.identitySettled(); await wait(); q.w.document.querySelector('#grantsPanel summary').click(); await wait(); const values = JSON.parse(q.storage()[key]); assert.ok(!('arbitrary' in values)); assert.ok(!('staffAssistantPanel' in values)); assert.ok(!('needsAttentionPanel' in values)); assert.equal(values.eventsPanel, false); } finally { q.close(); }
   } finally { p.close(); }
 });
 
 test("failed identity refresh revokes writes and in-flight hashes without deleting the previous person's preferences", async () => {
   const p = await page();
   try {
-    await p.w.loadStaffTeam(); await wait(); p.w.document.querySelector('#eventsPanel summary').click(); await wait();
-    const before = p.storage(); p.failIdentity(); await p.w.loadStaffTeam();
+    await p.w.loadStaffTeam(); await p.identitySettled(); await wait(); p.w.document.querySelector('#eventsPanel summary').click(); await wait();
+    const before = p.storage(); p.failIdentity(); await p.w.loadStaffTeam(); await p.identitySettled();
     p.w.document.querySelector('#grantsPanel summary').click(); await wait(); assert.deepEqual(p.storage(), before);
     let release; const held = new Promise(resolve => { release = resolve; });
     Object.defineProperty(p.w.crypto, 'subtle', { value: { digest: () => held }, configurable: true });
@@ -133,7 +141,7 @@ test('choices made before identity arrives are kept; service/unknown identity an
   const p = await page();
   try {
     p.w.document.querySelector('#eventsPanel summary').click(); await wait(); assert.deepEqual(p.storage(), {});
-    await p.w.loadStaffTeam(); await wait(); assert.equal(JSON.parse(Object.values(p.storage())[0]).eventsPanel, false);
+    await p.w.loadStaffTeam(); await p.identitySettled(); await wait(); assert.equal(JSON.parse(Object.values(p.storage())[0]).eventsPanel, false);
     p.w.forgetStaffPanelIdentity(); await p.w.rememberStaffPanelsFor({ email: 'service@example.invalid' }); p.w.document.querySelector('#grantsPanel summary').click(); await wait();
     assert.equal(Object.keys(p.storage()).length, 1, 'service actor gets no preference namespace');
     Object.defineProperty(p.w, 'localStorage', { get() { throw Error('blocked'); } });
@@ -183,7 +191,7 @@ test('cold DOMContentLoaded: parser toggles do not override first empty Alerts o
 test('programmatic and canceled activations do not persist; genuine early summary activation still does', async () => {
   const p = await page();
   try {
-    await p.w.loadStaffTeam(); await wait();
+    await p.w.loadStaffTeam(); await p.identitySettled(); await wait();
     const panel = p.w.document.getElementById('eventsPanel');
     panel.open = false; await wait(); assert.deepEqual(p.storage(), {});
     panel.open = true; await wait();
@@ -195,7 +203,7 @@ test('programmatic and canceled activations do not persist; genuine early summar
   try {
     early.w.document.querySelector('#needsAttentionPanel summary h4').click();
     await early.w.loadFollowups();
-    await early.w.loadStaffTeam(); await wait();
+    await early.w.loadStaffTeam(); await early.identitySettled(); await wait();
     assert.equal(early.w.document.getElementById('needsAttentionPanel').open, false);
     assert.equal(JSON.parse(Object.values(early.storage())[0]).needsAttentionPanel, false);
   } finally { early.close(); }
@@ -205,7 +213,7 @@ test('programmatic and canceled activations do not persist; genuine early summar
 test('a microtask checkpoint before native summary activation cannot drop the final preference', async () => {
   const p = await page();
   try {
-    await p.w.loadStaffTeam(); await wait();
+    await p.w.loadStaffTeam(); await p.identitySettled(); await wait();
     const panel = p.w.document.getElementById('needsAttentionPanel');
     const summary = panel.querySelector('summary');
     let checkpointBeforeActivation = false;
@@ -229,7 +237,7 @@ test('a microtask checkpoint before native summary activation cannot drop the fi
 test('rapid uncanceled/canceled activations retain the final user state, and revoked pending choices do not cross identities', async () => {
   const p = await page();
   try {
-    await p.w.loadStaffTeam(); await wait();
+    await p.w.loadStaffTeam(); await p.identitySettled(); await wait();
     const panel = p.w.document.getElementById('eventsPanel'), heading = panel.querySelector('summary h4');
     heading.click(); heading.click(); heading.click();
     panel.querySelector('summary').addEventListener('click', event => event.preventDefault(), { once: true });
@@ -241,4 +249,50 @@ test('rapid uncanceled/canceled activations retain the final user state, and rev
     heading.click(); p.w.forgetStaffPanelIdentity();
     await wait(); assert.deepEqual(p.storage(), before, 'revocation cancels pending persistence');
   } finally { p.close(); }
+});
+
+
+test('identity completion can lag multiple task turns without losing an early choice', async () => {
+  const p = await page();
+  try {
+    let release;
+    const held = new Promise(resolve => { release = resolve; });
+    Object.defineProperty(p.w.crypto, 'subtle', { value: { digest: () => held }, configurable: true });
+    p.w.document.querySelector('#eventsPanel summary').click();
+    await wait();
+    await p.w.loadStaffTeam(); // Deliberately do not settle the held hash yet.
+    await wait(); await wait();
+    assert.deepEqual(p.storage(), {});
+    release(new Uint8Array(32).buffer);
+    await p.identitySettled();
+    assert.equal(JSON.parse(Object.values(p.storage())[0]).eventsPanel, false);
+  } finally { p.close(); }
+});
+
+test('bulk Reviewed snapshots visible IDs, deduplicates and stops without retry after uncertain result', async () => {
+  const dom = new JSDOM(html, {url:'https://fixture.example.invalid/staff',runScripts:'outside-only'});
+  const w=dom.window;
+  w.document.getElementById('needsAttentionBody').innerHTML='<button data-action="resolve-followup" data-followup-id="1"></button><button data-action="resolve-followup" data-followup-id="1"></button><button data-action="resolve-followup" data-followup-id="2"></button><button data-action="resolve-followup" data-followup-id="3"></button>';
+  w.document.getElementById('reviewAllFollowups').disabled=false;
+  const calls=[];let reloads=0;
+  w.fetch=async(url,init)=>{calls.push(url);assert.equal(JSON.parse(init.body).status,'done');return {ok:calls.length===1,json:async()=>({ok:calls.length===1})};};
+  w.loadFollowups=async()=>{reloads++;};
+  w.eval(block('async function reviewAllFollowups(', 'async function resolveFollowup('));
+  await w.reviewAllFollowups();
+  assert.deepEqual(calls,['/api/staff/followup/1/resolve','/api/staff/followup/2/resolve']);
+  assert.equal(reloads,1);
+  assert.match(w.document.getElementById('followupReviewStatus').textContent,/1 items confirmed reviewed.*unconfirmed/);
+  assert.equal(w.document.getElementById('reviewAllFollowups').dataset.busy,undefined);
+  dom.window.close();
+});
+
+test('bulk Reviewed prevents double submission while a request is pending', async () => {
+  const dom=new JSDOM(html,{url:'https://fixture.example.invalid/staff',runScripts:'outside-only'});const w=dom.window;
+  w.document.getElementById('needsAttentionBody').innerHTML='<button data-action="resolve-followup" data-followup-id="7"></button>';
+  w.document.getElementById('reviewAllFollowups').disabled=false;
+  let finish,calls=0;w.fetch=()=>{calls++;return new Promise(resolve=>{finish=resolve;});};
+  w.loadFollowups=async()=>{};w.eval(block('async function reviewAllFollowups(', 'async function resolveFollowup('));
+  const first=w.reviewAllFollowups();await w.reviewAllFollowups();assert.equal(calls,1);
+  finish({ok:true,json:async()=>({ok:true})});await first;
+  assert.match(w.document.getElementById('followupReviewStatus').textContent,/1 items marked reviewed/);dom.window.close();
 });
