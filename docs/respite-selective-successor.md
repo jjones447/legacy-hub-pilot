@@ -175,3 +175,22 @@ confirmation/follow-up suite also loads the combined new guard set. This is not 
 Attendance HTTP writer or an accepted historical correction workflow. The latter
 must be implemented/qualified before collection activation; no runtime policy is
 changed by this unapplied candidate.
+
+### Available-date read increment (Nov 25)
+
+`readAvailableRespiteDates(db, serverOwnerId)` is an **unmounted read helper**,
+not the conditional-tab authorization boundary. Its caller must derive and
+qualify the current owner and the approved respite eligibility signals. It
+returns at most 50 marked, published, future sessions with known positive
+capacity and fewer registered/attended registrations than capacity. Null/zero
+capacity and invalid dates fail closed. Pending requests do not reserve seats;
+no private participant details, registration roster, or remaining-seat count is
+returned. The owner is checked before and after the query. This read is only a
+snapshot: the eventual pending writer still requires atomic current-session and
+capacity checks; this increment does not add them or authorize a booking.
+
+Four inert SQLite regressions cover date/marker/publication/capacity exclusion,
+registration status accounting, owner revocation during the read, projection,
+stable bounded ordering and zero writes. Native hosted D1, mounted routes,
+eligibility mapping, participant creation and browser tests remain separate.
+No schema, configuration, runtime flag, fixture or provider action was taken.
