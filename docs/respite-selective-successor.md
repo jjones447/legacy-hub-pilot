@@ -159,3 +159,19 @@ record→later confirm, refusal/revocation, audit rollback, fresh-follow-up afte
 changed needs and lost-ack handling. Actual UI/HTTP/action authorization, linked
 reservation cancellation/reconfirmation, Attendance/update protection and native
 D1/restore/removal qualification remain unfinished; collection stays OFF.
+
+## Registration update integrity increment
+
+An unapplied UPDATE guard now pins registration identity/source/request reference
+and refuses generic cancelled/no-show→registered/attended revival until a dedicated
+audited reconfirmation/correction protocol is implemented. Cancellation remains
+possible so review invalidation/removal can cancel first. An already reserved,
+freshly reviewed linked request may become attended after the session date without
+adding a seat or treating the historical reviewer's later deactivation as erasing
+that decision. Current acting Staff authorization remains the server adapter's
+responsibility; SQL guards do not identify the actor. Four local cases cover
+attendance, cancellation/revival, identity relabeling and invalidated review. The
+confirmation/follow-up suite also loads the combined new guard set. This is not an
+Attendance HTTP writer or an accepted historical correction workflow. The latter
+must be implemented/qualified before collection activation; no runtime policy is
+changed by this unapplied candidate.
