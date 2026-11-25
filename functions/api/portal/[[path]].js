@@ -366,7 +366,7 @@ export async function onRequestGet({ request, env }) {
         const card = item.available && findResourceCard(item.resourceId);
         return card ? { ...item, ...card } : { ...item, available: false, title: null, href: null };
       });
-      return json({ ok: true, items, nextCursor: page.nextCursor, csrfToken });
+      return json({ ok: true, caregiverId: session.caregiverId, items, nextCursor: page.nextCursor, csrfToken });
     }
 
     if (action === 'verify') {

@@ -71,3 +71,63 @@ test('saved state includes later pages and late reads cannot remount a departed 
   await settle();
   assert.equal(w.document.querySelector('[data-save-controls]'), null);
 });
+
+async function dashboardPage(t, fetch) {
+  const source = readFileSync(new URL('../../portal.html', import.meta.url), 'utf8');
+  const dom = new JSDOM(source, { url: 'https://staging.legacy-hub-5qo.pages.dev/portal', runScripts: 'outside-only', pretendToBeVisual: true });
+  t.after(() => dom.window.close());
+  const w = dom.window;
+  await new Promise(resolve => w.addEventListener('load', resolve, { once: true }));
+  w.fetch = fetch;
+  w.eval(script);
+  w.portalActiveCaregiverKey = 'fixture-owner|';
+  w.document.getElementById('dashView').style.display = 'block';
+  await settle();
+  return w;
+}
+
+test('dashboard resolves all pages, keeps retired items removable, and confirms removal before clearing a row', async t => {
+  const writes = [];
+  const w = await dashboardPage(t, async (url, options) => {
+    if (options.method === 'DELETE') {
+      writes.push(options);
+      return writes.length === 1 ? result({}, 503) : result({ ok: true, status: 'removed' });
+    }
+    const later = url.includes('?cursor=');
+    return result({ ok: true, caregiverId: 'fixture-owner', csrfToken: 'fixture-proof', nextCursor: later ? null : 'more',
+      items: later ? [{ resourceId: 'retired', available: false }] : [{ resourceId: 'guide', title: 'Guide', href: '/caregiver-tools#guide', available: true }] });
+  });
+  const panel = w.document.getElementById('portalSavedResources');
+  assert.equal(panel.hidden, false);
+  assert.equal(panel.querySelector('a').getAttribute('href'), '/caregiver-tools#guide');
+  const [first, second] = panel.querySelectorAll('button');
+  assert.match(second.getAttribute('aria-label'), /no longer available/);
+  second.click();
+  await settle();
+  assert.equal(panel.querySelectorAll('li').length, 2);
+  assert.equal(second.disabled, false);
+  second.click();
+  await settle();
+  assert.equal(writes[1].headers['X-Portal-CSRF'], 'fixture-proof');
+  assert.deepEqual(JSON.parse(writes[1].body), { resource_id: 'retired' });
+  assert.equal(panel.querySelectorAll('li').length, 1);
+  first.click();
+  await settle();
+  assert.match(panel.textContent, /no saved resources/);
+});
+
+test('dashboard hides another session’s list and clears private content when logout starts', async t => {
+  let owner = 'other';
+  const w = await dashboardPage(t, async () => result({ ok: true, caregiverId: owner, csrfToken: 'proof',
+    items: [{ resourceId: 'one', title: 'Private selection', available: true, href: '/trusted-resources#one' }], nextCursor: null }));
+  const panel = w.document.getElementById('portalSavedResources');
+  assert.equal(panel.hidden, true);
+  owner = 'fixture-owner';
+  w.dispatchEvent(new w.Event('pageshow'));
+  await settle();
+  assert.match(panel.textContent, /Private selection/);
+  w.document.getElementById('portalLogoutBtn').disabled = true;
+  await settle();
+  assert.equal(panel.hidden, true);
+  assert.equal(panel.textContent, '');
+});
