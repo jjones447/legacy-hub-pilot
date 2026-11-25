@@ -301,6 +301,7 @@ def asset_versions() -> dict:
         "membership.css": hashlib.sha256((ROOT / "membership.css").read_bytes()).hexdigest()[:12],
         "beyond-support.css": hashlib.sha256((ROOT / "beyond-support.css").read_bytes()).hexdigest()[:12],
         "styles.css": hashlib.sha256((ROOT / "styles.css").read_bytes()).hexdigest()[:12],
+        "resource-save.js": hashlib.sha256((ROOT / "resource-save.js").read_bytes()).hexdigest()[:12],
         "app.js": hashlib.sha256((ROOT / "app.js").read_bytes()).hexdigest()[:12],
         "staff.js": hashlib.sha256((ROOT / "staff.js").read_bytes()).hexdigest()[:12],
         "wellness-passport.css": hashlib.sha256((ROOT / "wellness-passport.css").read_bytes()).hexdigest()[:12],
