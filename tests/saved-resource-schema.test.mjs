@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { saveResource, removeSavedResource, listSavedResources } from '../functions/_lib/domain/saved-resources.mjs';
+import { listSavedResourcePage } from '../functions/_lib/saved-resource-page.mjs';
 
 function setup(t) {
   const db = new DatabaseSync(':memory:');
@@ -153,4 +154,32 @@ test('listing distinguishes an eligible empty list from an expired or archived c
   assert.deepEqual(await listSavedResources(db, { ...owner, expiresAtMs: 0 }), { status: 'unauthorized' });
   sqlite.exec("UPDATE caregiver SET status = 'archived' WHERE id = 'cg_a'");
   assert.deepEqual(await listSavedResources(db, owner), { status: 'unauthorized' });
+});
+
+test('a page cursor continues only within its issuing caregiver session', async t => {
+  const sqlite = setup(t);
+  const db = atomicStore(sqlite);
+  const owner = { caregiverId: 'cg_a', expiresAtMs: Date.now() + 60000 };
+  const secret = 'fictional portal key for local unit fixtures';
+  const publish = sqlite.prepare('INSERT INTO saved_resource_catalog VALUES (?, 1)');
+  const bookmark = sqlite.prepare('INSERT INTO saved_resource (caregiver_id, resource_id) VALUES (?, ?)');
+  for (let i = 0; i < 51; i++) {
+    const resource = 'guide-' + String(i).padStart(74, '0');
+    publish.run(resource);
+    bookmark.run(owner.caregiverId, resource);
+  }
+  const first = await listSavedResourcePage(db, owner, secret);
+  assert.equal(first.items.length, 50);
+  assert.equal(typeof first.nextCursor, 'string');
+  const second = await listSavedResourcePage(db, owner, secret, first.nextCursor);
+  assert.equal(second.items.length, 1);
+  assert.ok(!first.items.some(item => item.resourceId === second.items[0].resourceId));
+  assert.equal(second.nextCursor, null);
+  for (const session of [{ ...owner, caregiverId: 'cg_b' }, { ...owner, expiresAtMs: owner.expiresAtMs + 1 }]) {
+    assert.deepEqual(await listSavedResourcePage(db, session, secret, first.nextCursor), { status: 'invalid_cursor' });
+  }
+  const changed = first.nextCursor.slice(0, -1) + (first.nextCursor.endsWith('0') ? '1' : '0');
+  for (const invalid of ['', changed, 'x'.repeat(400)]) {
+    assert.deepEqual(await listSavedResourcePage(db, owner, secret, invalid), { status: 'invalid_cursor' });
+  }
 });
