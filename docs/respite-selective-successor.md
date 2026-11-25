@@ -95,8 +95,7 @@ participant/session races, audit rollback and lost acknowledgment. No real data,
 HTTP, mail or customer action.
 
 Still unbuilt: participant creation/field split validation, full private detail
-read/edit UI, same-model Staff follow-up/review/confirm/reconfirmation/capacity
-writer, generic registration/Attendance protection, removal ledger/restore and
+read/edit UI, complete same-model Staff follow-up/reconfirmation/capacity workflow, generic registration/Attendance protection, removal ledger/restore and
 native D1/schema/authenticated composition qualification. The oldB1 producer is
 not activated as a substitute. This delivers the bounded Nov25 06 create/read
 candidate early; it is not a complete registration candidate or TEST launch date.
@@ -111,6 +110,25 @@ while requests exist. It does not prove the initiating actor: authenticated Staf
 identity must still come from the owning server adapter. Four synthetic SQLite
 cases cover generic bypass/pending-no-seat, duplicate reference/full-capacity
 rollback, reviewer/owner/event/participant drift and marker bypass. This is NOT a
-complete Staff confirmation writer: atomic request review+registration link/CAS+
-audit, cancellation/reconfirmation/Attendance/update guard paths and native D1
+complete Staff confirmation writer: the first-confirmation store below now composes review/link/CAS/audit, while
+cancellation/reconfirmation/Attendance/update guard paths and native D1
 qualification remain unbuilt. No migration is numbered/applied or marker populated.
+
+## First-confirmation store increment
+
+confirmPendingRespiteRequest(db,verifiedStaffEmail,{id,revision},serverAckVersions)
+is now an unmounted candidate. It checks current Staff, pending exact revision,
+fresh acknowledgment versions and first-time follow-up before composing review,
+capacity-guarded reservation, request link/revision and metadata audit in one batch.
+A forced NOT NULL audit guard aborts stale/zero-row/intermediate eligibility
+failures rather than committing an unaudited or unlinked reservation. Lost
+acknowledgment returns outcome_unknown; the caller must refresh/reconcile, never
+automatically repeat confirmation. Identity still belongs to the verified shared
+server adapter, not this email argument. No participant fields enter audit.
+
+Six synthetic SQLite tests cover successful/stale confirmation, Staff/ack/follow-up
+gates, full capacity and eligibility races, audit rollback, lost acknowledgment,
+and mid-batch Staff revocation. This does not supply the Staff follow-up writer,
+reconfirmation/cancellation/Attendance UI or HTTP routes, native D1 batch/results
+qualification, schema preflight or activation. All schema candidates remain
+unapplied and collection OFF. Existing static previews are unchanged.
