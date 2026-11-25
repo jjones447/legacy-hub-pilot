@@ -340,13 +340,13 @@ export async function onRequestGet({ request, env }) {
     const pathSegments = url.pathname.split('/').filter(Boolean);
     const action = pathSegments[pathSegments.length - 1];
 
-    // Before secret, token, cookie or database access: existing preview bearer
-    // credentials must not unlock caregiver records after this containment.
-    if (previewPortalDisabled(env)) return previewUnavailable();
-
     if (action === 'saved-resources' && !savedResourcesEnabled(env, url)) {
       return json({ ok: false, error: 'not_found' }, 404);
     }
+
+    // Before secret, token, cookie or database access: existing preview bearer
+    // credentials must not unlock caregiver records after this containment.
+    if (previewPortalDisabled(env)) return previewUnavailable();
 
     const secret = env.PORTAL_TOKEN_SECRET;
     if (!secret) {
