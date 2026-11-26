@@ -207,3 +207,26 @@ and multiple pending requests/cancelled registrations without seat consumption.
 The confirmation-fullness regression creates both pending requests before the
 first confirmation consumes the last seat, preserving the separate confirmation
 race test. Candidate SQL only; no migration or runtime application occurred.
+
+### Persisted eligibility mapping (Nov 26)
+
+The pure, unmounted `projectRespiteEligibility` maps the five approved signals:
+Profile `fields_json.respite_interest` exact `Yes` / `Maybe`; Profile
+`fields_json.support_needs` containing exact `Respite care`; verified-owner
+Support receipt `needs` containing `break`; and a server-qualified Staff enable
+boolean. The reviewed static preview used lowercase illustrative interest values;
+those are not the persisted Profile contract. The projection returns only reason
+labels and visibility, never private answers/messages. Missing/malformed required
+server inputs return unavailable, not an invented negative answer.
+
+The existing Profile loader binds current caregiver identity; Support owner reads
+must be composed for the same identity. No request-body booleans can substitute
+for either. **Concrete remaining dependency:** there is no qualified persisted
+Staff-enable source/writer in this selected candidate. The boolean is an explicit
+server-composition input, not a new capability, client field, schema column or
+assumed default. Ct13 composition must either qualify that source with reviewed
+storage/Staff authorization or keep the corresponding capability unavailable.
+The projector is not authentication, authorization to collect, or an atomic
+write-time eligibility guard. Participant producer/field split and current
+acknowledgment-version composition remain unfinished; no complete Nov26
+prerequisite milestone is claimed by this increment.
