@@ -294,3 +294,23 @@ left open across policy changes is still a route/form composition requirement;
 this helper alone cannot prove what a user saw. Confirmation fixtures still use
 separate synthetic draft versions and must be reconciled to this artifact in the
 composed fixture packet. Participant producer/field split remains unfinished.
+
+### Participant field split increment (Nov 26)
+
+`validateRespiteParticipantDetails` carries retained B1 question keys/bounds into
+an isolated pure helper, without importing B1 HTTP/auth side effects. Reusable
+private details include loved-one name/optional age/relationship, support and
+emergency details, personal-care/medication support booleans. Caregiver identity,
+name/email/phone are excluded and must come from existing verified caregiver and
+Profile reads. Requested session, first-time, caregiver-on-site and affirmative
+acknowledgments are request context, not reusable participant fields. No approved
+question is removed; those excluded from this object still need composed display
+and request snapshot handling. This is the proposed implementation split, not a
+newly approved customer feature or complete producer.
+
+Four pure tests cover strict question limits, conditional explanations, private
+field shape and rejection of identity/contact/session/consent injection. The
+participant create/read writer, idempotent creation, session-context/digest
+snapshot extension and composed fixture contract remain unfinished. Initial
+pending-store fixtures with arbitrary participant JSON are not full field-schema
+qualification and must be upgraded before the completed candidate handoff.
