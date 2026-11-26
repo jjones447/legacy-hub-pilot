@@ -250,3 +250,17 @@ is enforced solely by this table. Pending INSERT must re-evaluate independent
 Profile/Support/grant signals so revoking a grant prevents new requests when no
 other signal qualifies. That eligibility guard, persisted-grant loader, route,
 and native D1 proof are still missing. SQL stays unapplied and unnumbered.
+
+### Staff grant writer increment (Nov 26)
+
+`setRespiteStaffEligibility(db, verifiedHumanStaffEmail, command)` now proposes
+the dedicated typed CAS writer. Revision zero creates, positive expected revision
+updates; enabled is a strict boolean and actor keys are rejected. Current Staff
+and caregiver predicates precede the write; candidate triggers check again at
+write time. Metadata audit is in the same batch and refuses zero-row writes or
+mid-batch Staff revocation. Stale preflight is conflict; transaction/acknowledgment
+uncertainty is outcome_unknown, never automatic replay. Five inert SQLite-backed
+writer tests pass, including concurrent CAS, revoked Staff, audit rollback and
+lost acknowledgment. This supersedes only the prior “writer missing” note.
+Authenticated dispatcher/current-human admission, grant loader, eligibility
+recheck at pending INSERT and native D1 qualification remain unfinished.
