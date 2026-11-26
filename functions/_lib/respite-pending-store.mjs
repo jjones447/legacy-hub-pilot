@@ -1,3 +1,4 @@
+import {currentRespiteAckVersions} from './respite-acknowledgments.mjs';
 // Unmounted selective candidate. ownerId/ackVersions are server context, NOT
 // browser identity or approval. No participant creation or Staff confirmation.
 const ID=/^[A-Za-z0-9_-]{1,160}$/;
@@ -15,7 +16,7 @@ const receipt=r=>({id:r.id,event_id:r.event_id,participant_id:r.participant_id,r
 export async function createPendingRespiteRequest(db,ownerId,body,ackVersions){
  const input=validatePendingRespiteCreate(body);
  if(typeof ownerId!=='string'||!ID.test(ownerId)||!input)return {ok:false,error:'invalid_request'};
- if(!ackVersions||!['privacy','nonmedical'].every(k=>typeof ackVersions[k]==='string'&&/^[-A-Za-z0-9_.]{1,80}$/.test(ackVersions[k])))return {ok:false,error:'unavailable'};
+ if(!currentRespiteAckVersions(ackVersions))return {ok:false,error:'unavailable'};
  if(!await ownerActive(db,ownerId))return {ok:false,error:'unauthorized'};
  const participant=await db.prepare('SELECT id,revision,details_json FROM respite_participant WHERE id=? AND caregiver_id=?').bind(input.participant_id,ownerId).first();
  if(!participant||participant.revision!==input.participant_revision)return {ok:false,error:'stale_or_forbidden'};

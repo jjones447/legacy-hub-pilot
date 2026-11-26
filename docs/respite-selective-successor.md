@@ -276,3 +276,21 @@ revocation, Profile/Support changes before INSERT and absent schema. These tests
 use minimal shape-compatible read-source tables, not full composed/native D1
 qualification. Review/apply ordering must include actual reviewed Profile,
 Support and Staff-grant schemas. No route or migration activation is added.
+
+### Pinned synthetic acknowledgments increment (Nov 26)
+
+`readRespiteAcknowledgments()` exposes deeply frozen exact fictional-only text
+from the reviewed visual preview, each with a sha256-of-UTF8-text version. The
+pending store now requires exactly those server-context versions and rejects old
+`draft_test_v1` fixtures before writes. These are synthetic qualification policy
+identifiers, not an approved real collection policy. Tests recompute the hashes,
+match both displayed paragraphs exactly, reject extra/accessor/stale context and
+verify immutable artifacts and zero writes on retired versions.
+
+Ct13 must serve these exact texts and versions from the same selected source
+and derive current context server-side. Client booleans remain affirmative
+acknowledgments only. An authenticated rendered-version binding to detect a form
+left open across policy changes is still a route/form composition requirement;
+this helper alone cannot prove what a user saw. Confirmation fixtures still use
+separate synthetic draft versions and must be reconciled to this artifact in the
+composed fixture packet. Participant producer/field split remains unfinished.
