@@ -231,6 +231,26 @@ export async function onRequest(context) {
     isProtectedPreviewRender ||
     (isRewritableRoute(path) &&
       (url.searchParams.has('preview_draft') || url.searchParams.has('preview_version')));
+  const isConsole =
+    CONSOLE_API_PREFIXES.some((p) => matchesPrefix(path, p)) ||
+    CONSOLE_PAGE_SET.has(normalizePagePath(path));
+
+  let qualificationAccess = null;
+  if (isSupportBrowserRequest(env, url)) {
+    const qualification = readSupportBrowserQualification(env, url.origin);
+    const teamDomain = env.CF_ACCESS_TEAM_DOMAIN;
+    const aud = env.CF_ACCESS_AUD;
+    if (!qualification || !teamDomain || !aud || isDraftPreview || matchesPrefix(path, '/api/agent')) {
+      return withSecurityHeaders(forbidden(), url.hostname, path, request.method);
+    }
+    const payload = await verifyAccessJwt(request.headers.get('Cf-Access-Jwt-Assertion'), { teamDomain, aud });
+    if (typeof payload?.email !== 'string' || !payload.email.includes('@') || payload.common_name
+        || (isConsole && normalizeEmail(payload.email) !== qualification.staffEmail)) {
+      return withSecurityHeaders(forbidden(), url.hostname, path, request.method);
+    }
+    qualificationAccess = payload;
+  }
+
   // Retire human-facing provider aliases without redirecting webhook/API traffic
   // or origin-bound protected draft previews. The destination enforces its own
   // normal staff/caregiver authentication; no session or access is transferred.
@@ -245,25 +265,6 @@ export async function onRequest(context) {
     destination.protocol = 'https:';
     destination.host = canonicalHost;
     return withSecurityHeaders(new Response(null, { status: 308, headers: { Location: destination.href } }), url.hostname, path, request.method);
-  }
-  const isConsole =
-    CONSOLE_API_PREFIXES.some((p) => matchesPrefix(path, p)) ||
-    CONSOLE_PAGE_SET.has(normalizePagePath(path));
-
-  let qualificationAccess = null;
-  if (isSupportBrowserRequest(env, url.origin)) {
-    const qualification = readSupportBrowserQualification(env, url.origin);
-    const teamDomain = env.CF_ACCESS_TEAM_DOMAIN;
-    const aud = env.CF_ACCESS_AUD;
-    if (!qualification || !teamDomain || !aud || isDraftPreview || matchesPrefix(path, '/api/agent')) {
-      return withSecurityHeaders(forbidden(), url.hostname, path, request.method);
-    }
-    const payload = await verifyAccessJwt(request.headers.get('Cf-Access-Jwt-Assertion'), { teamDomain, aud });
-    if (typeof payload?.email !== 'string' || !payload.email.includes('@') || payload.common_name
-        || (isConsole && normalizeEmail(payload.email) !== qualification.staffEmail)) {
-      return withSecurityHeaders(forbidden(), url.hostname, path, request.method);
-    }
-    qualificationAccess = payload;
   }
 
   if (isConsole || isDraftPreview) {
@@ -287,12 +288,15 @@ export async function onRequest(context) {
     } else if (path.startsWith('/api/agent/publisher/')) {
       return withSecurityHeaders(forbidden(), url.hostname, path, request.method);
     }
-    const refused = await staffGate(env, payload);
-    if (refused) return withSecurityHeaders(refused, url.hostname, path, request.method);
+    if (!qualificationAccess) {
+      const refused = await staffGate(env, payload);
+      if (refused) return withSecurityHeaders(refused, url.hostname, path, request.method);
+    }
     if (typeof payload.email === 'string' && !payload.common_name) {
       try {
         const member = await getStaffMember(env.LEGACY_DB, payload.email);
-        if (member?.status === 'active' && member.email === normalizeEmail(payload.email)) {
+        if (member?.status === 'active' && member.email === normalizeEmail(payload.email)
+            && (!qualificationAccess || ['staff', 'admin'].includes(member.role))) {
           setVerifiedAccessStaffActor(context.data, normalizeEmail(payload.email));
         }
       } catch { /* Unknown staff cannot confirm; other existing console behavior remains. */ }

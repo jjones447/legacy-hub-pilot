@@ -8,7 +8,8 @@ import { loadCaregiverProfile, saveCaregiverProfile, validateProfilePatch, readP
 import { PROFILE_SECTIONS } from '../../_lib/caregiver-profile-fields.js';
 import { createOwnerSupportRequest, readOwnerSupportRequests } from '../../_lib/portal-support-request-store.mjs';
 import { supportRequestBoundary, readSupportRequestBody, supportRequestStatus } from '../../_lib/portal-support-request-http.mjs';
-import { isSupportBrowserRequest, readSupportBrowserQualification } from '../../_lib/support-browser-qualification.mjs';
+import { SUPPORT_BROWSER_ORIGIN, isSupportBrowserRequest, readSupportBrowserQualification,
+  supportBrowserOwnerPredicate } from '../../_lib/support-browser-qualification.mjs';
 
 async function getHmacSha256(message, secret) {
   const enc = new TextEncoder();
@@ -66,14 +67,14 @@ function json(obj, status = 200) {
 // Public pages and the separate staff Access routes are unaffected. This is not
 // production session revocation, and the retired dev-link flag cannot bypass it.
 function previewPortalDisabled(env, request) {
-  const origin = new URL(request.url).origin;
-  if (isSupportBrowserRequest(env, origin)) return !readSupportBrowserQualification(env, origin);
+  const url = new URL(request.url);
+  if (isSupportBrowserRequest(env, url)) return !readSupportBrowserQualification(env, url.origin);
   if (env.ENVIRONMENT === 'development') return true;
   if (env.ENVIRONMENT === 'preview') {
     return !isPreviewMailOptIn(env) || ![
       'https://customer-test.legacy-hub-5qo.pages.dev',
       'https://staging.legacy-hub-5qo.pages.dev',
-    ].includes(origin);
+    ].includes(url.origin);
   }
   return false;
 }
@@ -230,10 +231,17 @@ async function parseSessionCookie(cookieHeader, secret, env) {
   if (!constantTimeEqual(computedSig, signature)) return null;
   const expMs = Number(exp);
   if (!Number.isFinite(expMs) || Date.now() > expMs) return null;
+  if (env.SUPPORT_BROWSER_QUALIFICATION === '1') {
+    const qualification = readSupportBrowserQualification(env, SUPPORT_BROWSER_ORIGIN);
+    if (!qualification) return null;
+    const row = await env.LEGACY_DB.prepare(`SELECT id FROM caregiver WHERE ${supportBrowserOwnerPredicate}`)
+      .bind(qualification.ownerId, qualification.email).first();
+    if (row?.id !== caregiverId) return null;
+  }
   return caregiverId;
 }
 
-async function redeemToken(token, env, secret) {
+async function redeemToken(token, env, secret, origin) {
   const tokenHash = await sha256(token);
   const tokenRow = await env.LEGACY_DB
     .prepare(`SELECT caregiver_id, used, expires_at FROM portal_token WHERE token_hash = ?`)
@@ -243,16 +251,21 @@ async function redeemToken(token, env, secret) {
   const expiresAtMs = Date.parse(tokenRow.expires_at.replace(' ', 'T') + 'Z');
   if (!Number.isFinite(expiresAtMs) || Date.now() > expiresAtMs) return htmlErrorPage('This access link has expired (15-minute limit).');
   const caregiverId = tokenRow.caregiver_id;
-  if (env.SUPPORT_BROWSER_QUALIFICATION === '1' && caregiverId !== env.SUPPORT_BROWSER_QA_OWNER_ID) {
+  const qualification = readSupportBrowserQualification(env, origin);
+  if (qualification && caregiverId !== qualification.ownerId) {
     return htmlErrorPage('This access link is unrecognized or has been revoked.');
   }
   if (!await hasNonarchivedCaregiver(env.LEGACY_DB, caregiverId)) return htmlErrorPage('This access link is unrecognized or has been revoked.');
   // Preserve the exact one-winner claim and current identity fence. Ambiguous
   // commit metadata remains fail-closed; never reset used after an unknown save.
-  const claim = await env.LEGACY_DB
-    .prepare(`UPDATE portal_token SET used = 1 WHERE token_hash = ? AND used = 0 AND caregiver_id = ?
+  const claim = qualification
+    ? await env.LEGACY_DB.prepare(`UPDATE portal_token SET used = 1 WHERE token_hash = ? AND used = 0 AND caregiver_id = ?
+          AND EXISTS (SELECT 1 FROM caregiver WHERE id = portal_token.caregiver_id AND ${supportBrowserOwnerPredicate})`)
+      .bind(tokenHash, caregiverId, qualification.ownerId, qualification.email).run()
+    : await env.LEGACY_DB
+      .prepare(`UPDATE portal_token SET used = 1 WHERE token_hash = ? AND used = 0 AND caregiver_id = ?
                   AND EXISTS (SELECT 1 FROM caregiver WHERE id = portal_token.caregiver_id AND status != 'archived')`)
-    .bind(tokenHash, caregiverId).run();
+      .bind(tokenHash, caregiverId).run();
   if (!claim || claim.success === false || !claim.meta || claim.meta.changes !== 1) return htmlErrorPage('This access link is unavailable or has already been used.');
   // This audit is still awaited before session issuance. A post-claim failure
   // consumes the token without a session; do not turn that uncertainty into reuse.
@@ -452,7 +465,7 @@ export async function onRequestPost({ request, env, data }) {
     if (action === 'verify') {
       const token = await confirmationToken(request, secret);
       if (!token) return json({ ok: false, error: 'forbidden' }, 403);
-      return await redeemToken(token, env, secret);
+      return await redeemToken(token, env, secret, url.origin);
     }
 
     if (action === 'login') {
@@ -502,8 +515,7 @@ export async function onRequestPost({ request, env, data }) {
 
       // Check if a non-archived caregiver has that email
       const caregiver = qualification
-        ? await env.LEGACY_DB.prepare(`SELECT id, email FROM caregiver WHERE id = ? AND LOWER(TRIM(email)) = ?
-            AND status = 'active' AND source = 'support_qualification' AND segment_tags = '[]'`)
+        ? await env.LEGACY_DB.prepare(`SELECT id, email FROM caregiver WHERE ${supportBrowserOwnerPredicate}`)
           .bind(qualification.ownerId, normalizedEmail).first()
         : await env.LEGACY_DB
           .prepare(`SELECT id, email FROM caregiver WHERE LOWER(TRIM(email)) = ? AND status != 'archived'`)

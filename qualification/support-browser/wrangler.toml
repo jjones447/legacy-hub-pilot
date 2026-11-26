@@ -5,6 +5,7 @@ pages_build_output_dir = "dist"
 
 [vars]
 ENVIRONMENT = "development"
+SUPPORT_BROWSER_QUALIFICATION = "0"
 PORTAL_SUPPORT_REQUEST_ENABLED = "0"
 ALLOW_DEV_CONSOLE = "0"
 PORTAL_TEST_INBOX_ENABLED = "0"

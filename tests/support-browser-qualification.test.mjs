@@ -22,10 +22,14 @@ test('only the pinned eligible mailbox can get an ordinary same-origin link and 
   const insert = raw.prepare('INSERT INTO caregiver(id,first_name,email,source) VALUES(?,?,?,?)');
   insert.run(id, 'Fictional', mailbox, 'support_qualification');
   insert.run('other_fixture', 'Other', 'other@example.org', 'support_qualification');
+  let beforeClaim;
   const db = { prepare(sql) { return { bind(...values) { return {
     async first() { return raw.prepare(sql).get(...values) ?? null; },
     async all() { return { results: raw.prepare(sql).all(...values) }; },
-    async run() { return { success: true, meta: raw.prepare(sql).run(...values) }; },
+    async run() {
+      if (sql.startsWith('UPDATE portal_token SET used')) beforeClaim?.();
+      return { success: true, meta: raw.prepare(sql).run(...values) };
+    },
   }; } }; } };
   const env = {
     ENVIRONMENT: 'preview', SUPPORT_BROWSER_QUALIFICATION: '1', PORTAL_PREVIEW_MAIL_ENABLED: '1',
@@ -76,6 +80,29 @@ test('only the pinned eligible mailbox can get an ordinary same-origin link and 
   assert.equal((await read('me')).status, 200, 'Dashboard uses full /me with award table');
   assert.equal((await read('wellness')).status, 200);
   assert.equal((await read('me?support=1')).status, 200);
+  const updateTags = raw.prepare('UPDATE caregiver SET segment_tags=? WHERE id=?');
+  updateTags.run('["exclude_reporting"]', id);
+  assert.equal((await read('me')).status, 401, 'the signed cookie cannot outlive fixture eligibility');
+  assert.equal((await read('me?support=1')).status, 401);
+  updateTags.run('[]', id);
+
+  assert.equal((await login(mailbox)).status, 200);
+  const pendingLink = trackedMail.at(-1).text.match(/https:\/\/[^\s]+\/api\/portal\/verify\?token=[A-Za-z0-9_-]+/)[0];
+  const ineligibleForm = await prepareConfirmation(pendingLink, env);
+  const moveMailbox = raw.prepare('UPDATE caregiver SET email=? WHERE id=?');
+  moveMailbox.run('changed@example.org', id);
+  const rejected = await onRequestPost({ env, request: ineligibleForm.request() });
+  assert.equal(rejected.status, 400);
+  assert.equal(rejected.headers.get('Set-Cookie'), null);
+  moveMailbox.run(mailbox, id);
+
+  beforeClaim = () => updateTags.run('["qa_test"]', id);
+  const raceForm = await prepareConfirmation(pendingLink, env);
+  const raced = await onRequestPost({ env, request: raceForm.request() });
+  assert.equal(raced.status, 400);
+  assert.equal(raced.headers.get('Set-Cookie'), null);
+  assert.equal(raw.prepare('SELECT count(*) AS n FROM portal_token WHERE used=0').get().n, 1);
+  assert.equal(raw.prepare("SELECT count(*) AS n FROM audit_log WHERE action='portal.login_success'").get().n, 1);
   const otherPayload = `other_fixture:${Date.now() + 60000}`;
   const otherSignature = createHmac('sha256', secret).update(`session:${otherPayload}`).digest('hex');
   const otherCookie = `portal_session=${encodeURIComponent(`${otherPayload}:${otherSignature}`)}`;

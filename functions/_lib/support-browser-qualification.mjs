@@ -1,10 +1,14 @@
 import { canSendEmail } from './email.js';
 
-export const SUPPORT_BROWSER_ORIGIN = 'https://qa.legacy-support-qualification.pages.dev';
+const projectHost = 'legacy-support-qualification.pages.dev';
+export const SUPPORT_BROWSER_ORIGIN = `https://qa.${projectHost}`;
+export const supportBrowserOwnerPredicate = `id = ? AND LOWER(TRIM(email)) = ?
+  AND status = 'active' AND source = 'support_qualification' AND segment_tags = '[]'`;
 const emailPattern = /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/;
 
-export function isSupportBrowserRequest(env, origin) {
-  return env?.SUPPORT_BROWSER_QUALIFICATION === '1' || origin === SUPPORT_BROWSER_ORIGIN;
+export function isSupportBrowserRequest(env, url) {
+  const hostname = url.hostname.replace(/\.$/, '');
+  return env?.SUPPORT_BROWSER_QUALIFICATION === '1' || hostname === projectHost || hostname.endsWith(`.${projectHost}`);
 }
 
 export function readSupportBrowserQualification(env, origin) {
