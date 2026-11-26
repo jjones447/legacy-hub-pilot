@@ -264,3 +264,15 @@ writer tests pass, including concurrent CAS, revoked Staff, audit rollback and
 lost acknowledgment. This supersedes only the prior “writer missing” note.
 Authenticated dispatcher/current-human admission, grant loader, eligibility
 recheck at pending INSERT and native D1 qualification remain unfinished.
+
+### Atomic pending eligibility fence (Nov 26)
+
+The separate unapplied `respite_pending_eligibility_guard.sql` re-evaluates the
+five independent persisted owner signals at request INSERT. Staff revocation
+therefore prevents a new pending request when no Profile/Support signal remains;
+a separate qualifying signal still works. Missing prerequisite schemas fail
+closed. Five inert SQL tests cover all signals, cross-owner negatives, grant
+revocation, Profile/Support changes before INSERT and absent schema. These tests
+use minimal shape-compatible read-source tables, not full composed/native D1
+qualification. Review/apply ordering must include actual reviewed Profile,
+Support and Staff-grant schemas. No route or migration activation is added.
