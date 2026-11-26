@@ -46,14 +46,15 @@ export function signInEmail(link) {
 }
 
 /** Send one email. Returns { ok, status } and never throws; callers log failures without details. */
-export async function sendEmail(env, { to, subject, text, html }, fetchImpl = fetch) {
+export async function sendEmail(env, { to, subject, text, html, qualificationSender }, fetchImpl = fetch) {
   if (!canSendEmail(env)) return { ok: false, status: 0 };
   try {
     const res = await fetchImpl(RESEND_URL, {
       method: 'POST',
       // Trim: a key stored with a trailing newline (e.g. piped from PowerShell) breaks the header.
       headers: { authorization: `Bearer ${String(env.EMAIL_API_KEY).trim()}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ from: EMAIL_FROM, reply_to: EMAIL_REPLY_TO, to: [typeof to === 'string' ? to.trim() : to], subject, text, html }),
+      body: JSON.stringify({ from: qualificationSender ?? EMAIL_FROM, reply_to: qualificationSender ?? EMAIL_REPLY_TO,
+        to: [typeof to === 'string' ? to.trim() : to], subject, text, html }),
     });
     return { ok: res.ok, status: res.status };
   } catch (e) {

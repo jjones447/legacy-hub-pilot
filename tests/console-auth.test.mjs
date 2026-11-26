@@ -3,6 +3,7 @@ import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { verifyAccessJwt, onRequest } from '../functions/_middleware.js';
 import { confirmationActor } from '../functions/_lib/agent-confirmation.mjs';
+import { SUPPORT_BROWSER_ORIGIN } from '../functions/_lib/support-browser-qualification.mjs';
 
 const enc = new TextEncoder();
 const TEAM = 'legacy.cloudflareaccess.com';
@@ -145,4 +146,66 @@ test('publisher middleware grants separate proof only after real signature and p
       assert.equal(confirmationActor(context.data),null,scenario);
     }
   } finally {globalThis.fetch=oldFetch;}
+});
+
+test('Support browser qualification requires human Access on all paths and restricts Staff to the named operator', async () => {
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = fetchImpl;
+  try {
+    const staffEmail = 'qa-staff@example.org';
+    let dbReads = 0;
+    let dbWrites = 0;
+    let hasStaffRow = true;
+    const member = { email: staffEmail, role: 'staff', status: 'active',
+      last_seen_at: new Date().toISOString().slice(0, 19).replace('T', ' ') };
+    const env = {
+      ENVIRONMENT: 'preview', PORTAL_SUPPORT_REQUEST_ENABLED: '1', SUPPORT_BROWSER_QUALIFICATION: '1',
+      PORTAL_PREVIEW_MAIL_ENABLED: '1', EMAIL_API_KEY: 'synthetic-key',
+      SUPPORT_BROWSER_QA_OWNER_ID: 'support_browser_case', SUPPORT_BROWSER_QA_EMAIL: 'qa-owner@example.org',
+      SUPPORT_BROWSER_STAFF_EMAIL: staffEmail, SUPPORT_BROWSER_MAIL_FROM: 'qa-sender@example.org',
+      CF_ACCESS_TEAM_DOMAIN: TEAM, CF_ACCESS_AUD: AUD,
+      LEGACY_DB: { prepare() { return { bind() { return {
+        async first() { dbReads++; return hasStaffRow ? member : null; },
+        async run() { dbWrites++; return { success: true }; },
+      }; } }; } },
+    };
+    async function open(path, token, origin = SUPPORT_BROWSER_ORIGIN, overrides = {}) {
+      const headers = token ? { 'Cf-Access-Jwt-Assertion': token } : {};
+      const data = {};
+      const response = await onRequest({ request: new Request(origin + path, { headers }), env: { ...env, ...overrides }, data,
+        next: async () => new Response('QA page') });
+      return { status: response.status, actor: confirmationActor(data) };
+    }
+    const caregiver = await makeJwt({ email: 'qa-owner@example.org' });
+    const staff = await makeJwt({ email: staffEmail });
+    const service = await makeJwt({ email: null, common_name: 'qualification-service' });
+    const wrongAudience = await makeJwt({ email: staffEmail, aud: 'shared-test' });
+    for (const path of ['/portal', '/staff', '/portal-support-ui.css', '/api/portal/me']) {
+      assert.equal((await open(path)).status, 403, path);
+      assert.equal((await open(path, service)).status, 403, path);
+      assert.equal((await open(path, wrongAudience)).status, 403, path);
+      assert.equal((await open(path, staff, 'https://immutable.legacy-support-qualification.pages.dev')).status, 403, path);
+      assert.equal((await open(path, staff, 'https://immutable.legacy-support-qualification.pages.dev',
+        { SUPPORT_BROWSER_QUALIFICATION: undefined })).status, 403, path);
+      assert.equal((await open(path, staff, 'https://legacy-support-qualification.pages.dev',
+        { SUPPORT_BROWSER_QUALIFICATION: undefined, ENVIRONMENT: 'development' })).status, 403, path);
+    }
+    assert.equal((await open('/portal', caregiver)).status, 200);
+    assert.equal((await open('/staff', caregiver)).status, 403);
+    assert.equal((await open('/api/staff/support-requests', caregiver)).status, 403);
+    assert.equal((await open('/api/agent/draft', staff)).status, 403);
+    assert.equal((await open('/staff', staff, SUPPORT_BROWSER_ORIGIN, { ALLOW_DEV_CONSOLE: '1' })).status, 403);
+    assert.equal(dbReads, 0, 'refused principals and caregiver pages never create or inspect a Staff row');
+    assert.deepEqual(await open('/staff', staff), { status: 200, actor: staffEmail });
+    member.status = 'deactivated';
+    assert.deepEqual(await open('/api/staff/support-requests', staff), { status: 403, actor: null });
+    assert.deepEqual(await open('/api/staff/support-requests', staff, SUPPORT_BROWSER_ORIGIN, { LEGACY_DB: undefined }),
+      { status: 403, actor: null });
+    hasStaffRow = false;
+    assert.deepEqual(await open('/staff', staff), { status: 403, actor: null });
+    assert.deepEqual(await open('/api/staff/support-requests', staff), { status: 403, actor: null });
+    assert.equal(dbWrites, 0, 'qualification sign-in cannot provision or update a Staff row');
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
 });

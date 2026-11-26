@@ -3,6 +3,7 @@ import { maybeRewriteMedia } from './_media.mjs';
 import { maybeRewriteContent, isRewritableRoute, renderProtectedDraftPreviewPage } from './_content.mjs';
 import { recordStaffSignIn, getStaffMember, normalizeEmail } from './_lib/staff.js';
 import { setVerifiedAccessStaffActor, confirmationActor } from './_lib/agent-confirmation.mjs';
+import { isSupportBrowserRequest, readSupportBrowserQualification } from './_lib/support-browser-qualification.mjs';
 
 // Root middleware: (1) baseline security headers on every response, and
 // (2) fail-closed auth on the staff/agent console surfaces via real Cloudflare
@@ -230,6 +231,26 @@ export async function onRequest(context) {
     isProtectedPreviewRender ||
     (isRewritableRoute(path) &&
       (url.searchParams.has('preview_draft') || url.searchParams.has('preview_version')));
+  const isConsole =
+    CONSOLE_API_PREFIXES.some((p) => matchesPrefix(path, p)) ||
+    CONSOLE_PAGE_SET.has(normalizePagePath(path));
+
+  let qualificationAccess = null;
+  if (isSupportBrowserRequest(env, url)) {
+    const qualification = readSupportBrowserQualification(env, url.origin);
+    const teamDomain = env.CF_ACCESS_TEAM_DOMAIN;
+    const aud = env.CF_ACCESS_AUD;
+    if (!qualification || !teamDomain || !aud || isDraftPreview || matchesPrefix(path, '/api/agent')) {
+      return withSecurityHeaders(forbidden(), url.hostname, path, request.method);
+    }
+    const payload = await verifyAccessJwt(request.headers.get('Cf-Access-Jwt-Assertion'), { teamDomain, aud });
+    if (typeof payload?.email !== 'string' || !payload.email.includes('@') || payload.common_name
+        || (isConsole && normalizeEmail(payload.email) !== qualification.staffEmail)) {
+      return withSecurityHeaders(forbidden(), url.hostname, path, request.method);
+    }
+    qualificationAccess = payload;
+  }
+
   // Retire human-facing provider aliases without redirecting webhook/API traffic
   // or origin-bound protected draft previews. The destination enforces its own
   // normal staff/caregiver authentication; no session or access is transferred.
@@ -245,9 +266,6 @@ export async function onRequest(context) {
     destination.host = canonicalHost;
     return withSecurityHeaders(new Response(null, { status: 308, headers: { Location: destination.href } }), url.hostname, path, request.method);
   }
-  const isConsole =
-    CONSOLE_API_PREFIXES.some((p) => matchesPrefix(path, p)) ||
-    CONSOLE_PAGE_SET.has(normalizePagePath(path));
 
   if (isConsole || isDraftPreview) {
     if (isDraftPreview && env.ENVIRONMENT !== 'preview') {
@@ -262,7 +280,7 @@ export async function onRequest(context) {
     const aud = env.CF_ACCESS_AUD;
     if (!teamDomain || !aud) return withSecurityHeaders(forbidden(), url.hostname, path, request.method);
     const token = request.headers.get('Cf-Access-Jwt-Assertion');
-    const payload = await verifyAccessJwt(token, { teamDomain, aud });
+    const payload = qualificationAccess ?? await verifyAccessJwt(token, { teamDomain, aud });
     if (!payload) return withSecurityHeaders(forbidden(), url.hostname, path, request.method);
     if (isPublisherPayload(payload, env)) {
       if (!publisherRouteAllowed(request, env)) return withSecurityHeaders(forbidden(), url.hostname, path, request.method);
@@ -270,17 +288,20 @@ export async function onRequest(context) {
     } else if (path.startsWith('/api/agent/publisher/')) {
       return withSecurityHeaders(forbidden(), url.hostname, path, request.method);
     }
-    const refused = await staffGate(env, payload);
-    if (refused) return withSecurityHeaders(refused, url.hostname, path, request.method);
+    if (!qualificationAccess) {
+      const refused = await staffGate(env, payload);
+      if (refused) return withSecurityHeaders(refused, url.hostname, path, request.method);
+    }
     if (typeof payload.email === 'string' && !payload.common_name) {
       try {
         const member = await getStaffMember(env.LEGACY_DB, payload.email);
-        if (member?.status === 'active' && member.email === normalizeEmail(payload.email)) {
+        if (member?.status === 'active' && member.email === normalizeEmail(payload.email)
+            && (!qualificationAccess || ['staff', 'admin'].includes(member.role))) {
           setVerifiedAccessStaffActor(context.data, normalizeEmail(payload.email));
         }
       } catch { /* Unknown staff cannot confirm; other existing console behavior remains. */ }
     }
-    if (isDraftPreview && !confirmationActor(context.data)) {
+    if ((isDraftPreview || qualificationAccess) && !confirmationActor(context.data)) {
       return withSecurityHeaders(forbidden(), url.hostname, path, request.method);
     }
     if (isProtectedPreviewRender) {

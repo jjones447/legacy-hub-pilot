@@ -8,6 +8,8 @@ import { loadCaregiverProfile, saveCaregiverProfile, validateProfilePatch, readP
 import { PROFILE_SECTIONS } from '../../_lib/caregiver-profile-fields.js';
 import { createOwnerSupportRequest, readOwnerSupportRequests } from '../../_lib/portal-support-request-store.mjs';
 import { supportRequestBoundary, readSupportRequestBody, supportRequestStatus } from '../../_lib/portal-support-request-http.mjs';
+import { SUPPORT_BROWSER_ORIGIN, isSupportBrowserRequest, readSupportBrowserQualification,
+  supportBrowserOwnerPredicate } from '../../_lib/support-browser-qualification.mjs';
 
 async function getHmacSha256(message, secret) {
   const enc = new TextEncoder();
@@ -65,13 +67,14 @@ function json(obj, status = 200) {
 // Public pages and the separate staff Access routes are unaffected. This is not
 // production session revocation, and the retired dev-link flag cannot bypass it.
 function previewPortalDisabled(env, request) {
+  const url = new URL(request.url);
+  if (isSupportBrowserRequest(env, url)) return !readSupportBrowserQualification(env, url.origin);
   if (env.ENVIRONMENT === 'development') return true;
   if (env.ENVIRONMENT === 'preview') {
-    const origin = new URL(request.url).origin;
     return !isPreviewMailOptIn(env) || ![
       'https://customer-test.legacy-hub-5qo.pages.dev',
       'https://staging.legacy-hub-5qo.pages.dev',
-    ].includes(origin);
+    ].includes(url.origin);
   }
   return false;
 }
@@ -214,12 +217,13 @@ function htmlErrorPage(message) {
   });
 }
 
-async function parseSessionCookie(cookieHeader, secret) {
+async function parseSessionCookie(cookieHeader, secret, env) {
   const sessionVal = portalSessionValue(cookieHeader);
   if (!sessionVal) return null;
   const parts = sessionVal.split(':');
   if (parts.length !== 3) return null;
   const [caregiverId, exp, signature] = parts;
+  if (env.SUPPORT_BROWSER_QUALIFICATION === '1' && caregiverId !== env.SUPPORT_BROWSER_QA_OWNER_ID) return null;
   // SEC-3: domain-separate session vs magic-link. A session cookie is signed over
   // `session:<payload>`; an opaque magic-link token pasted as a cookie is not an
   // `id:exp:session-hmac` value and cannot establish a session.
@@ -227,10 +231,17 @@ async function parseSessionCookie(cookieHeader, secret) {
   if (!constantTimeEqual(computedSig, signature)) return null;
   const expMs = Number(exp);
   if (!Number.isFinite(expMs) || Date.now() > expMs) return null;
+  if (env.SUPPORT_BROWSER_QUALIFICATION === '1') {
+    const qualification = readSupportBrowserQualification(env, SUPPORT_BROWSER_ORIGIN);
+    if (!qualification) return null;
+    const row = await env.LEGACY_DB.prepare(`SELECT id FROM caregiver WHERE ${supportBrowserOwnerPredicate}`)
+      .bind(qualification.ownerId, qualification.email).first();
+    if (row?.id !== caregiverId) return null;
+  }
   return caregiverId;
 }
 
-async function redeemToken(token, env, secret) {
+async function redeemToken(token, env, secret, origin) {
   const tokenHash = await sha256(token);
   const tokenRow = await env.LEGACY_DB
     .prepare(`SELECT caregiver_id, used, expires_at FROM portal_token WHERE token_hash = ?`)
@@ -240,13 +251,21 @@ async function redeemToken(token, env, secret) {
   const expiresAtMs = Date.parse(tokenRow.expires_at.replace(' ', 'T') + 'Z');
   if (!Number.isFinite(expiresAtMs) || Date.now() > expiresAtMs) return htmlErrorPage('This access link has expired (15-minute limit).');
   const caregiverId = tokenRow.caregiver_id;
+  const qualification = readSupportBrowserQualification(env, origin);
+  if (qualification && caregiverId !== qualification.ownerId) {
+    return htmlErrorPage('This access link is unrecognized or has been revoked.');
+  }
   if (!await hasNonarchivedCaregiver(env.LEGACY_DB, caregiverId)) return htmlErrorPage('This access link is unrecognized or has been revoked.');
   // Preserve the exact one-winner claim and current identity fence. Ambiguous
   // commit metadata remains fail-closed; never reset used after an unknown save.
-  const claim = await env.LEGACY_DB
-    .prepare(`UPDATE portal_token SET used = 1 WHERE token_hash = ? AND used = 0 AND caregiver_id = ?
+  const claim = qualification
+    ? await env.LEGACY_DB.prepare(`UPDATE portal_token SET used = 1 WHERE token_hash = ? AND used = 0 AND caregiver_id = ?
+          AND EXISTS (SELECT 1 FROM caregiver WHERE id = portal_token.caregiver_id AND ${supportBrowserOwnerPredicate})`)
+      .bind(tokenHash, caregiverId, qualification.ownerId, qualification.email).run()
+    : await env.LEGACY_DB
+      .prepare(`UPDATE portal_token SET used = 1 WHERE token_hash = ? AND used = 0 AND caregiver_id = ?
                   AND EXISTS (SELECT 1 FROM caregiver WHERE id = portal_token.caregiver_id AND status != 'archived')`)
-    .bind(tokenHash, caregiverId).run();
+      .bind(tokenHash, caregiverId).run();
   if (!claim || claim.success === false || !claim.meta || claim.meta.changes !== 1) return htmlErrorPage('This access link is unavailable or has already been used.');
   // This audit is still awaited before session issuance. A post-claim failure
   // consumes the token without a session; do not turn that uncertainty into reuse.
@@ -301,7 +320,7 @@ export async function onRequestGet({ request, env }) {
     }
 
     if (action === 'support-requests') {
-      const caregiverId = await parseSessionCookie(request.headers.get('Cookie'), secret);
+      const caregiverId = await parseSessionCookie(request.headers.get('Cookie'), secret, env);
       if (caregiverId && !await matchesSupportSession(request, 'owner', caregiverId)) return json({ ok: false, error: 'session_changed' }, 403);
       if (!caregiverId || !await hasNonarchivedCaregiver(env.LEGACY_DB, caregiverId)) return json({ ok: false, error: 'unauthorized' }, 401);
       const requests = await readOwnerSupportRequests(env.LEGACY_DB, caregiverId);
@@ -309,14 +328,14 @@ export async function onRequestGet({ request, env }) {
     }
 
     if (action === 'profile') {
-      const caregiverId = await parseSessionCookie(request.headers.get('Cookie'), secret);
+      const caregiverId = await parseSessionCookie(request.headers.get('Cookie'), secret, env);
       if (!caregiverId || !await hasNonarchivedCaregiver(env.LEGACY_DB, caregiverId)) return json({ ok: false, error: 'unauthorized' }, 401);
       const profile = await loadCaregiverProfile(env.LEGACY_DB, caregiverId);
       return profile ? json({ ok: true, profile, sections: PROFILE_SECTIONS }) : json({ ok: false, error: 'unauthorized' }, 401);
     }
 
     if (action === 'me') {
-      const caregiverId = await parseSessionCookie(request.headers.get('Cookie'), secret);
+      const caregiverId = await parseSessionCookie(request.headers.get('Cookie'), secret, env);
       if (!caregiverId) {
         return json({ ok: false, error: 'unauthorized' }, 401);
       }
@@ -371,7 +390,7 @@ export async function onRequestGet({ request, env }) {
     if (action === 'wellness') {
       // GET /api/portal/wellness -- the signed-in caregiver's own check-ins, whether one is due,
       // and the questions to ask.
-      const caregiverId = await parseSessionCookie(request.headers.get('Cookie'), secret);
+      const caregiverId = await parseSessionCookie(request.headers.get('Cookie'), secret, env);
       if (!caregiverId) {
         return json({ ok: false, error: 'unauthorized' }, 401);
       }
@@ -446,7 +465,7 @@ export async function onRequestPost({ request, env, data }) {
     if (action === 'verify') {
       const token = await confirmationToken(request, secret);
       if (!token) return json({ ok: false, error: 'forbidden' }, 403);
-      return await redeemToken(token, env, secret);
+      return await redeemToken(token, env, secret, url.origin);
     }
 
     if (action === 'login') {
@@ -480,6 +499,8 @@ export async function onRequestPost({ request, env, data }) {
 
       const normalizedEmail = email.toLowerCase().trim();
       if (capture && normalizedEmail !== capture.email) return json({ ok:false, error:'forbidden' },403);
+      const qualification = readSupportBrowserQualification(env, new URL(request.url).origin);
+      if (qualification && normalizedEmail !== qualification.email) return json({ ok: true });
       const emailHash = await sha256(normalizedEmail);
 
       // Basic rate limiting via audit_log
@@ -493,10 +514,12 @@ export async function onRequestPost({ request, env, data }) {
       }
 
       // Check if a non-archived caregiver has that email
-      const caregiver = await env.LEGACY_DB
-        .prepare(`SELECT id, email FROM caregiver WHERE LOWER(TRIM(email)) = ? AND status != 'archived'`)
-        .bind(normalizedEmail)
-        .first();
+      const caregiver = qualification
+        ? await env.LEGACY_DB.prepare(`SELECT id, email FROM caregiver WHERE ${supportBrowserOwnerPredicate}`)
+          .bind(qualification.ownerId, normalizedEmail).first()
+        : await env.LEGACY_DB
+          .prepare(`SELECT id, email FROM caregiver WHERE LOWER(TRIM(email)) = ? AND status != 'archived'`)
+          .bind(normalizedEmail).first();
 
       // Log audit trail login request
       await env.LEGACY_DB
@@ -535,7 +558,8 @@ export async function onRequestPost({ request, env, data }) {
         if (emailEnabled) {
           const origin = new URL(request.url).origin;
           const link = `${origin}/api/portal/verify?token=${encodeURIComponent(tokenValue)}`;
-          const sent = await sendEmail(env, { to: caregiver.email, ...signInEmail(link) });
+          const sent = await sendEmail(env, { to: qualification?.email ?? caregiver.email,
+            ...signInEmail(link), qualificationSender: qualification?.sender });
           const providerStatus = Number.isInteger(sent.status) ? sent.status : -1;
           const reason = sent.ok ? 'provider_accepted' : providerStatus === -1 ? 'network_error'
             : providerStatus === 0 ? 'email_not_configured' : 'provider_rejected';
@@ -557,7 +581,7 @@ export async function onRequestPost({ request, env, data }) {
     }
 
     if (action === 'support-requests') {
-      const caregiverId = await parseSessionCookie(request.headers.get('Cookie'), secret);
+      const caregiverId = await parseSessionCookie(request.headers.get('Cookie'), secret, env);
       if (caregiverId && !await matchesSupportSession(request, 'owner', caregiverId)) return json({ ok: false, error: 'session_changed' }, 403);
       if (!caregiverId || !await hasNonarchivedCaregiver(env.LEGACY_DB, caregiverId)) return json({ ok: false, error: 'unauthorized' }, 401);
       // Only this verified server owner reaches the writer. The writer rechecks
@@ -567,7 +591,7 @@ export async function onRequestPost({ request, env, data }) {
     }
 
     if (action === 'profile') {
-      const caregiverId = await parseSessionCookie(request.headers.get('Cookie'), secret);
+      const caregiverId = await parseSessionCookie(request.headers.get('Cookie'), secret, env);
       if (!caregiverId || !await hasNonarchivedCaregiver(env.LEGACY_DB, caregiverId)) return json({ ok: false, error: 'unauthorized' }, 401);
       const patch = validateProfilePatch(await readProfileBody(request));
       if (!patch) return json({ ok: false, error: 'invalid_profile' }, 400);
@@ -577,7 +601,7 @@ export async function onRequestPost({ request, env, data }) {
 
     if (action === 'wellness') {
       // POST /api/portal/wellness -- record a check-in for the signed-in caregiver (one a day at most).
-      const caregiverId = await parseSessionCookie(request.headers.get('Cookie'), secret);
+      const caregiverId = await parseSessionCookie(request.headers.get('Cookie'), secret, env);
       if (!caregiverId) {
         return json({ ok: false, error: 'unauthorized' }, 401);
       }
@@ -606,7 +630,7 @@ export async function onRequestPost({ request, env, data }) {
     }
 
     if (action === 'logout') {
-      const caregiverId = await parseSessionCookie(request.headers.get('Cookie'), secret);
+      const caregiverId = await parseSessionCookie(request.headers.get('Cookie'), secret, env);
       
       // Audit log portal.logout
       if (caregiverId) {
