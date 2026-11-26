@@ -3,6 +3,7 @@ import { maybeRewriteMedia } from './_media.mjs';
 import { maybeRewriteContent, isRewritableRoute, renderProtectedDraftPreviewPage } from './_content.mjs';
 import { recordStaffSignIn, getStaffMember, normalizeEmail } from './_lib/staff.js';
 import { setVerifiedAccessStaffActor, confirmationActor } from './_lib/agent-confirmation.mjs';
+import { isSupportBrowserRequest, readSupportBrowserQualification } from './_lib/support-browser-qualification.mjs';
 
 // Root middleware: (1) baseline security headers on every response, and
 // (2) fail-closed auth on the staff/agent console surfaces via real Cloudflare
@@ -249,6 +250,22 @@ export async function onRequest(context) {
     CONSOLE_API_PREFIXES.some((p) => matchesPrefix(path, p)) ||
     CONSOLE_PAGE_SET.has(normalizePagePath(path));
 
+  let qualificationAccess = null;
+  if (isSupportBrowserRequest(env, url.origin)) {
+    const qualification = readSupportBrowserQualification(env, url.origin);
+    const teamDomain = env.CF_ACCESS_TEAM_DOMAIN;
+    const aud = env.CF_ACCESS_AUD;
+    if (!qualification || !teamDomain || !aud || isDraftPreview || matchesPrefix(path, '/api/agent')) {
+      return withSecurityHeaders(forbidden(), url.hostname, path, request.method);
+    }
+    const payload = await verifyAccessJwt(request.headers.get('Cf-Access-Jwt-Assertion'), { teamDomain, aud });
+    if (typeof payload?.email !== 'string' || !payload.email.includes('@') || payload.common_name
+        || (isConsole && normalizeEmail(payload.email) !== qualification.staffEmail)) {
+      return withSecurityHeaders(forbidden(), url.hostname, path, request.method);
+    }
+    qualificationAccess = payload;
+  }
+
   if (isConsole || isDraftPreview) {
     if (isDraftPreview && env.ENVIRONMENT !== 'preview') {
       return withSecurityHeaders(forbidden(), url.hostname, path, request.method);
@@ -262,7 +279,7 @@ export async function onRequest(context) {
     const aud = env.CF_ACCESS_AUD;
     if (!teamDomain || !aud) return withSecurityHeaders(forbidden(), url.hostname, path, request.method);
     const token = request.headers.get('Cf-Access-Jwt-Assertion');
-    const payload = await verifyAccessJwt(token, { teamDomain, aud });
+    const payload = qualificationAccess ?? await verifyAccessJwt(token, { teamDomain, aud });
     if (!payload) return withSecurityHeaders(forbidden(), url.hostname, path, request.method);
     if (isPublisherPayload(payload, env)) {
       if (!publisherRouteAllowed(request, env)) return withSecurityHeaders(forbidden(), url.hostname, path, request.method);
@@ -280,7 +297,7 @@ export async function onRequest(context) {
         }
       } catch { /* Unknown staff cannot confirm; other existing console behavior remains. */ }
     }
-    if (isDraftPreview && !confirmationActor(context.data)) {
+    if ((isDraftPreview || qualificationAccess) && !confirmationActor(context.data)) {
       return withSecurityHeaders(forbidden(), url.hostname, path, request.method);
     }
     if (isProtectedPreviewRender) {

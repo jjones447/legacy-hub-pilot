@@ -1,0 +1,26 @@
+# Standalone non-production Pages project. Only deploy its qa preview branch.
+name = "legacy-support-qualification"
+compatibility_date = "2026-07-01"
+pages_build_output_dir = "dist"
+
+[vars]
+ENVIRONMENT = "development"
+PORTAL_SUPPORT_REQUEST_ENABLED = "0"
+ALLOW_DEV_CONSOLE = "0"
+PORTAL_TEST_INBOX_ENABLED = "0"
+
+[env.preview.vars]
+ENVIRONMENT = "preview"
+SUPPORT_BROWSER_QUALIFICATION = "1"
+PORTAL_SUPPORT_REQUEST_ENABLED = "1"
+PORTAL_PREVIEW_MAIL_ENABLED = "1"
+ALLOW_DEV_CONSOLE = "0"
+PORTAL_TEST_INBOX_ENABLED = "0"
+CF_ACCESS_TEAM_DOMAIN = "odd-smoke-0fc8.cloudflareaccess.com"
+CF_ACCESS_AUD = "8d2b5d7bb754c4f9bbb61e827b8f715dab67d3f3368bd0096907251f077d22fc"
+SUPPORT_BROWSER_QA_OWNER_ID = "support_browser_20261127_eligible"
+
+[[env.preview.d1_databases]]
+binding = "LEGACY_DB"
+database_name = "legacy-qualification-db"
+database_id = "c0467e95-952b-4bb8-a569-6e0526b52f76"
