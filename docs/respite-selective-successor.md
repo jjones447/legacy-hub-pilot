@@ -194,3 +194,16 @@ registration status accounting, owner revocation during the read, projection,
 stable bounded ordering and zero writes. Native hosted D1, mounted routes,
 eligibility mapping, participant creation and browser tests remain separate.
 No schema, configuration, runtime flag, fixture or provider action was taken.
+
+### Pending-write capacity race guard (Nov 26)
+
+The unapplied pending-create guard now rechecks positive known capacity and
+registered/attended occupancy at INSERT time, matching the available-date read.
+A session becoming full between selection and creation aborts the request and
+its audit batch. Pending requests still consume no seats and may exceed the
+number of eventual places; Staff confirmation must independently recheck seats.
+Two added inert cases cover zero/null/full capacity races with atomic refusal,
+and multiple pending requests/cancelled registrations without seat consumption.
+The confirmation-fullness regression creates both pending requests before the
+first confirmation consumes the last seat, preserving the separate confirmation
+race test. Candidate SQL only; no migration or runtime application occurred.
