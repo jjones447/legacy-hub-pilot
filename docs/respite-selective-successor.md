@@ -337,3 +337,23 @@ for caregiver-on-site and verified caregiver contact, composed form/acknowledgme
 version binding, strict schema/trigger preflight and complete fixtures. The old
 statement that participant create/read is missing is superseded by this increment;
 participant edit/removal and operating privacy/export/restore gates stay separate.
+
+### Request snapshot shape increment (Nov 26)
+
+`buildRespiteRequestSnapshot(participantDetails, serverContact, {caregiver_onsite})`
+proposes `{participant,caregiver,session}` with private reusable participant data,
+current verified caregiver/Profile name-email-phone, and the per-session on-site
+answer kept separate. It validates contact bounds, refuses missing/coerced values
+and copies inputs. Three pure tests cover field separation and strict failures.
+The contact argument is not authentication; ct13 must supply it from current
+verified owner reads. No client caregiver identity/contact is accepted by this
+interface. First-time remains the dedicated request field; acknowledgment versions
+remain dedicated request columns.
+
+This helper is not yet used by the pending writer. Integrating it MUST replace
+initial whole-JSON participant equality with exact equality of the nested
+participant snapshot to the current participant revision, and include all request
+context in the idempotency digest. Existing lifecycle edit validators/confirmation
+fixtures must be reconciled; do not apply a mixed old/new snapshot schema. Until
+that integration and its regressions land, the helper remains unmounted and the
+candidate is incomplete. No preview/production behavior is changed here.
