@@ -106,6 +106,7 @@ export const UNIT_TEST_FILES = Object.freeze([
   'respite-pending-store.test.mjs',
   'respite-date-read.test.mjs',
   'respite-eligibility.test.mjs',
+  'respite-staff-eligibility.test.mjs',
   'respite-registration-gate.test.mjs',
   'respite-registration-update.test.mjs',
   'respite-confirm-store.test.mjs',

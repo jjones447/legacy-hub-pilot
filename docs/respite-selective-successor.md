@@ -230,3 +230,23 @@ The projector is not authentication, authorization to collect, or an atomic
 write-time eligibility guard. Participant producer/field split and current
 acknowledgment-version composition remain unfinished; no complete Nov26
 prerequisite milestone is claimed by this increment.
+
+### Staff-enable proposal fence (Nov 26)
+
+Ct13 independently found no authoritative existing field in main/Profile/Support/
+Respite and accepted ct5 ownership of the inert proposal, retaining authenticated
+Staff routes and server composition. Proposed `respite_staff_eligibility` has one
+row per caregiver, explicit enabled/revoked state and monotonically increasing
+revision. Current active Staff/admin and current owner integrity predicates guard
+both create and update. Revocation updates the row rather than deleting history.
+No agent-editable segment tag or `is_caregiver` classification substitutes.
+
+Four SQLite tests cover grant/revoke, revoked and incorrect-role Staff, archived
+owner, identity lock, stale CAS and transactional rollback on audit failure.
+These test DDL and a synthetic batch, **not a completed production writer**. The
+remaining writer must accept only server-verified Staff, validate typed body,
+CAS exact expected revision and atomically append metadata-only audit; no audit
+is enforced solely by this table. Pending INSERT must re-evaluate independent
+Profile/Support/grant signals so revoking a grant prevents new requests when no
+other signal qualifies. That eligibility guard, persisted-grant loader, route,
+and native D1 proof are still missing. SQL stays unapplied and unnumbered.
