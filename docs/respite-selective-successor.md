@@ -314,3 +314,26 @@ participant create/read writer, idempotent creation, session-context/digest
 snapshot extension and composed fixture contract remain unfinished. Initial
 pending-store fixtures with arbitrary participant JSON are not full field-schema
 qualification and must be upgraded before the completed candidate handoff.
+
+### Participant create/private read increment (Nov 26)
+
+`createRespiteParticipant(db, serverOwnerId, {request_id,details})` validates the
+private field contract and derives a stable participant ID from SHA256 of the
+owner/key pair. Same key and canonical details reconcile without another audit;
+changed details conflict rather than overwriting a participant. Different owners
+cannot collide using the same client key. Current owner qualification is checked
+at INSERT and audit is in the same batch. Lost acknowledgment reconciles only an
+existing same-owner exact snapshot; otherwise outcome_unknown, no automatic retry.
+No caregiver contact/identity upsert occurs. Metadata audit records revision only.
+
+`readOwnerRespiteParticipants` returns at most20 same-owner private participants,
+rechecks current owner after the read, and refuses incompatible persisted JSON.
+Five inert SQLite-backed tests cover isolation, idempotency, injection, archive
+races, audit rollback, lost acknowledgment and corrupt-shape refusal. No HTTP
+route is mounted and this is not a native D1 or real-collection acceptance.
+
+Remaining integration: selected request session-context snapshot/digest extension
+for caregiver-on-site and verified caregiver contact, composed form/acknowledgment
+version binding, strict schema/trigger preflight and complete fixtures. The old
+statement that participant create/read is missing is superseded by this increment;
+participant edit/removal and operating privacy/export/restore gates stay separate.
