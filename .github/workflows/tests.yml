@@ -7,6 +7,7 @@ on:
   pull_request:
     branches:
       - main
+      - pc2-codex-ct-13/support-composed
   push:
     branches:
       - main
