@@ -1,4 +1,4 @@
-// [pc2-codex-41] NEW successor tests only. Existing node:sqlite in-memory mechanism; no cloud/native Worker runtime.
+// [pc2-codex-41] NEW successor tests only. [pc2-claude-ct-2] v3 limits/label updated Nov 28 2026. Existing node:sqlite in-memory mechanism; no cloud/native Worker runtime.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
@@ -34,8 +34,8 @@ test('row/cell/total encoded allocation and unsupported BLOB/unsafe integer/infi
  const db=new DatabaseSync(':memory:');try{
   db.exec('CREATE TABLE alpha(value)');const table={name:'alpha',columns:['value']};
   for(const insert of [()=>db.exec("INSERT INTO alpha VALUES(X'01')"),()=>db.exec('INSERT INTO alpha VALUES(9223372036854775807)'),()=>db.exec('INSERT INTO alpha VALUES(1e999)')]){db.exec('DELETE FROM alpha');insert();await assert.rejects(readBackupSnapshot(adapter(db)),/scalar limits/);}
-  db.exec('DELETE FROM alpha');const stmt=db.prepare('INSERT INTO alpha VALUES(?)');for(let i=0;i<2049;i++)stmt.run(null);const stats=db.prepare(snapshotStatsSql(table)).get();assert.equal(stats.row_count,2049);assert.equal(db.prepare(boundedTableSql(table,{rows:2048,cells:2048,bytes:1048576})).get().envelope,null);await assert.rejects(readBackupSnapshot(adapter(db)),/scalar limits/);
-  db.exec('DELETE FROM alpha');for(let i=0;i<120;i++)stmt.run('x'.repeat(2000));await assert.rejects(readBackupSnapshot(adapter(db)),/total allocation/);
+  db.exec('DELETE FROM alpha');const stmt=db.prepare('INSERT INTO alpha VALUES(?)');for(let i=0;i<=PRE_RETURN_LIMITS.rows;i++)stmt.run(null);const stats=db.prepare(snapshotStatsSql(table)).get();assert.equal(stats.row_count,PRE_RETURN_LIMITS.rows+1);assert.equal(db.prepare(boundedTableSql(table,{rows:PRE_RETURN_LIMITS.rows,cells:PRE_RETURN_LIMITS.rows,bytes:1048576})).get().envelope,null);await assert.rejects(readBackupSnapshot(adapter(db)),/scalar limits/);
+  db.exec('DELETE FROM alpha');db.exec('CREATE TABLE beta(value)');const beta=db.prepare('INSERT INTO beta VALUES(?)');for(let i=0;i<360;i++){stmt.run('x'.repeat(2000));beta.run('y'.repeat(2000));}await assert.rejects(readBackupSnapshot(adapter(db)),/total allocation/);db.exec('DROP TABLE beta');
   assert.throws(()=>boundedTableSql(table,{rows:1,cells:65537,bytes:1000}));
  }finally{db.close();}
 });
@@ -55,6 +55,37 @@ test('schema drift/generated/oversize DDL and identifiers explicitly refuse with
 test('successful full capture preserves unchanged R2 ordering/history/integrity and completion after all table bytes',async()=>{
  const db=new DatabaseSync(':memory:');try{db.exec("CREATE TABLE alpha(value TEXT);INSERT INTO alpha VALUES('a');CREATE TABLE d1_migrations(name TEXT);INSERT INTO d1_migrations VALUES('0020_fixture.sql')");const events=[],stored=new Map();
   const result=await runBackup({DB:adapter(db),BACKUPS:{async head(){events.push('head');return null;},async put(key,payload){events.push(key.endsWith('manifest.json')?'manifest':'table');stored.set(key,JSON.parse(payload));},async list(){events.push('prune');return {objects:[],truncated:false};}}},{now:new Date('2026-10-16T03:00:00Z')});
-  assert.deepEqual(events,['head','table','table','manifest','prune']);assert.equal(result.manifest.latest_migration,'0020_fixture.sql');assert.equal(result.manifest.snapshot.mechanism,'d1-bounded-typed-read-batch-v2');assert.equal(result.manifest.total_rows,2);assert.deepEqual(stored.get('legacy-hub/2026-10-16/alpha.json'),[{value:'a'}]);
+  assert.deepEqual(events,['head','table','table','manifest','prune']);assert.equal(result.manifest.latest_migration,'0020_fixture.sql');assert.equal(result.manifest.snapshot.mechanism,'d1-bounded-typed-read-batch-v3');assert.equal(result.manifest.total_rows,2);assert.deepEqual(stored.get('legacy-hub/2026-10-16/alpha.json'),[{value:'a'}]);
+ }finally{db.close();}
+});
+
+// [pc2-claude-ct-2] v3 regressions for the 2026-11-12..27 nightly refusal (production pessimistic
+// upper 1,683,234 > v2's 1 MiB; one content_type row at 56,872 of v2's 65,536 row cap).
+test('production-scale snapshot above the old 1 MiB cap succeeds in rowid-ordered chunks of ONE final batch',async()=>{
+ const db=new DatabaseSync(':memory:');try{
+  db.exec('CREATE TABLE audit_log(id INTEGER PRIMARY KEY,actor TEXT,before_json TEXT,after_json TEXT,at TEXT);CREATE TABLE content_type(id TEXT PRIMARY KEY,schema_json TEXT);CREATE TABLE note(id INTEGER PRIMARY KEY,body TEXT)');
+  const audit=db.prepare('INSERT INTO audit_log(actor,before_json,after_json,at) VALUES(?,?,?,?)');
+  for(let i=0;i<1500;i++)audit.run('fictional_staff',JSON.stringify({n:i,t:'é🌎'.repeat(20)}),i%7?null:JSON.stringify({v:'x'.repeat(300)}),'2026-11-27T03:00:00Z');
+  db.prepare('INSERT INTO content_type VALUES(?,?)').run('page_section','{"schema":"'+'s'.repeat(30000)+'"}');
+  const stats=db.prepare(snapshotStatsSql({name:'audit_log',columns:['id','actor','before_json','after_json','at']})).get();
+  assert.ok(stats.upper_bytes>1683234,'fixture exceeds the observed production upper');assert.ok(stats.chunk_count>=3);
+  const ct=db.prepare(snapshotStatsSql({name:'content_type',columns:['id','schema_json']})).get();assert.ok(ct.max_row_upper>65536&&ct.max_row_upper<=PRE_RETURN_LIMITS.rowUpper);
+  const binding=adapter(db),snap=await readBackupSnapshot(binding);
+  assert.equal(binding.batches.length,3);assert.equal(binding.batches[2].length,2+stats.chunk_count+2);
+  for(const name of ['audit_log','content_type','note'])assert.deepEqual(snap.tables.find(t=>t.name===name).rows,db.prepare(`SELECT * FROM ${name} ORDER BY rowid`).all().map(r=>({...r})));
+  assert.deepEqual(snap.tables.find(t=>t.name==='note').rows,[]);
+  for(const sql of binding.batches[2].filter(s=>s.includes('AS envelope'))){const e=db.prepare(sql).get().envelope;assert.ok(Buffer.byteLength(e)<=PRE_RETURN_LIMITS.envelopeBytes);}
+ }finally{db.close();}
+});
+test('chunk drift, oversize rows, reserved rowid names and WITHOUT ROWID tables refuse before any R2 write',async()=>{
+ const growth=db=>{const s=db.prepare('INSERT INTO alpha(value) VALUES(?)');for(let i=0;i<200;i++)s.run('z'.repeat(2000));};
+ const db=new DatabaseSync(':memory:');try{
+  db.exec('CREATE TABLE alpha(id INTEGER PRIMARY KEY,value TEXT)');const s=db.prepare('INSERT INTO alpha(value) VALUES(?)');for(let i=0;i<100;i++)s.run('a'.repeat(2000));
+  let writes=0;await assert.rejects(runBackup({DB:adapter(db,()=>growth(db)),BACKUPS:{async head(){return null;},async put(){writes++;},async list(){assert.fail('no pruning after refusal');}}}),/bounded snapshot/);assert.equal(writes,0);
+  db.exec('DELETE FROM alpha');db.prepare('INSERT INTO alpha(value) VALUES(?)').run('r'.repeat(50000));await assert.rejects(readBackupSnapshot(adapter(db)),/scalar limits/);
+  db.exec('DROP TABLE alpha;CREATE TABLE alpha(oid TEXT)');await assert.rejects(readBackupSnapshot(adapter(db)),/reserved rowid column/);
+  db.exec('DROP TABLE alpha;CREATE TABLE alpha(__legacy_backup_chunk TEXT)');await assert.rejects(readBackupSnapshot(adapter(db)),/reserved rowid column/);
+  db.exec('DROP TABLE alpha;CREATE TABLE alpha(id TEXT PRIMARY KEY,value TEXT) WITHOUT ROWID');await assert.rejects(readBackupSnapshot(adapter(db)),/rowid table/);
+  assert.throws(()=>boundedTableSql({name:'alpha',columns:['value']},{rows:1,cells:1,bytes:100,chunks:2},2),/chunk budget/);
  }finally{db.close();}
 });

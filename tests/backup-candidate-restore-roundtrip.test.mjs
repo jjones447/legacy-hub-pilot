@@ -12,7 +12,7 @@ import { runBackup } from '../workers/backup/candidates/pre-return-bounded.mjs';
 import { restoreDatabase, buildInsertSql } from '../scripts/restore-from-backup.mjs';
 
 const producerUrl = new URL('../workers/backup/candidates/pre-return-bounded.mjs', import.meta.url);
-const producerHash = '0de296c5390b434b554199bab3a07b7324357bf93d3eb514162dc47f5e7e4d38';
+const producerHash = 'b1952c13aaef158559acb2c4d7b4910d0b39441522c80ff28bda7f985ca2953d';
 const plain = value => JSON.parse(JSON.stringify(value));
 const auditFields = ['id', 'actor', 'action', 'entity', 'entity_id', 'before_json', 'after_json', 'at'];
 const originalAudit = [

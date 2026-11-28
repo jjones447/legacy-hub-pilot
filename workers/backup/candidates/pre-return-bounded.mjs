@@ -40,7 +40,26 @@ export const BAKED_IN_LATEST_MIGRATION = "0012_wellness_checkin.sql";
 // These conservative source limits refuse rather than emit a partial snapshot.
 export const SNAPSHOT_LIMITS = Object.freeze({ tables: 32, rowsPerTable: 4096, bytes: 8 * 1024 * 1024 });
 // [pc2-codex-41] Explicit successor: D1-side bounds apply BEFORE binding materialization.
-export const PRE_RETURN_LIMITS = Object.freeze({ rows: 2048, cells: 65536, encodedBytes: 1048576, rowUpper: 65536, columns: 100, identifierBytes: 128, ddlBytes: 4096, sqlBytes: 100000 });
+// [pc2-claude-ct-2] v3 (Nov 28 2026): the v2 single-envelope caps (2048 rows / 1 MiB
+// pessimistic upper in total, 65536 per row) refused production every night from
+// 2026-11-12 (sum upper 1,683,234). v3 keeps the same estimator, typed encoding and
+// lazy CASE refusal, but splits each table into rowid-ordered chunks whose envelopes
+// stay far below D1's 2,000,000-byte value limit, and raises the aggregate budget to
+// the existing 8 MiB post-serialization cap. All chunks are still read in ONE final
+// read-only batch (one transaction); any drift between preflight and capture refuses.
+export const PRE_RETURN_LIMITS = Object.freeze({
+  rows: 32768,            // total rows across all tables (per-table scan sentinel rows+1)
+  cells: 1048576,         // total cells
+  encodedBytes: 8388608,  // total pessimistic upper bytes = SNAPSHOT_LIMITS.bytes
+  rowUpper: 262144,       // max pessimistic upper bytes for one row
+  chunkBytes: 786432,     // chunk boundary step; one chunk's upper < chunkBytes + rowUpper
+  envelopeBytes: 1048576, // max encoded bytes of one returned envelope (chunkBytes + rowUpper)
+  chunks: 64,             // max chunks across all tables
+  queries: 1000,          // whole-invocation D1 query cap (Workers Paid); Free plan's 50 is enforced by D1 itself and still refuses
+  columns: 100, identifierBytes: 128, ddlBytes: 4096, sqlBytes: 100000
+});
+const RID = '__legacy_backup_rid', UPPER = '__legacy_backup_upper', BAD = '__legacy_backup_bad', CHUNK = '__legacy_backup_chunk';
+const RESERVED_COLUMNS = new Set(['rowid', '_rowid_', 'oid', RID, UPPER, BAD, CHUNK]);
 const FILTER = "m.type='table' AND m.name NOT LIKE 'sqlite_%' AND m.name NOT LIKE '_cf_%'";
 const CATALOG_SQL = `SELECT CASE WHEN length(CAST(m.name AS BLOB))<=128 THEN m.name ELSE NULL END AS name,CASE WHEN length(CAST(m.sql AS BLOB))<=4096 THEN m.sql ELSE NULL END AS sql FROM sqlite_master m WHERE ${FILTER} ORDER BY m.name LIMIT 33`;
 const SCHEMA_SQL = `SELECT CASE WHEN length(CAST(m.name AS BLOB))<=128 THEN m.name ELSE NULL END AS table_name,p.cid,CASE WHEN length(CAST(p.name AS BLOB))<=128 THEN p.name ELSE NULL END AS column_name,CASE WHEN length(CAST(p.type AS BLOB))<=128 THEN p.type ELSE NULL END AS type,p.pk,p.hidden FROM sqlite_master m JOIN pragma_table_xinfo(m.name) p WHERE ${FILTER} ORDER BY m.name,p.cid LIMIT 3201`;
@@ -51,12 +70,26 @@ function quoted(name) {
   return `"${name}"`;
 }
 function boundedSql(sql) { refusal(utf8(sql)<=PRE_RETURN_LIMITS.sqlBytes,'SQL size'); return sql; }
-export function snapshotStatsSql(table) {
+function checkedColumns(table) {
   refusal(Array.isArray(table.columns)&&table.columns.length>=1&&table.columns.length<=100&&new Set(table.columns).size===table.columns.length,'columns');
-  const columns=table.columns.map(quoted); quoted(table.name);
-  const row=`(16+${columns.map(c=>`(CASE WHEN typeof(${c})='text' THEN 6*length(CAST(${c} AS BLOB))+96 ELSE 96 END)`).join('+')})`;
+  refusal(table.columns.every(c=>typeof c==='string'&&!RESERVED_COLUMNS.has(c.toLowerCase())),'reserved rowid column');
+  return table.columns.map(quoted);
+}
+// Per-row pessimistic upper (unchanged from v2), per-row unsupported-cell count, and the
+// running upper of all EARLIER rows in rowid order. Chunk k holds rows whose earlier-row
+// upper is in [k*chunkBytes, (k+1)*chunkBytes); each row's upper is < chunkBytes, so chunk
+// indexes are contiguous and one chunk's upper is < chunkBytes + rowUpper.
+function rankedRowsSql(table) {
+  const columns=checkedColumns(table);quoted(table.name);
+  const upper=`(16+${columns.map(c=>`(CASE WHEN typeof(${c})='text' THEN 6*length(CAST(${c} AS BLOB))+96 ELSE 96 END)`).join('+')})`;
   const bad=columns.map(c=>`(CASE typeof(${c}) WHEN 'null' THEN 0 WHEN 'text' THEN 0 WHEN 'integer' THEN CASE WHEN ${c} BETWEEN -9007199254740991 AND 9007199254740991 THEN 0 ELSE 1 END WHEN 'real' THEN CASE WHEN ${c} BETWEEN -1.7976931348623157e308 AND 1.7976931348623157e308 THEN CASE WHEN CAST(printf('%!.26g',${c}) AS REAL)=${c} THEN 0 ELSE 1 END ELSE 1 END ELSE 1 END)`).join('+');
-  return boundedSql(`SELECT COUNT(*) AS row_count,2+COALESCE(SUM(${row}),0) AS upper_bytes,COALESCE(MAX(${row}),0) AS max_row_upper,COALESCE(SUM(${bad}),0) AS bad_cells FROM (SELECT ${columns.join(',')} FROM ${quoted(table.name)} LIMIT 2049)`);
+  return `SELECT ${columns.join(',')},"${RID}","${UPPER}","${BAD}",CAST(COALESCE(SUM("${UPPER}") OVER (ORDER BY "${RID}" ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),0)/${PRE_RETURN_LIMITS.chunkBytes} AS INTEGER) AS "${CHUNK}" FROM (SELECT ${columns.join(',')},"${RID}",${upper} AS "${UPPER}",${bad} AS "${BAD}" FROM (SELECT ${columns.join(',')},rowid AS "${RID}" FROM ${quoted(table.name)} ORDER BY rowid LIMIT ${PRE_RETURN_LIMITS.rows+1}))`;
+}
+function statsFrom() {
+  return `SELECT COUNT(*) AS row_count,2+COALESCE(SUM("${UPPER}"),0) AS upper_bytes,COALESCE(MAX("${UPPER}"),0) AS max_row_upper,COALESCE(SUM("${BAD}"),0) AS bad_cells,COALESCE(MAX("${CHUNK}"),-1)+1 AS chunk_count FROM r`;
+}
+export function snapshotStatsSql(table) {
+  return boundedSql(`WITH r AS (${rankedRowsSql(table)}) ${statsFrom()}`);
 }
 function typedRowSql(columns) {
   const values=columns.map(name=>{const c=quoted(name);return `json_array(typeof(${c}),CASE typeof(${c}) WHEN 'text' THEN hex(CAST(${c} AS BLOB)) WHEN 'integer' THEN CAST(${c} AS TEXT) WHEN 'real' THEN printf('%!.26g',${c}) ELSE NULL END)`;});
@@ -64,11 +97,17 @@ function typedRowSql(columns) {
   for(let i=32;i<values.length;i+=15)row=`json_insert(${row},${values.slice(i,i+15).map(v=>`'$[#]',${v}`).join(',')})`;
   return row;
 }
-export function boundedTableSql(table,budget) {
-  refusal(Number.isSafeInteger(budget.rows)&&budget.rows>=0&&budget.rows<=2048&&Number.isSafeInteger(budget.cells)&&budget.cells===budget.rows*table.columns.length&&budget.cells<=65536&&Number.isSafeInteger(budget.bytes)&&budget.bytes>=2&&budget.bytes<=1048576,'budget');
-  // CASE is lazy: rejected rows are never JSON encoded or projected to the binding.
-  // The LIMIT is a rejection sentinel in scalar statistics, NEVER a successful data truncation.
-  return boundedSql(`WITH s AS MATERIALIZED (${snapshotStatsSql(table)}) SELECT CASE WHEN row_count<=${budget.rows} AND row_count*${table.columns.length}<=${budget.cells} AND upper_bytes<=${budget.bytes} AND max_row_upper<=65536 AND bad_cells=0 THEN (SELECT json_group_array(${typedRowSql(table.columns)}) FROM ${quoted(table.name)}) ELSE NULL END AS envelope FROM s`);
+export function boundedTableSql(table,budget,chunk=0) {
+  const L=PRE_RETURN_LIMITS;
+  refusal(Number.isSafeInteger(budget.rows)&&budget.rows>=0&&budget.rows<=L.rows&&Number.isSafeInteger(budget.cells)&&budget.cells===budget.rows*table.columns.length&&budget.cells<=L.cells&&Number.isSafeInteger(budget.bytes)&&budget.bytes>=2&&budget.bytes<=L.encodedBytes,'budget');
+  const chunks=budget.chunks===undefined?1:budget.chunks;
+  refusal(Number.isSafeInteger(chunks)&&chunks>=1&&chunks<=L.chunks&&Number.isSafeInteger(chunk)&&chunk>=0&&chunk<chunks,'chunk budget');
+  // The whole-table statistics are recomputed on CURRENT rows inside the final transaction and
+  // compared with the immutable preflight budget, including the chunk count, so a chunk can
+  // never silently gain, lose or shift rows. An empty table has chunk_count 0 and budget 1.
+  // CASE is lazy: rejected chunks are never JSON encoded or projected to the binding.
+  // The LIMIT in r is a rejection sentinel in scalar statistics, NEVER a successful truncation.
+  return boundedSql(`WITH r AS MATERIALIZED (${rankedRowsSql(table)}),s AS MATERIALIZED (${statsFrom()}) SELECT CASE WHEN row_count<=${budget.rows} AND row_count*${table.columns.length}<=${budget.cells} AND upper_bytes<=${budget.bytes} AND max_row_upper<=${L.rowUpper} AND bad_cells=0 AND max(chunk_count,1)=${chunks} THEN (SELECT json_group_array(${typedRowSql(table.columns)}) FROM (SELECT ${table.columns.map(quoted).join(',')} FROM r WHERE "${CHUNK}"=${chunk} ORDER BY "${RID}")) ELSE NULL END AS envelope FROM s`);
 }
 function resultRows(result) {
   if (result?.success !== true || !Array.isArray(result.results)) throw new Error("Refusal: incomplete D1 snapshot result");
@@ -88,6 +127,7 @@ function catalogRows(result) {
 }
 export async function readBackupSnapshot(db) {
   if (typeof db.batch !== 'function') throw new Error("Refusal: transactional D1 batch unavailable");
+  const L=PRE_RETURN_LIMITS;
   // Discovery and allocation return bounded schema/scalars only. All row content
   // and schema revalidation are captured in ONE final read-only transaction.
   const metadata=await db.batch([db.prepare(CATALOG_SQL),db.prepare(SCHEMA_SQL)]);
@@ -96,6 +136,7 @@ export async function readBackupSnapshot(db) {
   refusal(schema.length<=3200,'schema count');
   const descriptors=catalog.map(({name,sql})=>{
     quoted(name);refusal(typeof sql==='string'&&utf8(sql)<=4096&&/^CREATE TABLE\b/i.test(sql.trim()),'ordinary table schema');
+    refusal(!/\bWITHOUT\s+ROWID\b/i.test(sql),'rowid table');
     const fields=schema.filter(c=>c.table_name===name);refusal(fields.length>=1&&fields.length<=100,'column count');
     for(const [i,c]of fields.entries()){quoted(c.column_name);refusal(c.cid===i&&c.hidden===0&&typeof c.type==='string'&&utf8(c.type)<=128&&Number.isSafeInteger(c.pk)&&c.pk>=0&&c.pk<=100,'column metadata');}
     refusal(new Set(fields.map(c=>c.column_name)).size===fields.length,'duplicate column');return {name,columns:fields.map(c=>c.column_name)};
@@ -103,21 +144,33 @@ export async function readBackupSnapshot(db) {
   refusal(schema.length===descriptors.reduce((n,t)=>n+t.columns.length,0),'schema coverage');
   const preflight=descriptors.length?await db.batch(descriptors.map(t=>db.prepare(snapshotStatsSql(t)))):[];
   refusal(Array.isArray(preflight)&&preflight.length===descriptors.length,'scalar preflight');
-  let totalRows=0,totalCells=0,totalUpper=0;
+  let totalRows=0,totalCells=0,totalUpper=0,totalChunks=0;
   const budgets=descriptors.map((t,i)=>{
     const values=resultRows(preflight[i]);refusal(values.length===1&&values[0]&&typeof values[0]==='object'&&!Array.isArray(values[0]),'scalar result');const r=values[0];
-    refusal(Object.keys(r).sort().join(',')==='bad_cells,max_row_upper,row_count,upper_bytes'&&Object.values(r).every(v=>Number.isSafeInteger(v)&&v>=0)&&r.bad_cells===0&&r.row_count<=2048&&r.max_row_upper<=65536,'scalar limits');
-    totalRows+=r.row_count;totalCells+=r.row_count*t.columns.length;totalUpper+=r.upper_bytes;return {rows:r.row_count,cells:r.row_count*t.columns.length,bytes:r.upper_bytes};
+    refusal(Object.keys(r).sort().join(',')==='bad_cells,chunk_count,max_row_upper,row_count,upper_bytes'&&Object.values(r).every(v=>Number.isSafeInteger(v)&&v>=0)&&r.bad_cells===0&&r.row_count<=L.rows&&r.max_row_upper<=L.rowUpper&&r.upper_bytes<=L.encodedBytes,'scalar limits');
+    const chunks=Math.max(r.chunk_count,1);refusal(chunks<=L.chunks,'chunk count');
+    totalRows+=r.row_count;totalCells+=r.row_count*t.columns.length;totalUpper+=r.upper_bytes;totalChunks+=chunks;
+    return {rows:r.row_count,cells:r.row_count*t.columns.length,bytes:r.upper_bytes,chunks};
   });
-  refusal(totalRows<=2048&&totalCells<=65536&&totalUpper<=1048576,'total allocation');
-  const results=await db.batch([db.prepare(CATALOG_SQL),db.prepare(SCHEMA_SQL),...descriptors.map((t,i)=>db.prepare(boundedTableSql(t,budgets[i])))]);
-  refusal(Array.isArray(results)&&results.length===catalog.length+2,'snapshot batch');
+  refusal(totalRows<=L.rows&&totalCells<=L.cells&&totalUpper<=L.encodedBytes,'total allocation');
+  refusal(totalChunks<=L.chunks,'total chunks');
+  // Whole invocation: metadata (2) + preflight (N) + final catalog/schema (2) + chunks.
+  refusal(4+descriptors.length+totalChunks<=L.queries,'query budget');
+  const chunkPlan=descriptors.flatMap((t,i)=>Array.from({length:budgets[i].chunks},(_,k)=>({table:i,chunk:k})));
+  const results=await db.batch([db.prepare(CATALOG_SQL),db.prepare(SCHEMA_SQL),...chunkPlan.map(({table,chunk})=>db.prepare(boundedTableSql(descriptors[table],budgets[table],chunk)))]);
+  refusal(Array.isArray(results)&&results.length===chunkPlan.length+2,'snapshot batch');
   refusal(JSON.stringify(catalogRows(results[0]))===JSON.stringify(catalog)&&JSON.stringify(resultRows(results[1]))===JSON.stringify(schema),'catalog/schema changed');
+  const decodedByTable=descriptors.map(()=>[]),encodedByTable=descriptors.map(()=>0);
+  chunkPlan.forEach(({table},n)=>{
+    const values=resultRows(results[n+2]);refusal(values.length===1&&values[0]&&typeof values[0]==='object'&&!Array.isArray(values[0])&&Object.keys(values[0]).join(',')==='envelope','envelope result');
+    const encoded=values[0].envelope;refusal(typeof encoded==='string','D1-side gate');
+    const size=utf8(encoded);refusal(size<=L.envelopeBytes,'envelope bytes');encodedByTable[table]+=size;refusal(encodedByTable[table]<=budgets[table].bytes,'encoded bytes');
+    let decoded;try{decoded=JSON.parse(encoded);}catch{refusal(false,'encoded JSON');}refusal(Array.isArray(decoded),'decoded envelope');
+    decodedByTable[table].push(...decoded);refusal(decodedByTable[table].length<=budgets[table].rows,'decoded row count');
+  });
   let byteLength = 0;
   const tables = catalog.map(({ name }, index) => {
-    const values=resultRows(results[index+2]);refusal(values.length===1&&values[0]&&typeof values[0]==='object'&&!Array.isArray(values[0])&&Object.keys(values[0]).join(',')==='envelope','envelope result');
-    const encoded=values[0].envelope;refusal(typeof encoded==='string'&&utf8(encoded)<=budgets[index].bytes,'D1-side gate/encoded bytes');
-    let decoded;try{decoded=JSON.parse(encoded);}catch{refusal(false,'encoded JSON');}const columns=descriptors[index].columns;refusal(Array.isArray(decoded)&&decoded.length<=budgets[index].rows,'decoded row count');
+    const decoded=decodedByTable[index];refusal(decoded.length===budgets[index].rows,'decoded row count');const columns=descriptors[index].columns;
     const rows=decoded.map(cells=>{
       refusal(Array.isArray(cells)&&cells.length===columns.length,'cell count');
       return Object.fromEntries(cells.map((cell,i)=>{
@@ -216,7 +269,7 @@ export async function runBackup(env, options = {}) {
     latest_migration: latestMigration,
     tables: tableCounts,
     total_rows: totalRows,
-    snapshot: { mechanism: "d1-bounded-typed-read-batch-v2", catalog_sha256: snapshot.catalog_sha256 },
+    snapshot: { mechanism: "d1-bounded-typed-read-batch-v3", catalog_sha256: snapshot.catalog_sha256 },
     // Additive version-1 metadata; existing restore readers still use tables.
     // Verify against a trusted manifest before restoring; old snapshots have no digests.
     integrity: { algorithm: "SHA-256", encoding: "utf-8", tables: tableIntegrity }
