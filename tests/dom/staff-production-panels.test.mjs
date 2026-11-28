@@ -296,3 +296,19 @@ test('bulk Reviewed prevents double submission while a request is pending', asyn
   finish({ok:true,json:async()=>({ok:true})});await first;
   assert.match(w.document.getElementById('followupReviewStatus').textContent,/1 items marked reviewed/);dom.window.close();
 });
+
+test('dedicated Support follow-ups stay visible and are excluded from individual and bulk review', async () => {
+  const dedicated = {id:1, caregiver_id:'one', kind:'support_request', status:'open', source:'portal_owner_support_request'};
+  const queue = [dedicated];
+  const p = await page({queue});
+  try {
+    await p.w.loadFollowups();
+    const doc = p.w.document;
+    assert.match(doc.getElementById('needsAttentionBody').textContent, /Manage in Caregiver Support Requests/);
+    assert.equal(doc.getElementById('reviewAllFollowups').disabled, true);
+    queue.push({...dedicated, id:2, source:'site_form:support'});
+    await p.w.loadFollowups();
+    assert.equal(doc.getElementById('reviewAllFollowups').disabled, false);
+    assert.deepEqual([...doc.querySelectorAll('[data-action="resolve-followup"]')].map(el=>el.dataset.followupId), ['2']);
+  } finally { p.close(); }
+});

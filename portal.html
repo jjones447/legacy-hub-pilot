@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css?v=2326affafb7e">
+<link rel="stylesheet" href="portal-support-ui.css?v=a3565a284d27">
 <link rel="icon" href="favicon.ico" sizes="32x32">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -212,6 +213,7 @@
         <a href="request-support.html" class="btn btn-outline btn-sm mt-16 d-inline-block">Contact Legacy</a>
       </div>
 
+      <section id="portalFunctionalSupport" hidden aria-label="Request Support"></section>
       <div class="panel m-0 portal-card" id="portalSupportCard" hidden>
         <h4><span class="portal-card-icon" aria-hidden="true">🤝</span> My Support</h4>
         <p class="small muted m-0" id="portalSupportSummary">Need help with caregiving, respite or resources? Send a request and the Legacy team will follow up with you.</p>
@@ -353,7 +355,8 @@
 </footer>
 <!-- SHARED:footer:end -->
 
-<script src="app.js?v=4e2ad99e6308"></script>
+<script type="module" src="portal-support-bootstrap.mjs?v=79bbb7ca4102"></script>
+<script src="app.js?v=139da08f25b0"></script>
 <script src="nav-v2.js"></script>
 </body>
 </html>

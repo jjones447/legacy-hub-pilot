@@ -709,7 +709,8 @@ async function loadFollowups() {
     
     const openCount = Array.isArray(data.queue) ? data.queue.length : 0;
     const reviewAll = document.getElementById('reviewAllFollowups');
-    if (reviewAll) reviewAll.disabled = !openCount || reviewAll.dataset.busy === 'true';
+    const reviewable = data.queue?.some(fu => fu.status === 'open' && fu.source !== 'portal_owner_support_request');
+    if (reviewAll) reviewAll.disabled = !reviewable || reviewAll.dataset.busy === 'true';
     if (count) count.textContent = openCount ? `(${openCount} open)` : '(nothing open)';
     noteNeedsAttentionActionable(openCount > 0);
     const body = document.getElementById('needsAttentionBody');
@@ -728,7 +729,9 @@ async function loadFollowups() {
       const statusText = fu.status === 'open' ? 'Queued' : 'Reviewed';
       
       let actionHtml = '';
-      if (fu.status === 'open') {
+      if (fu.source === 'portal_owner_support_request') {
+        actionHtml = 'Manage in Caregiver Support Requests';
+      } else if (fu.status === 'open') {
         actionHtml = `<button class="btn btn-sm btn-coral btn-compact-ml" data-action="resolve-followup" data-followup-id="${escapeHtml(fu.id)}">Reviewed</button>`;
       }
       

@@ -42,7 +42,7 @@ export async function onRequestPost({ request, env }) {
     }
 
     const oldFollowup = await env.LEGACY_DB
-      .prepare(`SELECT status FROM followup WHERE id = ?`)
+      .prepare(`SELECT status, source FROM followup WHERE id = ?`)
       .bind(body.id)
       .first();
 
@@ -50,6 +50,12 @@ export async function onRequestPost({ request, env }) {
       return new Response(JSON.stringify({ ok: false, error: 'followup not found' }), {
         status: 404,
         headers: { 'content-type': 'application/json' },
+      });
+    }
+
+    if (oldFollowup.source === 'portal_owner_support_request') {
+      return new Response(JSON.stringify({ ok: false, error: 'use_support_status' }), {
+        status: 409, headers: { 'content-type': 'application/json', 'Cache-Control': 'no-store' },
       });
     }
 

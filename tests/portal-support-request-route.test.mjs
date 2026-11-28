@@ -5,6 +5,7 @@ import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
 import {onRequestGet,onRequestPost} from '../functions/api/portal/[[path]].js';
 import {cookie,ORIGIN} from './helpers/caregiver-profile-fixture.mjs';
+import {supportSessionProof} from '../functions/_lib/support-session-proof.mjs';
 const payload=()=>({request_id:'synthetic_request_0001',needs:['break'],preferred_contact:'email',message:'Synthetic private text'});
 function setup(t){
  const raw=new DatabaseSync(':memory:');t.after(()=>raw.close());raw.exec('PRAGMA foreign_keys=ON');
@@ -15,6 +16,8 @@ function setup(t){
  const env={LEGACY_DB:db,PORTAL_TOKEN_SECRET:'synthetic-profile-signing-key',PORTAL_SUPPORT_REQUEST_ENABLED:'1'};
  async function call({method='GET',path='/api/portal/support-requests',body=payload(),id='cg_a',headers={},rawBody}={}){
   const h=new Headers({Origin:ORIGIN,'Content-Type':'application/json',Cookie:await cookie(id)});
+  const proofRequest = new Request(ORIGIN+path, {headers:h});
+  h.set('X-Support-Session', await supportSessionProof(proofRequest, 'owner', id));
   for(const [k,v]of Object.entries(headers))v===null?h.delete(k):h.set(k,v);
   const request=new Request(ORIGIN+path,{method,headers:h,...(method==='POST'?{body:rawBody??JSON.stringify(body)}:{})});
   return (method==='POST'?onRequestPost:onRequestGet)({request,env});
@@ -63,3 +66,24 @@ test('lost acknowledgment reconciles through HTTP, audit failure remains generic
  f.state.loseAck=false;f.raw.exec("CREATE TRIGGER synthetic_fail BEFORE INSERT ON audit_log BEGIN SELECT RAISE(ABORT,'private failure'); END;");const failed=await f.call({method:'POST',body:{...payload(),request_id:'synthetic_request_0002'}});assert.equal(failed.status,500);assert.doesNotMatch(await failed.text(),/private failure|Synthetic private/);assert.equal(f.count(),1);
 });
 test('missing contact requires action rather than fallback; absent schema stays closed',async t=>{const f=setup(t);f.raw.exec("UPDATE caregiver SET email=NULL WHERE id='cg_a'");assert.equal((await f.call({method:'POST'})).status,422);assert.equal(f.count(),0);f.raw.exec('DROP TABLE portal_support_request');assert.equal((await f.call()).status,500);});
+
+test('owner qualification is required on both operations and bound to the session that opened the view', async t => {
+  const f = setup(t);
+  const signed = await cookie('cg_a');
+  const qualified = await f.call({path:'/api/portal/me?support=1', headers:{Cookie:signed}});
+  const {support_session: proof} = await qualified.json();
+  assert.match(proof, /^[a-f0-9]{64}$/);
+  const expectedReads = f.state.reads;
+  for (const [credential, precondition] of [
+    [await cookie('cg_b'), proof], [await cookie('cg_a', Date.now()+120000), proof], [signed, null]
+  ]) {
+    for (const method of ['GET','POST']) {
+      const result = await f.call({method, headers:{Cookie:credential,'X-Support-Session':precondition}});
+      assert.equal(result.status, 403);
+    }
+  }
+  assert.equal(f.state.reads, expectedReads);
+  assert.equal(f.state.batches, 0);
+  assert.equal(f.raw.prepare('SELECT count(*) n FROM audit_log').get().n, 0);
+  assert.equal((await f.call({headers:{Cookie:signed,'X-Support-Session':proof}})).status, 200);
+});

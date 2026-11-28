@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css?v=2326affafb7e">
+<link rel="stylesheet" href="portal-support-ui.css?v=a3565a284d27">
 <link rel="icon" href="favicon.ico" sizes="32x32">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -125,6 +126,8 @@
   <div class="container">
     <div class="split align-start">
       <div class="login-card measure-none">
+        <section id="portalFunctionalSupport" hidden aria-label="Request Support"></section>
+        <div id="supportLegacyPublicForm">
         <h2 class="fs-24" data-cs="form.request_support.heading">Tell us what you need</h2>
         <p class="sub" data-cs="form.request_support.sub">Every request goes straight to our team — no phone tag required.</p>
         <form id="supportForm" data-action="submit-support">
@@ -164,6 +167,7 @@
           <div class="error-note" data-intake-error role="alert" aria-live="assertive"></div>
           <div class="routing-note" id="supRouting" data-intake-routing><strong>What happens next:</strong> Legacy staff will review your request and reach out within two business days. An appointment is not booked yet.</div>
         </form>
+        </div>
       </div>
       <div>
         <span class="eyebrow" data-cs="request_support.next.eyebrow">What happens next</span>
@@ -203,7 +207,8 @@
 </footer>
 
 
-<script src="app.js?v=4e2ad99e6308"></script>
+<script type="module" src="portal-support-bootstrap.mjs?v=79bbb7ca4102"></script>
+<script src="app.js?v=139da08f25b0"></script>
 <script src="nav-v2.js"></script>
 </body>
 </html>

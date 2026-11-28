@@ -1,33 +1,33 @@
 # Functional Support composition readiness — November 24
 
-Candidate composes deployed #386 f090fcfc with ct5 #382 b79b707, preserving both
-histories. The sole conflict was the unit inventory; both sets remain. All 2,383
-unit tests pass. No deployment, schema application or activation follows. #383's
-owner dispatcher is present but PORTAL_SUPPORT_REQUEST_ENABLED remains disabled.
+Draft #387 combines the deployed #386 Profile base, ct5’s #382 Support modules and the projection and presentation from #389. The candidate is ready for source review. Support remains disabled on both TEST hosts and in production.
 
-## Concrete remaining work
+## Review scope
 
-- Ct5 owns Support page/controller/CSS and narrow portal/Staff presentation mounts.
-  `mountSupportForm(root, transport)` returns submit/history/reset/dispose. Ct13 wires
-  reset immediately on owner/session invalidation; dispose on navigation/unmount.
-- Owner GET/POST `/api/portal/support-requests` contract matches the dedicated transport:
-  server-derived owner, strict Origin/JSON, received receipt, same-key replay, conflict.
-- Staff store `updateSupportStatus(db, verifiedEmail, body)` exists, but its server route
-  is not mounted. Ct13 owns verified-human/current Staff authorization and transport.
-- Proposed Staff list is NOT implemented: GET `/api/staff/support-requests`, no query,
-  max50, fixed projection of id/caregiver_id/revision/needs/preferred_contact/message/
-  status/created_at/updated_at/followup_id, exclude archived and internal QA owners.
-  Do not substitute owner history for that Staff projection.
-- Browser modules use `.mjs`; current static build allowlist excludes `.mjs`.
-  Final mounting must include the explicit browser-module assets and a dist import
-  closure test. No assertion that the current compiled artifact can serve those modules.
-- Candidate schema remains unapplied. Native D1 must qualify batch transaction rollback,
-  changes() audit gating, idempotency, Staff CAS and revoked-eligibility races before
-  activation. Source SQLite tests do not replace native proof.
-- Final exact composed Security/functional review and four hosted checks are required.
-  Preserve Profile, People, capture, Reviewed controls and the named-host correction.
+The dashboard and dedicated Support page validate the caregiver through the existing session handler. The Staff console validates the active staff member and verified Access identity. The opt-in capability response supplies an in-memory proof scoped to the authenticated principal, origin and session credential. Each owner or Staff Support read and write verifies that proof against its own authenticated request before touching private records. Session rotation clears the form. The ordinary caregiver dashboard response retains its existing contract.
 
-Planning: ct5 full source Nov26 noon remains the last accepted author checkpoint.
-Ct13's conditional Nov27 12–16 integration reservation supports QA16–18 only with
-complete reviewed/green input and an accepted operator window. This preparation
-is not a new unconditional Nov27 customer date or an accepted external review slot.
+Page hiding clears rendered history and form values. Browser restoration and focus recheck the session before displaying the form. Dashboard logout and account changes invalidate outstanding requests. Once the signed-in form has replaced public intake, only an explicit feature-off response restores public intake on that page.
+
+Staff can read the fixed 50-row projection and update status through the dedicated endpoint. Both the status lookup and conditional update apply the same archived and internal-QA exclusions as the Staff list. The update also checks the current revision and Staff actor. Dedicated requests remain visible in Alerts. Staff use the dedicated status control for them. Bulk review applies only to ordinary follow-ups.
+
+The static build includes the seven explicit Support browser modules and checks local imports. Local unit and DOM tests exercise these source paths. GUI5 owns authenticated browser qualification after the isolated D1 and review steps. The scheduled Security review is November 25, 11:00–12:30 UTC.
+
+## Native D1 qualification plan
+
+Use a separately authorized isolated synthetic database, with a verified binding
+that is neither production nor the shared customer-test database. Record candidate
+schema hash and preimage, then apply only that candidate in the isolated fixture.
+No database creation or schema application is authorized by this source packet.
+
+Qualify concurrent same-owner/same-key requests, conflicting payload reuse,
+owner isolation, archived or newly ineligible owners, and current Staff revocation.
+Run concurrent status CAS writes and require one accepted revision and exactly
+one audit record. Inject a failing statement into batch writes and verify complete
+rollback, no orphan follow-up and no audit leakage. Confirm native changes()
+semantics across the exact batch, including stale and no-op transitions.
+
+Exercise the actual HTTP dispatcher with strict Origin/JSON/body-size and
+client-owner/actor rejection. Verify the fixed bounded Staff projection excludes
+archived and internal QA identities and leaks no uncontracted fields. Reconcile
+unknown or late acknowledgments by readback, never blind replay. Retain redacted
+counts/results and remove only scoped synthetic fixtures after evidence capture.
