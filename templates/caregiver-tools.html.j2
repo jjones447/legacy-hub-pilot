@@ -66,7 +66,7 @@
     <p class="muted measure-640">Printable guides and worksheets from Legacy. Open any of them to read, print, or save.</p>
     <div class="card-grid mt-24">
 {%- for d in downloads %}
-      <div class="card download-item">
+      <div class="card download-item"{% if d.get('resource_id') %} id="{{ d.resource_id | e }}" data-resource-id="{{ d.resource_id | e }}"{% endif %}>
         <span class="resource-tag">PDF &middot; {{ d.pages }} pages</span>
         <h3>{{ d.title | e }}</h3>
         <p>{{ d.description | e }}</p>
@@ -109,5 +109,6 @@
 
 <script src="app.js"></script>
 <script src="nav-v2.js"></script>
+<script src="resource-save.js"></script>
 </body>
 </html>

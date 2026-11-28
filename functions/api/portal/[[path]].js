@@ -2,6 +2,9 @@
 import { checkIpRequestLimit, IP_LIMITS } from '../_shared.mjs';
 import { canSendEmail, isPreviewMailOptIn, sendEmail, signInEmail } from '../../_lib/email.js';
 import { QUESTIONS, validateCheckin, recordCheckin, caregiverHistory, isCheckinDue, CHECKIN_EVERY_DAYS } from '../../_lib/wellness.js';
+import { isSavedResourceId, saveResource, removeSavedResource } from '../../_lib/domain/saved-resources.mjs';
+import { findResourceCard } from '../../_lib/resource-cards.mjs';
+import { listSavedResourcePage } from '../../_lib/saved-resource-page.mjs';
 
 async function getHmacSha256(message, secret) {
   const enc = new TextEncoder();
@@ -152,9 +155,7 @@ async function confirmationPage(request, token, secret) {
   } });
 }
 
-async function confirmationToken(request, secret) {
-  const nonce = confirmationCookieNonce(request);
-  if (!nonce || (request.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase() !== 'application/x-www-form-urlencoded') return null;
+async function readPortalBodyBytes(request) {
   const reader = request.body?.getReader();
   if (!reader) return null;
   const chunks = [];
@@ -171,6 +172,14 @@ async function confirmationToken(request, secret) {
   const bytes = new Uint8Array(size);
   let offset = 0;
   for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+  return bytes;
+}
+
+async function confirmationToken(request, secret) {
+  const nonce = confirmationCookieNonce(request);
+  if (!nonce || (request.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase() !== 'application/x-www-form-urlencoded') return null;
+  const bytes = await readPortalBodyBytes(request);
+  if (!bytes) return null;
   const form = new URLSearchParams(new TextDecoder().decode(bytes));
   if ([...form.keys()].sort().join(',') !== 'csrf,proof,token') return null;
   const token = form.get('token'), csrf = form.get('csrf'), proof = form.get('proof');
@@ -202,22 +211,27 @@ function htmlErrorPage(message) {
   });
 }
 
-async function parseSessionCookie(cookieHeader, secret) {
-  if (!cookieHeader) return null;
-  const match = cookieHeader.match(/portal_session=([^;]+)/);
-  if (!match) return null;
-  const sessionVal = decodeURIComponent(match[1]);
-  const parts = sessionVal.split(':');
+async function verifiedPortalSession(cookieHeader, secret) {
+  const cookies = (cookieHeader || '').split(';').map(value => value.trim())
+    .filter(value => value.startsWith('portal_session='));
+  if (cookies.length !== 1) return null;
+  let decoded;
+  try {
+    decoded = decodeURIComponent(cookies[0].slice('portal_session='.length));
+  } catch {
+    return null;
+  }
+  const parts = decoded.split(':');
   if (parts.length !== 3) return null;
   const [caregiverId, exp, signature] = parts;
-  // SEC-3: domain-separate session vs magic-link. A session cookie is signed over
-  // `session:<payload>`; an opaque magic-link token pasted as a cookie is not an
-  // `id:exp:session-hmac` value and cannot establish a session.
-  const computedSig = await getHmacSha256(`session:${caregiverId}:${exp}`, secret);
-  if (!constantTimeEqual(computedSig, signature)) return null;
-  const expMs = Number(exp);
-  if (!Number.isFinite(expMs) || Date.now() > expMs) return null;
-  return caregiverId;
+  const expiresAtMs = Number(exp);
+  if (!caregiverId || !Number.isSafeInteger(expiresAtMs) || expiresAtMs <= Date.now()) return null;
+  const expected = await getHmacSha256(`session:${caregiverId}:${exp}`, secret);
+  return constantTimeEqual(expected, signature) ? { caregiverId, expiresAtMs } : null;
+}
+
+async function parseSessionCookie(cookieHeader, secret) {
+  return (await verifiedPortalSession(cookieHeader, secret))?.caregiverId ?? null;
 }
 
 async function redeemToken(token, env, secret) {
@@ -253,6 +267,68 @@ async function redeemToken(token, env, secret) {
   } });
 }
 
+function savedResourcesEnabled(env, url) {
+  const onTestHost = url.origin === 'https://customer-test.legacy-hub-5qo.pages.dev'
+    || url.origin === 'https://staging.legacy-hub-5qo.pages.dev';
+  return env.PORTAL_SAVED_RESOURCES_ENABLED === '1' && env.ENVIRONMENT === 'preview'
+    && onTestHost && url.pathname === '/api/portal/saved-resources';
+}
+
+function savedResourcesProof(session, secret) {
+  return getHmacSha256(`saved-resource-write:${session.caregiverId}:${session.expiresAtMs}`, secret);
+}
+
+async function changeSavedResource({ request, env }, operation) {
+  try {
+    const url = new URL(request.url);
+    if (!savedResourcesEnabled(env, url)) return json({ ok: false, error: 'not_found' }, 404);
+    if (previewPortalDisabled(env, request)) return previewUnavailable();
+    if (url.search) return json({ ok: false, error: 'invalid_query' }, 400);
+    if (request.headers.get('Origin') !== url.origin || request.headers.get('Sec-Fetch-Site') !== 'same-origin') {
+      return json({ ok: false, error: 'forbidden' }, 403);
+    }
+    if (request.headers.get('Content-Type')?.split(';')[0].trim().toLowerCase() !== 'application/json') {
+      return json({ ok: false, error: 'unsupported_media_type' }, 415);
+    }
+    const secret = env.PORTAL_TOKEN_SECRET;
+    if (!secret) return json({ ok: false, error: 'auth_not_configured' }, 503);
+    const session = await verifiedPortalSession(request.headers.get('Cookie'), secret);
+    if (!session) return json({ ok: false, error: 'unauthorized' }, 401);
+    const proof = request.headers.get('X-Portal-CSRF') || '';
+    if (!constantTimeEqual(proof, await savedResourcesProof(session, secret))) return json({ ok: false, error: 'forbidden' }, 403);
+
+    const bytes = await readPortalBodyBytes(request);
+    if (!bytes) return json({ ok: false, error: 'invalid_body' }, 400);
+    let body;
+    try {
+      body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+    } catch {
+      return json({ ok: false, error: 'invalid_body' }, 400);
+    }
+    if (!body || Object.keys(body).length !== 1 || !isSavedResourceId(body.resource_id)) {
+      return json({ ok: false, error: 'invalid_body' }, 400);
+    }
+
+    if (operation === saveResource && !findResourceCard(body.resource_id)) {
+      return json({ ok: false, error: 'unavailable' }, 404);
+    }
+    const result = await operation(env.LEGACY_DB, session, body.resource_id);
+    if (result.status === 'unauthorized') return json({ ok: false, error: 'unauthorized' }, 401);
+    if (result.status === 'unavailable') return json({ ok: false, error: 'unavailable' }, 404);
+    return json({ ok: true, ...result });
+  } catch {
+    return json({ ok: false, error: 'internal_error' }, 500);
+  }
+}
+
+export function onRequestPut(context) {
+  return changeSavedResource(context, saveResource);
+}
+
+export function onRequestDelete(context) {
+  return changeSavedResource(context, removeSavedResource);
+}
+
 export async function onRequestHead(context) {
   const response = await onRequestGet(context);
   return new Response(null, { status: response.status, headers: response.headers });
@@ -264,6 +340,10 @@ export async function onRequestGet({ request, env }) {
     const pathSegments = url.pathname.split('/').filter(Boolean);
     const action = pathSegments[pathSegments.length - 1];
 
+    if (action === 'saved-resources' && !savedResourcesEnabled(env, url)) {
+      return json({ ok: false, error: 'not_found' }, 404);
+    }
+
     // Before secret, token, cookie or database access: existing preview bearer
     // credentials must not unlock caregiver records after this containment.
     if (previewPortalDisabled(env)) return previewUnavailable();
@@ -271,6 +351,22 @@ export async function onRequestGet({ request, env }) {
     const secret = env.PORTAL_TOKEN_SECRET;
     if (!secret) {
       return json({ ok: false, error: 'auth_not_configured' }, 503);
+    }
+
+    if (action === 'saved-resources') {
+      const session = await verifiedPortalSession(request.headers.get('Cookie'), secret);
+      if (!session) return json({ ok: false, error: 'unauthorized' }, 401);
+      if ([...url.searchParams.keys()].some(key => key !== 'cursor') || url.searchParams.getAll('cursor').length > 1) {
+        return json({ ok: false, error: 'invalid_query' }, 400);
+      }
+      const page = await listSavedResourcePage(env.LEGACY_DB, session, secret, url.searchParams.get('cursor'));
+      if (page.status !== 'ok') return json({ ok: false, error: page.status }, page.status === 'unauthorized' ? 401 : 400);
+      const csrfToken = await savedResourcesProof(session, secret);
+      const items = page.items.map(item => {
+        const card = item.available && findResourceCard(item.resourceId);
+        return card ? { ...item, ...card } : { ...item, available: false, title: null, href: null };
+      });
+      return json({ ok: true, caregiverId: session.caregiverId, items, nextCursor: page.nextCursor, csrfToken });
     }
 
     if (action === 'verify') {
