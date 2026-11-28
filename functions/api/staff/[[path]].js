@@ -1,3 +1,6 @@
+import {supportSessionProof} from '../../_lib/support-session-proof.mjs';
+import { confirmationActor } from '../../_lib/agent-confirmation.mjs';
+import { staffSupportRequest } from '../../_lib/portal-support-staff-http.mjs';
 // GET/POST /api/staff/[[path]] — staff endpoints for queue and caregiver management (slice 08).
 import { getActor } from '../../_lib/actor.js';
 import { internalError } from '../../_lib/errors.js';
@@ -7,6 +10,7 @@ import { getStaffMember, listStaff, updateStaffMember, createStaffMember } from 
 import { staffSeries, caregiversWithCheckins } from '../../_lib/wellness.js';
 import { _resetContentCache } from '../../_content.mjs';
 import { listSubscribers, subscribedForExport, subscribersCsv } from '../../_lib/newsletter.mjs';
+import { staffCaregiverProfile, staffProfileSummary } from '../../_lib/caregiver-profile-staff.js';
 
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), {
@@ -15,7 +19,8 @@ function json(obj, status = 200) {
   });
 }
 
-export async function onRequestGet({ request, env }) {
+export async function onRequestGet({ request, env, data }) {
+  if (new URL(request.url).pathname.startsWith('/api/staff/support-requests')) return staffSupportRequest({request,env,data});
   try {
     const url = new URL(request.url);
     const pathSegments = url.pathname.split('/').filter(Boolean); // ['api', 'staff', 'queue'] or ['api', 'staff', 'caregiver', ':id']
@@ -25,6 +30,19 @@ export async function onRequestGet({ request, env }) {
     }
 
     const subRoute = pathSegments[2];
+
+    if (subRoute === 'caregiver-profile' || subRoute === 'profile-summary') {
+      try {
+        return await (subRoute === 'caregiver-profile' ? staffCaregiverProfile : staffProfileSummary)({ request, env, data });
+      } catch (error) {
+        // Database errors may contain sensitive bound values. Do not pass them
+        // through the older generic staff logger or cache an error response.
+        console.error('profile staff handler error:', error instanceof Error ? error.name : typeof error);
+        return new Response(JSON.stringify({ ok: false, error: 'internal_error' }), {
+          status: 500, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+        });
+      }
+    }
 
     if (subRoute === 'queue') {
       // GET /api/staff/queue — open follow-up items
@@ -349,7 +367,15 @@ export async function onRequestGet({ request, env }) {
       // GET /api/staff/me -- the signed-in person's staff record (role decides admin controls)
       const actor = getActor(request, env);
       const member = await getStaffMember(env.LEGACY_DB, actor);
-      return json({ ok: true, me: member || { email: actor, display_name: null, role: 'staff', status: 'active' } });
+      const supportEnabled = env.PORTAL_SUPPORT_REQUEST_ENABLED === '1' && member?.status === 'active'
+        && ['staff','admin'].includes(member.role) && confirmationActor(data) === member.email;
+      const supportProof = url.search === '?support=1' && supportEnabled
+        ? await supportSessionProof(request, 'staff', member.email) : null;
+      const response = json({ ok: true, me: member || { email: actor, display_name: null, role: 'staff', status: 'active' },
+        ...(url.search === '?support=1' ? { capabilities: { support_requests: Boolean(supportProof) } } : {}),
+        ...(supportProof ? {support_session: supportProof} : {}) });
+      response.headers.set('Cache-Control', 'no-store');
+      return response;
     }
 
     if (subRoute === 'wellness') {
@@ -373,7 +399,8 @@ export async function onRequestGet({ request, env }) {
   }
 }
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env, data }) {
+  if (new URL(request.url).pathname.startsWith('/api/staff/support-requests')) return staffSupportRequest({request,env,data});
   try {
     const url = new URL(request.url);
     const pathSegments = url.pathname.split('/').filter(Boolean);
@@ -431,11 +458,15 @@ export async function onRequestPost({ request, env }) {
 
       // Fetch followup status
       const followup = await env.LEGACY_DB.prepare(`
-        SELECT status, caregiver_id FROM followup WHERE id = ?
+        SELECT status, caregiver_id, source FROM followup WHERE id = ?
       `).bind(id).first();
 
       if (!followup) {
         return json({ ok: false, error: 'followup not found' }, 404);
+      }
+
+      if (followup.source === 'portal_owner_support_request') {
+        return json({ ok: false, error: 'use_support_status' }, 409);
       }
 
       if (followup.status !== 'open') {

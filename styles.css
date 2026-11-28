@@ -1487,3 +1487,17 @@ main ul.measure-620 { margin: 16px 0; padding-left: 24px; }
 .respite-details-list address { font-style: normal; font-weight: 600; }
 .respite-note { color: var(--ink-soft); margin-top: 8px; }
 .respite-steps { list-style: none; padding: 0; margin: 24px 0 0; }
+
+/* Owner-only caregiver Profile editor; values never appear in browser storage. */
+.profile-section { margin: 1rem 0; padding: 1rem; border: 1px solid var(--border, #d9d2dc); border-radius: .6rem; }
+.profile-section summary { font-weight: 600; cursor: pointer; }
+.profile-field { margin: 1rem 0; min-width: 0; }
+.profile-field > label, .profile-field > legend { display: block; font-weight: 600; margin-bottom: .4rem; }
+.profile-field input:not([type="checkbox"]), .profile-field select, .profile-field textarea { width: 100%; max-width: 36rem; box-sizing: border-box; padding: .65rem; font: inherit; }
+.profile-field textarea { min-height: 7rem; }
+.profile-choice { display: flex; align-items: baseline; gap: .5rem; padding: .4rem 0; }
+.profile-actions { display: flex; flex-wrap: wrap; gap: .75rem; }
+.profile-save-status { min-height: 1.5em; }
+.profile-section [hidden] { display: none !important; }
+
+.portal-card.profile-editor-open { grid-column: 1 / -1; }

@@ -25,6 +25,8 @@
   <div class="container">
     <div class="split align-start">
       <div class="login-card measure-none">
+        <section id="portalFunctionalSupport" hidden aria-label="Request Support"></section>
+        <div id="supportLegacyPublicForm">
         <h2 class="fs-24" data-cs="form.request_support.heading">{{ sections["form.request_support"].heading }}</h2>
         <p class="sub" data-cs="form.request_support.sub">{{ sections["form.request_support"].sub }}</p>
         <form id="supportForm" data-action="submit-support">
@@ -62,6 +64,7 @@
           <div class="error-note" data-intake-error role="alert" aria-live="assertive"></div>
           <div class="routing-note" id="supRouting" data-intake-routing><strong>What happens next:</strong> Legacy staff will review your request and reach out within two business days. An appointment is not booked yet.</div>
         </form>
+        </div>
       </div>
       <div>
         <span class="eyebrow" data-cs="request_support.next.eyebrow">{{ sections["request_support.next"].eyebrow }}</span>
@@ -79,6 +82,7 @@
 
 {% include '_footer.html.j2' %}
 
+<script type="module" src="portal-support-bootstrap.mjs"></script>
 <script src="app.js"></script>
 <script src="nav-v2.js"></script>
 </body>
