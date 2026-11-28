@@ -105,6 +105,7 @@ export const UNIT_TEST_FILES = Object.freeze([
   'drop-in-respite-page.test.mjs',
   'resource-closeout.test.mjs',
   'resource-links.test.mjs',
+  'saved-resource-schema.test.mjs',
   'sanctuary-our-approach.test.mjs',
   'restore-audit-integrity.test.mjs',
   'restore-count-report.test.mjs',

@@ -9,16 +9,19 @@
         "title": "Dementia & Caregiver Support",
         "items": [
           {
+            "resource_id": "res-9206abfbf3384c32861621f8feca4993",
             "name": "Alzheimer's Association – Wisconsin Chapter",
             "note": "Provides dementia education, caregiver support, local programs, resources, and a 24/7 Helpline for individuals and families impacted by Alzheimer's and other dementias.",
             "url": "https://www.alz.org/wi"
           },
           {
+            "resource_id": "res-eba1b2271734426abed82613deb333e2",
             "name": "Wisconsin Alzheimer's Institute – Milwaukee",
             "note": "Provides culturally responsive dementia education, caregiver support, community programs, research opportunities, and resources for Milwaukee and Southeastern Wisconsin communities.",
             "url": "https://wai.wisc.edu/milwaukee/"
           },
           {
+            "resource_id": "res-af7b3e5de35245bf9c09e436dd22fc9b",
             "name": "Lorenzo's House",
             "note": "Provides connection, education, advocacy, and support for families navigating younger-onset dementia, including spouses, children, and other family caregivers.",
             "url": "https://www.lorenzoshouse.org/"
@@ -29,21 +32,25 @@
         "title": "Navigating Care & Services",
         "items": [
           {
+            "resource_id": "res-fdcc7f090fc64054a24c86da365d5570",
             "name": "Milwaukee County Aging & Disability Resource Center (ADRC)",
             "note": "Helps older adults, people with disabilities, and families navigate community resources, benefits, dementia care, long-term care options, and other available services.",
             "url": "https://county.milwaukee.gov/EN/DHHS/Disabilities-Services/Disability-Resource-Center"
           },
           {
+            "resource_id": "res-c4bac7d7117a4f13a250f670e43a165e",
             "name": "CarePatrol of the Milwaukee Area",
             "note": "Helps families navigate local senior care options, including assisted living, memory care, independent living, and other supportive care settings.",
             "url": "https://carepatrol.com/the-milwaukee-area/"
           },
           {
+            "resource_id": "res-aa698632c0dc414095e6941b20b9d440",
             "name": "Oasis Senior Advisors – Milwaukee",
             "note": "Provides personalized local guidance to help families explore senior living and care options based on their loved one's needs, preferences, and circumstances.",
             "url": "https://www.oasissenioradvisors.com/locations/milwaukee/"
           },
           {
+            "resource_id": "res-e5b84c6b6a0f47a5ab2f92d4625e4127",
             "name": "Life Navigators",
             "note": "Provides information, advocacy, support, and future planning resources for individuals with disabilities and their families.",
             "url": "https://lifenavigators.org/"
@@ -54,16 +61,19 @@
         "title": "Respite & Financial Support",
         "items": [
           {
+            "resource_id": "res-cffd7f61377c483b843fac1574d85f1d",
             "name": "Respite Care Association of Wisconsin (RCAW)",
             "note": "Connects Wisconsin families with respite care information, resources, providers, training, and programs that can help make respite more accessible.",
             "url": "https://respitecarewi.org/"
           },
           {
+            "resource_id": "res-eeaacaee8604465d9fa51f368b2d9e96",
             "name": "Hilarity for Charity (HFC)",
             "note": "Supports families impacted by Alzheimer's and dementia through caregiver resources and programs, including respite care assistance for eligible families.",
             "url": "https://wearehfc.org/"
           },
           {
+            "resource_id": "res-43a6df9fa42948afa9aba63695785d07",
             "name": "St. Ann Center for Intergenerational Care",
             "note": "Provides adult day services and supportive care, including specialized dementia care and overnight respite options that give family caregivers an opportunity to take a break.",
             "url": "https://stanncenter.org/adult-care/"
@@ -74,6 +84,7 @@
         "title": "Legal Support",
         "items": [
           {
+            "resource_id": "res-9d5397e1b17b4939aefed942a5adca42",
             "name": "SeniorLAW – Legal Action of Wisconsin",
             "note": "Provides free civil legal assistance to Milwaukee County residents age 60 and older, including help with public benefits, housing, health care, consumer issues, and other legal concerns affecting older adults.",
             "url": "https://legalaction.org/services/specific-populations/"
@@ -92,6 +103,7 @@
     "blurb": "Dementia and caregiving accounts, online educators and people whose work we think is worth your time.",
     "items": [
       {
+        "resource_id": "res-51020640fc9443f8ad523f3f18a89bd2",
         "name": "Adria Thompson | Be Light Care",
         "note": "Speech-language pathologist and dementia educator sharing practical, easy-to-understand strategies for communication, behaviors, personal care, and everyday dementia caregiving.",
         "links": [
@@ -100,6 +112,7 @@
         ]
       },
       {
+        "resource_id": "res-5246e5ca042345048fe474f9dec28e5e",
         "name": "Dr. Macie P. Smith | Just Ask Dr. Macie",
         "note": "Gerontologist and licensed social worker sharing approachable dementia education to help families better understand behaviors, communication, caregiving, and aging.",
         "links": [
@@ -108,6 +121,7 @@
         ]
       },
       {
+        "resource_id": "res-1f5593696bab4aad8359adf46b92620d",
         "name": "Jessica C. Guthrie | When Career & Caregiving Collide",
         "note": "Family caregiver, advocate, educator, and speaker sharing an honest look at caring for her mother living with Alzheimer's disease and navigating caregiving as a young Black caregiver.",
         "links": [
@@ -117,6 +131,7 @@
         ]
       },
       {
+        "resource_id": "res-0cd1d6d54745495090682d5246c31794",
         "name": "Carrie Aalberts | Dementia Darling",
         "note": "Gerontologist and dementia educator sharing caregiver education, resources, encouragement, and a more joyful, human-centered perspective on dementia and aging.",
         "links": [
@@ -125,6 +140,7 @@
         ]
       },
       {
+        "resource_id": "res-cc6ef3df5a3345bd8bd344da59d8e932",
         "name": "Dr. Natali Edmonds | Dementia Careblazers",
         "note": "Board-certified geropsychologist providing practical dementia education to help family caregivers navigate behaviors, safety, caregiver stress, and everyday caregiving challenges.",
         "links": [
@@ -134,6 +150,7 @@
         ]
       },
       {
+        "resource_id": "res-8d0cba85be31480a9ed3033adbd020c6",
         "name": "Teepa Snow | Positive Approach to Care",
         "note": "Dementia care educator and occupational therapist known for practical, hands-on approaches to understanding brain changes, communication, behaviors, and supporting people living with dementia.",
         "links": [
@@ -143,6 +160,7 @@
         ]
       },
       {
+        "resource_id": "res-d905077d26e641e293254ecfb0e12e56",
         "name": "Jacquelyn Revere | Mom of My Mom",
         "note": "Former millennial family caregiver who shares her experience caring for her mother with dementia, including the realities of caregiving, grief, identity, advocacy, and life after caregiving.",
         "links": [
@@ -151,6 +169,7 @@
         ]
       },
       {
+        "resource_id": "res-ef1f4c7b00d24a10ba5efbdfc1168164",
         "name": "Ashley Stevens | The Dementia Guru",
         "note": "Gerontologist and licensed clinical social worker sharing dementia education with a focus on caregiving challenges, family dynamics, care decisions, and supporting families throughout the dementia journey.",
         "links": [
@@ -159,6 +178,7 @@
         ]
       },
       {
+        "resource_id": "res-68499f1e159c47e7989979e544030437",
         "name": "Rev. Katie Norris | Creative Connections Dementia",
         "note": "Dementia educator sharing relationship-centered and trauma-informed approaches to dementia care, with an emphasis on connection, communication, and helping families create meaningful experiences.",
         "links": [
@@ -167,6 +187,7 @@
         ]
       },
       {
+        "resource_id": "res-94c5a97334ab4902bf9e787a9e601020",
         "name": "Dementia Success Path",
         "note": "Practical dementia caregiving education focused on challenging behaviors, activities, caregiver self-care, and strategies families can use in everyday life.",
         "links": [

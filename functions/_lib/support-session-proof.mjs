@@ -4,8 +4,14 @@ const header = 'X-Support-Session';
 const encoder = new TextEncoder();
 
 export function portalSessionValue(cookieHeader) {
-  const match = /(?:^|;\s*)portal_session=([^;]+)/.exec(cookieHeader || '');
-  return match ? decodeURIComponent(match[1]) : '';
+  const cookies = (cookieHeader || '').split(';').map(value => value.trim())
+    .filter(value => value.startsWith('portal_session='));
+  if (cookies.length !== 1) return '';
+  try {
+    return decodeURIComponent(cookies[0].slice('portal_session='.length));
+  } catch {
+    return '';
+  }
 }
 
 async function binding(request, role, principal) {
