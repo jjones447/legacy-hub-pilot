@@ -136,3 +136,29 @@ test('reset ignores late results, clears private view, and stops subsequent date
     raw.close();
   }
 });
+
+test('a stale rendered acknowledgment stops the attempt and requires fresh agreement', async () => {
+  const { db, raw } = respiteFixture();
+  try {
+    const { view, root } = panel(db, {
+      async read() {
+        const current = await readOwnerRespiteView(db, 'owner');
+        return {
+          ...current,
+          acknowledgments: {
+            ...current.acknowledgments,
+            privacy: { text: 'Earlier fictional wording', version: 'retired_version' },
+          },
+        };
+      },
+    });
+    await view.load();
+    assert.match(root.textContent, /Earlier fictional wording/);
+    complete(root).requestSubmit();
+    await until(() => root.querySelector('[role="status"]').textContent.includes('The acknowledgments changed'));
+    assert.equal(root.querySelector('button').disabled, true);
+    assert.equal(raw.prepare('SELECT count(*) n FROM respite_request').get().n, 0);
+  } finally {
+    raw.close();
+  }
+});

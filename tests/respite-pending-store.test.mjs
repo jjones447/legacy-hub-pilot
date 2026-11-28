@@ -147,3 +147,15 @@ test('initial INSERT rejects flat, foreign participant snapshot, or missing on-s
       /participant changed|session snapshot required/);
   }
 }));
+
+test('concurrent identical requests reconcile to one pending row and one audit', () => check(async ({ db, raw }) => {
+  const results = await Promise.all([
+    create(db, 'owner', pendingCommand()),
+    create(db, 'owner', pendingCommand()),
+  ]);
+  assert.ok(results.every(result => result.ok));
+  assert.equal(results[0].id, results[1].id);
+  assert.deepEqual(results.map(result => result.replayed).sort(), [false, true]);
+  assert.equal(raw.prepare('SELECT count(*) n FROM respite_request').get().n, 1);
+  assert.equal(raw.prepare('SELECT count(*) n FROM audit_log').get().n, 1);
+}));

@@ -16,7 +16,7 @@ signatures below.
 | Browser panel | `mountRespitePanel(root, transport, {onVisibilityChange})` takes verified-session `read()`, `createParticipant(body)` and `createPendingRequest(body)` transport methods. The tab shell uses the visibility callback. Call `reset()` whenever its owning session is invalidated, including page lifecycle transitions with restored DOM. |
 
 The pending store reloads current Profile contact and the same owner's participant.
-The snapshot has three objects: `participant`, `caregiver` and `session`.
+The snapshot keeps `participant`, `caregiver` and `session` in separate objects.
 First time and acknowledgment versions have dedicated request columns. The digest
 includes date, participant identity/revision, all three snapshot objects, first
 time and both pinned versions. The guarded INSERT detects concurrent contact or
@@ -39,7 +39,7 @@ qualified lifecycle work.
 The ordered source fixture is `tests/helpers/respite-fixture.mjs`. It runs the
 actual selected Profile, Support and Respite DDL with foreign keys enabled and
 runs only the Staff table DDL from `0011_staff_member.sql`. It seeds fictional
-owners, a Staff row and marked future sessions. Schema order is:
+owners, a Staff row and marked future sessions. It applies the files in this order.
 
 1. `0001_init.sql` and `0011_staff_member.sql` table DDL.
 2. `candidates/0022_caregiver_profile.sql` and `candidates/portal_support_request.sql`.
