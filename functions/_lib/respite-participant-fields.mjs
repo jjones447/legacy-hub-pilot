@@ -24,3 +24,30 @@ export function validateRespiteParticipantDetails(input){
  if(out.personal_care_help&&!out.personal_care_detail)return null;
  return out;
 }
+
+const labels = {
+  participant_name: 'Loved one full name',
+  age: 'Age (optional)',
+  relationship: 'Relationship to loved one',
+  mobility: 'Mobility and support needs (write none if none)',
+  communication: 'Communication preferences and support',
+  personal_care_help: 'Personal-care assistance needed?',
+  personal_care_detail: 'Personal-care help explanation (required if yes)',
+  safety: 'Safety considerations (optional)',
+  allergies_diet: 'Allergies / dietary needs (write none if none)',
+  activities: 'Enjoyable activities',
+  comfort: 'Comfort and support preferences (optional)',
+  emergency_name: 'Emergency contact full name',
+  emergency_relationship: 'Emergency contact relationship',
+  emergency_phone: 'Emergency contact phone',
+  medication_help: 'Medication assistance needed? Staff must discuss accommodation.',
+};
+
+export function respiteParticipantQuestions() {
+  return Object.entries(labels).map(([key, label]) => {
+    const bounds = RESPITE_PARTICIPANT_FIELDS[key];
+    return bounds
+      ? { key, label, type: bounds[0] > 254 ? 'textarea' : 'text', maxLength: bounds[0], required: bounds[1] }
+      : { key, label, type: 'boolean', required: true };
+  });
+}

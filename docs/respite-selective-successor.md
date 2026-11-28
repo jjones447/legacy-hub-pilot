@@ -1,4 +1,75 @@
-# Selective respite successor: model and capacity fence
+# Respite pending requests
+
+## Nov 28 composition handoff
+
+PR #390 supplies the synthetic pending-request module and panel for the Support
+composition branch. Use the interfaces here in place of the earlier checkpoint
+signatures below.
+
+| Surface | Contract |
+| --- | --- |
+| Owner view | `readOwnerRespiteView(db, ownerId)` loads the same owner's Profile, Support break indication and Staff grant. The five signals are independent. It returns `{ok:true,visible:false}` when none qualify. A visible view has available dates, owner receipts, participant selection summaries, current caregiver contact, question descriptors and the exact fictional acknowledgment text and versions. |
+| Create participant | `createRespiteParticipant(db, ownerId, {request_id, details})` accepts the 15 reusable participant fields listed by `respiteParticipantQuestions()`. It returns the participant ID and revision. Repeating the same owner/key/details returns the same row and audit receipt. |
+| Create pending request | `createPendingRespiteRequest(db, ownerId, body)` accepts exactly `request_id`, `participant_id`, `participant_revision`, `event_id`, `first_time`, `caregiver_onsite`, `privacy_ack`, `nonmedical_ack` and `acknowledgment_versions`. Both answers are booleans and both acknowledgments must be true. `acknowledgment_versions` echoes `{privacy, nonmedical}` from the rendered view. A mismatch requires showing the current wording again. The server chooses the stored versions from the pinned artifact. |
+| Staff pending list | `readStaffPendingRespiteRequests(db, verifiedHumanStaffEmail)` returns up to 50 current pending receipt summaries after checking the active Staff/admin row before, during and after projection. The summaries contain event/date and request metadata for triage. |
+| Staff eligibility | `setRespiteStaffEligibility(db, verifiedHumanStaffEmail, {caregiver_id, revision, enabled})` is the dedicated current-Staff CAS writer. First grant starts with expected revision zero. |
+| Browser panel | `mountRespitePanel(root, transport, {onVisibilityChange})` takes verified-session `read()`, `createParticipant(body)` and `createPendingRequest(body)` transport methods. The tab shell uses the visibility callback. Call `reset()` whenever its owning session is invalidated, including page lifecycle transitions with restored DOM. |
+
+The pending store reloads current Profile contact and the same owner's participant.
+The snapshot has three objects: `participant`, `caregiver` and `session`.
+First time and acknowledgment versions have dedicated request columns. The digest
+includes date, participant identity/revision, all three snapshot objects, first
+time and both pinned versions. The guarded INSERT detects concurrent contact or
+Profile revision changes, rechecks nested participant details, and applies the
+persisted eligibility, publication, future date and capacity predicates. The
+pending row and metadata audit commit together. Each selected date uses its own
+stable key and receipt. The panel retries unresolved writes on explicit action
+using the original keys during the active attempt. A pending request uses zero
+registration slots.
+
+The Staff confirmation and first-time follow-up helpers remain source candidates;
+the first pending-request composition exposes the read-only Staff list. If
+confirmation is evaluated separately, its three-argument store resolves the same
+pinned policy internally. Participant edit, withdrawal/removal, Staff booking,
+reconfirmation, Attendance, notifications and export/restore belong to later
+qualified lifecycle work.
+
+### Selected schema and local fixture
+
+The ordered source fixture is `tests/helpers/respite-fixture.mjs`. It runs the
+actual selected Profile, Support and Respite DDL with foreign keys enabled and
+runs only the Staff table DDL from `0011_staff_member.sql`. It seeds fictional
+owners, a Staff row and marked future sessions. Schema order is:
+
+1. `0001_init.sql` and `0011_staff_member.sql` table DDL.
+2. `candidates/0022_caregiver_profile.sql` and `candidates/portal_support_request.sql`.
+3. `candidates/respite_owner_lifecycle.sql` and `candidates/respite_pending_create_guards.sql`.
+4. `candidates/respite_staff_eligibility.sql` and `candidates/respite_pending_eligibility_guard.sql`.
+5. `candidates/respite_registration_insert_gate.sql`, `candidates/respite_registration_update_gate.sql` and `candidates/respite_followup_invalidation.sql`.
+
+`respiteSchemaIsReady(db)` pins SHA-256 of ordered `sqlite_master` name/SQL
+pairs for the selected Respite objects and checks the dependent read columns
+and non-null audit actor constraint. The local fixture fingerprint is
+`2425b87d17793f1575e3993732cb701f5b26a478a642a68573610d2e8f1a1181`.
+The native qualification run must verify representation and batch semantics on
+its selected binding. The old B1 DDL and the flat request snapshot are incompatible
+with this fixture. Seed independently with the selected version artifact and the
+nested snapshot, or drive the new stores.
+
+### Ct13 integration seam
+
+Ct13 owns shared portal/Staff dispatch, identity admission, body bounds,
+CSRF/Origin, cache policy, tab shell, session teardown and packaging of
+`portal-respite-ui.mjs`. Where an action is enabled, derive owner or Staff
+identity on the server, admit only the qualified fictional test context, and
+check the selected schema before reaching a store. A changed acknowledgment
+requires a fresh form and explicit agreement. The checked-in panel accepts only
+the transport supplied by that composition and ignores late results after reset.
+Review evidence in this PR is local SQLite and DOM plus hosted source CI.
+Authenticated HTTP, native D1, browser/device and installed TEST qualification
+remain with the scheduled composition.
+
+## Earlier source checkpoints
 
 Source author ct5; donor369a8594de and321 history remain intact. This branch does
 not merge the stale inherited backend stack or apply either candidate schema.

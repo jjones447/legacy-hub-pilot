@@ -6,8 +6,9 @@ export function projectRespiteEligibility({profileFields, supportRequests, staff
   if (!profileFields || typeof profileFields !== 'object' || Array.isArray(profileFields)
       || !Array.isArray(supportRequests) || typeof staffEnabled !== 'boolean')
     return {ok:false,error:'unavailable'};
-  const interest=profileFields.respite_interest;
-  const needs=profileFields.support_needs;
+  // Profile permits explicit clearing with null or an empty string.
+  const interest=profileFields.respite_interest ?? undefined;
+  const needs=profileFields.support_needs === '' ? undefined : profileFields.support_needs ?? undefined;
   if ((interest !== undefined && typeof interest !== 'string')
       || (needs !== undefined && (!Array.isArray(needs) || needs.some(x=>typeof x!=='string')))
       || supportRequests.some(r=>!r || typeof r!=='object' || !Array.isArray(r.needs) || r.needs.some(x=>typeof x!=='string')))

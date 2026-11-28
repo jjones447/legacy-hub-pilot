@@ -1,6 +1,6 @@
 import { loadCaregiverProfile } from './caregiver-profile.js';
 import { currentRespiteAckVersions, readRespiteAckVersions } from './respite-acknowledgments.mjs';
-import { buildRespiteRequestSnapshot } from './respite-request-snapshot.mjs';
+import { buildRespiteRequestSnapshot, respiteCaregiverContact } from './respite-request-snapshot.mjs';
 
 // Owner identity comes from the verified portal session.
 const ID = /^[A-Za-z0-9_-]{1,160}$/;
@@ -54,9 +54,8 @@ export async function createPendingRespiteRequest(db, ownerId, body) {
     return { ok: false, error: 'stale_or_forbidden' };
   }
   const { first_name, last_name, email, phone } = profile.fields;
-  const name = [first_name, last_name].filter(part => typeof part === 'string' && part.trim())
-    .map(part => part.trim()).join(' ');
-  const snapshot = buildRespiteRequestSnapshot(JSON.parse(participant.details_json), { name, email, phone },
+  const contact = respiteCaregiverContact(profile.fields);
+  const snapshot = buildRespiteRequestSnapshot(JSON.parse(participant.details_json), contact,
     { caregiver_onsite: input.caregiver_onsite });
   if (!snapshot) return { ok: false, error: 'details_unavailable' };
 
