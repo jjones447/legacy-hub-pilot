@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css?v=2326affafb7e">
-<link rel="stylesheet" href="profile-page.css?v=0b0f2bc7341a">
+<link rel="stylesheet" href="profile-page.css?v=b1c536b00ec8">
 <link rel="icon" href="favicon.ico" sizes="32x32">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -115,9 +115,12 @@
 <!-- SHARED:header:end -->
 <main id="main">
 <div class="container profile-page">
-  <div class="profile-toolbar"><a class="btn btn-outline" href="portal.html">← Back to my dashboard</a><button class="btn btn-outline" type="button" id="profilePageLogout">Sign out</button></div>
+  <div class="profile-toolbar"><nav class="caregiver-tabs" aria-label="Caregiver portal">
+        <a href="portal.html">Dashboard</a>
+        <a href="profile.html" aria-current="page">My Profile</a>
+      </nav><button class="btn btn-outline" type="button" id="profilePageLogout">Sign out</button></div>
   <section class="profile-welcome" aria-labelledby="profilePageTitle">
-    <span class="profile-eyebrow">YOUR CAREGIVING STORY</span>
+    <span class="profile-eyebrow">Caregiver Portal</span>
     <h1 id="profilePageTitle">My Caregiver Profile</h1>
     <p>A little about you helps us understand your journey. Take your time—you can save a little now and come back later.</p>
     <p>Open each section when you are ready. Your sign-in email stays the same.</p>

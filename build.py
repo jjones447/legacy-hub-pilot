@@ -129,6 +129,7 @@ PAGE_METADATA = {
     },
     "portal.html": {
         "title": "Caregiver Portal — Legacy Home & Respite Care Foundation",
+        "stylesheets": ("profile-page.css",),
         "description": "Your events, your wellness and your resources, in one place.",
         "stylesheets": ("portal-support-ui.css",),
     },
