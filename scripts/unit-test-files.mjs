@@ -143,6 +143,7 @@ export const UNIT_TEST_FILES = Object.freeze([
   'staff-team.test.mjs',
   'staging-db-config.test.mjs',
   'tap-targets-375px.test.mjs',
+  'tabbed-portal-preview.test.mjs',
   'test-boundary.test.mjs',
   'wellness-checkin.test.mjs',
   'wellness-journey-storage.test.mjs',
