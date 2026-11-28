@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="styles.css?v=2326affafb7e">
 <link rel="stylesheet" href="portal-support-ui.css?v=a3565a284d27">
 <link rel="stylesheet" href="profile-page.css?v=b1c536b00ec8">
+<link rel="stylesheet" href="portal-respite.css?v=4e237c19b2a7">
 <link rel="icon" href="favicon.ico" sizes="32x32">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -159,10 +160,13 @@
     <p class="small mt-8 d-none" id="portalLogoutStatus" role="alert"></p>
 
     <nav class="caregiver-tabs" aria-label="Caregiver portal">
-        <a href="portal.html" aria-current="page">Dashboard</a>
+        <a href="portal.html" id="portalDashboardTab" aria-current="page">Dashboard</a>
         <a href="profile.html">My Profile</a>
+        <a id="portalRespiteTab" href="#respite" hidden>Respite Registration</a>
       </nav>
 
+    <section class="panel mt-16" id="respite" aria-label="Respite Registration" hidden></section>
+    <div id="portalDashboardContent">
     <details class="mt-16" id="portalWellnessSample">
       <summary id="portalPreviewToggle">Preview a filled-out portal (sample data)</summary>
       <p class="small"><strong>SAMPLE DATA — fictional portal preview.</strong> The events, grant and Memory Social visits below are fictional illustrations, not your records. Your real wellness check-ins remain below, unchanged; this preview adds no check-ins or scores. Nothing here registers you, submits an application, awards a grant or makes a payment.</p>
@@ -332,6 +336,7 @@
         <div id="portalWellnessForm" class="d-none mt-16"></div>
         <p class="small mt-8 m-0" id="portalWellnessMsg" role="status"></p>
       </div>
+    </div>
 
   </div>
 </section>
@@ -361,8 +366,9 @@
 </footer>
 <!-- SHARED:footer:end -->
 
+<script type="module" src="portal-respite-bootstrap.mjs?v=6432113c0d12"></script>
 <script type="module" src="portal-support-bootstrap.mjs?v=79bbb7ca4102"></script>
-<script src="app.js?v=139da08f25b0"></script>
+<script src="app.js?v=af39f63ad6cb"></script>
 <script src="nav-v2.js"></script>
 </body>
 </html>

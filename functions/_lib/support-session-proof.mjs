@@ -8,28 +8,28 @@ export function portalSessionValue(cookieHeader) {
   return match ? decodeURIComponent(match[1]) : '';
 }
 
-async function binding(request, role, principal) {
+async function binding(request, role, principal, scope) {
   const credential = role === 'owner'
     ? portalSessionValue(request.headers.get('Cookie'))
     : request.headers.get('Cf-Access-Jwt-Assertion');
   if (!credential || !principal) return null;
   const key = await crypto.subtle.importKey('raw', encoder.encode(credential),
     {name:'HMAC', hash:'SHA-256'}, false, ['sign', 'verify']);
-  const data = encoder.encode(JSON.stringify(['support-session-v1', new URL(request.url).origin, role, principal]));
+  const data = encoder.encode(JSON.stringify([scope, new URL(request.url).origin, role, principal]));
   return {key, data};
 }
 
-export async function supportSessionProof(request, role, principal) {
-  const bound = await binding(request, role, principal);
+export async function supportSessionProof(request, role, principal, scope = 'support-session-v1') {
+  const bound = await binding(request, role, principal, scope);
   if (!bound) return null;
   const bytes = new Uint8Array(await crypto.subtle.sign('HMAC', bound.key, bound.data));
   return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
 }
 
-export async function matchesSupportSession(request, role, principal) {
-  const value = request.headers.get(header);
+export async function matchesSupportSession(request, role, principal, scope = 'support-session-v1', proofHeader = header) {
+  const value = request.headers.get(proofHeader);
   if (!value || !/^[a-f0-9]{64}$/.test(value)) return false;
-  const bound = await binding(request, role, principal);
+  const bound = await binding(request, role, principal, scope);
   if (!bound) return false;
   const signature = Uint8Array.from(value.match(/../g), pair => parseInt(pair, 16));
   return crypto.subtle.verify('HMAC', bound.key, signature, bound.data);

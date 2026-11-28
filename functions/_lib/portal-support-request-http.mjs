@@ -11,7 +11,7 @@ export function supportRequestBoundary(request, env) {
   }
   return null;
 }
-export async function readSupportRequestBody(request) {
+export async function readSupportRequestBody(request, maxBytes = 8192) {
   const reader = request.body?.getReader();
   if (!reader) return null;
   const chunks=[]; let size=0;
@@ -19,7 +19,7 @@ export async function readSupportRequestBody(request) {
     while (true) {
       const {value,done}=await reader.read(); if(done) break;
       size+=value.byteLength;
-      if(size>8192){await reader.cancel();return null;}
+      if(size>maxBytes){await reader.cancel();return null;}
       chunks.push(value);
     }
     const bytes=new Uint8Array(size);let offset=0;

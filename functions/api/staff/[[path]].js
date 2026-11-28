@@ -1,3 +1,4 @@
+import {isRespitePath, respiteRequest} from '../../_lib/respite-http.mjs';
 import {supportSessionProof} from '../../_lib/support-session-proof.mjs';
 import { confirmationActor } from '../../_lib/agent-confirmation.mjs';
 import { staffSupportRequest } from '../../_lib/portal-support-staff-http.mjs';
@@ -20,6 +21,7 @@ function json(obj, status = 200) {
 }
 
 export async function onRequestGet({ request, env, data }) {
+  if (isRespitePath(new URL(request.url).pathname, 'staff')) return respiteRequest({request, env, data});
   if (new URL(request.url).pathname.startsWith('/api/staff/support-requests')) return staffSupportRequest({request,env,data});
   try {
     const url = new URL(request.url);
@@ -400,6 +402,7 @@ export async function onRequestGet({ request, env, data }) {
 }
 
 export async function onRequestPost({ request, env, data }) {
+  if (isRespitePath(new URL(request.url).pathname, 'staff')) return respiteRequest({request, env, data});
   if (new URL(request.url).pathname.startsWith('/api/staff/support-requests')) return staffSupportRequest({request,env,data});
   try {
     const url = new URL(request.url);

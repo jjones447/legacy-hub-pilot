@@ -54,6 +54,7 @@
       const current = await identity();
       if (stopped || generation !== epoch) return;
       owner = current;
+      window.portalRespiteRefresh?.();
       notice.textContent = 'Your profile is unavailable. Return to the portal or try again later.';
       await editor.load();
     } catch {
@@ -64,6 +65,7 @@
   logout.addEventListener('click', async () => {
     if (stopped) return;
     stopped = true; logoutHold = true; logout.disabled = true; retry.disabled = true;
+    window.portalRespiteInvalidate?.();
     clear('Signing out…');
     try {
       const res = await request('/api/portal/logout', { method: 'POST', credentials: 'same-origin', redirect: 'error' });

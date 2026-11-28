@@ -9,6 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css?v=2326affafb7e">
 <link rel="stylesheet" href="profile-page.css?v=b1c536b00ec8">
+<link rel="stylesheet" href="portal-respite.css?v=4e237c19b2a7">
 <link rel="icon" href="favicon.ico" sizes="32x32">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -118,6 +119,7 @@
   <div class="profile-toolbar"><nav class="caregiver-tabs" aria-label="Caregiver portal">
         <a href="portal.html">Dashboard</a>
         <a href="profile.html" aria-current="page">My Profile</a>
+        <a id="portalRespiteTab" href="portal.html#respite" hidden>Respite Registration</a>
       </nav><button class="btn btn-outline" type="button" id="profilePageLogout">Sign out</button></div>
   <section class="profile-welcome" aria-labelledby="profilePageTitle">
     <span class="profile-eyebrow">Caregiver Portal</span>
@@ -160,6 +162,7 @@
 
 <script src="caregiver-profile.js?v=4c1849ea7145"></script>
 <script src="nav-v2.js"></script>
-<script src="profile-page.js?v=dda3bd6a7af4"></script>
+<script type="module" src="portal-respite-bootstrap.mjs?v=6432113c0d12"></script>
+<script src="profile-page.js?v=b108b2e96bc7"></script>
 </body>
 </html>

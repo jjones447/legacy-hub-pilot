@@ -1,3 +1,4 @@
+import {isRespitePath, respiteRequest} from '../../_lib/respite-http.mjs';
 import {portalSessionValue, supportSessionProof, matchesSupportSession} from '../../_lib/support-session-proof.mjs';
 import { testInboxCapture, insertCapturedToken, deliverCapturedToken } from '../../_lib/portal-test-inbox.mjs';
 // GET/POST /api/portal/[[path]] — Magic-link authentication and gated caregiver portal API endpoints (slice 09).
@@ -278,6 +279,11 @@ export async function onRequestGet({ request, env }) {
     // credentials must not unlock caregiver records after this containment.
     if (previewPortalDisabled(env, request)) return previewUnavailable();
 
+    if (isRespitePath(url.pathname, 'owner')) {
+      return respiteRequest({request, env, readOwnerSession: () => env.PORTAL_TOKEN_SECRET
+        ? parseSessionCookie(request.headers.get('Cookie'), env.PORTAL_TOKEN_SECRET) : null});
+    }
+
     if (action === 'profile' && (env.PORTAL_PROFILE_ENABLED !== '1'
         || url.pathname !== '/api/portal/profile' || url.search)) return json({ ok: false, error: 'not_found' }, 404);
 
@@ -405,6 +411,11 @@ export async function onRequestPost({ request, env, data }) {
         return response;
       }
       return previewUnavailable();
+    }
+
+    if (isRespitePath(url.pathname, 'owner')) {
+      return respiteRequest({request, env, readOwnerSession: () => env.PORTAL_TOKEN_SECRET
+        ? parseSessionCookie(request.headers.get('Cookie'), env.PORTAL_TOKEN_SECRET) : null});
     }
 
     // Profile is browser-only: strict origin plus JSON rejects simple form CSRF.

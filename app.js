@@ -654,6 +654,7 @@ function checkPortalSession() {
         renderPortalData(result.data);
         window.portalFunctionalOwner = result.data.profile?.id || null;
         window.portalSupportRefresh?.();
+        window.portalRespiteRefresh?.();
         loadWellness();
         if (document.getElementById('portalSupportForm')) {
           loadPortalSupport();
@@ -1020,6 +1021,7 @@ function resetPortalSupportViews() {
   if (typeof window !== 'undefined') {
     window.portalFunctionalOwner = null;
     window.portalSupportInvalidate?.();
+    window.portalRespiteInvalidate?.();
   }
   if (typeof portalSupportMountedViews !== 'undefined') portalSupportMountedViews.forEach(function (view) { view.reset(); });
 }
