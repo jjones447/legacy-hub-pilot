@@ -1,5 +1,15 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {DatabaseSync} from 'node:sqlite';import {readFileSync} from 'node:fs';
-function setup(){const db=new DatabaseSync(':memory:');for(const p of ['schema/0001_init.sql','schema/candidates/respite_owner_lifecycle.sql','schema/candidates/respite_pending_create_guards.sql'])db.exec(readFileSync(new URL('../'+p,import.meta.url),'utf8'));db.exec("CREATE TABLE staff_member(email TEXT PRIMARY KEY,status TEXT,role TEXT);INSERT INTO staff_member VALUES('staff@example.invalid','active','staff');INSERT INTO caregiver(id,first_name,last_name,status)VALUES('owner','Fictional','Owner','active');INSERT INTO event(id,title,type,starts_at,publish_state,capacity,respite_review_required)VALUES('session','Fictional','memory_social','2999-01-01','published',1,1);INSERT INTO respite_participant(id,caregiver_id,details_json)VALUES('p','owner','{}');INSERT INTO respite_request(id,caregiver_id,participant_id,event_id,request_key,payload_digest,details_json,participant_revision,first_time,privacy_version,nonmedical_version,acknowledged_at)VALUES('request','owner','p','session','synthetic','digest','{}',1,0,'draft','draft',datetime('now'));UPDATE respite_request SET status='confirmed',needs_review=0,reviewed_by='staff@example.invalid',reviewed_at=datetime('now'),revision=2,reviewed_revision=2;");db.exec(readFileSync(new URL('../schema/candidates/respite_registration_insert_gate.sql',import.meta.url),'utf8'));db.exec("INSERT INTO registration(id,caregiver_id,event_id,status,source,external_ref)VALUES(1,'owner','session','registered','respite_owner_v1','request');UPDATE respite_request SET registration_id=1,revision=3,reviewed_revision=3;");db.exec(readFileSync(new URL('../schema/candidates/respite_registration_update_gate.sql',import.meta.url),'utf8'));return db;}
+import { insertFixturePending, respiteFixture } from './helpers/respite-fixture.mjs';
+import test from 'node:test';import assert from 'node:assert/strict';
+function setup(){
+ const {raw:db}=respiteFixture();
+ insertFixturePending(db);
+ db.exec(`UPDATE respite_request SET status='confirmed',needs_review=0,reviewed_by='staff@example.invalid',
+     reviewed_at=datetime('now'),revision=2,reviewed_revision=2;
+   INSERT INTO registration(id,caregiver_id,event_id,status,source,external_ref)
+     VALUES(1,'owner','session','registered','respite_owner_v1','request');
+   UPDATE respite_request SET registration_id=1,revision=3,reviewed_revision=3;`);
+ return db;
+}
 function check(fn){const db=setup();try{fn(db);}finally{db.close();}}
 test('reviewed reserved attendance after session date is allowed without adding seats',()=>check(db=>{db.exec("UPDATE event SET starts_at='2000-01-01';UPDATE staff_member SET status='deactivated';UPDATE registration SET status='attended' WHERE id=1");assert.equal(db.prepare('SELECT status FROM registration').get().status,'attended');assert.equal(db.prepare('SELECT count(*) n FROM registration').get().n,1);}));
 test('cancellation remains possible but generic revival cannot reuse historical review',()=>check(db=>{db.exec("UPDATE registration SET status='cancelled' WHERE id=1");assert.throws(()=>db.exec("UPDATE registration SET status='registered' WHERE id=1"),/reconfirmation/);assert.throws(()=>db.exec("UPDATE registration SET status='attended' WHERE id=1"),/reconfirmation/);assert.equal(db.prepare('SELECT status FROM registration').get().status,'cancelled');}));

@@ -9,7 +9,16 @@ CREATE TRIGGER respite_pending_create_guard BEFORE INSERT ON respite_request BEG
   OR NEW.followup_by IS NOT NULL OR NEW.followup_at IS NOT NULL
   THEN RAISE(ABORT,'pending creation only') END;
  SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM caregiver WHERE id=NEW.caregiver_id AND status!='archived') THEN RAISE(ABORT,'owner unavailable') END;
- SELECT CASE WHEN NEW.participant_id IS NULL OR NOT EXISTS(SELECT 1 FROM respite_participant p WHERE p.id=NEW.participant_id AND p.caregiver_id=NEW.caregiver_id AND p.revision=NEW.participant_revision AND p.details_json=NEW.details_json AND json_type(p.details_json)='object') THEN RAISE(ABORT,'participant changed') END;
+ SELECT CASE WHEN NEW.participant_id IS NULL OR NOT EXISTS(SELECT 1 FROM respite_participant p WHERE p.id=NEW.participant_id AND p.caregiver_id=NEW.caregiver_id AND p.revision=NEW.participant_revision AND json_type(NEW.details_json,'$.participant')='object'
+  AND json(p.details_json)=json_extract(NEW.details_json,'$.participant')) THEN RAISE(ABORT,'participant changed') END;
+ SELECT CASE WHEN NOT (
+  json_type(NEW.details_json,'$.caregiver') IS 'object'
+  AND json_type(NEW.details_json,'$.caregiver.name') IS 'text'
+  AND json_type(NEW.details_json,'$.caregiver.email') IS 'text'
+  AND json_type(NEW.details_json,'$.caregiver.phone') IS 'text'
+  AND json_type(NEW.details_json,'$.session') IS 'object'
+  AND COALESCE(json_type(NEW.details_json,'$.session.caregiver_onsite') IN ('true','false'),0)
+ ) THEN RAISE(ABORT,'session snapshot required') END;
  SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM event e WHERE e.id=NEW.event_id AND e.respite_review_required=1 AND e.publish_state='published' AND julianday(e.starts_at)>julianday('now') AND e.capacity>0 AND (SELECT count(*) FROM registration r WHERE r.event_id=e.id AND r.status IN ('registered','attended'))<e.capacity) THEN RAISE(ABORT,'session unavailable') END;
  SELECT CASE WHEN length(NEW.privacy_version) NOT BETWEEN 1 AND 80 OR length(NEW.nonmedical_version) NOT BETWEEN 1 AND 80 THEN RAISE(ABORT,'acknowledgments unavailable') END;
 END;

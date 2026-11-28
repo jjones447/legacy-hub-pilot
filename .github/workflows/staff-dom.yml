@@ -2,7 +2,7 @@ name: Staff DOM controls
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, pc2-codex-ct-13/support-composed]
   push:
     branches: [main]
 

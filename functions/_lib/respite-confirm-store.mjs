@@ -1,8 +1,10 @@
-// Unmounted first-confirm candidate. verifiedEmail/currentAck are server context,
+import { readRespiteAckVersions } from './respite-acknowledgments.mjs';
+
+// Unmounted first-confirm candidate. verifiedEmail comes from the server session,
 // never browser identity/approval. Follow-up/reconfirmation/Attendance are separate.
-export async function confirmPendingRespiteRequest(db,verifiedEmail,command,currentAck){
+export async function confirmPendingRespiteRequest(db,verifiedEmail,command){
  if(typeof verifiedEmail!=='string'||!verifiedEmail||verifiedEmail.length>254||!command||Object.getPrototypeOf(command)!==Object.prototype||Reflect.ownKeys(command).some(k=>!['id','revision'].includes(k)||Object.getOwnPropertyDescriptor(command,k)?.get||Object.getOwnPropertyDescriptor(command,k)?.set)||typeof command.id!=='string'||!/^[-A-Za-z0-9_]{1,160}$/.test(command.id)||!Number.isSafeInteger(command.revision)||command.revision<1)return {ok:false,error:'invalid_command'};
- if(!currentAck||!['privacy','nonmedical'].every(k=>typeof currentAck[k]==='string'&&/^[-A-Za-z0-9_.]{1,80}$/.test(currentAck[k])))return {ok:false,error:'unavailable'};
+ const currentAck=readRespiteAckVersions();
  const staff=await db.prepare("SELECT email FROM staff_member WHERE email=? AND status='active' AND role IN ('staff','admin')").bind(verifiedEmail).first();
  if(!staff)return {ok:false,error:'forbidden'};
  const before=await db.prepare('SELECT * FROM respite_request WHERE id=?').bind(command.id).first();

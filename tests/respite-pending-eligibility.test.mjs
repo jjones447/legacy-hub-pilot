@@ -1,9 +1,45 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {DatabaseSync} from 'node:sqlite';import {readFileSync} from 'node:fs';
-function setup(){const db=new DatabaseSync(':memory:');for(const p of ['schema/0001_init.sql','schema/candidates/respite_owner_lifecycle.sql','schema/candidates/respite_pending_create_guards.sql'])db.exec(readFileSync(new URL('../'+p,import.meta.url),'utf8'));db.exec("CREATE TABLE caregiver_profile(caregiver_id TEXT,fields_json TEXT);CREATE TABLE portal_support_request(caregiver_id TEXT,needs_json TEXT);CREATE TABLE respite_staff_eligibility(caregiver_id TEXT,enabled INTEGER);INSERT INTO caregiver(id,first_name,last_name,status)VALUES('owner','Fictional','Owner','active'),('foreign','Fictional','Other','active');INSERT INTO event(id,title,type,starts_at,publish_state,capacity,respite_review_required)VALUES('session','Fictional','memory_social','2999-01-01','published',1,1);INSERT INTO respite_participant(id,caregiver_id,details_json)VALUES('p','owner','{}');");db.exec(readFileSync(new URL('../schema/candidates/respite_pending_eligibility_guard.sql',import.meta.url),'utf8'));return db;}
-function pending(db){db.exec("INSERT INTO respite_request(id,caregiver_id,participant_id,event_id,request_key,payload_digest,details_json,participant_revision,first_time,privacy_version,nonmedical_version,acknowledged_at)VALUES('r','owner','p','session','synthetic','digest','{}',1,0,'draft','draft',datetime('now'))");}
+import { insertFixturePending, respiteFixture } from './helpers/respite-fixture.mjs';
+import test from 'node:test';import assert from 'node:assert/strict';
+function setup(){return respiteFixture({initialEligibility:false}).raw;}
+const pending = insertFixturePending;
+function profile(db, owner, fields) {
+ db.prepare('INSERT INTO caregiver_profile(caregiver_id,revision,fields_json) VALUES(?,1,?)').run(owner,JSON.stringify(fields));
+}
+function support(db, owner) {
+ db.prepare("INSERT INTO followup(caregiver_id,kind) VALUES(?,'support_request')").run(owner);
+ db.prepare(`INSERT INTO portal_support_request(id,caregiver_id,request_key,payload_digest,needs_json,preferred_contact,followup_id)
+  VALUES('support',?,'synthetic_support_request',?,'["break"]','phone',last_insert_rowid())`).run(owner, 'a'.repeat(64));
+}
+function grant(db, owner) {
+ db.prepare("INSERT INTO respite_staff_eligibility(caregiver_id,enabled,revision,updated_by) VALUES(?,1,1,'staff@example.invalid')").run(owner);
+}
 function check(fn){const db=setup();try{fn(db);}finally{db.close();}}
-test('each persisted owner signal independently permits a pending request without a seat',()=>{for(const sql of ["INSERT INTO caregiver_profile VALUES('owner','{\"respite_interest\":\"Yes\"}')","INSERT INTO caregiver_profile VALUES('owner','{\"respite_interest\":\"Maybe\"}')","INSERT INTO caregiver_profile VALUES('owner','{\"support_needs\":[\"Respite care\"]}')","INSERT INTO portal_support_request VALUES('owner','[\"break\"]')","INSERT INTO respite_staff_eligibility VALUES('owner',1)"])check(db=>{db.exec(sql);pending(db);assert.equal(db.prepare('SELECT count(*) n FROM registration').get().n,0);});});
-test('missing, negative and other-owner signals cannot grant eligibility',()=>{for(const sql of ["SELECT 1","INSERT INTO caregiver_profile VALUES('owner','{\"respite_interest\":\"No\"}')","INSERT INTO portal_support_request VALUES('foreign','[\"break\"]')","INSERT INTO respite_staff_eligibility VALUES('foreign',1)","INSERT INTO caregiver_profile VALUES('foreign','{\"respite_interest\":\"Yes\"}')"])check(db=>{db.exec(sql);assert.throws(()=>pending(db),/eligibility unavailable/);});});
-test('Staff revoke between read and INSERT prevents pending creation unless an independent owner signal remains',()=>check(db=>{db.exec("INSERT INTO respite_staff_eligibility VALUES('owner',1);UPDATE respite_staff_eligibility SET enabled=0");assert.throws(()=>pending(db),/eligibility unavailable/);db.exec("INSERT INTO portal_support_request VALUES('owner','[\"break\"]')");pending(db);assert.equal(db.prepare('SELECT status FROM respite_request').get().status,'pending');}));
-test('Profile and Support changes before INSERT invalidate their prior eligibility',()=>{for(const sql of ["INSERT INTO caregiver_profile VALUES('owner','{\"respite_interest\":\"Yes\"}');UPDATE caregiver_profile SET fields_json='{}'","INSERT INTO portal_support_request VALUES('owner','[\"break\"]');DELETE FROM portal_support_request"])check(db=>{db.exec(sql);assert.throws(()=>pending(db),/eligibility unavailable/);});});
-test('absent prerequisite table fails closed and does not create a request',()=>check(db=>{db.exec('DROP TABLE caregiver_profile');assert.throws(()=>pending(db),/no such table/);assert.equal(db.prepare('SELECT count(*) n FROM respite_request').get().n,0);}));
+test('five independent same-owner signals authorize pending rows without reserving seats', () => {
+ for (const seed of [db=>profile(db,'owner',{respite_interest:'Yes'}),
+    db=>profile(db,'owner',{respite_interest:'Maybe'}), db=>profile(db,'owner',{support_needs:['Respite care']}),
+    db=>support(db,'owner'), db=>grant(db,'owner')]) check(db=> {
+  seed(db);pending(db);assert.equal(db.prepare('SELECT count(*) n FROM registration').get().n,0);
+ });
+});
+test('missing, negative and other-owner signals cannot grant eligibility', () => {
+ for(const seed of [()=>{},db=>profile(db,'owner',{respite_interest:'No'}),
+    db=>support(db,'foreign'),db=>grant(db,'foreign'),db=>profile(db,'foreign',{respite_interest:'Yes'})]) {
+  check(db=>{seed(db);assert.throws(()=>pending(db),/eligibility unavailable/);});
+ }
+});
+test('Staff revoke prevents pending creation unless an independent same-owner signal remains',()=>check(db=>{
+ grant(db,'owner');
+ db.exec("UPDATE respite_staff_eligibility SET enabled=0, revision=2");
+ assert.throws(()=>pending(db),/eligibility unavailable/);
+ support(db,'owner');pending(db);
+ assert.equal(db.prepare('SELECT status FROM respite_request').get().status,'pending');
+}));
+test('Profile and Support removal invalidates eligibility before INSERT',()=> {
+ check(db=>{profile(db,'owner',{respite_interest:'Yes'});db.exec("UPDATE caregiver_profile SET fields_json='{}'");assert.throws(()=>pending(db),/eligibility unavailable/);});
+ check(db=>{support(db,'owner');db.exec("DELETE FROM portal_support_request");assert.throws(()=>pending(db),/eligibility unavailable/);});
+});
+test('absent prerequisite table fails closed without creating a request',()=>check(db=>{
+ db.exec('DROP TABLE caregiver_profile');
+ assert.throws(()=>pending(db),/no such table/);
+ assert.equal(db.prepare('SELECT count(*) n FROM respite_request').get().n,0);
+}));
