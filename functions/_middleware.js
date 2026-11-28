@@ -1,3 +1,4 @@
+import {isRespitePath, isRespiteTestOrigin} from './_lib/respite-http.mjs';
 import { setVerifiedPublisher, isPublisherPayload, publisherRouteAllowed } from './_lib/publisher-identity.mjs';
 import { maybeRewriteMedia } from './_media.mjs';
 import { maybeRewriteContent, isRewritableRoute, renderProtectedDraftPreviewPage } from './_content.mjs';
@@ -163,7 +164,10 @@ function withSecurityHeaders(resp, hostname, pathname = '', method = '') {
   if (!PRODUCTION_HOSTNAMES.has(hostname)) {
     h.set('X-Robots-Tag', 'noindex, nofollow');
   }
-  if (/\.(?:js|css)$/i.test(pathname) && !/\bno-store\b/i.test(h.get('Cache-Control') || '')) {
+  if (isRespitePath(pathname, 'owner') || isRespitePath(pathname, 'staff')) {
+    h.set('Cache-Control', 'no-store');
+  }
+  if (/\.(?:m?js|css)$/i.test(pathname) && !/\bno-store\b/i.test(h.get('Cache-Control') || '')) {
     h.set('Cache-Control', 'no-cache, must-revalidate');
   }
   h.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
@@ -233,9 +237,10 @@ export async function onRequest(context) {
   // Retire human-facing provider aliases without redirecting webhook/API traffic
   // or origin-bound protected draft previews. The destination enforces its own
   // normal staff/caregiver authentication; no session or access is transferred.
+  // Named Pages staging is an independent TEST origin; the historical custom
+  // staging hostname currently aliases production and must not receive TEST users.
   const canonicalHost = {
     'legacy-hub-5qo.pages.dev': 'caregiversanctuary.org',
-    'staging.legacy-hub-5qo.pages.dev': 'staging.caregiversanctuary.org',
   }[url.hostname];
   const isPage = !/\.[a-z0-9]+$/i.test(path) || /\.html$/i.test(path);
   if (canonicalHost && isPage && !matchesPrefix(path, '/api') && !isDraftPreview && ['GET', 'HEAD'].includes(request.method)) {
@@ -248,12 +253,14 @@ export async function onRequest(context) {
     CONSOLE_API_PREFIXES.some((p) => matchesPrefix(path, p)) ||
     CONSOLE_PAGE_SET.has(normalizePagePath(path));
 
+  const respiteTest = isRespitePath(path, 'staff') || (isRespiteTestOrigin(url, env)
+    && isConsole && !path.startsWith('/api/agent/publisher/'));
   if (isConsole || isDraftPreview) {
     if (isDraftPreview && env.ENVIRONMENT !== 'preview') {
       return withSecurityHeaders(forbidden(), url.hostname, path, request.method);
     }
     // Non-prod escape for console only (never grants confirmationActor or draft preview access).
-    if (isConsole && !isDraftPreview && !path.startsWith('/api/agent/publisher/') && env.ALLOW_DEV_CONSOLE === '1') {
+    if (isConsole && !isDraftPreview && !path.startsWith('/api/agent/publisher/') && !respiteTest && env.ALLOW_DEV_CONSOLE === '1') {
       return withSecurityHeaders(await next(), url.hostname, path, request.method);
     }
     // Real verification. Fail closed until Cloudflare Access is configured.
@@ -269,7 +276,7 @@ export async function onRequest(context) {
     } else if (path.startsWith('/api/agent/publisher/')) {
       return withSecurityHeaders(forbidden(), url.hostname, path, request.method);
     }
-    const refused = await staffGate(env, payload);
+    const refused = respiteTest ? null : await staffGate(env, payload);
     if (refused) return withSecurityHeaders(refused, url.hostname, path, request.method);
     if (typeof payload.email === 'string' && !payload.common_name) {
       try {
@@ -279,7 +286,7 @@ export async function onRequest(context) {
         }
       } catch { /* Unknown staff cannot confirm; other existing console behavior remains. */ }
     }
-    if (isDraftPreview && !confirmationActor(context.data)) {
+    if ((isDraftPreview || respiteTest) && !confirmationActor(context.data)) {
       return withSecurityHeaders(forbidden(), url.hostname, path, request.method);
     }
     if (isProtectedPreviewRender) {

@@ -120,6 +120,8 @@ function postIntake(form, payload) {
 function submitSupport(e) {
   e.preventDefault();
   const form = document.getElementById('supportForm');
+  const publicForm = document.getElementById('supportLegacyPublicForm');
+  if (publicForm?.hidden || publicForm?.inert) return false;
   const name = splitName(document.getElementById('supName').value);
   const contact = contactFields(document.getElementById('supEmail').value);
   const payload = Object.assign({
@@ -650,6 +652,9 @@ function checkPortalSession() {
       if (result.outcome === 'signed_in') {
         takePortalHandoff(); // discard: an existing session wins, nothing is sent
         renderPortalData(result.data);
+        window.portalFunctionalOwner = result.data.profile?.id || null;
+        window.portalSupportRefresh?.();
+        window.portalRespiteRefresh?.();
         loadWellness();
         if (document.getElementById('portalSupportForm')) {
           loadPortalSupport();
@@ -775,6 +780,7 @@ function portalLogout() {
   const logoutStatus = document.getElementById('portalLogoutStatus');
   if (btn && btn.disabled) return; // pending or uncertain: do not repeat the POST
   if (btn) btn.disabled = true;
+  if (typeof resetPortalSupportViews === 'function') resetPortalSupportViews();
   if (logoutStatus) {
     logoutStatus.style.display = 'block';
     logoutStatus.textContent = 'Signing out...';
@@ -824,6 +830,8 @@ function renderPortalData(data) {
     nextQaSamples !== portalQaSamplesActive ||
     (portalSupportCacheCaregiverKey && portalSupportCacheCaregiverKey !== nextCaregiverKey);
   if (identityChanged) {
+    if (typeof resetPortalSupportViews === 'function') resetPortalSupportViews();
+    if (typeof portalProfileEditor !== 'undefined' && portalProfileEditor) portalProfileEditor.clear();
     portalSessionGeneration += 1;
     portalEventsFilterState = 'all';
     portalSupportRealRequests = [];
@@ -857,7 +865,7 @@ function renderPortalData(data) {
     welcome.textContent = first ? 'Welcome to Your Sanctuary, ' + first + '!' : 'Welcome to Your Sanctuary!';
   }
 
-  // My Profile & Intake: read-only account details (updates/intake are not built yet).
+  // Account identity stays read-only; the separately gated Profile editor saves owner answers.
   const setText = function (id, value) {
     const el = document.getElementById(id);
     if (el) el.textContent = value ? String(value) : '—';
@@ -865,6 +873,8 @@ function renderPortalData(data) {
   setText('portalProfileName', [profile.first_name, profile.last_name].filter(Boolean).join(' '));
   setText('portalProfileEmail', profile.email);
   setText('portalProfilePhone', profile.phone);
+  if ((identityChanged || (typeof portalProfileEditor !== 'undefined' && portalProfileEditor && !portalProfileEditor.available))
+      && typeof loadPortalProfileEditor === 'function') loadPortalProfileEditor();
 
   // Membership status
   const memberStatus = document.getElementById('portalMembershipStatus');
@@ -955,6 +965,23 @@ function renderPortalData(data) {
   });
 }
 
+var portalProfileEditor = null;
+function loadPortalProfileEditor() {
+  const root = document.getElementById('portalProfileEditor');
+  if (!root || typeof window.createCaregiverProfileEditor !== 'function') return;
+  if (!portalProfileEditor) portalProfileEditor = window.createCaregiverProfileEditor(root, {
+    epoch: function () { return portalSessionGeneration; },
+    available: function (enabled) {
+      const fallback = document.getElementById('portalProfileComingSoon');
+      if (fallback) fallback.hidden = enabled;
+      const card = document.getElementById('portalProfileCard');
+      if (card && enabled) card.hidden = false;
+      if (card && card.classList) card.classList.toggle('profile-editor-open', enabled);
+    }
+  });
+  void portalProfileEditor.load();
+}
+
 var portalSessionGeneration = 0;
 var portalActiveCaregiverKey = '';
 var portalQaSamplesActive = false;
@@ -967,6 +994,7 @@ var portalSupportHistoryUnavailable = false;
 var portalSupportFilterState = 'all';
 
 function bumpPortalSessionGeneration() {
+  if (typeof portalProfileEditor !== 'undefined' && portalProfileEditor) portalProfileEditor.clear();
   portalSessionGeneration += 1;
   return portalSessionGeneration;
 }
@@ -982,7 +1010,30 @@ function portalProfileIdentityKey(profile) {
   return '';
 }
 
+// Support mount bridge; presentation owns mounting, shared auth owns invalidation.
+var portalSupportMountedViews = new Set();
+if (typeof window !== 'undefined') window.registerPortalSupportView = function (view) {
+  if (!view || typeof view.reset !== 'function' || typeof view.dispose !== 'function') throw new TypeError('invalid_support_view');
+  portalSupportMountedViews.add(view);
+  return function () { if (portalSupportMountedViews.delete(view)) view.dispose(); };
+};
+function resetPortalSupportViews() {
+  if (typeof window !== 'undefined') {
+    window.portalFunctionalOwner = null;
+    window.portalSupportInvalidate?.();
+    window.portalRespiteInvalidate?.();
+  }
+  if (typeof portalSupportMountedViews !== 'undefined') portalSupportMountedViews.forEach(function (view) { view.reset(); });
+}
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') window.addEventListener('pagehide', function () {
+  const expectedOwner = window.portalFunctionalOwner;
+  resetPortalSupportViews();
+  window.portalFunctionalOwner = expectedOwner;
+});
+
 function resetPortalSessionState() {
+  resetPortalSupportViews();
+  if (typeof portalProfileEditor !== 'undefined' && portalProfileEditor) portalProfileEditor.clear();
   portalSessionGeneration += 1;
   portalActiveCaregiverKey = '';
   portalQaSamplesActive = false;

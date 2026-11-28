@@ -1,7 +1,14 @@
+import {isRespitePath, respiteRequest} from '../../_lib/respite-http.mjs';
+import {portalSessionValue, supportSessionProof, matchesSupportSession} from '../../_lib/support-session-proof.mjs';
+import { testInboxCapture, insertCapturedToken, deliverCapturedToken } from '../../_lib/portal-test-inbox.mjs';
 // GET/POST /api/portal/[[path]] — Magic-link authentication and gated caregiver portal API endpoints (slice 09).
 import { checkIpRequestLimit, IP_LIMITS } from '../_shared.mjs';
 import { canSendEmail, isPreviewMailOptIn, sendEmail, signInEmail } from '../../_lib/email.js';
 import { QUESTIONS, validateCheckin, recordCheckin, caregiverHistory, isCheckinDue, CHECKIN_EVERY_DAYS } from '../../_lib/wellness.js';
+import { loadCaregiverProfile, saveCaregiverProfile, validateProfilePatch, readProfileBody } from '../../_lib/caregiver-profile.js';
+import { PROFILE_SECTIONS } from '../../_lib/caregiver-profile-fields.js';
+import { createOwnerSupportRequest, readOwnerSupportRequests } from '../../_lib/portal-support-request-store.mjs';
+import { supportRequestBoundary, readSupportRequestBody, supportRequestStatus } from '../../_lib/portal-support-request-http.mjs';
 
 async function getHmacSha256(message, secret) {
   const enc = new TextEncoder();
@@ -58,9 +65,15 @@ function json(obj, status = 200) {
 // portal access there, including redemption of old dev links and old sessions.
 // Public pages and the separate staff Access routes are unaffected. This is not
 // production session revocation, and the retired dev-link flag cannot bypass it.
-function previewPortalDisabled(env) {
+function previewPortalDisabled(env, request) {
   if (env.ENVIRONMENT === 'development') return true;
-  if (env.ENVIRONMENT === 'preview') return !isPreviewMailOptIn(env);
+  if (env.ENVIRONMENT === 'preview') {
+    const origin = new URL(request.url).origin;
+    return !isPreviewMailOptIn(env) || ![
+      'https://customer-test.legacy-hub-5qo.pages.dev',
+      'https://staging.legacy-hub-5qo.pages.dev',
+    ].includes(origin);
+  }
   return false;
 }
 
@@ -203,10 +216,8 @@ function htmlErrorPage(message) {
 }
 
 async function parseSessionCookie(cookieHeader, secret) {
-  if (!cookieHeader) return null;
-  const match = cookieHeader.match(/portal_session=([^;]+)/);
-  if (!match) return null;
-  const sessionVal = decodeURIComponent(match[1]);
+  const sessionVal = portalSessionValue(cookieHeader);
+  if (!sessionVal) return null;
   const parts = sessionVal.split(':');
   if (parts.length !== 3) return null;
   const [caregiverId, exp, signature] = parts;
@@ -266,7 +277,20 @@ export async function onRequestGet({ request, env }) {
 
     // Before secret, token, cookie or database access: existing preview bearer
     // credentials must not unlock caregiver records after this containment.
-    if (previewPortalDisabled(env)) return previewUnavailable();
+    if (previewPortalDisabled(env, request)) return previewUnavailable();
+
+    if (isRespitePath(url.pathname, 'owner')) {
+      return respiteRequest({request, env, readOwnerSession: () => env.PORTAL_TOKEN_SECRET
+        ? parseSessionCookie(request.headers.get('Cookie'), env.PORTAL_TOKEN_SECRET) : null});
+    }
+
+    if (action === 'profile' && (env.PORTAL_PROFILE_ENABLED !== '1'
+        || url.pathname !== '/api/portal/profile' || url.search)) return json({ ok: false, error: 'not_found' }, 404);
+
+    if (action === 'support-requests') {
+      const refusal = supportRequestBoundary(request, env);
+      if (refusal) return json({ ok: false, error: refusal.error }, refusal.status);
+    }
 
     const secret = env.PORTAL_TOKEN_SECRET;
     if (!secret) {
@@ -282,10 +306,33 @@ export async function onRequestGet({ request, env }) {
       return await confirmationPage(request, token, secret);
     }
 
+    if (action === 'support-requests') {
+      const caregiverId = await parseSessionCookie(request.headers.get('Cookie'), secret);
+      if (caregiverId && !await matchesSupportSession(request, 'owner', caregiverId)) return json({ ok: false, error: 'session_changed' }, 403);
+      if (!caregiverId || !await hasNonarchivedCaregiver(env.LEGACY_DB, caregiverId)) return json({ ok: false, error: 'unauthorized' }, 401);
+      const requests = await readOwnerSupportRequests(env.LEGACY_DB, caregiverId);
+      return json({ ok: true, requests });
+    }
+
+    if (action === 'profile') {
+      const caregiverId = await parseSessionCookie(request.headers.get('Cookie'), secret);
+      if (!caregiverId || !await hasNonarchivedCaregiver(env.LEGACY_DB, caregiverId)) return json({ ok: false, error: 'unauthorized' }, 401);
+      const profile = await loadCaregiverProfile(env.LEGACY_DB, caregiverId);
+      return profile ? json({ ok: true, profile, sections: PROFILE_SECTIONS }) : json({ ok: false, error: 'unauthorized' }, 401);
+    }
+
     if (action === 'me') {
       const caregiverId = await parseSessionCookie(request.headers.get('Cookie'), secret);
       if (!caregiverId) {
         return json({ ok: false, error: 'unauthorized' }, 401);
+      }
+
+      if (url.pathname === '/api/portal/me' && url.search === '?support=1') {
+        const owner = await env.LEGACY_DB.prepare("SELECT id FROM caregiver WHERE id = ? AND status != 'archived'").bind(caregiverId).first();
+        if (!owner) return json({ ok: false, error: 'profile_not_found' }, 404);
+        const enabled = env.PORTAL_SUPPORT_REQUEST_ENABLED === '1';
+        return json({ ok: true, profile: { id: owner.id }, capabilities: { support_requests: enabled },
+          ...(enabled ? {support_session: await supportSessionProof(request, 'owner', owner.id)} : {}) });
       }
 
       // Get profile
@@ -349,13 +396,13 @@ export async function onRequestGet({ request, env }) {
   }
 }
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env, data }) {
   try {
     const url = new URL(request.url);
     const pathSegments = url.pathname.split('/').filter(Boolean);
     const action = pathSegments[pathSegments.length - 1];
 
-    if (previewPortalDisabled(env)) {
+    if (previewPortalDisabled(env, request)) {
       // Allow local cookie clearing without resolving the old preview identity,
       // consulting the database or relying on a configured signing secret.
       if (action === 'logout') {
@@ -364,6 +411,19 @@ export async function onRequestPost({ request, env }) {
         return response;
       }
       return previewUnavailable();
+    }
+
+    if (isRespitePath(url.pathname, 'owner')) {
+      return respiteRequest({request, env, readOwnerSession: () => env.PORTAL_TOKEN_SECRET
+        ? parseSessionCookie(request.headers.get('Cookie'), env.PORTAL_TOKEN_SECRET) : null});
+    }
+
+    // Profile is browser-only: strict origin plus JSON rejects simple form CSRF.
+    // Keep the initial storage slice off until full source/review/TEST qualification.
+    if (action === 'profile') {
+      if (env.PORTAL_PROFILE_ENABLED !== '1' || url.pathname !== '/api/portal/profile' || url.search) return json({ ok: false, error: 'not_found' }, 404);
+      if (request.headers.get('Origin') !== url.origin) return json({ ok: false, error: 'forbidden' }, 403);
+      if (request.headers.get('Content-Type')?.split(';')[0].trim().toLowerCase() !== 'application/json') return json({ ok: false, error: 'invalid_content_type' }, 415);
     }
 
     // Incremental browser-origin defense for known production POST actions.
@@ -384,6 +444,11 @@ export async function onRequestPost({ request, env }) {
       }
     }
 
+    if (action === 'support-requests') {
+      const refusal = supportRequestBoundary(request, env);
+      if (refusal) return json({ ok: false, error: refusal.error }, refusal.status);
+    }
+
     const secret = env.PORTAL_TOKEN_SECRET;
     if (!secret) {
       return json({ ok: false, error: 'auth_not_configured' }, 503);
@@ -396,6 +461,7 @@ export async function onRequestPost({ request, env }) {
     }
 
     if (action === 'login') {
+      const capture = testInboxCapture(data, request, env);
       const limited = await checkIpRequestLimit(env.LEGACY_DB, request, IP_LIMITS.portalLogin);
       if (!limited.ok) {
         return json({ ok: false, error: limited.error }, limited.status);
@@ -410,7 +476,7 @@ export async function onRequestPost({ request, env }) {
       const emailEnabled = canSendEmail(env);
       // Deployment-wide readiness is checked before membership lookup, so the
       // unavailable response cannot reveal whether this address is registered.
-      if (!emailEnabled) {
+      if (!emailEnabled && !capture) {
         const reason = 'email_not_configured';
         try {
           await env.LEGACY_DB.prepare(`
@@ -424,6 +490,7 @@ export async function onRequestPost({ request, env }) {
       }
 
       const normalizedEmail = email.toLowerCase().trim();
+      if (capture && normalizedEmail !== capture.email) return json({ ok:false, error:'forbidden' },403);
       const emailHash = await sha256(normalizedEmail);
 
       // Basic rate limiting via audit_log
@@ -452,17 +519,27 @@ export async function onRequestPost({ request, env }) {
 
       if (caregiver) {
         // Mint a single-use, short-TTL (~15 min) opaque token
-        const expiresAt = Date.now() + 15 * 60 * 1000;
+        const expiresAt = Date.now() + (capture ? 5 : 15) * 60 * 1000;
         const tokenValue = randomToken();
 
         const tokenHash = await sha256(tokenValue);
         const expiresAtIso = new Date(expiresAt).toISOString().replace('T', ' ').slice(0, 19);
 
         // Store hash in portal_token table
-        await env.LEGACY_DB
-          .prepare(`INSERT INTO portal_token (token_hash, caregiver_id, expires_at, used) VALUES (?, ?, ?, 0)`)
-          .bind(tokenHash, caregiver.id, expiresAtIso)
-          .run();
+        if (capture) {
+          if (caregiver.id !== capture.id) return json({ ok:false, error:'forbidden' },403);
+          await insertCapturedToken(capture, tokenHash, expiresAtIso);
+        } else {
+          await env.LEGACY_DB
+            .prepare(`INSERT INTO portal_token (token_hash, caregiver_id, expires_at, used) VALUES (?, ?, ?, 0)`)
+            .bind(tokenHash, caregiver.id, expiresAtIso)
+            .run();
+        }
+        if (capture) {
+          const link = `${new URL(request.url).origin}/api/portal/verify?token=${encodeURIComponent(tokenValue)}`;
+          await deliverCapturedToken(capture, link, tokenHash, expiresAt);
+          return json({ ok:true });
+        }
 
         // Production: email the link. The response stays the same generic { ok: true } whether or
         // not the email went, so the page never reveals who is a Legacy client.
@@ -488,6 +565,25 @@ export async function onRequestPost({ request, env }) {
       }
 
       return json(responseObj);
+    }
+
+    if (action === 'support-requests') {
+      const caregiverId = await parseSessionCookie(request.headers.get('Cookie'), secret);
+      if (caregiverId && !await matchesSupportSession(request, 'owner', caregiverId)) return json({ ok: false, error: 'session_changed' }, 403);
+      if (!caregiverId || !await hasNonarchivedCaregiver(env.LEGACY_DB, caregiverId)) return json({ ok: false, error: 'unauthorized' }, 401);
+      // Only this verified server owner reaches the writer. The writer rechecks
+      // nonarchived eligibility at write time; this precheck is not a lock.
+      const result = await createOwnerSupportRequest(env.LEGACY_DB, caregiverId, await readSupportRequestBody(request));
+      return json(result, supportRequestStatus(result));
+    }
+
+    if (action === 'profile') {
+      const caregiverId = await parseSessionCookie(request.headers.get('Cookie'), secret);
+      if (!caregiverId || !await hasNonarchivedCaregiver(env.LEGACY_DB, caregiverId)) return json({ ok: false, error: 'unauthorized' }, 401);
+      const patch = validateProfilePatch(await readProfileBody(request));
+      if (!patch) return json({ ok: false, error: 'invalid_profile' }, 400);
+      const result = await saveCaregiverProfile(env.LEGACY_DB, caregiverId, patch);
+      return json(result.ok ? { ok: true, revision: result.revision } : { ok: false, error: result.error }, result.status ?? 200);
     }
 
     if (action === 'wellness') {

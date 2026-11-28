@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 // Root-level files that browsers load: pages, their scripts and styles, and images.
 const ROOT_FILE = /\.(html|css|js|png|jpe?g|gif|svg|webp|ico|webmanifest)$/i;
 // Pages control files, deployed when present.
+const BROWSER_MODULES = new Set(['portal-support-contract.mjs','portal-support-transport.mjs','portal-support-ui.mjs','portal-support-staff-ui.mjs','portal-support-entry.mjs','portal-support-session.mjs','portal-support-bootstrap.mjs','portal-respite-bootstrap.mjs','portal-respite-ui.mjs']);
 const ROOT_CONTROL_FILES = new Set(['_redirects', '_headers']);
 // Folders served whole.
 const SITE_DIRECTORIES = ['media'];
@@ -39,7 +40,7 @@ function walk(dir, base) {
 export function selectSiteFiles(root) {
   const files = [];
   for (const entry of readdirSync(root, { withFileTypes: true })) {
-    if (entry.isFile() && (ROOT_FILE.test(entry.name) || ROOT_CONTROL_FILES.has(entry.name))) {
+    if (entry.isFile() && (ROOT_FILE.test(entry.name) || ROOT_CONTROL_FILES.has(entry.name) || BROWSER_MODULES.has(entry.name))) {
       files.push(entry.name);
     }
   }

@@ -1,0 +1,57 @@
+.caregiver-tabs a[hidden],
+#respite[hidden],
+#staffRespite[hidden] {
+  display: none;
+}
+
+#respite h2,
+#staffRespite h2 {
+  color: var(--plum-dark);
+  margin-bottom: .75rem;
+}
+
+#respite {
+  max-width: 52rem;
+  scroll-margin-top: 5rem;
+}
+
+#respite fieldset {
+  min-width: 0;
+  margin: 1rem 0;
+  padding: .85rem 1rem;
+  border: 1px solid #eadfd5;
+  border-radius: .75rem;
+}
+
+#respite legend {
+  padding: 0 .3rem;
+  font-weight: 700;
+}
+
+#respite label {
+  display: block;
+  margin: .65rem 0;
+}
+
+#respite input:not([type=checkbox]),
+#respite select,
+#respite textarea {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: .5rem;
+  font: inherit;
+}
+
+#respite input[type=checkbox] {
+  margin-inline-end: .5rem;
+  accent-color: var(--coral-dark);
+}
+
+#respite textarea {
+  min-height: 5rem;
+}
+
+#respite button {
+  min-height: 44px;
+}
